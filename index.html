@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="googlebot" content="noindex, nofollow">
+<title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:ital,wght@0,400;0,700;1,400&display=swap');
+  :root {
+    /* Fonts (Lawfare identity) */
+    --font-serif: 'EB Garamond', Garamond, Georgia, serif;
+    --font-sans: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', Monaco, Menlo, monospace;
+    /* Colors (Lawfare identity) */
+    --accent: #006A72;
+    --accent-light: #008A94;
+    --accent-dark: #00535A;
+    --accent-bg: #E6F0F1;
+    --text: #303030;
+    --text-secondary: #555;
+    --text-muted: #777;
+    --bg: #FFFFFF;
+    --surface: #F3F3F3;
+    --surface-alt: #EEEEEE;
+    --border: #DDDDDD;
+    --border-light: #EEEEEE;
+    --highlight: #006A72;
+    --highlight-bg: #E6F0F1;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--font-sans); background:var(--bg); color:var(--text); line-height:1.5; }
+
+  /* Gate */
+  #gate { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; gap:16px; }
+  #gate h1 { font-family:var(--font-serif); font-size:28px; color:var(--accent); }
+  #gate input { padding:10px 16px; border:1px solid var(--border); border-radius:4px; font-size:15px; width:260px; text-align:center; }
+  #gate button { padding:10px 24px; background:var(--accent); color:white; border:none; border-radius:5px; font-size:15px; font-weight:600; cursor:pointer; }
+  #gate button:hover { background:var(--accent-light); }
+  #gate .error { color:var(--highlight); font-size:13px; }
+
+  /* Header */
+  header { background:var(--accent); color:white; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-family:var(--font-serif); font-size:20px; font-weight:700; }
+  header .stats { font-size:12px; opacity:0.8; font-family:var(--font-mono); }
+
+  /* Layout — controlled by body.welcome-state / body.active-state */
+  #app { display:none; }
+
+  /* Sidebar */
+  .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:16px; overflow-y:auto; max-height:calc(100vh - 56px); position:sticky; top:56px; }
+  .sidebar h3 { font-family:var(--font-serif); font-size:13px; font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .fg { margin-bottom:14px; }
+  .fg label { display:block; font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px; }
+  .fg input,.fg select { width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-sans); font-size:13px; background:var(--bg); }
+  .fg input:focus,.fg select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-bg); }
+  .fg textarea { width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-sans); font-size:13px; background:var(--bg); resize:vertical; min-height:50px; }
+  .date-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .divider { border:none; border-top:1px solid var(--border-light); margin:14px 0; }
+  .btn { padding:7px 14px; border:none; border-radius:4px; font-family:var(--font-sans); font-weight:600; font-size:13px; cursor:pointer; }
+  .btn-primary { background:var(--accent); color:white; width:100%; }
+  .btn-primary:hover { background:var(--accent-light); }
+  .btn-ai { background:var(--accent); color:white; width:100%; margin-top:6px; }
+  .btn-ai:hover { background:var(--accent-dark); }
+  .btn-clear { background:none; color:var(--text-muted); font-size:11px; padding:3px 6px; margin-top:3px; border:none; cursor:pointer; text-decoration:underline; }
+  .ctx-note { font-size:10px; color:var(--text-muted); font-style:italic; margin-top:6px; }
+
+  /* Content */
+  .content { padding:20px; overflow-y:auto; max-height:calc(100vh - 56px); }
+  .results-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .results-header h2 { font-family:var(--font-serif); font-size:17px; }
+  .results-count { font-family:var(--font-mono); font-size:12px; color:var(--text-muted); }
+
+  /* Table */
+  .ct { width:100%; border-collapse:collapse; font-size:12px; }
+  .ct th { text-align:left; padding:6px 10px; background:var(--surface-alt); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-secondary); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:1; }
+  .ct td { padding:6px 10px; border-bottom:1px solid var(--border-light); vertical-align:top; }
+  .ct tr { cursor:pointer; transition:background .15s; }
+  .ct tr:hover { background:var(--accent-bg); }
+  .ct tr.sel { background:var(--accent-bg); }
+  .cn { font-family:var(--font-serif); font-weight:600; color:var(--accent); font-size:12px; }
+  .dn { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
+  .cb { display:inline-block; padding:1px 5px; background:var(--surface-alt); border-radius:3px; font-size:10px; font-family:var(--font-mono); color:var(--text-secondary); }
+
+  /* Detail panel */
+  #detail { display:none; background:var(--surface); border:1px solid var(--border); border-radius:6px; margin-top:12px; }
+  .dh { padding:12px 16px; background:var(--accent-bg); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; }
+  .dh h3 { font-family:var(--font-serif); font-size:15px; font-weight:700; color:var(--accent); }
+  .dm { display:flex; gap:12px; flex-wrap:wrap; margin-top:3px; font-size:11px; color:var(--text-secondary); font-family:var(--font-mono); }
+  .dc { background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); }
+  .el { padding:12px 16px; max-height:400px; overflow-y:auto; }
+  .ei { display:grid; grid-template-columns:96px 96px 1fr; gap:10px; padding:6px 0; border-bottom:1px solid var(--border-light); font-size:12px; }
+  .ei:last-child { border-bottom:none; }
+  .en { font-family:var(--font-mono); font-weight:600; color:var(--accent); font-size:11px; }
+  .en a { color:inherit; text-decoration:none; border-bottom:1px dotted var(--accent); }
+  .en a:hover { color:var(--accent-light); border-bottom-color:var(--accent-light); }
+  .ed { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); white-space:nowrap; }
+  .ei .doc-ref { color:var(--highlight); font-family:var(--font-mono); font-size:11px; text-decoration:none; border-bottom:1px dotted var(--highlight); }
+  .ei .doc-ref:hover { color:#a04830; border-bottom-color:#a04830; }
+
+  /* AI panel */
+  #ai-panel { display:none; background:var(--surface); border:1px solid var(--border); border-radius:6px; margin-top:12px; }
+  .ai-h { padding:10px 16px; background:var(--highlight-bg); border-bottom:1px solid var(--border); font-family:var(--font-serif); font-weight:600; font-size:14px; color:var(--highlight); }
+  .ai-b { padding:12px 16px; }
+  .ai-r { font-size:13px; line-height:1.7; max-height:800px; overflow-y:auto; }
+  .sp { display:inline-block; width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--highlight); border-radius:50%; animation:spin .8s linear infinite; vertical-align:middle; margin-right:5px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Scope bar */
+  .scope-bar { background:var(--accent-bg); border:1px solid var(--border); border-radius:4px; padding:8px 10px; margin-bottom:10px; }
+  .scope-label { font-size:11px; color:var(--accent); font-weight:600; margin-bottom:6px; font-family:var(--font-mono); line-height:1.4; white-space:pre-line; }
+  .scope-btns { display:flex; gap:4px; flex-wrap:wrap; }
+  .scope-btns button { flex:1; min-width:0; padding:4px 6px; font-size:10px; font-family:var(--font-sans); font-weight:500; background:var(--surface); border:1px solid var(--border); border-radius:3px; color:var(--text-secondary); cursor:pointer; white-space:nowrap; }
+  .scope-btns button:hover:not(:disabled) { background:var(--accent); color:white; border-color:var(--accent); }
+  .scope-btns button:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* AI response sections */
+  .ai-section { margin-bottom:14px; }
+  .ai-section:last-child { margin-bottom:0; }
+  .ai-section-h { font-family:var(--font-serif); font-weight:600; font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; padding-bottom:3px; border-bottom:1px solid var(--border-light); }
+  .ai-analysis { font-size:13px; line-height:1.7; white-space:pre-wrap; color:var(--text); }
+  .ai-caselist { font-size:12px; border-collapse:collapse; width:100%; }
+  .ai-caselist tr { cursor:pointer; transition:background .15s; }
+  .ai-caselist tr:hover { background:var(--accent-bg); }
+  .ai-caselist td { padding:5px 8px; border-bottom:1px solid var(--border-light); vertical-align:top; }
+  .ai-caselist td:nth-child(1) { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); white-space:nowrap; }
+  .ai-caselist td:nth-child(2) { font-family:var(--font-serif); font-weight:600; color:var(--accent); font-size:12px; }
+  .ai-caselist td:nth-child(3) { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); white-space:nowrap; }
+  .ai-caselist td:nth-child(4) { font-size:11px; color:var(--text-secondary); white-space:nowrap; }
+  .ai-footer { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); padding-top:6px; border-top:1px solid var(--border-light); margin-top:10px; }
+
+  /* Pagination */
+  .pag { display:flex; justify-content:center; gap:6px; margin-top:12px; }
+  .pag button { padding:5px 12px; border:1px solid var(--border); background:var(--surface); border-radius:4px; font-size:12px; cursor:pointer; }
+  .pag button:hover { background:var(--accent-bg); }
+  .pag button.ap { background:var(--accent); color:white; border-color:var(--accent); }
+  .pag button:disabled { opacity:.4; cursor:not-allowed; }
+  .loading { text-align:center; padding:40px; color:var(--text-muted); font-family:var(--font-mono); font-size:13px; }
+
+  /* Links — Lawfare identity: teal, underlined */
+  a { color:var(--accent); text-decoration:underline; }
+  a:hover { color:var(--accent-dark); }
+
+  /* Demo / BYO-key auth block */
+  .auth-block { background:var(--surface); border:1px solid var(--border-light); border-radius:4px; padding:10px; margin-bottom:12px; }
+  .auth-block .fg { margin-bottom:8px; }
+  .auth-block .fg:last-child { margin-bottom:0; }
+  .demo-indicator { display:none; font-size:10px; color:var(--accent); font-weight:600; margin-top:4px; font-family:var(--font-mono); }
+  .demo-indicator.active { display:block; }
+  .or-divider { text-align:center; font-size:10px; color:var(--text-muted); font-family:var(--font-mono); font-weight:600; letter-spacing:.15em; margin:6px 0; position:relative; }
+  .or-divider::before, .or-divider::after { content:""; position:absolute; top:50%; width:40%; height:1px; background:var(--border-light); }
+  .or-divider::before { left:0; }
+  .or-divider::after { right:0; }
+
+  /* Direct-mode toggle */
+  .direct-mode-wrap { display:flex; align-items:flex-start; gap:6px; margin:6px 0 10px; font-size:11px; color:var(--text-secondary); line-height:1.3; cursor:pointer; }
+  .direct-mode-wrap input[type=checkbox] { margin-top:2px; flex-shrink:0; }
+  .direct-mode-wrap.disabled { opacity:.4; cursor:not-allowed; }
+
+  /* ============================================
+     WELCOME STATE (body.welcome-state)
+     One-way transition to active-state on first
+     Search or Ask Claude click.
+     ============================================ */
+  body.welcome-state header { display:none; }
+  body.welcome-state .active-only { display:none; }
+  body.welcome-state .main-layout {
+    display:block;
+    max-width:720px;
+    margin:0 auto;
+    padding:40px 24px 24px;
+    min-height:auto;
+  }
+  body.welcome-state .sidebar {
+    background:transparent;
+    border-right:none;
+    padding:0;
+    max-height:none;
+    position:static;
+    overflow:visible;
+  }
+  body.welcome-state .sidebar > h3 { display:none; } /* headers inline with sections look cluttered in welcome */
+  body.welcome-state .sidebar > h3.welcome-show { display:block; margin-top:18px; font-family:var(--font-serif); font-size:15px; letter-spacing:.02em; }
+  body.welcome-state .sidebar > .divider { margin:22px 0; }
+  body.welcome-state .filter-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px 14px;
+  }
+  body.welcome-state .filter-grid .fg { margin-bottom:0; }
+  body.welcome-state .filter-grid .fg.span-2 { grid-column:1 / -1; }
+  body.welcome-state .filter-actions { display:flex; gap:10px; align-items:center; margin-top:14px; }
+  body.welcome-state .filter-actions .btn-primary { flex:1; padding:10px 18px; font-size:14px; }
+  body.welcome-state .filter-actions .btn-clear {
+    background:transparent; border:1px solid var(--border); color:var(--text-secondary);
+    padding:9px 16px; font-size:12px; border-radius:4px; text-decoration:none; margin-top:0;
+  }
+  body.welcome-state .filter-actions .btn-clear:hover { background:var(--surface); }
+  body.welcome-state .btn-ai { padding:10px 18px; font-size:14px; }
+
+  /* Hero */
+  .welcome-hero { text-align:center; padding:60px 24px 30px; max-width:720px; margin:0 auto; }
+  body.active-state .welcome-hero { display:none; }
+  .hero-title { font-family:var(--font-serif); font-weight:700; font-size:64px; color:var(--text); line-height:1; letter-spacing:-.01em; margin-bottom:6px; }
+  .hero-tagline { font-family:var(--font-sans); font-style:italic; font-size:17px; color:var(--text-secondary); margin-bottom:14px; font-weight:400; }
+  .hero-lawfare { display:flex; align-items:center; justify-content:center; gap:8px; font-family:var(--font-sans); font-size:15px; color:var(--text-secondary); margin-bottom:24px; font-weight:400; }
+  .hero-lawfare img { height:23px; width:auto; vertical-align:middle; }
+  .hero-stats { font-family:var(--font-sans); font-size:13px; color:var(--text-muted); letter-spacing:.02em; }
+
+  /* About section (welcome only) */
+  .welcome-about { max-width:720px; margin:36px auto 60px; padding:0 24px; font-family:var(--font-sans); font-size:14px; color:var(--text-secondary); line-height:1.65; }
+  body.active-state .welcome-about { display:none; }
+  .welcome-about h4 { font-family:var(--font-serif); font-weight:700; font-size:15px; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; margin:22px 0 8px; }
+  .welcome-about ul { padding-left:20px; margin:6px 0; }
+  .welcome-about ul li { margin-bottom:3px; }
+  .welcome-about .cta { margin-top:26px; text-align:center; font-family:var(--font-serif); font-style:italic; font-size:16px; color:var(--text); }
+
+  /* In active state, gate title should say RAGtime */
+  body.active-state .main-layout { display:grid; grid-template-columns:300px 1fr; min-height:calc(100vh - 56px); }
+  @media(max-width:900px) { body.active-state .main-layout { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<!-- PASSWORD GATE -->
+<div id="gate">
+  <h1>RAGtime</h1>
+  <p style="color:var(--text-secondary);max-width:400px;text-align:center;font-size:14px;font-family:var(--font-sans);font-style:italic;">
+    A Federal Litigation Research Tool from Lawfare
+  </p>
+  <input type="password" id="gate-pw" placeholder="Enter access code" onkeydown="if(event.key==='Enter')checkGate()">
+  <button onclick="checkGate()">Enter</button>
+  <div class="error" id="gate-err"></div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header>
+    <h1>RAGtime</h1>
+    <span class="stats" id="hstats"><span class="sp"></span> Connecting...</span>
+  </header>
+
+  <!-- Welcome hero (visible only in welcome-state) -->
+  <div class="welcome-hero">
+    <div class="hero-title">RAGtime</div>
+    <div class="hero-tagline">A Federal Litigation Research Tool</div>
+    <div class="hero-lawfare">
+      <span>from</span>
+      <img src="https://lawfare-assets-new.azureedge.net/assets/images/default-source/default-album/site-logo.png?sfvrsn=1d7ccf3d_1" alt="Lawfare" onerror="this.style.display='none'">
+    </div>
+    <div class="hero-stats" id="hstats-welcome"><span class="sp"></span> Connecting...</div>
+  </div>
+
+  <div class="main-layout">
+    <aside class="sidebar">
+      <h3>Search</h3>
+      <div class="filter-grid">
+        <div class="fg span-2"><label>Full-Text Search</label><input type="text" id="f-search" placeholder="e.g. preliminary injunction, TRO..."></div>
+        <div class="fg span-2"><label>Case Name</label><input type="text" id="f-name" placeholder="e.g. ACLU, Trump, EPA..."></div>
+        <div class="fg"><label>Court</label><select id="f-court"><option value="">All Courts</option></select></div>
+        <div class="fg"><label>Judge</label><select id="f-judge"><option value="">All Judges</option></select></div>
+        <div class="fg"><label>Case Type</label>
+          <select id="f-type"><option value="">All</option><option value="cv">Civil</option><option value="cr">Criminal</option><option value="mj">Magistrate</option><option value="mc">Misc</option></select>
+        </div>
+        <div class="fg"><label>Cause / NOS</label><input type="text" id="f-cause" placeholder="e.g. APA, 551, 1983..."></div>
+        <div class="fg span-2"><label>Date Range</label>
+          <div class="date-row"><input type="date" id="f-from" value="2025-01-20"><input type="date" id="f-to"></div>
+        </div>
+        <div class="fg span-2"><label>Party Name</label><input type="text" id="f-party" placeholder="e.g. DHS, Noem, ACLU..."></div>
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary" onclick="runSearch()">Search</button>
+        <button class="btn-clear" onclick="clearFilters()">Clear filters</button>
+      </div>
+      <hr class="divider">
+      <h3>Ask Claude</h3>
+      <div class="auth-block">
+        <div class="fg">
+          <label>Demo password</label>
+          <input type="password" id="demo-pw" placeholder="Enter demo access password" oninput="onDemoPasswordInput()">
+          <div class="demo-indicator" id="demo-ind">✓ Demo access unlocked</div>
+        </div>
+        <div class="or-divider">OR</div>
+        <div class="fg"><label>Your own Anthropic API key</label><input type="password" id="api-key" placeholder="sk-ant-..."></div>
+      </div>
+      <div class="scope-bar">
+        <div class="scope-label" id="scope-label">Scope: loading...</div>
+        <div class="scope-btns">
+          <button id="scope-use-filter" onclick="useFilterAsScope()" title="Constrain Claude to cases currently matching your filter">Use filter</button>
+          <button id="scope-use-last" onclick="useLastResultAsScope()" disabled title="Narrow within cases from your previous Claude query">Use last result</button>
+          <button id="scope-reset" onclick="resetScope()" disabled title="Return scope to all cases">Reset</button>
+        </div>
+      </div>
+      <div class="fg"><label>Question</label><textarea id="ai-q" placeholder="e.g. What trends do you see? What cases should I look at?"></textarea></div>
+      <label class="direct-mode-wrap disabled" id="direct-mode-wrap" title="Available when scope is narrowed to a filter or previous result">
+        <input type="checkbox" id="direct-mode" disabled>
+        <span>Skip narrowing — analyze full scope directly</span>
+      </label>
+      <button class="btn btn-ai" onclick="askClaude()">Ask Claude</button>
+      <p class="ctx-note">Claude queries within the scope above. Output: analysis + list of matched cases (clickable).</p>
+    </aside>
+    <main class="content active-only">
+      <div class="results-header">
+        <h2 id="rtitle">Search Results</h2>
+        <span class="results-count" id="rcount"></span>
+      </div>
+      <table class="ct"><thead><tr>
+        <th>Docket</th><th>Case Name</th><th>Filed</th><th>Judge</th><th>Cause</th><th>#</th>
+      </tr></thead><tbody id="tbody"></tbody></table>
+      <div class="pag" id="pag"></div>
+      <div id="detail">
+        <div class="dh"><div><h3 id="d-name"></h3><div class="dm" id="d-meta"></div></div><button class="dc" onclick="closeDetail()">&times;</button></div>
+        <div class="el" id="d-entries"></div>
+      </div>
+      <div id="ai-panel">
+        <div class="ai-h">Claude Analysis</div>
+        <div class="ai-b"><div class="ai-r" id="ai-r"></div></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Welcome state about section -->
+  <div class="welcome-about">
+    <h4>How to use</h4>
+    <ul>
+      <li><strong>Browse and filter</strong> — set criteria above, click Search.</li>
+      <li><strong>Ask Claude</strong> — type a natural-language question; Claude writes SQL and analyzes results.</li>
+      <li><strong>Iterate</strong> — use the Scope bar to narrow; ask follow-ups.</li>
+    </ul>
+    <h4>About the data</h4>
+    <ul>
+      <li>Federal district courts and appellate circuits.</li>
+      <li>Cases filed since January 20, 2025.</li>
+      <li>Full docket entries; OCR text of attached documents where available.</li>
+      <li>Full-text search runs on docket-entry descriptions, not document contents.</li>
+    </ul>
+    <div class="cta">Set a filter or type a question to begin.</div>
+  </div>
+</div>
+
+<script>
+// === CONFIG ===
+var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpa2RianBybmRna3NpYmJ2Y2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTE0MjksImV4cCI6MjA5MjA4NzQyOX0.FzzHOU7mcixedWZXd7wZkd3Jpy-05dMFB66q-yPSPL4";
+var ACCESS_CODE = "lawfare2025";
+// Proxy for Anthropic API calls. Deployed as a Supabase Edge Function.
+// Function name: ragtime-proxy. verify_jwt disabled (function implements its
+// own auth via demo password + BYO key + quota tracking).
+var WORKER_URL = "https://aikdbjprndgksibbvcfs.supabase.co/functions/v1/ragtime-proxy";
+// Shared demo password for demo access (server-side validated in constant time).
+// Client-side use is only for enabling the "✓ Demo access unlocked" indicator.
+var DEMO_PASSWORD = "Lawfareskunkworks";
+var CLAUDE_MODEL = "claude-sonnet-4-20250514";
+
+var PAGE_SIZE = 50;
+var currentResults = [], currentPage = 0, selectedId = null;
+var totalCaseCount = 0;
+var currentScope = { type: 'all', cl_ids: null, detail: '' };
+var lastClaudeResult = null; // { question, cl_ids, timestamp }
+var hasTransitioned = false;
+
+// === SCOPE MANAGEMENT ===
+function updateScopeDisplay() {
+  var label;
+  if (currentScope.type === 'all') {
+    label = 'Scope: all ' + totalCaseCount.toLocaleString() + ' cases';
+  } else {
+    var n = currentScope.cl_ids ? currentScope.cl_ids.length : 0;
+    var source = currentScope.type === 'filter' ? 'filtered results' : 'previous Claude query';
+    label = 'Scope: ' + n.toLocaleString() + ' cases (' + source + ')';
+    if (currentScope.detail) label += '\n' + currentScope.detail;
+  }
+  document.getElementById('scope-label').textContent = label;
+  document.getElementById('scope-use-last').disabled = !lastClaudeResult || !lastClaudeResult.cl_ids || lastClaudeResult.cl_ids.length === 0;
+  document.getElementById('scope-reset').disabled = currentScope.type === 'all';
+  updateDirectModeAvailability();
+}
+
+// Direct mode is only meaningful when a scope is set. Enable/disable the checkbox
+// to match the current scope state and uncheck it if scope reverts to 'all'.
+function updateDirectModeAvailability() {
+  var wrap = document.getElementById('direct-mode-wrap');
+  var cb = document.getElementById('direct-mode');
+  var canDirect = currentScope.type !== 'all' && currentScope.cl_ids && currentScope.cl_ids.length > 0;
+  cb.disabled = !canDirect;
+  if (!canDirect) {
+    cb.checked = false;
+    wrap.classList.add('disabled');
+  } else {
+    wrap.classList.remove('disabled');
+  }
+}
+
+// Graduated depth lookup. Single source of truth for how much context Pass 2 gets
+// based on scope size. Thresholds tuned to keep total context under ~500 KB.
+// Returns { metadataCap, entries, docs } where null = "all" and 0 = "none".
+function depthScale(N) {
+  if (N > 1000) return { metadataCap: 1000, entries: 0,    docs: 0 };
+  if (N > 100)  return { metadataCap: null, entries: 25,   docs: 0 };
+  if (N > 25)   return { metadataCap: null, entries: null, docs: 0 };
+  if (N > 10)   return { metadataCap: null, entries: null, docs: 5 };
+  return              { metadataCap: null, entries: null, docs: null };
+}
+
+// One-way transition from welcome state to active state. Idempotent.
+function transitionToActive() {
+  if (hasTransitioned) return;
+  hasTransitioned = true;
+  document.body.classList.remove('welcome-state');
+  document.body.classList.add('active-state');
+}
+
+// Demo password indicator — updates "✓ Demo access unlocked" in real time.
+// Note: the actual authorization is done server-side in constant time.
+function onDemoPasswordInput() {
+  var v = document.getElementById('demo-pw').value;
+  var ind = document.getElementById('demo-ind');
+  if (v === DEMO_PASSWORD) {
+    ind.classList.add('active');
+  } else {
+    ind.classList.remove('active');
+  }
+}
+
+function useFilterAsScope() {
+  if (currentResults.length === 0) { alert('No cases in current filter. Run a search first.'); return; }
+  var parts = [];
+  var vals = {
+    search: document.getElementById('f-search').value.trim(),
+    name: document.getElementById('f-name').value.trim(),
+    court: document.getElementById('f-court').value,
+    judge: document.getElementById('f-judge').value,
+    caseType: document.getElementById('f-type').value,
+    cause: document.getElementById('f-cause').value.trim(),
+    from: document.getElementById('f-from').value,
+    to: document.getElementById('f-to').value,
+    party: document.getElementById('f-party').value.trim()
+  };
+  if (vals.search) parts.push('text~"' + vals.search + '"');
+  if (vals.name) parts.push('name~"' + vals.name + '"');
+  if (vals.court) parts.push('court=' + vals.court);
+  if (vals.judge) parts.push('judge=' + vals.judge);
+  if (vals.caseType) parts.push('type=' + vals.caseType);
+  if (vals.cause) parts.push('cause~"' + vals.cause + '"');
+  if (vals.from) parts.push('from=' + vals.from);
+  if (vals.to) parts.push('to=' + vals.to);
+  if (vals.party) parts.push('party~"' + vals.party + '"');
+  currentScope = {
+    type: 'filter',
+    cl_ids: currentResults.map(function(r){return r.cl_id;}),
+    detail: parts.length > 0 ? '[' + parts.join(', ') + ']' : '[no filters — all cases]'
+  };
+  updateScopeDisplay();
+}
+
+function useLastResultAsScope() {
+  if (!lastClaudeResult || !lastClaudeResult.cl_ids || lastClaudeResult.cl_ids.length === 0) return;
+  var q = lastClaudeResult.question || '';
+  currentScope = {
+    type: 'previous_query',
+    cl_ids: lastClaudeResult.cl_ids.slice(),
+    detail: 'prev Q: "' + (q.length > 70 ? q.substring(0,70) + '...' : q) + '"'
+  };
+  // Promote Claude's matched cases into the main results table. This replaces
+  // whatever search was displayed up top so the user is now browsing the
+  // Claude-returned set. Any follow-up filter/scope action will operate on it.
+  if (lastClaudeResult.case_infos && lastClaudeResult.case_infos.length > 0) {
+    currentResults = lastClaudeResult.case_infos.slice();
+    currentPage = 0;
+    selectedId = null;
+    var qShort = q.length > 60 ? q.substring(0,60) + '…' : q;
+    document.getElementById('rtitle').textContent = qShort ? 'Claude results — ' + qShort : 'Claude results';
+    renderResults();
+    closeDetail();
+    // Scroll the top of the content area into view so the user sees the new table.
+    var content = document.querySelector('.content');
+    if (content) content.scrollTop = 0;
+  }
+  updateScopeDisplay();
+}
+
+function resetScope() {
+  currentScope = { type: 'all', cl_ids: null, detail: '' };
+  updateScopeDisplay();
+}
+
+// Inject scope constraint into a SQL query. Assumes the primary table is one where
+// cl_id is a valid column (cases, docket_entries, documents all qualify).
+function scopedSql(sql) {
+  if (currentScope.type === 'all' || !currentScope.cl_ids || currentScope.cl_ids.length === 0) {
+    return sql;
+  }
+  var idList = currentScope.cl_ids.join(',');
+  var constraint = 'cl_id IN (' + idList + ')';
+  // Find the first WHERE in the outer query. If present, inject constraint as leading condition.
+  // Otherwise insert a WHERE clause before ORDER/GROUP/LIMIT/HAVING, or at the end.
+  var hasWhere = /\bwhere\b/i.test(sql);
+  if (hasWhere) {
+    // Inject right after the first WHERE keyword
+    return sql.replace(/\bwhere\b/i, 'WHERE ' + constraint + ' AND');
+  }
+  var tailMatch = sql.match(/\b(order\s+by|group\s+by|limit|having)\b/i);
+  if (tailMatch) {
+    return sql.replace(tailMatch[0], 'WHERE ' + constraint + ' ' + tailMatch[0]);
+  }
+  return sql + ' WHERE ' + constraint;
+}
+
+// Click handler for cases shown in Claude's response case list.
+// Fetches the case if not already in currentResults, then opens the detail view.
+async function claudeCaseClick(clId) {
+  var existing = currentResults.find(function(r) { return r.cl_id === clId; });
+  if (!existing) {
+    try {
+      var rows = await sbRpc("run_query", {
+        query_text: "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases WHERE cl_id = " + clId
+      });
+      if (rows && rows[0]) {
+        currentResults = [rows[0]].concat(currentResults);
+      }
+    } catch (e) { console.error(e); return; }
+  }
+  showDetail(clId);
+}
+
+function esc(s) { if(!s) return ''; var d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
+
+// Render docket entry description. Strips bracketed 6-10 digit noise
+// (PACER internal document IDs that don't map to public URLs) and normalizes whitespace.
+// Intentionally preserves informative brackets like [25-1048] (circuit case numbers)
+// and [Entered: ...] (timestamps) since those contain non-digit characters.
+function renderDescription(desc) {
+  if (!desc) return '';
+  var cleaned = String(desc).replace(/\s*\[\d{6,10}\]\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  return esc(cleaned);
+}
+
+// Build a link to a specific docket entry on CourtListener.
+// Districts (small sequential entry_numbers): /docket/{id}/{entry_num}/{slug}/
+//   → loads the document page with OCR text when the entry has an attached doc.
+// Circuits (ca1-ca11, cadc, cafc) and any entry with a huge CL-internal ID:
+//   → falls back to /docket/{id}/{slug}/#entry-{entry_num} (docket page, scrolled).
+// The size heuristic (>=6 digits => CL internal ID) protects against oddball court
+// codes not in the whitelist. Edge cases (missing cl_url) return '#'.
+function entryLink(clUrl, entryNum, court) {
+  if (!clUrl) return '#';
+  var isCircuit = /^(ca\d+|cadc|cafc)$/.test(court || '');
+  var isLargeEntryNum = /^\d{6,}$/.test(String(entryNum));
+  var m = clUrl.match(/^(https:\/\/www\.courtlistener\.com\/docket\/\d+)\/([^/?#]+)\/?$/);
+  if (m && !isCircuit && !isLargeEntryNum) {
+    return m[1] + '/' + entryNum + '/' + m[2] + '/';
+  }
+  return clUrl.replace(/\/?$/, '/') + '#entry-' + entryNum;
+}
+function clean(s) { return String(s||"").replace(/[\uD800-\uDFFF]/g,"").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFD]/g," "); }
+function shortCause(c) { return !c?'':c.length>25?c.substring(0,23)+'…':c; }
+
+// === PASSWORD GATE ===
+function checkGate() {
+  if (document.getElementById('gate-pw').value === ACCESS_CODE) {
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.body.classList.add('welcome-state');
+    initApp();
+  } else {
+    document.getElementById('gate-err').textContent = 'Incorrect code.';
+  }
+}
+
+// === SUPABASE HELPERS ===
+async function sbGet(path) {
+  var resp = await fetch(SB_URL + "/rest/v1/" + path, {
+    headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY }
+  });
+  if (!resp.ok) throw new Error("Supabase error: " + resp.status);
+  return resp.json();
+}
+
+async function sbRpc(fnName, params) {
+  var resp = await fetch(SB_URL + "/rest/v1/rpc/" + fnName, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SB_KEY,
+      "Authorization": "Bearer " + SB_KEY
+    },
+    body: JSON.stringify(params)
+  });
+  if (!resp.ok) {
+    var errText = await resp.text();
+    throw new Error("RPC error " + resp.status + ": " + errText.substring(0, 200));
+  }
+  return resp.json();
+}
+
+// === INIT ===
+async function initApp() {
+  try {
+    // Counts + freshness in one query. We clamp MAX(date_filed) to CURRENT_DATE
+    // so a single bogus future-dated row in cases doesn't poison the "Updated" stat.
+    var counts = await sbRpc("run_query", {
+      query_text: "SELECT (SELECT COUNT(*) FROM cases) as case_count, " +
+                  "(SELECT COUNT(*) FROM docket_entries) as entry_count, " +
+                  "(SELECT COUNT(DISTINCT court) FROM cases) as court_count, " +
+                  "(SELECT MAX(date_filed)::text FROM cases WHERE date_filed <= CURRENT_DATE) as max_filed"
+    });
+    var c = counts[0];
+    totalCaseCount = Number(c.case_count);
+    var statsActive = Number(c.case_count).toLocaleString() + ' cases · ' +
+                      Number(c.entry_count).toLocaleString() + ' entries · ' +
+                      c.court_count + ' courts';
+    var statsWelcome = statsActive + (c.max_filed ? ' · Updated ' + c.max_filed : '');
+    document.getElementById('hstats').textContent = statsActive;
+    document.getElementById('hstats-welcome').textContent = statsWelcome;
+    updateScopeDisplay();
+
+    // Populate dropdowns
+    var courts = await sbRpc("run_query", {
+      query_text: "SELECT DISTINCT court FROM cases ORDER BY court"
+    });
+    var cs = document.getElementById('f-court');
+    courts.forEach(function(r) {
+      var o = document.createElement('option'); o.value = r.court; o.textContent = r.court.toUpperCase();
+      cs.appendChild(o);
+    });
+
+    var judges = await sbRpc("run_query", {
+      query_text: "SELECT DISTINCT judge FROM cases WHERE judge != '' AND judge IS NOT NULL ORDER BY judge"
+    });
+    var js = document.getElementById('f-judge');
+    judges.forEach(function(r) {
+      var o = document.createElement('option'); o.value = r.judge; o.textContent = r.judge;
+      js.appendChild(o);
+    });
+
+    // Welcome state intentionally does NOT auto-run a search. Main results table
+    // only populates after user clicks Search (which also triggers transition).
+  } catch(err) {
+    document.getElementById('hstats').textContent = 'Connection error: ' + err.message;
+    document.getElementById('hstats-welcome').textContent = 'Connection error: ' + err.message;
+  }
+}
+
+// === SEARCH ===
+async function runSearch() {
+  transitionToActive();
+  // Restore the default results title in case a prior "Use last result" set it
+  // to "Claude results — ...".
+  document.getElementById('rtitle').textContent = 'Search Results';
+  var search = document.getElementById('f-search').value.trim();
+  var name = document.getElementById('f-name').value.trim();
+  var court = document.getElementById('f-court').value;
+  var judge = document.getElementById('f-judge').value;
+  var caseType = document.getElementById('f-type').value;
+  var cause = document.getElementById('f-cause').value.trim();
+  var dateFrom = document.getElementById('f-from').value;
+  var dateTo = document.getElementById('f-to').value;
+  var party = document.getElementById('f-party').value.trim();
+
+  // Build SQL for the search
+  var sql = "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases WHERE 1=1";
+
+  if (search) {
+    sql += " AND cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE description ILIKE '%" + search.replace(/'/g,"''") + "%')";
+  }
+  if (name) sql += " AND case_name ILIKE '%" + name.replace(/'/g,"''") + "%'";
+  if (court) sql += " AND court = '" + court.replace(/'/g,"''") + "'";
+  if (judge) sql += " AND judge = '" + judge.replace(/'/g,"''") + "'";
+  if (caseType) sql += " AND docket_number LIKE '%-" + caseType + "-%'";
+  if (cause) sql += " AND (cause ILIKE '%" + cause.replace(/'/g,"''") + "%' OR nature_of_suit ILIKE '%" + cause.replace(/'/g,"''") + "%')";
+  if (dateFrom) sql += " AND date_filed >= '" + dateFrom + "'";
+  if (dateTo) sql += " AND date_filed <= '" + dateTo + "'";
+  if (party) sql += " AND (plaintiff ILIKE '%" + party.replace(/'/g,"''") + "%' OR defendant ILIKE '%" + party.replace(/'/g,"''") + "%')";
+  sql += " ORDER BY date_filed DESC";
+
+  try {
+    currentResults = await sbRpc("run_query", { query_text: sql }) || [];
+  } catch(err) {
+    console.error(err);
+    currentResults = [];
+  }
+
+  currentPage = 0;
+  renderResults();
+  closeDetail();
+  document.getElementById('ai-panel').style.display = 'none';
+}
+
+function clearFilters() {
+  ['f-search','f-name','f-cause','f-party'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('f-court').value=''; document.getElementById('f-judge').value='';
+  document.getElementById('f-type').value=''; document.getElementById('f-from').value='2025-01-20';
+  document.getElementById('f-to').value=''; runSearch();
+}
+
+// === RENDER ===
+function renderResults() {
+  var n = currentResults.length;
+  document.getElementById('rcount').textContent = n.toLocaleString() + (n>=500?'+':'') + ' cases';
+  var tbody = document.getElementById('tbody'); tbody.innerHTML = '';
+  var start = currentPage * PAGE_SIZE, end = Math.min(start + PAGE_SIZE, n);
+  currentResults.slice(start, end).forEach(function(r) {
+    var tr = document.createElement('tr');
+    if (r.cl_id === selectedId) tr.className = 'sel';
+    tr.onclick = function() { showDetail(r.cl_id); };
+    tr.innerHTML = '<td><span class="dn">' + esc(r.docket_number) + '</span></td>' +
+      '<td><span class="cn">' + esc(r.case_name) + '</span></td>' +
+      '<td style="white-space:nowrap;font-size:11px">' + esc(r.date_filed) + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary)">' + esc(r.judge||'') + '</td>' +
+      '<td>' + (r.cause ? '<span class="cb">' + esc(shortCause(r.cause)) + '</span>' : '') + '</td>' +
+      '<td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">' + (r.entry_count||0) + '</td>';
+    tbody.appendChild(tr);
+  });
+  renderPag(n);
+}
+
+function renderPag(total) {
+  var p = document.getElementById('pag'); p.innerHTML = '';
+  var pages = Math.ceil(total / PAGE_SIZE); if (pages <= 1) return;
+  function mk(l, pg, dis, act) {
+    var b = document.createElement('button'); b.textContent = l; b.disabled = dis;
+    if (act) b.className = 'ap';
+    b.onclick = function() { currentPage = pg; renderResults(); };
+    p.appendChild(b);
+  }
+  mk('← Prev', currentPage-1, currentPage===0);
+  var s = Math.max(0, currentPage-3), e = Math.min(pages, s+7);
+  for (var i = s; i < e; i++) mk(String(i+1), i, false, i===currentPage);
+  mk('Next →', currentPage+1, currentPage>=pages-1);
+}
+
+// === CASE DETAIL ===
+async function showDetail(clId) {
+  selectedId = clId;
+  document.getElementById('detail').style.display = 'block';
+  var c = currentResults.find(function(r) { return r.cl_id === clId; });
+  if (!c) return;
+  document.getElementById('d-name').textContent = c.case_name;
+  document.getElementById('d-meta').innerHTML =
+    '<span>' + esc(c.docket_number) + '</span><span>' + (c.court||'').toUpperCase() + '</span>' +
+    '<span>Filed: ' + esc(c.date_filed) + '</span><span>Judge: ' + esc(c.judge) + '</span>' +
+    (c.cause ? '<span>' + esc(c.cause) + '</span>' : '') +
+    (c.cl_url ? '<a href="' + esc(c.cl_url) + '" target="_blank" style="color:var(--accent)">CL →</a>' : '');
+
+  try {
+    var entries = await sbRpc("run_query", {
+      query_text: "SELECT entry_number, entry_date, description FROM docket_entries WHERE cl_id = " + clId + " ORDER BY entry_number"
+    });
+    var el = document.getElementById('d-entries'); el.innerHTML = '';
+    (entries || []).forEach(function(e) {
+      var div = document.createElement('div'); div.className = 'ei';
+      div.innerHTML = '<span class="en"><a href="' + entryLink(c.cl_url, e.entry_number, c.court) +
+        '" target="_blank" rel="noopener" title="View on CourtListener">#' + e.entry_number + '</a></span>' +
+        '<span class="ed">' + esc(e.entry_date) + '</span>' +
+        '<span>' + renderDescription(e.description) + '</span>';
+      el.appendChild(div);
+    });
+  } catch(err) { console.error(err); }
+
+  document.getElementById('detail').scrollIntoView({ behavior: 'smooth' });
+  renderResults();
+}
+function closeDetail() { document.getElementById('detail').style.display = 'none'; selectedId = null; }
+
+// === ASK CLAUDE (v5: proxy-routed, scope-aware, graduated depth, direct-mode) ===
+async function askClaude() {
+  transitionToActive();
+  var demoPw = document.getElementById('demo-pw').value.trim();
+  var userKey = document.getElementById('api-key').value.trim();
+  var question = document.getElementById('ai-q').value.trim();
+  var directModeCb = document.getElementById('direct-mode');
+  var directMode = directModeCb.checked && !directModeCb.disabled;
+
+  if (!demoPw && !userKey) { alert('Enter the demo password or your own Anthropic API key.'); return; }
+  if (!question) { alert('Enter a question.'); return; }
+
+  var panel = document.getElementById('ai-panel');
+  var respEl = document.getElementById('ai-r');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth' });
+
+  // Call Claude via the Cloudflare Worker proxy. Demo-password route uses
+  // Ben's shared key (quota-tracked server-side); user_api_key route forwards
+  // the user's own key with no quota.
+  async function callClaude(system, content, maxTok) {
+    var body = {
+      model: CLAUDE_MODEL,
+      max_tokens: maxTok || 4000,
+      system: system,
+      messages: [{ role: "user", content: clean(content) }]
+    };
+    if (demoPw) body.password = demoPw;
+    else body.user_api_key = userKey;
+
+    var r;
+    // If the worker URL is still the placeholder, short-circuit with a clear message
+    // rather than letting the browser throw an opaque "Failed to fetch".
+    if (WORKER_URL.indexOf('YOUR-SUBDOMAIN') !== -1 || WORKER_URL.indexOf('YOUR-WORKER') !== -1) {
+      throw new Error("WORKER_URL is not set. Deploy the Cloudflare Worker (see wrangler.toml) and replace the placeholder in this HTML file's CONFIG block with the deployed URL.");
+    }
+    try {
+      r = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    } catch (netErr) {
+      throw new Error("Could not reach proxy at " + WORKER_URL + ". " + netErr.message + " — check that the worker is deployed and the URL is correct.");
+    }
+    var d;
+    try { d = await r.json(); }
+    catch (e) { throw new Error("Proxy returned non-JSON (HTTP " + r.status + ")"); }
+    if (!r.ok) {
+      var msg = (d && d.error && d.error.message) ? d.error.message : ("Proxy error " + r.status);
+      throw new Error(msg);
+    }
+    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
+    if (d.content && d.content[0]) return d.content[0].text;
+    throw new Error("Unexpected response from proxy");
+  }
+
+  // Scope description for Pass 1 system prompt and Pass 2 context header.
+  var scopeDesc;
+  if (currentScope.type === 'all') {
+    scopeDesc = 'ALL ' + totalCaseCount.toLocaleString() + ' cases in the database';
+  } else {
+    var n = currentScope.cl_ids.length;
+    var src = currentScope.type === 'filter' ? 'a user-specified filter' : 'a previous Claude query';
+    scopeDesc = 'a pre-filtered subset of ' + n.toLocaleString() + ' cases (from ' + src + (currentScope.detail ? ' — ' + currentScope.detail : '') + '). The scope constraint is automatically injected into your SQL; you do NOT need to add it yourself.';
+  }
+
+  try {
+    var allClIds = new Set();
+    var qResults = [];
+    // Direct mode only fires when scope is non-trivial and checkbox is on.
+    var skipPass1 = directMode && currentScope.type !== 'all' && currentScope.cl_ids && currentScope.cl_ids.length > 0;
+
+    if (skipPass1) {
+      // Direct mode: seed allClIds from scope, skip Pass 1 entirely.
+      respEl.innerHTML = '<span class="sp"></span> Direct mode: seeding ' + currentScope.cl_ids.length.toLocaleString() + ' cases from scope (skipping Pass 1)...';
+      currentScope.cl_ids.forEach(function(id) { allClIds.add(id); });
+      qResults.push({
+        label: 'Direct-mode scope seed',
+        sql: 'DIRECT MODE — no SQL generated; scope = ' + currentScope.cl_ids.length + ' cases from ' + (currentScope.type === 'filter' ? 'user filter' : 'previous Claude query'),
+        rowCount: currentScope.cl_ids.length,
+        rows: []
+      });
+    } else {
+      // === PASS 1: Claude generates SQL ===
+      respEl.innerHTML = '<span class="sp"></span> Pass 1/2: Claude is designing database queries...';
+
+      var schema = [
+        "DATABASE: PostgreSQL on Supabase. Queries run via run_query(query_text) RPC function.",
+        "IMPORTANT: Use PostgreSQL syntax (ILIKE not LIKE for case-insensitive, || for concat).",
+        "",
+        "CURRENT SCOPE: " + scopeDesc,
+        "",
+        "TABLE cases (cl_id BIGINT PK, docket_number TEXT, case_name TEXT, date_filed DATE,",
+        "  court TEXT, judge TEXT, cause TEXT, nature_of_suit TEXT, plaintiff TEXT, defendant TEXT, entry_count INT)",
+        "",
+        "TABLE docket_entries (id BIGSERIAL PK, cl_id BIGINT FK, entry_number INT, entry_date TEXT, description TEXT, court TEXT)",
+        "",
+        "TABLE documents (id BIGSERIAL PK, cl_id BIGINT FK, entry_number INT, doc_number INT, text_content TEXT, text_length INT)",
+        "",
+        "- Civil: docket_number LIKE '%-cv-%', Criminal: '%-cr-%', Magistrate: '%-mj-%'",
+        "- docket_entries.description contains motions, orders, opinions, complaints",
+        "- Use ILIKE for case-insensitive text matching",
+        "- Always include cl_id in SELECT",
+        "- LIMIT to 500 rows per query",
+        "- For full-text search use: WHERE description ILIKE '%term%'"
+      ].join("\n");
+
+      var pass1System = "You generate PostgreSQL queries for a federal litigation database. " +
+        "Given a question and a scope, produce 1-5 queries. Return ONLY a JSON array: [{\"label\":\"...\",\"sql\":\"...\"}]\n" +
+        "No markdown, no explanation. IMPORTANT RULES:\n" +
+        "- Use PostgreSQL syntax (ILIKE, not SQLite LIKE)\n" +
+        "- Translate legal concepts to docket entry language\n" +
+        "- Always include cl_id in SELECT\n" +
+        "- LIMIT 500 per query\n" +
+        "- If the scope is already restricted and the question is analytical (e.g. 'what trends'), a simple SELECT over the scope may be sufficient. Do NOT re-filter unless the question asks for further narrowing.\n\n" + schema;
+
+      var pass1 = await callClaude(pass1System,
+        "QUESTION: " + question + "\n\nGenerate SQL. Return ONLY JSON array.", 2000);
+
+      var queries = [];
+      try {
+        queries = JSON.parse(pass1.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim());
+      } catch(pe) {
+        var m = pass1.match(/\[[\s\S]*\]/);
+        if (m) queries = JSON.parse(m[0]);
+        else throw new Error("Could not parse SQL from Claude");
+      }
+
+      respEl.innerHTML = '<span class="sp"></span> Running ' + queries.length + ' quer' + (queries.length === 1 ? 'y' : 'ies') + '...';
+
+      for (var qi = 0; qi < queries.length; qi++) {
+        var actualSql = scopedSql(queries[qi].sql);
+        try {
+          var rows = await sbRpc("run_query", { query_text: actualSql });
+          var qr = { label: queries[qi].label, sql: queries[qi].sql, actualSql: actualSql, rowCount: (rows || []).length, rows: rows || [] };
+          (rows || []).forEach(function(r) { if (r.cl_id) allClIds.add(r.cl_id); });
+          qResults.push(qr);
+        } catch(sqlerr) {
+          qResults.push({ label: queries[qi].label, sql: queries[qi].sql, actualSql: actualSql, error: sqlerr.message });
+        }
+      }
+    }
+
+    // === GRADUATED DEPTH SCALE ===
+    // Single source of truth for how much context Pass 2 gets. Thresholds live in depthScale().
+    var N = allClIds.size;
+    var depth = depthScale(N);
+
+    // FETCH CASE METADATA (ordered by date_filed DESC so "top K" = most recent K).
+    // Selecting the full column set (entry_count, cl_url included) so lastClaudeResult
+    // can be promoted straight into the main results table via "Use last result".
+    var allCaseInfos = [];
+    if (N > 0) {
+      var idList = Array.from(allClIds).join(',');
+      var metaCap = depth.metadataCap !== null ? depth.metadataCap : 1500;
+      try {
+        allCaseInfos = await sbRpc("run_query", {
+          query_text: "SELECT cl_id, docket_number, case_name, date_filed, judge, court, cause, nature_of_suit, entry_count, cl_url FROM cases WHERE cl_id IN (" + idList + ") ORDER BY date_filed DESC LIMIT " + metaCap
+        }) || [];
+      } catch(e) { console.error('case metadata fetch failed:', e); }
+    }
+
+    // FETCH FULL DOCKET ENTRIES per depth scale (null=all, 0=none, K=top K by date_filed DESC)
+    var entriesIds = [];
+    if (depth.entries === null) {
+      entriesIds = allCaseInfos.map(function(ci) { return ci.cl_id; });
+    } else if (depth.entries > 0) {
+      entriesIds = allCaseInfos.slice(0, depth.entries).map(function(ci) { return ci.cl_id; });
+    }
+
+    var caseEntries = {}; // cl_id -> formatted entry string
+    if (entriesIds.length > 0) {
+      respEl.innerHTML = '<span class="sp"></span> Loading docket entries for ' + entriesIds.length + ' case' + (entriesIds.length === 1 ? '' : 's') + '...';
+      for (var ei = 0; ei < entriesIds.length; ei++) {
+        try {
+          var entries = await sbRpc("run_query", {
+            query_text: "SELECT entry_number, entry_date, description FROM docket_entries WHERE cl_id = " + entriesIds[ei] + " ORDER BY entry_number"
+          });
+          var blob = '';
+          (entries || []).forEach(function(e) {
+            var desc = clean(e.description || '');
+            if (desc.length > 400) desc = desc.substring(0, 400) + '...';
+            blob += "  [" + e.entry_number + "] " + e.entry_date + ": " + desc + "\n";
+          });
+          caseEntries[entriesIds[ei]] = blob;
+        } catch(e) { /* per-case failure should not abort */ }
+      }
+    }
+
+    // FETCH DOCUMENT OCR TEXT per depth scale
+    var docsIds = [];
+    if (depth.docs === null) {
+      docsIds = allCaseInfos.map(function(ci) { return ci.cl_id; });
+    } else if (depth.docs > 0) {
+      docsIds = allCaseInfos.slice(0, depth.docs).map(function(ci) { return ci.cl_id; });
+    }
+
+    var caseDocs = {}; // cl_id -> formatted doc text string
+    if (docsIds.length > 0) {
+      respEl.innerHTML = '<span class="sp"></span> Loading document text for ' + docsIds.length + ' case' + (docsIds.length === 1 ? '' : 's') + '...';
+      for (var di = 0; di < docsIds.length; di++) {
+        try {
+          var docs = await sbRpc("run_query", {
+            query_text: "SELECT entry_number, doc_number, text_content, text_length FROM documents WHERE cl_id = " + docsIds[di] + " ORDER BY entry_number, doc_number"
+          });
+          var docBlob = '';
+          (docs || []).forEach(function(dc) {
+            var txt = clean(dc.text_content || '');
+            // 20KB per-doc cap — OCR dumps can be enormous and we want to preserve diversity across docs.
+            if (txt.length > 20000) txt = txt.substring(0, 20000) + '...[DOC TRUNCATED]';
+            docBlob += "  DOC entry #" + dc.entry_number + (dc.doc_number ? '.' + dc.doc_number : '') +
+                       " (" + (dc.text_length || 0) + " chars):\n" + txt + "\n\n";
+          });
+          if (docBlob) caseDocs[docsIds[di]] = docBlob;
+        } catch(e) { /* per-case failure should not abort */ }
+      }
+    }
+
+    // === BUILD PASS 2 CONTEXT ===
+    var ctx = "=== SCOPE: " + scopeDesc + " ===\n\n";
+
+    if (skipPass1) {
+      ctx += "=== MODE: DIRECT ===\nAnalyzing all " + N + " cases in scope; no Pass 1 SQL narrowing.\n\n";
+    } else {
+      ctx += "=== DATABASE QUERY RESULTS ===\n\n";
+      qResults.forEach(function(qr, i) {
+        ctx += "--- Query " + (i+1) + ": " + qr.label + " ---\nSQL: " + qr.sql + "\n";
+        if (qr.error) { ctx += "ERROR: " + qr.error + "\n\n"; return; }
+        ctx += "Results: " + qr.rowCount + " rows\n";
+        (qr.rows || []).slice(0, 200).forEach(function(row) {
+          var vals = Object.values(row).map(function(v) { var s = clean(String(v||'')); return s.length > 300 ? s.substring(0,300)+'...' : s; });
+          ctx += "  " + vals.join(" | ") + "\n";
+        });
+        ctx += "\n";
+      });
+    }
+
+    if (allCaseInfos.length > 0) {
+      ctx += "\n=== CASE DETAILS (" + allCaseInfos.length + " case" + (allCaseInfos.length === 1 ? '' : 's') + ") ===\n\n";
+      allCaseInfos.forEach(function(ci, idx) {
+        ctx += "--- CASE " + (idx+1) + " (cl_id=" + ci.cl_id + ") ---\n";
+        ctx += clean(ci.case_name || '') + " (" + clean(ci.docket_number || '') + ")\n";
+        ctx += "Filed: " + (ci.date_filed || '') + " | Court: " + (ci.court || '').toUpperCase() +
+               " | Judge: " + clean(ci.judge || '') + "\n";
+        if (ci.cause || ci.nature_of_suit) {
+          ctx += "Cause: " + clean(ci.cause || '') + (ci.nature_of_suit ? " | NOS: " + clean(ci.nature_of_suit) : '') + "\n";
+        }
+        if (caseEntries[ci.cl_id]) {
+          ctx += "Docket entries:\n" + caseEntries[ci.cl_id];
+        }
+        if (caseDocs[ci.cl_id]) {
+          ctx += "Document OCR text:\n" + caseDocs[ci.cl_id];
+        }
+        ctx += "\n";
+      });
+    }
+
+    // Overall size cap. If we hit this, OCR text will be the first casualty since
+    // depthScale only allows docs for small N (≤25), so a 500KB truncation there
+    // almost always indicates something pathological in a single doc.
+    if (ctx.length > 500000) ctx = ctx.substring(0, 500000) + "\n[CONTEXT TRUNCATED AT 500KB]";
+
+    // === PASS 2: Analysis ===
+    respEl.innerHTML = '<span class="sp"></span> Pass 2/2: Analyzing ' + N + ' case' + (N === 1 ? '' : 's') + '...';
+
+    var pass2System = "You are a legal research assistant analyzing federal court litigation data. " +
+      "You received case metadata, and — depending on scope size — full docket entries and OCR text of attached documents. " +
+      "The user is working within a specific scope (described at the top of the context). " +
+      "Give precise answers about cases in this scope. Cite case names and docket numbers. " +
+      "Quantify patterns. Distinguish confirmed facts from inferences. " +
+      "Do NOT repeat the list of matched cases at the end — the UI will render that separately. " +
+      "Focus your response on the analysis itself.";
+
+    var pass2 = await callClaude(pass2System, ctx + "\n\nQUESTION: " + question, 8000);
+
+    // Record this query's results for potential "Use last result" scope promotion.
+    // case_infos holds the full rows so the main results table can be repopulated
+    // without a re-fetch.
+    lastClaudeResult = {
+      question: question,
+      cl_ids: Array.from(allClIds),
+      case_infos: allCaseInfos.slice(),
+      timestamp: new Date()
+    };
+    updateScopeDisplay();
+
+    // === RENDER: three-section structured response ===
+    var footer = buildFooter(scopeDesc, N, entriesIds.length, docsIds.length, allCaseInfos.length, skipPass1);
+    renderClaudeResponse(pass2, allCaseInfos, footer);
+  } catch(err) {
+    respEl.textContent = "Error: " + err.message;
+  }
+}
+
+// Human-readable footer describing scope, match count, and what got analyzed.
+function buildFooter(scopeDesc, N, entriesCount, docsCount, metaCount, direct) {
+  var scopeClean = scopeDesc.replace(/\s*\(.*/, '').replace(/\s*\.\s+The scope constraint.*$/, '');
+  if (N === 0) return 'Answered against ' + scopeClean + ' · no matches';
+  var depthParts = [];
+  depthParts.push(metaCount + ' metadata');
+  if (entriesCount > 0) depthParts.push(entriesCount + ' with entries');
+  if (docsCount > 0) depthParts.push(docsCount + ' with docs');
+  return 'Answered against ' + scopeClean + ' · ' +
+    N.toLocaleString() + ' match' + (N === 1 ? '' : 'es') + ' · ' +
+    (direct ? 'direct · ' : '') +
+    'analyzed: ' + depthParts.join(', ');
+}
+
+// Render Claude's response as three sections: analysis / case list / footer.
+function renderClaudeResponse(analysis, caseInfos, footer) {
+  var html = '';
+  html += '<div class="ai-section">';
+  html += '<div class="ai-section-h">Analysis</div>';
+  html += '<div class="ai-analysis">' + esc(analysis) + '</div>';
+  html += '</div>';
+
+  if (caseInfos && caseInfos.length > 0) {
+    html += '<div class="ai-section">';
+    html += '<div class="ai-section-h">' + caseInfos.length + ' case' + (caseInfos.length === 1 ? '' : 's') + ' matched — click any to view details</div>';
+    html += '<table class="ai-caselist"><tbody>';
+    caseInfos.forEach(function(ci) {
+      html += '<tr onclick="claudeCaseClick(' + ci.cl_id + ')">';
+      html += '<td>' + esc(ci.docket_number || '') + '</td>';
+      html += '<td>' + esc(ci.case_name || '') + '</td>';
+      html += '<td>' + esc((ci.court || '').toUpperCase()) + '</td>';
+      html += '<td>' + esc(ci.date_filed || '') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '</div>';
+  }
+
+  html += '<div class="ai-footer">' + esc(footer) + '</div>';
+  document.getElementById('ai-r').innerHTML = html;
+}
+
+// Enter key triggers search (except in auth/password fields or textareas)
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT' &&
+      e.target.id !== 'api-key' && e.target.id !== 'demo-pw' && e.target.id !== 'gate-pw') {
+    runSearch();
+  }
+});
+</script>
+</body>
+</html>

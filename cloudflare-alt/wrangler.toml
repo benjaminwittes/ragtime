@@ -1,0 +1,24 @@
+name = "ragtime-proxy"
+main = "ragtime-worker.js"
+compatibility_date = "2024-11-01"
+
+# Before first deploy:
+#   1. wrangler login
+#   2. wrangler kv namespace create QUOTA
+#      → copy the returned id into the [[kv_namespaces]] block below
+#   3. wrangler secret put ANTHROPIC_API_KEY
+#      → paste your Anthropic API key when prompted
+#   4. (optional) wrangler secret put DEMO_PASSWORD
+#      → only set if you want to override the default "Lawfareskunkworks"
+#   5. wrangler deploy
+#   6. Note the deployed URL (e.g. https://ragtime-proxy.<subdomain>.workers.dev)
+#      and paste it into ../index.html as WORKER_URL + '/ask'
+#   7. Set a monthly spending cap on the Anthropic console for the demo key
+#      as a safety net on top of the daily-request KV quota.
+
+[[kv_namespaces]]
+binding = "QUOTA"
+id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+
+# Secrets (ANTHROPIC_API_KEY, optionally DEMO_PASSWORD) are set via
+# `wrangler secret put`, not in this file. Never commit real keys to git.
