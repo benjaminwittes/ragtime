@@ -25,7 +25,7 @@ An interactive research tool for federal court cases filed since January 20, 202
 Two password layers:
 
 1. **Access gate** — `lawfare2025`. Keeps casual visitors out.
-2. **Claude authentication** — either the shared demo password (`Lawfareskunkworks`, quota-limited) or your own Anthropic API key (no quota, billed to you).
+2. **Claude authentication** — either the shared demo password (quota-limited) or your own Anthropic API key (no quota, billed to you).
 
 Both passwords are present in client source. Quotas and rate limits are the real security boundary.
 
