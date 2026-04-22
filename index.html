@@ -1,10 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex, nofollow, noarchive">
-<meta name="googlebot" content="noindex, nofollow">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:ital,wght@0,400;0,700;1,400&display=swap');
@@ -662,7 +661,10 @@ async function runSearch() {
   var sql = "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases WHERE 1=1";
 
   if (search) {
-    sql += " AND cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE description ILIKE '%" + search.replace(/'/g,"''") + "%')";
+    // Use the GIN index on docket_entries.fts. websearch_to_tsquery supports
+    // multi-word phrases, "quoted phrases", AND/OR/-NOT operators. ~12x faster
+    // than ILIKE on 752K+ entries (660ms vs 10s+ full seq scan).
+    sql += " AND cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', '" + search.replace(/'/g,"''") + "'))";
   }
   if (name) sql += " AND case_name ILIKE '%" + name.replace(/'/g,"''") + "%'";
   if (court) sql += " AND court = '" + court.replace(/'/g,"''") + "'";
@@ -865,10 +867,15 @@ async function askClaude() {
         "",
         "- Civil: docket_number LIKE '%-cv-%', Criminal: '%-cr-%', Magistrate: '%-mj-%'",
         "- docket_entries.description contains motions, orders, opinions, complaints",
-        "- Use ILIKE for case-insensitive text matching",
+        "- Use ILIKE for short case-insensitive string matches (case_name, party, judge)",
         "- Always include cl_id in SELECT",
         "- LIMIT to 500 rows per query",
-        "- For full-text search use: WHERE description ILIKE '%term%'"
+        "- IMPORTANT: For text search on docket_entries.description, ALWAYS use the GIN-indexed fts column, NOT ILIKE.",
+        "  Use: WHERE fts @@ websearch_to_tsquery('english', 'term')",
+        "  websearch_to_tsquery supports phrases, \"quoted phrases\", AND, OR, and -NOT.",
+        "  Example: WHERE fts @@ websearch_to_tsquery('english', 'temporary restraining order')",
+        "  ILIKE on description is 10-20x slower on the 750K+ entries table and will time out.",
+        "  cases.fts and documents.text_content also have FTS indexes — same pattern applies."
       ].join("\n");
 
       var pass1System = "You generate PostgreSQL queries for a federal litigation database. " +
