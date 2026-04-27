@@ -1,0 +1,2983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:ital,wght@0,400;0,700;1,400&display=swap');
+  :root {
+    /* Fonts (Lawfare identity) */
+    --font-serif: 'EB Garamond', Garamond, Georgia, serif;
+    --font-sans: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', Monaco, Menlo, monospace;
+    /* Colors (Lawfare identity) */
+    --accent: #006A72;
+    --accent-light: #008A94;
+    --accent-dark: #00535A;
+    --accent-bg: #E6F0F1;
+    --text: #303030;
+    --text-secondary: #555;
+    --text-muted: #777;
+    --bg: #FFFFFF;
+    --surface: #F3F3F3;
+    --surface-alt: #EEEEEE;
+    --border: #DDDDDD;
+    --border-light: #EEEEEE;
+    --highlight: #006A72;
+    --highlight-bg: #E6F0F1;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--font-sans); background:var(--bg); color:var(--text); line-height:1.5; }
+
+  /* Gate */
+  #gate { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; gap:16px; }
+  #gate h1 { font-family:var(--font-serif); font-size:28px; color:var(--accent); }
+  #gate input { padding:10px 16px; border:1px solid var(--border); border-radius:4px; font-size:15px; width:260px; text-align:center; }
+  #gate button { padding:10px 24px; background:var(--accent); color:white; border:none; border-radius:5px; font-size:15px; font-weight:600; cursor:pointer; }
+  #gate button:hover { background:var(--accent-light); }
+  #gate .error { color:var(--highlight); font-size:13px; }
+
+  /* Header */
+  header { background:var(--accent); color:white; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-family:var(--font-serif); font-size:20px; font-weight:700; }
+  header .header-right { display:flex; align-items:center; gap:18px; }
+  header .stats { font-size:12px; opacity:0.8; font-family:var(--font-mono); }
+  header .reset-link { font-size:11px; color:white; opacity:0.7; text-decoration:underline; cursor:pointer; background:none; border:none; font-family:var(--font-sans); }
+  header .reset-link:hover { opacity:1; }
+
+  /* Layout */
+  #app { display:none; }
+
+  /* Sidebar */
+  .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:16px; overflow-y:auto; max-height:calc(100vh - 56px); position:sticky; top:56px; }
+  .sidebar h3 { font-family:var(--font-serif); font-size:13px; font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+  .fg { margin-bottom:14px; }
+  .fg label { display:block; font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px; }
+  .fg input,.fg select { width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-sans); font-size:13px; background:var(--bg); }
+  .fg input:focus,.fg select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-bg); }
+  .fg textarea { width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-sans); font-size:13px; background:var(--bg); resize:vertical; min-height:60px; }
+  .date-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .divider { border:none; border-top:1px solid var(--border-light); margin:14px 0; }
+  .btn { padding:7px 14px; border:none; border-radius:4px; font-family:var(--font-sans); font-weight:600; font-size:13px; cursor:pointer; }
+  .btn-primary { background:var(--accent); color:white; width:100%; }
+  .btn-primary:hover { background:var(--accent-light); }
+  .btn-primary:disabled { background:var(--border); cursor:not-allowed; }
+  .btn-clear { background:none; color:var(--text-muted); font-size:11px; padding:3px 6px; margin-top:3px; border:none; cursor:pointer; text-decoration:underline; }
+  .ctx-note { font-size:10px; color:var(--text-muted); font-style:italic; margin-top:8px; line-height:1.5; }
+
+  /* Mode button row */
+  .mode-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:14px; }
+  .mode-btn { padding:8px 6px; font-family:var(--font-sans); font-size:11px; font-weight:600; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text-secondary); cursor:pointer; text-align:center; line-height:1.25; transition:all .15s; }
+  .mode-btn:hover:not(:disabled):not(.active) { background:var(--accent-bg); border-color:var(--accent-light); color:var(--accent); }
+  .mode-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+  .mode-btn:disabled { opacity:.45; cursor:not-allowed; }
+  .mode-btn.hidden { display:none; }
+
+  /* Back navigation button (sidebar; peer of mode buttons) */
+  .nav-back { width:100%; padding:8px 10px; font-family:var(--font-sans); font-size:11px; font-weight:600; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text-secondary); cursor:pointer; text-align:center; line-height:1.25; transition:all .15s; margin-bottom:8px; }
+  .nav-back:hover:not(:disabled) { background:var(--surface); border-color:var(--text-secondary); color:var(--text); }
+  .nav-back:disabled { opacity:.45; cursor:not-allowed; }
+
+  /* Courts field: presets row + scrollable checkbox list */
+  .courts-presets { display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; margin-bottom:6px; }
+  .court-preset { padding:5px 4px; font-family:var(--font-sans); font-size:10px; font-weight:600; background:var(--bg); border:1px solid var(--border); border-radius:3px; color:var(--text-secondary); cursor:pointer; text-align:center; transition:all .15s; text-transform:uppercase; letter-spacing:.04em; }
+  .court-preset:hover:not(:disabled):not(.active) { background:var(--accent-bg); border-color:var(--accent-light); color:var(--accent); }
+  .court-preset.active { background:var(--accent); border-color:var(--accent); color:white; }
+  .court-preset:disabled { opacity:.45; cursor:not-allowed; }
+  .courts-list { max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; background:var(--bg); padding:4px 6px; }
+  .courts-list[disabled], .mode-form.locked .courts-list { opacity:.55; pointer-events:none; }
+  .court-row { display:flex; align-items:center; gap:8px; padding:5px 4px; font-size:11px; font-family:var(--font-mono); cursor:pointer; user-select:none; border-radius:2px; }
+  .court-row:hover { background:var(--accent-bg); }
+  .court-row input { margin:0; flex-shrink:0; cursor:pointer; }
+  .court-row .court-name { color:var(--text); }
+  .court-row .court-tag { font-size:9px; color:var(--text-muted); margin-left:auto; padding:0 4px; background:var(--surface-alt); border-radius:2px; font-family:var(--font-sans); text-transform:uppercase; letter-spacing:.04em; }
+  .courts-summary { font-size:10px; color:var(--text-muted); font-style:italic; margin-top:4px; line-height:1.4; }
+
+  /* Per-mode form containers */
+  .mode-form { display:none; }
+  .mode-form.active { display:block; }
+
+  /* Read-only sidebar notice (when viewing past page) */
+  .sidebar-readonly { background:var(--surface-alt); border:1px dashed var(--border); border-radius:4px; padding:10px 12px; margin-bottom:14px; font-size:11px; color:var(--text-secondary); line-height:1.45; }
+  .sidebar-readonly strong { color:var(--accent); font-family:var(--font-serif); font-size:12px; }
+
+  /* Field readout (prominent size-of-field display; active state only) */
+  .field-readout { background:var(--accent); color:white; border-radius:6px; padding:14px 16px; margin-bottom:14px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .field-readout-label { font-family:var(--font-sans); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; opacity:.85; margin-bottom:3px; }
+  .field-readout-number { font-family:var(--font-serif); font-size:34px; font-weight:700; line-height:1.05; }
+  .field-readout-sub { font-family:var(--font-sans); font-size:11px; opacity:.85; margin-top:4px; line-height:1.35; }
+  body.welcome-state .field-readout { display:none; }
+
+  /* Arm prompt (shown when on tip but no mode selected = fields locked) */
+  .arm-prompt { font-size:12px; color:var(--text-secondary); font-style:italic; padding:10px 12px; background:var(--surface); border:1px dashed var(--border); border-radius:4px; margin-bottom:12px; text-align:center; line-height:1.45; }
+  .arm-prompt strong { font-style:normal; color:var(--accent); font-family:var(--font-serif); }
+
+  /* Locked mode form (dimmed when fields are disabled because no mode is armed) */
+  .mode-form.locked { opacity:.5; }
+
+  /* Claude access panel (sidebar, below field readout) */
+  .claude-access { background:var(--surface-alt); border:1px solid var(--border); border-radius:5px; padding:10px 12px; margin-bottom:14px; font-size:11px; }
+  .claude-access-status { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .claude-access-label { font-family:var(--font-sans); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-secondary); }
+  .claude-access-state { color:var(--text); }
+  .claude-access-state.unlocked { color:var(--accent); font-weight:600; }
+  .claude-access-toggle { background:none; border:none; color:var(--accent); cursor:pointer; font-family:var(--font-sans); font-size:11px; text-decoration:underline; padding:0; }
+  .claude-access-form { display:none; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+  .claude-access-form.active { display:block; }
+  .claude-access-form .radio-row { display:flex; gap:10px; margin-bottom:6px; }
+  .claude-access-form .radio-row label { display:flex; align-items:center; gap:4px; font-size:11px; cursor:pointer; }
+  .claude-access-form input[type=password], .claude-access-form input[type=text] { width:100%; padding:5px 7px; font-family:var(--font-mono); font-size:11px; border:1px solid var(--border); border-radius:3px; box-sizing:border-box; margin-top:4px; }
+  .claude-access-form .form-buttons { display:flex; gap:6px; margin-top:8px; }
+  .claude-access-form .form-buttons button { flex:1; padding:5px 8px; font-family:var(--font-sans); font-size:11px; font-weight:600; border-radius:3px; cursor:pointer; border:1px solid var(--border); }
+  .claude-access-form .form-buttons .btn-save { background:var(--accent); color:white; border-color:var(--accent); }
+  .claude-access-form .form-buttons .btn-cancel { background:var(--bg); color:var(--text-secondary); }
+  .claude-access-error { color:var(--danger); font-size:10px; margin-top:6px; }
+
+  /* claude_sql form */
+  .claude-sql-form textarea { width:100%; padding:8px 10px; font-family:var(--font-sans); font-size:13px; border:1px solid var(--border); border-radius:4px; box-sizing:border-box; resize:vertical; min-height:90px; line-height:1.4; }
+  .claude-sql-form textarea:disabled { background:var(--surface); cursor:not-allowed; }
+  .claude-sql-help { font-size:10px; color:var(--text-muted); font-style:italic; margin-top:4px; line-height:1.4; }
+  .claude-status { font-size:11px; color:var(--accent); font-style:italic; margin-top:6px; display:none; }
+  .claude-status.active { display:block; }
+
+  /* Generated SQL display in page band */
+  .generated-sql { margin-top:8px; }
+  .generated-sql summary { cursor:pointer; font-family:var(--font-sans); font-size:11px; color:var(--text-secondary); padding:4px 0; user-select:none; }
+  .generated-sql summary:hover { color:var(--accent); }
+  .generated-sql pre { background:var(--surface-alt); border:1px solid var(--border); border-radius:4px; padding:10px 12px; font-family:var(--font-mono); font-size:11px; line-height:1.5; overflow-x:auto; white-space:pre-wrap; word-break:break-word; margin:6px 0 0 0; color:var(--text); }
+  .claude-prompt-display { background:var(--accent-bg); border-left:3px solid var(--accent); padding:8px 12px; font-family:var(--font-sans); font-size:13px; color:var(--text); margin-top:6px; border-radius:0 4px 4px 0; line-height:1.5; }
+
+  /* Content */
+  .content { padding:20px; overflow-y:auto; max-height:calc(100vh - 56px); }
+
+  /* View-banner (appears when viewing a past page) */
+  .view-banner { background:var(--surface-alt); border:1px solid var(--border); border-left:3px solid var(--accent-light); border-radius:4px; padding:10px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12px; color:var(--text-secondary); }
+  .view-banner span { font-family:var(--font-sans); }
+  .view-banner button { padding:5px 12px; font-size:11px; font-weight:600; background:var(--accent); color:white; border:none; border-radius:3px; cursor:pointer; }
+  .view-banner button:hover { background:var(--accent-light); }
+
+  /* Stack breadcrumb */
+  .breadcrumb-wrap { margin-bottom:14px; overflow-x:auto; padding-bottom:2px; }
+  .breadcrumb { display:flex; gap:6px; align-items:stretch; min-width:min-content; }
+  .crumb { display:flex; flex-direction:column; padding:6px 10px; border:1px solid var(--border); border-radius:4px; background:var(--bg); cursor:pointer; transition:all .15s; min-width:140px; flex-shrink:0; }
+  .crumb:hover:not(.current) { background:var(--accent-bg); border-color:var(--accent-light); }
+  .crumb.current { background:var(--accent); border-color:var(--accent); cursor:default; }
+  .crumb.current .crumb-idx,
+  .crumb.current .crumb-label,
+  .crumb.current .crumb-count { color:white; }
+  .crumb.current .crumb-idx { opacity:0.8; }
+  .crumb.current .crumb-count { opacity:0.8; }
+  .crumb-idx { font-family:var(--font-mono); font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px; }
+  .crumb-label { font-family:var(--font-sans); font-size:11px; font-weight:600; color:var(--text); line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px; }
+  .crumb-count { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:2px; }
+  .crumb-arrow { align-self:center; color:var(--text-muted); font-size:13px; padding:0 2px; flex-shrink:0; }
+
+  /* Page header band (teal) */
+  .page-band { background:var(--accent-bg); border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:4px; padding:12px 16px; margin-bottom:14px; }
+  .page-band.init { background:var(--surface); border-left-color:var(--border); }
+  .page-band.analysis { border-left-color:var(--accent-light); }
+  .page-band-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+  .page-band-label { font-family:var(--font-serif); font-size:15px; font-weight:600; color:var(--accent); line-height:1.35; }
+  .page-band.init .page-band-label { color:var(--text-secondary); font-style:italic; }
+  .page-band-actions { display:flex; gap:6px; flex-shrink:0; }
+  .page-band-actions button { padding:5px 10px; font-size:11px; font-weight:600; background:var(--bg); color:var(--accent); border:1px solid var(--accent-light); border-radius:3px; cursor:pointer; font-family:var(--font-sans); }
+  .page-band-actions button:hover { background:var(--accent); color:white; }
+  .page-band-meta { font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); margin-top:6px; }
+  .page-band-meta .sep { margin:0 8px; color:var(--border); }
+  .chip { display:inline-block; padding:1px 6px; font-size:9px; font-family:var(--font-mono); font-weight:600; letter-spacing:.04em; background:var(--accent-light); color:white; border-radius:2px; margin-left:6px; text-transform:uppercase; vertical-align:middle; }
+
+  /* Empty-state for page 0 */
+  .page-empty { padding:40px 20px; text-align:center; color:var(--text-muted); font-family:var(--font-serif); font-style:italic; font-size:15px; border:1px dashed var(--border); border-radius:6px; background:var(--surface); }
+
+  /* Analysis page layout (claude_analysis) */
+  .analysis-shell { display:block; }
+  .analysis-shell.layout-right { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:14px; align-items:start; }
+  .artifact-panel { background:var(--bg); border:1px solid var(--border); border-left:4px solid var(--accent-light); border-radius:4px; margin-bottom:14px; overflow:hidden; }
+  .layout-right .artifact-panel { margin-bottom:0; position:sticky; top:8px; max-height:calc(100vh - 24px); display:flex; flex-direction:column; }
+  .artifact-header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; background:var(--accent-bg); border-bottom:1px solid var(--border); }
+  .artifact-header-title { font-family:var(--font-serif); font-size:13px; font-weight:600; color:var(--accent); }
+  .artifact-header-actions { display:flex; gap:6px; }
+  .artifact-header-actions button { padding:3px 8px; font-size:11px; background:var(--bg); color:var(--accent); border:1px solid var(--accent-light); border-radius:3px; cursor:pointer; font-family:var(--font-sans); }
+  .artifact-header-actions button:hover { background:var(--accent); color:white; }
+  .artifact-body { padding:16px 20px; max-height:42vh; overflow-y:auto; }
+  .layout-right .artifact-body { max-height:none; flex:1; }
+  /* Markdown content rendering — Lawfare-styled */
+  .md-content { font-family:var(--font-serif); font-size:14px; line-height:1.65; color:var(--text); }
+  .md-content h1 { font-size:20px; font-weight:700; color:var(--accent); margin:14px 0 8px; }
+  .md-content h2 { font-size:17px; font-weight:700; color:var(--accent); margin:14px 0 6px; }
+  .md-content h3 { font-size:14px; font-weight:700; color:var(--accent-dark); margin:12px 0 4px; }
+  .md-content h4 { font-size:13px; font-weight:600; color:var(--text); margin:10px 0 4px; }
+  .md-content p { margin:0 0 10px; }
+  .md-content ul, .md-content ol { margin:0 0 10px 22px; }
+  .md-content li { margin:0 0 4px; }
+  .md-content a { color:var(--accent); text-decoration:underline; }
+  .md-content a:hover { color:var(--accent-light); }
+  .md-content a.case-ref { font-family:var(--font-sans); font-size:13px; font-weight:600; padding:1px 4px; background:var(--accent-bg); border-radius:3px; text-decoration:none; }
+  .md-content a.case-ref:hover { background:var(--accent); color:white; }
+  .md-content strong { font-weight:700; }
+  .md-content em { font-style:italic; }
+  .md-content code { font-family:var(--font-mono); font-size:12px; background:var(--surface-alt); padding:1px 4px; border-radius:3px; }
+  .md-content pre { font-family:var(--font-mono); font-size:12px; background:var(--surface-alt); padding:10px 12px; border-radius:4px; overflow-x:auto; margin:0 0 10px; }
+  .md-content blockquote { border-left:3px solid var(--accent-light); padding:2px 12px; color:var(--text-secondary); margin:0 0 10px; }
+  .md-content hr { border:none; border-top:1px solid var(--border); margin:14px 0; }
+  /* Row pulse when a case-ref link is clicked */
+  @keyframes case-pulse { 0% { background:var(--accent); color:white; } 100% { background:var(--accent-bg); } }
+  .ct tr.case-pulse { animation: case-pulse 1.2s ease-out; }
+
+  /* Table */
+  .ct { width:100%; border-collapse:collapse; font-size:12px; }
+  .ct th { text-align:left; padding:6px 10px; background:var(--surface-alt); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-secondary); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:1; }
+  .ct td { padding:6px 10px; border-bottom:1px solid var(--border-light); vertical-align:top; }
+  .ct tr { cursor:pointer; transition:background .15s; }
+  .ct tr:hover { background:var(--accent-bg); }
+  .ct tr.sel { background:var(--accent-bg); }
+  .cn { font-family:var(--font-serif); font-weight:600; color:var(--accent); font-size:12px; }
+  .dn { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
+  .cb { display:inline-block; padding:1px 5px; background:var(--surface-alt); border-radius:3px; font-size:10px; font-family:var(--font-mono); color:var(--text-secondary); }
+
+  /* Detail panel */
+  #detail { display:none; background:var(--surface); border:1px solid var(--border); border-radius:6px; margin-top:12px; }
+  .dh { padding:12px 16px; background:var(--accent-bg); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; }
+  .dh h3 { font-family:var(--font-serif); font-size:15px; font-weight:700; color:var(--accent); }
+  .dm { display:flex; gap:12px; flex-wrap:wrap; margin-top:3px; font-size:11px; color:var(--text-secondary); font-family:var(--font-mono); }
+  .dc { background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); }
+  .el { padding:12px 16px; max-height:400px; overflow-y:auto; }
+  .ei { display:grid; grid-template-columns:96px 96px 1fr; gap:10px; padding:6px 0; border-bottom:1px solid var(--border-light); font-size:12px; }
+  .ei:last-child { border-bottom:none; }
+  .en { font-family:var(--font-mono); font-weight:600; color:var(--accent); font-size:11px; }
+  .en a { color:inherit; text-decoration:none; border-bottom:1px dotted var(--accent); }
+  .en a:hover { color:var(--accent-light); border-bottom-color:var(--accent-light); }
+  .ed { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); white-space:nowrap; }
+
+  /* Pagination */
+  .pag { display:flex; justify-content:center; gap:6px; margin-top:12px; }
+  .pag button { padding:5px 12px; border:1px solid var(--border); background:var(--surface); border-radius:4px; font-size:12px; cursor:pointer; }
+  .pag button:hover { background:var(--accent-bg); }
+  .pag button.ap { background:var(--accent); color:white; border-color:var(--accent); }
+  .pag button:disabled { opacity:.4; cursor:not-allowed; }
+  .loading { text-align:center; padding:40px; color:var(--text-muted); font-family:var(--font-mono); font-size:13px; }
+  .sp { display:inline-block; width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--highlight); border-radius:50%; animation:spin .8s linear infinite; vertical-align:middle; margin-right:5px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Links — Lawfare identity: teal, underlined */
+  a { color:var(--accent); text-decoration:underline; }
+  a:hover { color:var(--accent-dark); }
+
+  /* ============================================
+     WELCOME STATE (body.welcome-state)
+     One-way transition on first page commit.
+     ============================================ */
+  body.welcome-state header { display:none; }
+  body.welcome-state .active-only { display:none; }
+  body.welcome-state .main-layout {
+    display:block;
+    max-width:720px;
+    margin:0 auto;
+    padding:40px 24px 24px;
+    min-height:auto;
+  }
+  body.welcome-state .sidebar {
+    background:transparent;
+    border-right:none;
+    padding:0;
+    max-height:none;
+    position:static;
+    overflow:visible;
+  }
+  body.welcome-state .sidebar > h3 { display:none; }
+  body.welcome-state .sidebar > h3.welcome-show { display:block; margin-top:18px; font-family:var(--font-serif); font-size:15px; letter-spacing:.02em; text-transform:none; color:var(--text); font-weight:600; }
+  body.welcome-state .sidebar > .divider { display:none; }
+  body.welcome-state .mode-row { display:none; }
+  body.welcome-state .filter-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px 14px;
+  }
+  body.welcome-state .filter-grid .fg { margin-bottom:0; }
+  body.welcome-state .filter-grid .fg.span-2 { grid-column:1 / -1; }
+  body.welcome-state .filter-actions { display:flex; gap:10px; align-items:center; margin-top:14px; }
+  body.welcome-state .filter-actions .btn-primary { flex:1; padding:10px 18px; font-size:14px; }
+  body.welcome-state .filter-actions .btn-clear {
+    background:transparent; border:1px solid var(--border); color:var(--text-secondary);
+    padding:9px 16px; font-size:12px; border-radius:4px; text-decoration:none; margin-top:0;
+  }
+  body.welcome-state .filter-actions .btn-clear:hover { background:var(--surface); }
+
+  /* Hero */
+  .welcome-hero { text-align:center; padding:60px 24px 30px; max-width:720px; margin:0 auto; }
+  body.active-state .welcome-hero { display:none; }
+  .hero-title { font-family:var(--font-serif); font-weight:700; font-size:64px; color:var(--text); line-height:1; letter-spacing:-.01em; margin-bottom:6px; }
+  .hero-tagline { font-family:var(--font-sans); font-style:italic; font-size:17px; color:var(--text-secondary); margin-bottom:14px; font-weight:400; }
+  .hero-lawfare { display:flex; align-items:center; justify-content:center; gap:8px; font-family:var(--font-sans); font-size:15px; color:var(--text-secondary); margin-bottom:24px; font-weight:400; }
+  .hero-lawfare img { height:23px; width:auto; vertical-align:middle; }
+  .hero-stats { font-family:var(--font-sans); font-size:13px; color:var(--text-muted); letter-spacing:.02em; }
+
+  /* About section (welcome only) */
+  .welcome-about { max-width:720px; margin:36px auto 60px; padding:0 24px; font-family:var(--font-sans); font-size:14px; color:var(--text-secondary); line-height:1.65; }
+  body.active-state .welcome-about { display:none; }
+  .welcome-about h4 { font-family:var(--font-serif); font-weight:700; font-size:15px; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; margin:22px 0 8px; }
+  .welcome-about ul { padding-left:20px; margin:6px 0; }
+  .welcome-about ul li { margin-bottom:3px; }
+  .welcome-about .cta { margin-top:26px; text-align:center; font-family:var(--font-serif); font-style:italic; font-size:16px; color:var(--text); }
+
+  body.active-state .main-layout { display:grid; grid-template-columns:320px 1fr; min-height:calc(100vh - 56px); }
+  @media(max-width:900px) { body.active-state .main-layout { grid-template-columns:1fr; } }
+
+  /* Tooltip helper */
+  [data-tip] { position:relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
+    background:var(--text); color:white; font-family:var(--font-sans); font-size:11px; font-weight:400;
+    padding:5px 9px; border-radius:3px; white-space:normal; width:max-content; max-width:220px;
+    text-align:center; line-height:1.4; z-index:100; pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<!-- PASSWORD GATE -->
+<div id="gate">
+  <h1>RAGtime</h1>
+  <p style="color:var(--text-secondary);max-width:400px;text-align:center;font-size:14px;font-family:var(--font-sans);font-style:italic;">
+    A Federal Litigation Research Tool from Lawfare
+  </p>
+  <input type="password" id="gate-pw" placeholder="Enter access code" onkeydown="if(event.key==='Enter')checkGate()">
+  <button onclick="checkGate()">Enter</button>
+  <div class="error" id="gate-err"></div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header>
+    <h1>RAGtime</h1>
+    <div class="header-right">
+      <span class="stats" id="hstats"><span class="sp"></span> Connecting...</span>
+      <button class="reset-link" onclick="resetSession()" title="Discard stack and return to page 0">Reset session</button>
+    </div>
+  </header>
+
+  <!-- Welcome hero (visible only in welcome-state) -->
+  <div class="welcome-hero">
+    <div class="hero-title">RAGtime</div>
+    <div class="hero-tagline">A Federal Litigation Research Tool</div>
+    <div class="hero-lawfare">
+      <span>from</span>
+      <img src="https://lawfare-assets-new.azureedge.net/assets/images/default-source/default-album/site-logo.png?sfvrsn=1d7ccf3d_1" alt="Lawfare" onerror="this.style.display='none'">
+    </div>
+    <div class="hero-stats" id="hstats-welcome"><span class="sp"></span> Connecting...</div>
+  </div>
+
+  <div class="main-layout">
+    <aside class="sidebar">
+      <!-- Field readout (active state only; shows size of currently-viewed field) -->
+      <div class="field-readout" id="field-readout">
+        <div class="field-readout-label">Current field</div>
+        <div class="field-readout-number" id="field-readout-num">—</div>
+        <div class="field-readout-sub" id="field-readout-sub">cases</div>
+      </div>
+
+      <!-- Read-only notice when viewing a past page -->
+      <div class="sidebar-readonly" id="sidebar-readonly" style="display:none;">
+        <strong>Viewing past page</strong><br>
+        The sidebar shows the state that produced this page. Return to the current page to make changes.
+      </div>
+
+      <!-- Claude access panel (active state only; controls credentials for Claude modes) -->
+      <div class="claude-access" id="claude-access" style="display:none;">
+        <div class="claude-access-status">
+          <div>
+            <div class="claude-access-label">Claude features</div>
+            <div class="claude-access-state" id="claude-access-state">Locked</div>
+          </div>
+          <button class="claude-access-toggle" id="claude-access-toggle" onclick="toggleClaudeAccessForm()">Unlock</button>
+        </div>
+        <div class="claude-access-form" id="claude-access-form">
+          <div class="radio-row">
+            <label><input type="radio" name="claude-auth" value="demo" checked onchange="toggleClaudeAuthMode()"> Demo password</label>
+            <label><input type="radio" name="claude-auth" value="byo" onchange="toggleClaudeAuthMode()"> My API key</label>
+          </div>
+          <div id="claude-auth-demo-block">
+            <input type="password" id="claude-demo-pw" placeholder="Demo password" onkeydown="if(event.key==='Enter')saveClaudeAccess()">
+          </div>
+          <div id="claude-auth-byo-block" style="display:none;">
+            <input type="password" id="claude-byo-key" placeholder="sk-ant-api03-..." onkeydown="if(event.key==='Enter')saveClaudeAccess()">
+          </div>
+          <div class="form-buttons">
+            <button class="btn-cancel" onclick="cancelClaudeAccessForm()">Cancel</button>
+            <button class="btn-save" onclick="saveClaudeAccess()">Unlock</button>
+          </div>
+          <div class="claude-access-error" id="claude-access-error"></div>
+        </div>
+      </div>
+
+      <!-- Mode buttons (hidden in welcome state; visible on all active pages) -->
+      <h3 class="welcome-show">Search</h3>
+      <button class="nav-back" id="nav-back-btn" onclick="popTip()" style="display:none;">← Back to previous page</button>
+      <div class="mode-row" id="mode-row">
+        <button class="mode-btn" data-mode="manual_filter" onclick="selectMode('manual_filter')" data-tip="Set filter criteria and apply them to produce a narrowed page.">Filter manually</button>
+        <button class="mode-btn" data-mode="claude_sql" onclick="selectMode('claude_sql')" data-tip="Describe a filter in natural language; Claude writes SQL.">Claude writes SQL</button>
+        <button class="mode-btn" data-mode="claude_read" onclick="selectMode('claude_read')" data-tip="Claude reads each case and keeps/drops per criterion.">Claude reads each case</button>
+        <button class="mode-btn" data-mode="claude_analysis" onclick="selectMode('claude_analysis')" data-tip="Claude analyzes the full case list and produces narrative + annotations.">Claude analyzes</button>
+      </div>
+
+      <!-- Arm prompt (shown on tip when no mode is armed; explains why fields are locked) -->
+      <div class="arm-prompt" id="arm-prompt" style="display:none;">
+        Click an operation above to narrow the field further.
+      </div>
+
+      <!-- Manual filter form -->
+      <div class="mode-form active" id="form-manual_filter">
+        <div class="filter-grid">
+          <div class="fg span-2"><label>Full-Text Search</label><input type="text" id="f-search" placeholder="e.g. preliminary injunction, TRO..."></div>
+          <div class="fg span-2"><label>Case Name</label><input type="text" id="f-name" placeholder="e.g. ACLU, Trump, EPA..."></div>
+          <div class="fg span-2">
+            <label>Courts</label>
+            <div class="courts-presets" id="courts-presets">
+              <button type="button" class="court-preset" data-preset="all" onclick="applyCourtPreset('all')">All</button>
+              <button type="button" class="court-preset" data-preset="district" onclick="applyCourtPreset('district')">District</button>
+              <button type="button" class="court-preset" data-preset="circuit" onclick="applyCourtPreset('circuit')">Circuit</button>
+              <button type="button" class="court-preset" data-preset="none" onclick="applyCourtPreset('none')">None</button>
+            </div>
+            <div class="courts-list" id="courts-list"></div>
+            <div class="courts-summary" id="courts-summary"></div>
+          </div>
+          <div class="fg"><label>Judge</label><select id="f-judge"><option value="">All Judges</option></select></div>
+          <div class="fg"><label>Case Type</label>
+            <select id="f-type"><option value="">All</option><option value="cv">Civil</option><option value="cr">Criminal</option><option value="mj">Magistrate</option><option value="mc">Misc</option></select>
+          </div>
+          <div class="fg span-2"><label>Cause / NOS</label><input type="text" id="f-cause" placeholder="e.g. APA, 551, 1983..."></div>
+          <div class="fg span-2"><label>Date Range</label>
+            <div class="date-row"><input type="date" id="f-from" value="2025-01-20"><input type="date" id="f-to"></div>
+          </div>
+          <div class="fg span-2"><label>Party Name</label><input type="text" id="f-party" placeholder="e.g. DHS, Noem, ACLU..."></div>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="btn-commit-filter" onclick="applyManualFilter()">Apply filter</button>
+          <button class="btn-clear" onclick="clearFilters()">Clear filters</button>
+        </div>
+        <p class="ctx-note" id="filter-scope-note"></p>
+      </div>
+
+      <!-- claude_sql: Claude generates a single SQL query from a natural-language description -->
+      <div class="mode-form claude-sql-form" id="form-claude_sql">
+        <div class="fg">
+          <label>Describe what you want to find</label>
+          <textarea id="sql-prompt" placeholder="e.g. cases where the government filed an emergency motion to stay; or: APA challenges with TROs granted in 2025"></textarea>
+        </div>
+        <p class="claude-sql-help">Claude will design and run a SQL query against the current field. The query will be shown to you so you can see exactly what was matched.</p>
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="btn-commit-sql" onclick="applyClaudeSql()">Generate query</button>
+          <button class="btn-clear" onclick="document.getElementById('sql-prompt').value=''">Clear</button>
+        </div>
+        <div class="claude-status" id="claude-sql-status"></div>
+        <p class="ctx-note" id="sql-scope-note"></p>
+      </div>
+      <!-- claude_read: Claude reads each case's docket entries and decides keep/drop per case -->
+      <div class="mode-form claude-sql-form" id="form-claude_read">
+        <div class="fg">
+          <label>Per-case criterion</label>
+          <textarea id="read-prompt" placeholder="e.g. the court ordered the government to do something and the government didn't comply"></textarea>
+        </div>
+        <p class="claude-sql-help">Claude reads each case's docket entries and decides keep/drop per case. Slow and expensive; available only when the field is ≤ 5,000 cases.</p>
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="btn-commit-read" onclick="applyClaudeRead()">Read cases</button>
+          <button class="btn-clear" onclick="document.getElementById('read-prompt').value=''">Clear</button>
+        </div>
+        <div class="claude-status" id="claude-read-status"></div>
+        <p class="ctx-note" id="read-scope-note"></p>
+        <p class="ctx-note" id="read-cost-note" style="margin-top:4px;"></p>
+      </div>
+      <!-- claude_analysis: Claude reads the cases and produces narrative + per-case annotations. List is NOT narrowed. -->
+      <div class="mode-form claude-sql-form" id="form-claude_analysis">
+        <div class="fg">
+          <label>Analytical prompt</label>
+          <textarea id="analysis-prompt" placeholder="e.g. rank by severity of non-compliance and explain each ranking; or: identify common patterns and group cases by pattern"></textarea>
+        </div>
+        <p class="claude-sql-help">Claude reads all the cases and produces a written analysis plus optional per-case annotations (rank, score, category). The case list is not narrowed.</p>
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="btn-commit-analysis" onclick="applyClaudeAnalysis()">Analyze</button>
+          <button class="btn-clear" onclick="document.getElementById('analysis-prompt').value=''">Clear</button>
+        </div>
+        <div class="claude-status" id="claude-analysis-status"></div>
+        <p class="ctx-note" id="analysis-scope-note"></p>
+        <p class="ctx-note" id="analysis-cost-note" style="margin-top:4px;"></p>
+      </div>
+    </aside>
+
+    <main class="content active-only">
+      <!-- View-banner appears when viewing a non-tip page -->
+      <div class="view-banner" id="view-banner" style="display:none;">
+        <span id="view-banner-text">Viewing page 0 (past). Return to current page to make changes.</span>
+        <button onclick="jumpToTip()">Return to current page</button>
+      </div>
+
+      <!-- Stack breadcrumb -->
+      <div class="breadcrumb-wrap"><div class="breadcrumb" id="breadcrumb"></div></div>
+
+      <!-- Page header band -->
+      <div id="page-band-container"></div>
+
+      <!-- Case list / empty state -->
+      <div id="page-content"></div>
+
+      <!-- Detail panel (for case docket view) -->
+      <div id="detail">
+        <div class="dh"><div><h3 id="d-name"></h3><div class="dm" id="d-meta"></div></div><button class="dc" onclick="closeDetail()">&times;</button></div>
+        <div class="el" id="d-entries"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Welcome state about section -->
+  <div class="welcome-about">
+    <h4>How to use</h4>
+    <ul>
+      <li><strong>Filter manually</strong> to start — set criteria and apply to produce page 1.</li>
+      <li><strong>Stack further operations</strong> on top: each narrows or analyzes the previous page's case set.</li>
+      <li><strong>Back</strong> pops the stack; <strong>click a breadcrumb</strong> to view any past page read-only.</li>
+    </ul>
+    <h4>About the data</h4>
+    <ul>
+      <li>Federal district courts and appellate circuits.</li>
+      <li>Cases filed since January 20, 2025.</li>
+      <li>Full docket entries; OCR text of attached documents where available.</li>
+      <li>Full-text search runs on docket-entry descriptions (indexed), not document contents.</li>
+    </ul>
+    <div class="cta">Set a filter or type a question to begin.</div>
+  </div>
+</div>
+
+<script>
+// === CONFIG ===
+var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpa2RianBybmRna3NpYmJ2Y2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTE0MjksImV4cCI6MjA5MjA4NzQyOX0.FzzHOU7mcixedWZXd7wZkd3Jpy-05dMFB66q-yPSPL4";
+var ACCESS_CODE = "lawfare2025";
+var PAGE_SIZE = 50;
+// Cloudflare Worker proxy for Anthropic API calls
+var WORKER_URL = "https://ragtimeproxy.benjamin-wittes.workers.dev/ask";
+var CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+var CLAUDE_MAX_ROWS = 10000; // SQL row cap (matches manual_filter LIMIT)
+var CLAUDE_MAX_RAW_ROWS = 200000; // Hard ceiling on Claude's pre-intersection result set
+
+// claude_read mode (Phase 5) tunables.
+var CLAUDE_READ_MAX = 5000;            // hard cap on incoming case count (spec: "≤ 5,000")
+var CLAUDE_READ_BATCH_SIZE = 25;       // cases per Claude API call (~60K input tokens at typical case size)
+var CLAUDE_READ_CONCURRENCY = 4;       // parallel API calls (4 × 25 = 100 cases in flight)
+var CLAUDE_READ_MAX_ENTRIES_PER_CASE = 30; // most recent entries to send Claude per case
+var CLAUDE_READ_MAX_ENTRY_CHARS = 600; // truncate any individual entry's description to this length
+// Per-case cost heuristic for the live cost readout (Sonnet 4.5 pricing as of 2026):
+//   $3 / Mtok input, $15 / Mtok output. Per-case ~1400 input + ~50 output → ~$0.0050/case.
+//   Time: ~25s per batch × (cases / batch_size / concurrency).
+var CLAUDE_READ_COST_PER_CASE = 0.005;
+
+// claude_analysis mode (Phase 6) tunables.
+// Analysis is one-shot (Claude must see all cases together to rank/classify/summarize),
+// so context budget is the binding constraint, not API cost. Per case: metadata + N entries.
+// At ~800 tokens/case with 15 entries × 400 chars, 150 cases ≈ 120K input tokens — comfortable
+// within 200K context with system prompt + reasoning headroom.
+var CLAUDE_ANALYSIS_MAX = 150;                  // hard cap on incoming case count
+var CLAUDE_ANALYSIS_SOFT_WARN = 100;            // confirm before running above this
+var CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE = 15;  // most recent entries to send per case
+var CLAUDE_ANALYSIS_MAX_ENTRY_CHARS = 400;      // per-entry char cap
+var CLAUDE_ANALYSIS_MAX_OUTPUT_TOKENS = 8000;   // analysis can be a long markdown doc
+// Cost heuristic: per-case ~900 input tokens + amortized ~30 output tokens.
+//   Input: 900 × $3/Mtok = $0.0027/case; output amortized ~$0.0005/case ⇒ ~$0.003/case.
+var CLAUDE_ANALYSIS_COST_PER_CASE = 0.003;
+
+// === CLAUDE ACCESS STATE ===
+// Stored only in memory for the duration of this session — never persisted.
+// mode: 'locked' | 'demo' | 'byo'
+var claudeAccess = { mode: 'locked', demoPw: null, byoKey: null };
+
+// === STACK STATE ===
+//
+// The explorer session is represented as a linear stack of pages. Page 0 is
+// always the empty init page. Each subsequent page is the result of exactly
+// one operation applied to the previous page. Narrowing-only: outgoing set
+// can shrink or stay the same, never grow.
+//
+// Page shape:
+//   {
+//     page_id: int,
+//     operation_type: 'init' | 'manual_filter' | 'claude_sql' | 'claude_read' | 'claude_analysis',
+//     operation_label: string,
+//     prompt: string | null,            // for Claude operations
+//     generated_sql: string | null,     // for claude_sql (and internal manual_filter SQL, handy for download/debug)
+//     filter_state: object | null,      // for manual_filter: snapshot of filter form values
+//     incoming_cl_ids: number[],        // cl_ids entering the page (empty for page 0)
+//     outgoing_cl_ids: number[],        // cl_ids leaving the page
+//     cases: object[],                  // case display-data rows for outgoing (cache; lets rendering past pages be instant)
+//     incoming_count: number,           // convenience; equals incoming_cl_ids.length for pages > 0, or totalCaseCount for "filter from all" commits
+//     outgoing_count: number,
+//     per_case_annotations: object | null, // for Claude operations; null for manual_filter
+//     artifact_markdown: string | null,    // for claude_analysis
+//     created_at: string (ISO)
+//   }
+//
+// View state:
+//   stack[viewingIdx] is what the user currently sees.
+//   stack[stack.length-1] is the "tip" — the live page.
+//   If viewingIdx < stack.length-1, user is viewing a past page (read-only).
+//
+// Page 0's "incoming" is conceptually "all cases" (the full DB) but stored as
+// empty array — the SQL-builder treats empty incoming as "no constraint".
+var stack = [];
+var viewingIdx = 0;
+var selectedMode = 'manual_filter';  // which mode button is currently active (tip only)
+var modeArmed = true;                // whether user has armed a mode; false = fields locked. Starts true for welcome state.
+var selectedCaseId = null;           // cl_id of docket detail currently open
+var currentPagePagination = 0;       // page index within the case list (pagination inside a stack page)
+var totalCaseCount = 0;
+var hasTransitioned = false;
+var analysisLayout = 'top';          // 'top' (artifact above table) | 'right' (artifact in right column)
+
+// Court taxonomy (populated from DB on init).
+// allCourtCodes: every distinct `court` value, lowercased, sorted.
+// districtCodes / circuitCodes: partition of allCourtCodes by isCircuit().
+var allCourtCodes = [];
+var districtCodes = [];
+var circuitCodes = [];
+
+// === INITIAL STACK ===
+function initStack() {
+  stack = [{
+    page_id: 0,
+    operation_type: 'init',
+    operation_label: 'New session — start by filtering',
+    prompt: null, generated_sql: null, filter_state: null,
+    incoming_cl_ids: [], outgoing_cl_ids: [], cases: [],
+    incoming_count: 0, outgoing_count: 0,
+    per_case_annotations: null, artifact_markdown: null,
+    created_at: new Date().toISOString()
+  }];
+  viewingIdx = 0;
+}
+
+// === UTILITIES ===
+function esc(s) { if(!s) return ''; var d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
+function escSql(s) { return String(s||'').replace(/'/g,"''"); }
+function clean(s) { return String(s||"").replace(/[\uD800-\uDFFF]/g,"").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFD]/g," "); }
+function shortCause(c) { return !c?'':c.length>25?c.substring(0,23)+'…':c; }
+function fmtInt(n) { return Number(n || 0).toLocaleString(); }
+function fmtTime(iso) {
+  try { var d = new Date(iso); return d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); }
+  catch(e) { return ''; }
+}
+
+// Render docket entry description. Strips bracketed 6-10 digit noise
+// (PACER internal document IDs that don't map to public URLs) and normalizes whitespace.
+function renderDescription(desc) {
+  if (!desc) return '';
+  var cleaned = String(desc).replace(/\s*\[\d{6,10}\]\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  return esc(cleaned);
+}
+
+// Build a link to a specific docket entry on CourtListener.
+function entryLink(clUrl, entryNum, court) {
+  if (!clUrl) return '#';
+  var courtIsCircuit = /^(ca\d+|cadc|cafc)$/.test(court || '');
+  var isLargeEntryNum = /^\d{6,}$/.test(String(entryNum));
+  var m = clUrl.match(/^(https:\/\/www\.courtlistener\.com\/docket\/\d+)\/([^/?#]+)\/?$/);
+  if (m && !courtIsCircuit && !isLargeEntryNum) {
+    return m[1] + '/' + entryNum + '/' + m[2] + '/';
+  }
+  return clUrl.replace(/\/?$/, '/') + '#entry-' + entryNum;
+}
+
+// === COURT TAXONOMY HELPERS ===
+// A court code is "circuit" if it matches the federal-circuit naming pattern.
+// Everything else is treated as a district court.
+function isCircuit(code) { return /^(ca\d+|cadc|cafc)$/.test(code); }
+
+// Render the courts checkbox list (called once on init after taxonomy loads).
+function populateCourtsList() {
+  var list = document.getElementById('courts-list');
+  list.innerHTML = '';
+  allCourtCodes.forEach(function(code) {
+    var label = document.createElement('label');
+    label.className = 'court-row';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = code;
+    cb.dataset.court = code;
+    cb.onchange = onCourtCheckboxChange;
+    var name = document.createElement('span');
+    name.className = 'court-name'; name.textContent = code.toUpperCase();
+    var tag = document.createElement('span');
+    tag.className = 'court-tag'; tag.textContent = isCircuit(code) ? 'Circuit' : 'District';
+    label.appendChild(cb); label.appendChild(name); label.appendChild(tag);
+    list.appendChild(label);
+  });
+}
+
+// Read currently-checked court codes from the DOM.
+function getSelectedCourts() {
+  var boxes = document.querySelectorAll('#courts-list input[type=checkbox]');
+  var sel = [];
+  Array.prototype.forEach.call(boxes, function(cb) { if (cb.checked) sel.push(cb.value); });
+  return sel;
+}
+
+// Apply a preset by setting the checkboxes appropriately.
+// Presets: 'all' | 'district' | 'circuit' | 'none'
+function applyCourtPreset(preset) {
+  var target;
+  if (preset === 'all') target = allCourtCodes.slice();
+  else if (preset === 'district') target = districtCodes.slice();
+  else if (preset === 'circuit') target = circuitCodes.slice();
+  else if (preset === 'none') target = [];
+  else return;
+  var targetSet = {};
+  target.forEach(function(c) { targetSet[c] = true; });
+  var boxes = document.querySelectorAll('#courts-list input[type=checkbox]');
+  Array.prototype.forEach.call(boxes, function(cb) { cb.checked = !!targetSet[cb.value]; });
+  updateCourtsUI();
+}
+
+// Detect which preset (if any) matches the current selection.
+function detectActivePreset(selected) {
+  if (selected.length === allCourtCodes.length) return 'all';
+  if (selected.length === 0) return 'none';
+  if (selected.length === districtCodes.length && selected.every(function(c) { return !isCircuit(c); })) return 'district';
+  if (selected.length === circuitCodes.length && selected.every(function(c) { return isCircuit(c); })) return 'circuit';
+  return null; // custom selection
+}
+
+// Update preset button highlights and the summary line.
+function updateCourtsUI() {
+  var selected = getSelectedCourts();
+  var activePreset = detectActivePreset(selected);
+  Array.prototype.forEach.call(document.querySelectorAll('.court-preset'), function(btn) {
+    if (btn.dataset.preset === activePreset) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+  var summary = document.getElementById('courts-summary');
+  if (activePreset === 'all') {
+    summary.textContent = 'All ' + allCourtCodes.length + ' courts';
+  } else if (activePreset === 'district') {
+    summary.textContent = 'All ' + districtCodes.length + ' district courts';
+  } else if (activePreset === 'circuit') {
+    summary.textContent = 'All ' + circuitCodes.length + ' circuit courts';
+  } else if (activePreset === 'none') {
+    summary.textContent = 'No courts selected — empty result';
+  } else if (selected.length <= 3) {
+    summary.textContent = selected.map(function(c) { return c.toUpperCase(); }).join(', ');
+  } else {
+    summary.textContent = selected.length + ' courts selected';
+  }
+}
+
+// Checkbox change handler — clears preset highlight if selection no longer matches a preset.
+function onCourtCheckboxChange() { updateCourtsUI(); }
+
+// === PASSWORD GATE ===
+function checkGate() {
+  if (document.getElementById('gate-pw').value === ACCESS_CODE) {
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.body.classList.add('welcome-state');
+    initApp();
+  } else {
+    document.getElementById('gate-err').textContent = 'Incorrect code.';
+  }
+}
+
+// === SUPABASE HELPERS ===
+// Wraps Supabase RPC calls with a single retry on fetch-layer failures.
+// Mirrors callClaude's retry logic: Safari "Load failed" / TLS handshake /
+// transient network errors get one retry after a brief delay; Supabase-returned
+// HTTP errors (4xx/5xx with body) propagate immediately since those are
+// deterministic and a retry won't help.
+async function sbRpc(fnName, params) {
+  var url = SB_URL + "/rest/v1/rpc/" + fnName;
+  var opts = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SB_KEY,
+      "Authorization": "Bearer " + SB_KEY
+    },
+    body: JSON.stringify(params)
+  };
+  var attempt = 0;
+  var lastNetErr = null;
+  while (attempt < 2) {
+    attempt++;
+    var resp;
+    try {
+      resp = await fetch(url, opts);
+    } catch (netErr) {
+      lastNetErr = netErr;
+      if (attempt < 2) {
+        await new Promise(function(r) { setTimeout(r, 1500); });
+        continue;
+      }
+      throw new Error("Database fetch failed: " + netErr.message + " (retried once)");
+    }
+    if (!resp.ok) {
+      var errText = await resp.text();
+      throw new Error("RPC error " + resp.status + ": " + errText.substring(0, 200));
+    }
+    return resp.json();
+  }
+  throw new Error("Database fetch failed: " + (lastNetErr ? lastNetErr.message : 'unknown'));
+}
+
+// === INIT ===
+async function initApp() {
+  initStack();
+  try {
+    var counts = await sbRpc("run_query", {
+      query_text: "SELECT (SELECT COUNT(*) FROM cases) as case_count, " +
+                  "(SELECT COUNT(*) FROM docket_entries) as entry_count, " +
+                  "(SELECT COUNT(DISTINCT court) FROM cases) as court_count, " +
+                  "(SELECT MAX(date_filed)::text FROM cases) as max_filed"
+    });
+    var c = counts[0];
+    totalCaseCount = Number(c.case_count);
+    var statsActive = fmtInt(c.case_count) + ' cases · ' + fmtInt(c.entry_count) + ' entries · ' + c.court_count + ' courts';
+    var statsWelcome = statsActive + (c.max_filed ? ' · Updated ' + c.max_filed : '');
+    document.getElementById('hstats').textContent = statsActive;
+    document.getElementById('hstats-welcome').textContent = statsWelcome;
+
+    // Populate court taxonomy & checkbox list
+    var courts = await sbRpc("run_query", { query_text: "SELECT DISTINCT court FROM cases ORDER BY court" });
+    allCourtCodes = courts.map(function(r) { return String(r.court || '').toLowerCase(); }).filter(Boolean);
+    districtCodes = allCourtCodes.filter(function(c) { return !isCircuit(c); });
+    circuitCodes = allCourtCodes.filter(function(c) { return isCircuit(c); });
+    populateCourtsList();
+    applyCourtPreset('all'); // start with "All" preset selected
+
+    // Populate judges dropdown
+    var judges = await sbRpc("run_query", { query_text: "SELECT DISTINCT judge FROM cases WHERE judge != '' AND judge IS NOT NULL ORDER BY judge" });
+    var js = document.getElementById('f-judge');
+    judges.forEach(function(r) {
+      var o = document.createElement('option'); o.value = r.judge; o.textContent = r.judge;
+      js.appendChild(o);
+    });
+
+    renderClaudeAccessUI();
+    renderAll();
+  } catch(err) {
+    document.getElementById('hstats').textContent = 'Connection error: ' + err.message;
+    document.getElementById('hstats-welcome').textContent = 'Connection error: ' + err.message;
+  }
+}
+
+// One-way transition from welcome state to active state
+function transitionToActive() {
+  if (hasTransitioned) return;
+  hasTransitioned = true;
+  document.body.classList.remove('welcome-state');
+  document.body.classList.add('active-state');
+}
+
+// === MODE SWITCHING ===
+function selectMode(mode) {
+  if (!isOnTip()) return; // no mode switching when viewing past page
+  selectedMode = mode;
+  modeArmed = true; // clicking a mode button arms the form (unlocks fields)
+  Array.prototype.forEach.call(document.querySelectorAll('.mode-btn'), function(btn) {
+    if (btn.dataset.mode === mode) btn.classList.add('active'); else btn.classList.remove('active');
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.mode-form'), function(form) {
+    if (form.id === 'form-' + mode) form.classList.add('active'); else form.classList.remove('active');
+  });
+  renderSidebarForViewState(); // reflect armed state (unlock fields, hide arm-prompt)
+}
+
+// Page 0 hides claude_read and claude_analysis (nothing to operate on)
+function updateModeButtonVisibility() {
+  var tip = stack[stack.length - 1];
+  var isPage0 = (stack.length === 1);
+  Array.prototype.forEach.call(document.querySelectorAll('.mode-btn'), function(btn) {
+    var mode = btn.dataset.mode;
+    if (isPage0 && (mode === 'claude_read' || mode === 'claude_analysis')) {
+      btn.classList.add('hidden');
+    } else {
+      btn.classList.remove('hidden');
+    }
+  });
+  // Adjust grid layout to 2-col or 4-col based on visibility
+  var row = document.getElementById('mode-row');
+  row.style.gridTemplateColumns = isPage0 ? '1fr 1fr' : 'repeat(4, 1fr)';
+}
+
+// === MANUAL FILTER OPERATION ===
+//
+// Builds SQL that narrows the tip page's incoming set by filter criteria,
+// runs it, pushes a new page onto the stack.
+// === CLAUDE ACCESS UI ===
+//
+// The Claude access panel sits in the sidebar between the field readout and the
+// mode buttons. It governs whether claude_sql / claude_read / claude_analysis
+// modes can actually run. Three states:
+//   - locked (default): no creds; Claude mode buttons are disabled.
+//   - demo: shared password; goes through the worker's quota tracking.
+//   - byo: user's own Anthropic API key; not quota-tracked server-side.
+// State lives in `claudeAccess` (memory only — not persisted).
+
+function claudeAccessUnlocked() { return claudeAccess.mode !== 'locked'; }
+
+function toggleClaudeAccessForm() {
+  var form = document.getElementById('claude-access-form');
+  if (form.classList.contains('active')) {
+    form.classList.remove('active');
+  } else {
+    form.classList.add('active');
+    // Default to demo radio if not already unlocked with a specific mode
+    if (claudeAccess.mode === 'locked' || claudeAccess.mode === 'demo') {
+      document.querySelector('input[name=claude-auth][value=demo]').checked = true;
+    } else {
+      document.querySelector('input[name=claude-auth][value=byo]').checked = true;
+    }
+    toggleClaudeAuthMode();
+    document.getElementById('claude-access-error').textContent = '';
+  }
+}
+
+function cancelClaudeAccessForm() {
+  document.getElementById('claude-access-form').classList.remove('active');
+  document.getElementById('claude-access-error').textContent = '';
+}
+
+// Show/hide the demo-pw vs byo-key input blocks based on the radio selection.
+function toggleClaudeAuthMode() {
+  var mode = document.querySelector('input[name=claude-auth]:checked').value;
+  document.getElementById('claude-auth-demo-block').style.display = (mode === 'demo') ? 'block' : 'none';
+  document.getElementById('claude-auth-byo-block').style.display = (mode === 'byo') ? 'block' : 'none';
+}
+
+function saveClaudeAccess() {
+  var mode = document.querySelector('input[name=claude-auth]:checked').value;
+  var errEl = document.getElementById('claude-access-error');
+  errEl.textContent = '';
+  if (mode === 'demo') {
+    var pw = document.getElementById('claude-demo-pw').value;
+    if (!pw) { errEl.textContent = 'Enter the demo password.'; return; }
+    claudeAccess = { mode: 'demo', demoPw: pw, byoKey: null };
+  } else {
+    var key = document.getElementById('claude-byo-key').value.trim();
+    if (!key) { errEl.textContent = 'Enter your Anthropic API key.'; return; }
+    if (!/^sk-ant-/.test(key)) { errEl.textContent = 'API keys start with "sk-ant-".'; return; }
+    claudeAccess = { mode: 'byo', demoPw: null, byoKey: key };
+  }
+  // Clear inputs after capture so they don't linger in the DOM
+  document.getElementById('claude-demo-pw').value = '';
+  document.getElementById('claude-byo-key').value = '';
+  document.getElementById('claude-access-form').classList.remove('active');
+  renderClaudeAccessUI();
+  renderSidebarForViewState();
+}
+
+function lockClaudeAccess() {
+  claudeAccess = { mode: 'locked', demoPw: null, byoKey: null };
+  renderClaudeAccessUI();
+  renderSidebarForViewState();
+}
+
+// Render the access panel header (locked/unlocked badge + toggle button label).
+function renderClaudeAccessUI() {
+  var stateEl = document.getElementById('claude-access-state');
+  var toggleEl = document.getElementById('claude-access-toggle');
+  if (claudeAccess.mode === 'locked') {
+    stateEl.textContent = 'Locked';
+    stateEl.classList.remove('unlocked');
+    toggleEl.textContent = 'Unlock';
+    toggleEl.onclick = toggleClaudeAccessForm;
+  } else {
+    stateEl.textContent = '✓ Unlocked (' + (claudeAccess.mode === 'demo' ? 'demo' : 'your key') + ')';
+    stateEl.classList.add('unlocked');
+    toggleEl.textContent = 'Lock';
+    toggleEl.onclick = lockClaudeAccess;
+  }
+}
+
+// === CLAUDE API CALL ===
+//
+// Posts to the Cloudflare Worker proxy with either a demo password or a BYO key.
+// Returns the assistant's text content. Throws on any error.
+//
+// Auto-retries ONCE on fetch-layer failures (Safari "Load failed", network blips,
+// cold-Worker timeouts). The pattern observed in v6.4.2 testing was deterministic:
+// first call after a quiet period fails at the fetch layer, second call (warm
+// Worker, hot connection pool to api.anthropic.com) succeeds. We don't retry on
+// auth errors or Anthropic-returned errors — those are deterministic and a
+// retry would just delay user feedback.
+async function callClaude(systemPrompt, userContent, maxTok) {
+  if (!claudeAccessUnlocked()) {
+    throw new Error('Claude features are locked. Click "Unlock" in the sidebar.');
+  }
+  var body = {
+    model: CLAUDE_MODEL,
+    max_tokens: maxTok || 4000,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userContent }]
+  };
+  if (claudeAccess.mode === 'demo') body.password = claudeAccess.demoPw;
+  else body.user_api_key = claudeAccess.byoKey;
+
+  var attempt = 0;
+  var lastNetErr = null;
+  while (attempt < 2) {
+    attempt++;
+    var resp;
+    try {
+      resp = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    } catch (netErr) {
+      // Fetch-layer failure (TLS handshake, timeout, "Load failed" in Safari, etc.)
+      // Retry once after a short delay to warm up the Worker / connection pool.
+      lastNetErr = netErr;
+      if (attempt < 2) {
+        await new Promise(function(r) { setTimeout(r, 1500); });
+        continue;
+      }
+      throw new Error('Could not reach Claude proxy: ' + netErr.message + ' (retried once)');
+    }
+    // From here down, no retry — the request reached the proxy.
+    var data;
+    try { data = await resp.json(); }
+    catch (e) { throw new Error('Proxy returned non-JSON (HTTP ' + resp.status + ')'); }
+    if (!resp.ok) {
+      var msg = (data && data.error && data.error.message) ? data.error.message : ('Proxy error ' + resp.status);
+      throw new Error(msg);
+    }
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    if (data.content && data.content[0] && data.content[0].text) return data.content[0].text;
+    throw new Error('Unexpected response shape from proxy');
+  }
+  // Unreachable (the loop either returns or throws), but for clarity:
+  throw new Error('Could not reach Claude proxy: ' + (lastNetErr ? lastNetErr.message : 'unknown'));
+}
+
+// === CLAUDE SQL MODE ===
+//
+// User describes a filter in natural language; Claude generates a single SQL
+// query against the cases/docket_entries/documents schema; we run it, intersect
+// with the incoming cl_ids set, and push a new stack page.
+//
+// Narrowing is enforced in our own code: we never modify Claude's SQL; we
+// fetch the cl_ids it returns and intersect with the incoming set. This
+// guarantees the outgoing set is always a subset of the incoming set.
+async function applyClaudeSql() {
+  if (!isOnTip()) return;
+  if (!claudeAccessUnlocked()) {
+    alert('Click "Unlock" in the Claude features panel to use this mode.');
+    return;
+  }
+
+  var prompt = document.getElementById('sql-prompt').value.trim();
+  if (!prompt) { alert('Describe what you want to find first.'); return; }
+
+  transitionToActive();
+
+  var tip = stack[stack.length - 1];
+  var incoming = tip.operation_type === 'init' ? [] : tip.outgoing_cl_ids;
+  // Build a hash for fast intersection in JS (replaces the v6.4.1 SQL wrapper).
+  var incomingSet = null;
+  if (incoming.length > 0) {
+    incomingSet = {};
+    incoming.forEach(function(id) { incomingSet[id] = true; });
+  }
+
+  var btn = document.getElementById('btn-commit-sql');
+  var statusEl = document.getElementById('claude-sql-status');
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.innerHTML = '<span class="sp"></span> Working...';
+  statusEl.classList.add('active');
+
+  // Scope description for system prompt — Claude needs to know how big the
+  // current field is so it can calibrate its query (e.g. don't write a query
+  // so narrow that it returns nothing within the field).
+  var scopeDesc;
+  if (tip.operation_type === 'init') {
+    scopeDesc = 'ALL ' + fmtInt(totalCaseCount) + ' cases in the database (no pre-filter applied).';
+  } else {
+    scopeDesc = 'a pre-filtered set of ' + fmtInt(incoming.length) + ' cases (from page ' + tip.page_id + ': ' + tip.operation_label + '). Your query runs WITHIN this scope — the application restricts cl_id to this set automatically before executing your SQL. Write your query as if it ran across the full database; the scope filter is applied for you.';
+  }
+
+  var schema = [
+    "DATABASE: PostgreSQL on Supabase. Queries run via run_query(query_text) RPC.",
+    "USE PostgreSQL syntax: ILIKE for case-insensitive matching, || for concat.",
+    "",
+    "CURRENT SCOPE: " + scopeDesc,
+    "",
+    "TABLE cases (",
+    "  cl_id BIGINT PRIMARY KEY,",
+    "  docket_number TEXT,         -- e.g. '1:25-cv-12345'; civil=-cv-, criminal=-cr-, magistrate=-mj-, misc=-mc-",
+    "  case_name TEXT,             -- short caption like 'Smith v. Garland'; usually NOT a good place to search for topics",
+    "  date_filed DATE,",
+    "  court TEXT,                 -- lowercase codes like 'dcd' (DC District), 'ca9' (9th Circuit), 'cadc' (DC Circuit)",
+    "  judge TEXT,",
+    "  cause TEXT,                 -- statutory cause of action, e.g. '5 U.S.C. § 702 Administrative Procedure Act', '28:2241 Habeas Corpus'",
+    "  nature_of_suit TEXT,        -- NOS code/description, e.g. '530 Habeas Corpus (General)', '463 Habeas Corpus - Alien Detainee'",
+    "  plaintiff TEXT,",
+    "  defendant TEXT,             -- often where you'll find agency names like 'DHS', 'Mayorkas', 'Garland', 'BOP'",
+    "  entry_count INT,",
+    "  cl_url TEXT",
+    ")",
+    "",
+    "TABLE docket_entries (",
+    "  id BIGSERIAL PRIMARY KEY,",
+    "  cl_id BIGINT REFERENCES cases,",
+    "  entry_number INT,",
+    "  entry_date TEXT,",
+    "  description TEXT,           -- text of motions, orders, opinions, complaints — the substantive content",
+    "  court TEXT,",
+    "  fts TSVECTOR                -- precomputed full-text index on description (use this for topical search)",
+    ")",
+    "",
+    "TABLE documents (",
+    "  id BIGSERIAL PRIMARY KEY,",
+    "  cl_id BIGINT REFERENCES cases,",
+    "  entry_number INT,",
+    "  doc_number INT,",
+    "  text_content TEXT,          -- extracted document text (large; use sparingly)",
+    "  text_length INT",
+    ")"
+  ].join("\n");
+
+  var systemPrompt =
+    "You are a SQL query generator for a federal litigation research tool. Given a natural-language description of cases the user wants to find, produce ONE PostgreSQL query that returns the cl_id values of matching cases.\n\n" +
+    "CRITICAL OUTPUT RULES:\n" +
+    "- Return JSON only: {\"sql\": \"...\", \"label\": \"a short 5-10 word description of what this query finds\"}\n" +
+    "- No markdown, no code fences, no explanation outside the JSON.\n" +
+    "- The query MUST be a single SELECT.\n" +
+    "- The query MUST return cl_id (other columns are fine, but cl_id is required).\n" +
+    "- Do NOT include LIMIT or OFFSET — the application handles pagination.\n" +
+    "- Do NOT add a scope constraint (e.g. cl_id IN (...)) — scope is applied automatically.\n\n" +
+    "FUNDAMENTAL RULES (read these FIRST — most failures come from violating them):\n" +
+    "1. RECALL OVER PRECISION. The user can always narrow further with a follow-up operation; they cannot un-miss a case the query excluded. When in doubt, return more, not less.\n" +
+    "2. NEVER 'AND' a metadata filter with an FTS filter. Combine them with OR. Example of the failure:\n" +
+    "     BAD:  WHERE (case_name ILIKE '%immigration%') AND (cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ ...))\n" +
+    "     GOOD: WHERE (case_name ILIKE '%immigration%') OR (cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ ...))\n" +
+    "   Reason: case_name is a short caption like 'Doe v. Garland'; topical words rarely appear there. ANDing kills recall.\n" +
+    "3. FOR ANY TOPICAL OR CONCEPTUAL QUERY, FTS IS REQUIRED. If the user asks about a topic, agency, concept, or substance ('immigration detention', 'TROs', 'DHS challenges', 'APA suits'), your query MUST contain at least one FTS branch on docket_entries. Metadata-only queries on case_name/cause/NOS will under-match by an order of magnitude.\n" +
+    "4. AVOID SHORT-ACRONYM ILIKE PATTERNS. '%ICE%' matches notice/service/voice/evidence/police/officer/justice. '%DHS%' is safer but still risky. Use FTS for acronyms — it does whole-token matching.\n" +
+    "5. Reserve ILIKE for unambiguous full phrases ('%Department of Homeland Security%') or proper names ('%Mayorkas%', '%Noem%').\n" +
+    "6. case_name is rarely informative for topical queries. It's a caption like 'Doe v. Garland', not a description of what the case is about. Don't lean on it.\n" +
+    "7. cause and nature_of_suit are coded fields. A habeas immigration case has cause '28:2241 Habeas Corpus' and NOS '530 Habeas Corpus' or '463 Habeas - Alien Detainee' — NOT 'immigration'. Don't filter on metadata words that won't be there.\n" +
+    "8. defendant is often the best metadata field for agency/official queries — but in habeas cases it's frequently the warden or facility director, not the agency. Always pair defendant ILIKE with an FTS branch (combined via OR).\n" +
+    "9. SCOPE-AWARE ENRICHMENT — CHECK BEFORE OR-ING METADATA. Look at the CURRENT SCOPE description above. Before adding any `OR <metadata-condition>` branch, ask: would this condition match every case in the current scope? If yes, DO NOT add it. An OR branch that's true for the whole scope is a tautology — it makes your FTS branch irrelevant and your query returns the entire scope. Common traps:\n" +
+    "   - Scope is 'habeas cases', and you add `OR nature_of_suit ILIKE '%habeas%'` → returns ALL habeas cases (the whole scope).\n" +
+    "   - Scope is 'immigration cases', and you add `OR cause ILIKE '%immigration%'` → returns the whole immigration scope.\n" +
+    "   - Scope is 'cases in DCD', and you add `OR court = 'dcd'` → returns the whole DCD scope.\n" +
+    "   When the scope already constrains a field, that field cannot be used for enrichment. Use FTS only, OR enrich via fields the scope hasn't constrained.\n\n" +
+    "QUERY-DESIGN PATTERNS:\n" +
+    "- FTS syntax: cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'TERMS'))\n" +
+    "  websearch_to_tsquery supports 'OR', quoted phrases, and 'and'. Example: 'detention OR removal OR \"final order of removal\"'.\n" +
+    "- For agency/official queries, OR-combine: (defendant ILIKE proper-names) OR (FTS for acronyms and concepts).\n" +
+    "- For topical queries, FTS is the workhorse; metadata filters are optional ENRICHMENT (added with OR), never RESTRICTION (added with AND).\n" +
+    "- Use websearch_to_tsquery's 'OR' operator generously. 'detention OR custody OR confined OR removal OR deportation' will catch many phrasings of the same idea.\n\n" +
+    "WORKED EXAMPLE 1 — agency/official query:\n" +
+    "User: 'cases challenging DHS or ICE actions'\n" +
+    "Good SQL:\n" +
+    "  SELECT cl_id FROM cases WHERE\n" +
+    "      defendant ILIKE '%Department of Homeland Security%'\n" +
+    "      OR defendant ILIKE '%Mayorkas%'\n" +
+    "      OR defendant ILIKE '%Noem%'\n" +
+    "      OR defendant ILIKE '%Immigration and Customs Enforcement%'\n" +
+    "      OR cl_id IN (SELECT DISTINCT cl_id FROM docket_entries\n" +
+    "                   WHERE fts @@ websearch_to_tsquery('english',\n" +
+    "                       'DHS OR ICE OR \"Department of Homeland Security\" OR \"Immigration and Customs Enforcement\" OR \"Homeland Security\"'))\n" +
+    "Why it works: ORs proper names (ILIKE-safe) with FTS for acronyms (avoids substring traps). Catches both wardens-as-defendant cases (via FTS on entries) and agency-as-defendant cases (via ILIKE).\n\n" +
+    "WORKED EXAMPLE 2 — topical/conceptual query:\n" +
+    "User: 'cases involving immigration detention'\n" +
+    "Good SQL:\n" +
+    "  SELECT cl_id FROM cases WHERE\n" +
+    "      cl_id IN (SELECT DISTINCT cl_id FROM docket_entries\n" +
+    "                WHERE fts @@ websearch_to_tsquery('english',\n" +
+    "                    '\"immigration detention\" OR \"removal proceedings\" OR \"final order of removal\" OR \"ICE custody\" OR \"asylum\" OR \"deportation\"'))\n" +
+    "      OR nature_of_suit ILIKE '%alien detainee%'\n" +
+    "Why it works: Leads with FTS (the workhorse for topical queries). Metadata branch is OR'd, not AND'd — it ENRICHES rather than RESTRICTS. Note: NOT filtering on 'immigration' in case_name, cause, or generic NOS — those columns won't have the word.\n\n" +
+    "ANTI-EXAMPLE (DO NOT DO THIS):\n" +
+    "User: 'immigration detention cases'\n" +
+    "BAD SQL:\n" +
+    "  SELECT cl_id FROM cases WHERE\n" +
+    "      (case_name ILIKE '%immigration%' OR cause ILIKE '%immigration%' OR nature_of_suit ILIKE '%immigration%')\n" +
+    "      AND cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'immigration detention'))\n" +
+    "Why it fails: ANDing a fragile metadata filter (those words won't be in case_name/cause/NOS for habeas cases) with FTS wipes out the FTS recall. Returns near-zero rows.\n\n" +
+    "WORKED EXAMPLE 3 — scope-aware enrichment:\n" +
+    "Scope: 'a pre-filtered set of 32,143 cases (from page 2: Filter: cause~Habeas, from=2025-01-20)'\n" +
+    "User: 'cases where the government may not have complied with court orders'\n" +
+    "BAD SQL (tautology — returns the entire scope):\n" +
+    "  SELECT cl_id FROM cases WHERE\n" +
+    "      cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'noncompliance OR contempt OR \"failed to produce\" OR ...'))\n" +
+    "      OR nature_of_suit ILIKE '%habeas%'\n" +
+    "Why it fails: The scope is already 'habeas cases', so `nature_of_suit ILIKE '%habeas%'` matches every case in scope. The OR makes the FTS irrelevant — query returns ~32,143.\n" +
+    "GOOD SQL (FTS only, no tautological enrichment):\n" +
+    "  SELECT DISTINCT cl_id FROM docket_entries\n" +
+    "  WHERE fts @@ websearch_to_tsquery('english',\n" +
+    "      '\"failed to produce\" OR \"failed to comply\" OR contempt OR \"violation of court order\"\n" +
+    "       OR \"deported despite\" OR \"removed despite\" OR \"violated stay\" OR \"writ not honored\"\n" +
+    "       OR \"refused to comply\" OR \"failed to release\" OR \"show cause\" OR sanctions')\n" +
+    "Why it works: Recognizes that within a habeas-only scope, no habeas-related metadata field can usefully enrich the result. FTS does the actual selection. Returns a small, real subset.\n\n" + schema;
+
+  var userMessage = "USER REQUEST:\n" + prompt + "\n\nReturn ONLY the JSON object.";
+
+  try {
+    statusEl.textContent = 'Designing query...';
+    var raw = await callClaude(systemPrompt, userMessage, 2000);
+
+    // Parse — tolerate accidental code fences or surrounding text
+    var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    var parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (pe) {
+      var m = cleaned.match(/\{[\s\S]*\}/);
+      if (m) parsed = JSON.parse(m[0]);
+      else throw new Error('Claude did not return valid JSON. Raw output: ' + raw.slice(0, 200));
+    }
+
+    var generatedSql = (parsed.sql || '').trim();
+    var generatedLabel = (parsed.label || prompt.slice(0, 50)).trim();
+    if (!generatedSql) throw new Error('Claude did not return a SQL query.');
+
+    // Strip any LIMIT/OFFSET Claude included despite instructions, and any
+    // trailing semicolon. Defensive — Claude is told not to include these,
+    // but we strip them so our own constraints can apply cleanly.
+    var sanitized = generatedSql
+      .replace(/;\s*$/g, '')
+      .replace(/\bLIMIT\s+\d+\b/gi, '')
+      .replace(/\bOFFSET\s+\d+\b/gi, '')
+      .trim();
+
+    // ARCHITECTURE NOTE (v6.4.4):
+    // Earlier versions wrapped Claude's SQL with `WHERE sub.cl_id IN (incoming)
+    // LIMIT 10000` to apply scope during execution. That had two failure modes:
+    //   (1) The outer LIMIT 10000 silently capped outgoing_cl_ids — same family
+    //       of bug as the manual_filter truncation we fixed in v6.4.3.
+    //   (2) For large incoming sets (e.g. 39K cl_ids after filtering to "habeas"),
+    //       the IN-clause grew to ~350KB, slow to plan, hit Safari's request
+    //       timeout on cold path → "Load failed."
+    //
+    // New approach: run Claude's sanitized SQL UNWRAPPED with no LIMIT, get back
+    // every cl_id Claude's query matches, then intersect with the incoming set
+    // in JavaScript. The v6.4.2 system prompt makes Claude scope-aware (it sees
+    // a description of the current scope), so its queries are typically focused
+    // and the unscoped result is manageable in size.
+    //
+    // Safety cap: if Claude's query returns more than CLAUDE_MAX_RAW_ROWS rows,
+    // bail out with an error rather than load-fail silently. This protects
+    // against runaway queries (e.g. Claude writes "SELECT cl_id FROM cases"
+    // matching the entire database).
+    var unscopedSql = "SELECT DISTINCT sub.cl_id FROM (" + sanitized + ") AS sub";
+
+    statusEl.textContent = 'Running query...';
+    var rows = await sbRpc('run_query', { query_text: unscopedSql }) || [];
+    if (!Array.isArray(rows)) throw new Error('Query result was not a list of rows.');
+
+    if (rows.length > CLAUDE_MAX_RAW_ROWS) {
+      throw new Error('Claude\'s query matched ' + fmtInt(rows.length) + ' cases (cap is ' + fmtInt(CLAUDE_MAX_RAW_ROWS) + '). Try a more specific prompt.');
+    }
+
+    // Extract cl_ids and intersect with the incoming scope (if any).
+    var matchedIds = [];
+    if (incomingSet) {
+      rows.forEach(function(r) {
+        if (r.cl_id != null && incomingSet[r.cl_id]) matchedIds.push(r.cl_id);
+      });
+    } else {
+      // No incoming scope (init page) — keep all matches.
+      rows.forEach(function(r) { if (r.cl_id != null) matchedIds.push(r.cl_id); });
+    }
+
+    statusEl.textContent = 'Fetching ' + fmtInt(matchedIds.length) + ' cases...';
+    // Display rows are still capped at 10K — that's the only place truncation
+    // lives. matchedIds (which becomes outgoing_cl_ids) holds the true full set
+    // for downstream operations.
+    var caseRows = [];
+    if (matchedIds.length > 0) {
+      // For very large matchedIds sets, only fetch display rows for the first 10K
+      // (database-side ordering by date_filed DESC). The IN clause uses ALL ids
+      // because we want display ordered across the full set, not arbitrary first 10K.
+      var fetchSql = "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases WHERE cl_id IN (" + matchedIds.join(',') + ") ORDER BY date_filed DESC LIMIT 10000";
+      caseRows = await sbRpc('run_query', { query_text: fetchSql }) || [];
+    }
+
+    var newPage = {
+      page_id: stack.length,
+      operation_type: 'claude_sql',
+      operation_label: 'Claude SQL: ' + generatedLabel,
+      prompt: prompt,
+      generated_sql: generatedSql,    // what Claude actually wrote (shown in page band)
+      executed_sql: unscopedSql,       // what actually ran (sanitized; intersection done in JS)
+      filter_state: null,
+      incoming_cl_ids: incoming.slice(),
+      incoming_count: (tip.operation_type === 'init' ? totalCaseCount : incoming.length),
+      outgoing_cl_ids: matchedIds,         // FIX: was caseRows.map(...) which was capped at 10K
+      outgoing_count: matchedIds.length,   // FIX: was caseRows.length which was capped at 10K
+      cases: caseRows,                     // display rows (capped at 10K)
+      per_case_annotations: null,
+      artifact_markdown: null,
+      created_at: new Date().toISOString()
+    };
+    stack.push(newPage);
+    viewingIdx = stack.length - 1;
+    currentPagePagination = 0;
+    selectedCaseId = null;
+    modeArmed = false;
+    closeDetail();
+
+    document.getElementById('sql-prompt').value = '';
+  } catch (err) {
+    alert('Claude SQL failed: ' + err.message);
+  }
+
+  statusEl.classList.remove('active');
+  statusEl.textContent = '';
+  btn.disabled = false;
+  btn.textContent = origLabel;
+  renderAll();
+}
+
+
+// === CLAUDE READ MODE ===
+//
+// User describes a per-case criterion in natural language; Claude reads each
+// case's docket entries and decides keep/drop per case, with a one-sentence
+// reason. Slow and expensive — capped at CLAUDE_READ_MAX cases per spec.
+//
+// Pipeline:
+//   1. Fetch top-N most-recent docket entries for each incoming cl_id (chunked).
+//   2. Build per-case context blocks (metadata + truncated entries).
+//   3. Batch into groups of CLAUDE_READ_BATCH_SIZE.
+//   4. Process batches in parallel (CLAUDE_READ_CONCURRENCY at a time).
+//   5. Cases with no entries are auto-dropped without consulting Claude
+//      (reason: "no docket entries available to analyze").
+//   6. Aggregate {cl_id → {keep, reason}} into per_case_annotations.
+//   7. outgoing_cl_ids = the cl_ids where keep=true.
+//   8. Push new claude_read page with display rows for the kept cases.
+
+// Cost/time heuristic for the live readout in the sidebar.
+function estimateClaudeReadCost(caseCount) {
+  var dollars = caseCount * CLAUDE_READ_COST_PER_CASE;
+  // Time: 1 batch ≈ 25s; throughput = batch_size × concurrency cases per 25s.
+  var perBatchSec = 25;
+  var batchesNeeded = Math.ceil(caseCount / CLAUDE_READ_BATCH_SIZE);
+  var serialBatches = Math.ceil(batchesNeeded / CLAUDE_READ_CONCURRENCY);
+  var minutes = Math.max(1, Math.round(serialBatches * perBatchSec / 60));
+  return { dollars: dollars, minutes: minutes };
+}
+
+// Limited-concurrency parallel runner. Returns results in input order.
+// onProgress fires after each item completes with (completedCount, totalCount).
+async function runWithConcurrency(items, fn, concurrency, onProgress) {
+  var results = new Array(items.length);
+  var idx = 0, done = 0;
+  async function worker() {
+    while (true) {
+      var i = idx; idx++;
+      if (i >= items.length) return;
+      try { results[i] = await fn(items[i], i); }
+      catch (e) { results[i] = { __error: e }; }
+      done++;
+      if (onProgress) onProgress(done, items.length);
+    }
+  }
+  var workers = [];
+  for (var k = 0; k < Math.min(concurrency, items.length); k++) workers.push(worker());
+  await Promise.all(workers);
+  return results;
+}
+
+// Fetch the most recent CLAUDE_READ_MAX_ENTRIES_PER_CASE entries for each
+// cl_id in `clIds`. Returns { cl_id: [entry, ...] }, ordered most-recent first.
+// Chunks the IN clause to keep individual queries tractable.
+async function fetchEntriesForReadBatches(clIds) {
+  var byClId = {};
+  if (clIds.length === 0) return byClId;
+  var CHUNK = 500;
+  for (var i = 0; i < clIds.length; i += CHUNK) {
+    var chunk = clIds.slice(i, i + CHUNK);
+    var sql =
+      "SELECT cl_id, entry_number, entry_date, description FROM (" +
+      "  SELECT cl_id, entry_number, entry_date, description, " +
+      "         ROW_NUMBER() OVER (PARTITION BY cl_id ORDER BY entry_number DESC) AS rn " +
+      "  FROM docket_entries WHERE cl_id IN (" + chunk.join(',') + ")" +
+      ") sub WHERE rn <= " + CLAUDE_READ_MAX_ENTRIES_PER_CASE;
+    var rows = await sbRpc('run_query', { query_text: sql }) || [];
+    rows.forEach(function(r) {
+      if (!byClId[r.cl_id]) byClId[r.cl_id] = [];
+      byClId[r.cl_id].push(r);
+    });
+  }
+  // Sort each case's entries newest-first (entry_number DESC, which we already
+  // selected in that order, but defensively re-sort in case the RPC didn't
+  // preserve ordering).
+  Object.keys(byClId).forEach(function(k) {
+    byClId[k].sort(function(a, b) { return (b.entry_number || 0) - (a.entry_number || 0); });
+  });
+  return byClId;
+}
+
+// Build the per-case context block sent to Claude for one case.
+function buildReadCaseBlock(caseRow, entries) {
+  var meta = [
+    'cl_id: ' + caseRow.cl_id,
+    'case_name: ' + (caseRow.case_name || ''),
+    'court: ' + (caseRow.court || '') +
+      ' · judge: ' + (caseRow.judge || '—') +
+      ' · cause: ' + (caseRow.cause || '—') +
+      ' · NOS: ' + (caseRow.nature_of_suit || '—') +
+      ' · filed: ' + (caseRow.date_filed || '—')
+  ].join('\n');
+  var entryLines = entries.map(function(e) {
+    var desc = String(e.description || '').replace(/\s+/g, ' ').trim();
+    if (desc.length > CLAUDE_READ_MAX_ENTRY_CHARS) {
+      desc = desc.slice(0, CLAUDE_READ_MAX_ENTRY_CHARS) + '…';
+    }
+    return '#' + (e.entry_number != null ? e.entry_number : '?') +
+           ' (' + (e.entry_date || '?') + '): ' + desc;
+  });
+  var entriesBlock = entryLines.length > 0
+    ? 'DOCKET ENTRIES (' + entryLines.length + ', newest first):\n' + entryLines.join('\n')
+    : 'DOCKET ENTRIES: (none available)';
+  return meta + '\n' + entriesBlock;
+}
+
+// Parse Claude's JSON-array response for a batch. Tolerates code fences and
+// surrounding chatter. Returns { cl_id: {keep, reason} }.
+function parseReadBatchResponse(raw, expectedClIds) {
+  var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  var arr;
+  try { arr = JSON.parse(cleaned); }
+  catch (pe) {
+    var m = cleaned.match(/\[[\s\S]*\]/);
+    if (m) arr = JSON.parse(m[0]);
+    else throw new Error('Claude did not return a valid JSON array. Raw: ' + raw.slice(0, 200));
+  }
+  if (!Array.isArray(arr)) throw new Error('Claude response was not a JSON array.');
+  var out = {};
+  arr.forEach(function(item) {
+    if (item && item.cl_id != null) {
+      out[item.cl_id] = {
+        keep: !!item.keep,
+        reason: String(item.reason || '').slice(0, 300)
+      };
+    }
+  });
+  return out;
+}
+
+// Send one batch to Claude. Returns { cl_id: {keep, reason} } for the batch.
+async function processClaudeReadBatch(criterion, batch) {
+  var systemPrompt =
+    "You are reviewing federal court cases against a user-supplied criterion. " +
+    "For each case, decide keep/drop based ONLY on the docket entries shown.\n\n" +
+    "OUTPUT: a JSON array. One element per case, in input order. Each element has shape:\n" +
+    '  {"cl_id": <int>, "keep": <true|false>, "reason": "<= 25 word explanation>"}\n\n' +
+    "RULES:\n" +
+    "- Be conservative. If the entries do not clearly support keeping the case under the criterion, drop it with a reason explaining what's missing or insufficient.\n" +
+    "- The 'reason' field must be 25 words or fewer.\n" +
+    "- 'keep' is a literal boolean (true/false), not a string.\n" +
+    "- Output the JSON array only. No markdown, no code fences, no prose outside the array.\n" +
+    "- Return exactly " + batch.length + " elements, one per case.";
+
+  var userParts = ['USER CRITERION:\n' + criterion + '\n\nCASES (n=' + batch.length + '):\n'];
+  batch.forEach(function(item, i) {
+    userParts.push('--- CASE ' + (i + 1) + ' ---\n' + item.block);
+  });
+  userParts.push('\nReturn the JSON array now.');
+  var userMessage = userParts.join('\n\n');
+
+  var raw = await callClaude(systemPrompt, userMessage, 4000);
+  return parseReadBatchResponse(raw, batch.map(function(b) { return b.caseRow.cl_id; }));
+}
+
+async function applyClaudeRead() {
+  if (!isOnTip()) return;
+  if (!claudeAccessUnlocked()) {
+    alert('Click "Unlock" in the Claude features panel to use this mode.');
+    return;
+  }
+
+  var criterion = document.getElementById('read-prompt').value.trim();
+  if (!criterion) { alert('Describe the per-case criterion first.'); return; }
+
+  var tip = stack[stack.length - 1];
+  var incoming = tip.operation_type === 'init' ? [] : tip.outgoing_cl_ids.slice();
+  var incomingCount = tip.operation_type === 'init' ? totalCaseCount : incoming.length;
+  if (incomingCount > CLAUDE_READ_MAX) {
+    alert('Field is ' + fmtInt(incomingCount) + ' cases. Read mode is capped at ' + fmtInt(CLAUDE_READ_MAX) + '. Narrow the field first.');
+    return;
+  }
+  if (incomingCount === 0) { alert('No cases in scope.'); return; }
+
+  // For init page (no incoming list), claude_read isn't meaningful — but the UI
+  // disables that mode on init. Defensive guard:
+  if (tip.operation_type === 'init') {
+    alert('Read mode is not available on the welcome page. Apply at least one filter first.');
+    return;
+  }
+
+  // Cost confirmation for non-trivial runs.
+  var est = estimateClaudeReadCost(incomingCount);
+  if (est.dollars >= 5.0) {
+    var ok = confirm(
+      'This will read ' + fmtInt(incomingCount) + ' cases.\n\n' +
+      'Estimated cost: ~$' + est.dollars.toFixed(2) + '\n' +
+      'Estimated time: ~' + est.minutes + ' min\n\n' +
+      'Continue?'
+    );
+    if (!ok) return;
+  }
+
+  transitionToActive();
+
+  var btn = document.getElementById('btn-commit-read');
+  var statusEl = document.getElementById('claude-read-status');
+  var origLabel = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="sp"></span> Working...';
+  statusEl.classList.add('active');
+
+  try {
+    // Step 1: Fetch case rows for all incoming cl_ids (need metadata for context).
+    statusEl.textContent = 'Fetching case metadata...';
+    var caseFetchSql =
+      "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases " +
+      "WHERE cl_id IN (" + incoming.join(',') + ") ORDER BY date_filed DESC";
+    var caseRows = await sbRpc('run_query', { query_text: caseFetchSql }) || [];
+    var caseById = {};
+    caseRows.forEach(function(r) { caseById[r.cl_id] = r; });
+
+    // Step 2: Fetch docket entries (chunked).
+    statusEl.textContent = 'Fetching docket entries...';
+    var entriesById = await fetchEntriesForReadBatches(incoming);
+
+    // Step 3: Auto-drop cases with no entries; queue the rest for Claude.
+    var annotations = {};       // cl_id → { keep, reason }
+    var queue = [];             // items to send to Claude: { caseRow, block }
+    incoming.forEach(function(cl_id) {
+      var caseRow = caseById[cl_id];
+      if (!caseRow) {
+        annotations[cl_id] = { keep: false, reason: 'case row not found in database' };
+        return;
+      }
+      var entries = entriesById[cl_id] || [];
+      if (entries.length === 0) {
+        annotations[cl_id] = { keep: false, reason: 'no docket entries available to analyze' };
+        return;
+      }
+      queue.push({ caseRow: caseRow, block: buildReadCaseBlock(caseRow, entries) });
+    });
+
+    // Step 4: Batch the queue and run with limited concurrency.
+    var batches = [];
+    for (var i = 0; i < queue.length; i += CLAUDE_READ_BATCH_SIZE) {
+      batches.push(queue.slice(i, i + CLAUDE_READ_BATCH_SIZE));
+    }
+
+    var totalCasesToRead = queue.length;
+    var casesProcessedCount = 0;
+    statusEl.textContent = 'Reading 0 / ' + fmtInt(totalCasesToRead) + ' cases...';
+
+    var batchResults = await runWithConcurrency(
+      batches,
+      function(batch) { return processClaudeReadBatch(criterion, batch); },
+      CLAUDE_READ_CONCURRENCY,
+      function(doneCount) {
+        // doneCount is "batches finished"; convert to "cases finished" approximately
+        casesProcessedCount = Math.min(totalCasesToRead, doneCount * CLAUDE_READ_BATCH_SIZE);
+        statusEl.textContent = 'Reading ' + fmtInt(casesProcessedCount) + ' / ' + fmtInt(totalCasesToRead) + ' cases...';
+      }
+    );
+
+    // Step 5: Aggregate batch results, surface any per-batch errors as failures.
+    var failures = [];
+    batchResults.forEach(function(r, bi) {
+      if (r && r.__error) {
+        failures.push({ batchIndex: bi, error: r.__error });
+        // For the failed batch's cases, mark them as drop with the error reason
+        // so they're at least visible in per_case_annotations.
+        batches[bi].forEach(function(item) {
+          annotations[item.caseRow.cl_id] = { keep: false, reason: 'batch failed: ' + (r.__error.message || 'unknown error') };
+        });
+      } else if (r && typeof r === 'object') {
+        Object.keys(r).forEach(function(k) {
+          annotations[k] = r[k];
+        });
+        // Cases the batch was supposed to cover but Claude omitted: mark drop.
+        batches[bi].forEach(function(item) {
+          if (!annotations[item.caseRow.cl_id]) {
+            annotations[item.caseRow.cl_id] = { keep: false, reason: 'no judgment returned by Claude' };
+          }
+        });
+      }
+    });
+
+    // Step 6: Build outgoing list from cases marked keep=true.
+    var keptIds = [];
+    incoming.forEach(function(cl_id) {
+      if (annotations[cl_id] && annotations[cl_id].keep) keptIds.push(cl_id);
+    });
+
+    // Step 7: Build display rows for kept cases (ordered by date_filed DESC).
+    var displayCases = caseRows.filter(function(r) {
+      return annotations[r.cl_id] && annotations[r.cl_id].keep;
+    });
+    var droppedDisplayCases = caseRows.filter(function(r) {
+      return !annotations[r.cl_id] || !annotations[r.cl_id].keep;
+    });
+
+    // Generate a short label from the criterion (Claude could do this, but the
+    // user's own phrasing is usually more informative — and avoids an extra API call).
+    var shortLabel = criterion.length > 60 ? criterion.slice(0, 60) + '…' : criterion;
+
+    var newPage = {
+      page_id: stack.length,
+      operation_type: 'claude_read',
+      operation_label: 'Claude read: ' + shortLabel,
+      prompt: criterion,
+      generated_sql: null,
+      executed_sql: null,
+      filter_state: null,
+      incoming_cl_ids: incoming.slice(),
+      incoming_count: incomingCount,
+      outgoing_cl_ids: keptIds,
+      outgoing_count: keptIds.length,
+      cases: displayCases,
+      dropped_cases: droppedDisplayCases,  // claude_read only: kept off table but included in download
+      per_case_annotations: annotations,
+      artifact_markdown: null,
+      created_at: new Date().toISOString()
+    };
+    stack.push(newPage);
+    viewingIdx = stack.length - 1;
+    currentPagePagination = 0;
+    selectedCaseId = null;
+    modeArmed = false;
+    closeDetail();
+    document.getElementById('read-prompt').value = '';
+
+    if (failures.length > 0) {
+      alert(
+        'Read completed with ' + failures.length + ' batch failure(s) out of ' + batches.length + '.\n' +
+        'Affected cases were marked dropped with the error as their reason. ' +
+        'You can retry by going Back and re-running.'
+      );
+    }
+  } catch (err) {
+    alert('Claude Read failed: ' + err.message);
+  }
+
+  statusEl.classList.remove('active');
+  statusEl.textContent = '';
+  btn.disabled = false;
+  btn.textContent = origLabel;
+  renderAll();
+}
+
+
+// === CLAUDE ANALYSIS MODE ===
+//
+// User describes an analytical prompt (rank, summarize, classify, cross-case
+// observation). Claude reads ALL the cases in one shot and produces:
+//   1. A markdown narrative (artifact_markdown)
+//   2. Optional per-case annotations (rank, score, category, label)
+// The case list is NOT narrowed: outgoing == incoming, possibly reordered by rank.
+//
+// One-shot is the right architecture here — Claude needs to see all cases together
+// to rank or classify them coherently. Context budget is the binding constraint
+// (CLAUDE_ANALYSIS_MAX = 150 cases). Above that, the user must narrow first.
+
+function estimateClaudeAnalysisCost(caseCount) {
+  var dollars = caseCount * CLAUDE_ANALYSIS_COST_PER_CASE;
+  // Time: roughly proportional to output token volume; ~30s for 50 cases, ~75s for 150.
+  var seconds = Math.max(15, Math.round(15 + caseCount * 0.4));
+  return { dollars: dollars, seconds: seconds };
+}
+
+// Build the per-case context block for analysis. Lighter than the read-mode block:
+// fewer entries, shorter truncation, since Claude is comparing across cases.
+function buildAnalysisCaseBlock(caseRow, entries) {
+  var meta = [
+    'cl_id: ' + caseRow.cl_id,
+    'case_name: ' + (caseRow.case_name || ''),
+    'docket: ' + (caseRow.docket_number || '') +
+      ' · court: ' + (caseRow.court || '') +
+      ' · judge: ' + (caseRow.judge || '—') +
+      ' · cause: ' + (caseRow.cause || '—') +
+      ' · NOS: ' + (caseRow.nature_of_suit || '—') +
+      ' · filed: ' + (caseRow.date_filed || '—')
+  ].join('\n');
+  var entryLines = entries.map(function(e) {
+    var desc = String(e.description || '').replace(/\s+/g, ' ').trim();
+    if (desc.length > CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) {
+      desc = desc.slice(0, CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) + '…';
+    }
+    return '#' + (e.entry_number != null ? e.entry_number : '?') +
+           ' (' + (e.entry_date || '?') + '): ' + desc;
+  });
+  var entriesBlock = entryLines.length > 0
+    ? 'DOCKET ENTRIES (' + entryLines.length + '):\n' + entryLines.join('\n')
+    : 'DOCKET ENTRIES: (none available)';
+  return meta + '\n' + entriesBlock;
+}
+
+// Fetch top-N most-recent entries per case, scoped to CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE.
+async function fetchEntriesForAnalysis(clIds) {
+  var byClId = {};
+  if (clIds.length === 0) return byClId;
+  var CHUNK = 500;
+  for (var i = 0; i < clIds.length; i += CHUNK) {
+    var chunk = clIds.slice(i, i + CHUNK);
+    var sql =
+      "SELECT cl_id, entry_number, entry_date, description FROM (" +
+      "  SELECT cl_id, entry_number, entry_date, description, " +
+      "         ROW_NUMBER() OVER (PARTITION BY cl_id ORDER BY entry_number DESC) AS rn " +
+      "  FROM docket_entries WHERE cl_id IN (" + chunk.join(',') + ")" +
+      ") sub WHERE rn <= " + CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE;
+    var rows = await sbRpc('run_query', { query_text: sql }) || [];
+    rows.forEach(function(r) {
+      if (!byClId[r.cl_id]) byClId[r.cl_id] = [];
+      byClId[r.cl_id].push(r);
+    });
+  }
+  Object.keys(byClId).forEach(function(k) {
+    byClId[k].sort(function(a, b) { return (b.entry_number || 0) - (a.entry_number || 0); });
+  });
+  return byClId;
+}
+
+// Parse Claude's analysis response. Expected JSON shape:
+//   { "markdown": "...", "annotations": [ { "cl_id": int, "rank"?: int, "score"?: number, "category"?: string, "label"?: string } ] }
+// Tolerates code fences and surrounding chatter.
+function parseAnalysisResponse(raw) {
+  var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  var parsed;
+  try { parsed = JSON.parse(cleaned); }
+  catch (pe) {
+    var m = cleaned.match(/\{[\s\S]*\}/);
+    if (m) parsed = JSON.parse(m[0]);
+    else throw new Error('Claude did not return valid JSON. Raw: ' + raw.slice(0, 200));
+  }
+  if (typeof parsed !== 'object' || parsed === null) throw new Error('Analysis response was not an object.');
+  var markdown = String(parsed.markdown || '').trim();
+  var annotationsArr = Array.isArray(parsed.annotations) ? parsed.annotations : [];
+  var annotations = {};
+  annotationsArr.forEach(function(a) {
+    if (a && a.cl_id != null) {
+      var entry = {};
+      if (a.rank != null) entry.rank = Number(a.rank);
+      if (a.score != null) entry.score = Number(a.score);
+      if (a.category != null) entry.category = String(a.category).slice(0, 80);
+      if (a.label != null) entry.label = String(a.label).slice(0, 120);
+      annotations[a.cl_id] = entry;
+    }
+  });
+  return { markdown: markdown, annotations: annotations };
+}
+
+async function applyClaudeAnalysis() {
+  if (!isOnTip()) return;
+  if (!claudeAccessUnlocked()) {
+    alert('Click "Unlock" in the Claude features panel to use this mode.');
+    return;
+  }
+
+  var prompt = document.getElementById('analysis-prompt').value.trim();
+  if (!prompt) { alert('Describe the analysis you want first.'); return; }
+
+  var tip = stack[stack.length - 1];
+  if (tip.operation_type === 'init') {
+    alert('Analysis requires a list. Apply at least one filter first.');
+    return;
+  }
+  var incoming = tip.outgoing_cl_ids.slice();
+  var incomingCount = incoming.length;
+  if (incomingCount === 0) { alert('No cases in scope.'); return; }
+  if (incomingCount > CLAUDE_ANALYSIS_MAX) {
+    alert('Field is ' + fmtInt(incomingCount) + ' cases. Analysis is capped at ' + fmtInt(CLAUDE_ANALYSIS_MAX) + '. Narrow the field first.');
+    return;
+  }
+
+  // Soft-warn confirm above the comfort threshold.
+  if (incomingCount > CLAUDE_ANALYSIS_SOFT_WARN) {
+    var aest = estimateClaudeAnalysisCost(incomingCount);
+    var ok = confirm(
+      'This will analyze ' + fmtInt(incomingCount) + ' cases in one shot.\n\n' +
+      'Estimated cost: ~$' + aest.dollars.toFixed(2) + '\n' +
+      'Estimated time: ~' + aest.seconds + ' sec\n\n' +
+      'Above ' + fmtInt(CLAUDE_ANALYSIS_SOFT_WARN) + ' cases the analysis quality may degrade — Claude has less attention per case. Continue?'
+    );
+    if (!ok) return;
+  }
+
+  transitionToActive();
+
+  var btn = document.getElementById('btn-commit-analysis');
+  var statusEl = document.getElementById('claude-analysis-status');
+  var origLabel = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="sp"></span> Working...';
+  statusEl.classList.add('active');
+
+  try {
+    statusEl.textContent = 'Fetching case metadata...';
+    var caseFetchSql =
+      "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases " +
+      "WHERE cl_id IN (" + incoming.join(',') + ") ORDER BY date_filed DESC";
+    var caseRows = await sbRpc('run_query', { query_text: caseFetchSql }) || [];
+    var caseById = {};
+    caseRows.forEach(function(r) { caseById[r.cl_id] = r; });
+
+    statusEl.textContent = 'Fetching docket entries...';
+    var entriesById = await fetchEntriesForAnalysis(incoming);
+
+    statusEl.textContent = 'Building context...';
+    // Build the case blocks in stable order (date_filed DESC, matching caseRows).
+    var caseBlocks = [];
+    caseRows.forEach(function(r) {
+      var entries = entriesById[r.cl_id] || [];
+      caseBlocks.push({ caseRow: r, block: buildAnalysisCaseBlock(r, entries) });
+    });
+
+    var systemPrompt =
+      "You are an analyst reviewing a set of federal court cases. The user has a question or analytical task. Read the cases and produce:\n" +
+      "1. A markdown document presenting your analysis.\n" +
+      "2. Optional per-case annotations as a JSON array.\n\n" +
+      "OUTPUT FORMAT — JSON OBJECT ONLY. No markdown fences, no prose outside the JSON.\n" +
+      '{\n' +
+      '  "markdown": "<your analysis as a markdown document>",\n' +
+      '  "annotations": [ { "cl_id": <int>, "rank"?: <int>, "score"?: <number>, "category"?: <string>, "label"?: <string> }, ... ]\n' +
+      '}\n\n' +
+      "MARKDOWN AUTHORING RULES:\n" +
+      "- Reference cases using the exact syntax: [Case Name (docket)](#case-<cl_id>).\n" +
+      "  Example: [Doe v. Garland (1:25-cv-12345)](#case-67890123). The link target MUST be #case- followed by the cl_id.\n" +
+      "- Use ## for major section headers, ### for subsections.\n" +
+      "- Be concrete. Cite specific cases when making points; abstract generalities without case references are weak.\n" +
+      "- Don't list every case — that's what the table below your analysis already does. Use case references to highlight examples.\n" +
+      "- Write in plain analytical prose. No throat-clearing, no \"in this analysis I will…\" — start with the substance.\n\n" +
+      "ANNOTATIONS RULES:\n" +
+      "- Include annotations only if the user's prompt calls for ranking, scoring, classifying, or labeling individual cases.\n" +
+      "- 'rank' is 1-indexed; 1 = highest/most. If you rank, every case gets a unique rank.\n" +
+      "- 'score' is a numeric value (any range; the user defines its meaning).\n" +
+      "- 'category' is a short label (≤80 chars). 'label' is a one-line characterization (≤120 chars).\n" +
+      "- Include annotations only for cases you actually rank/categorize. Don't pad.\n" +
+      "- If the user's prompt is purely descriptive ('what patterns do you see'), you may omit annotations entirely (annotations: []).";
+
+    var userParts = ['ANALYTICAL PROMPT:\n' + prompt + '\n\nCASES (n=' + caseBlocks.length + '):\n'];
+    caseBlocks.forEach(function(item, i) {
+      userParts.push('--- CASE ' + (i + 1) + ' ---\n' + item.block);
+    });
+    userParts.push('\nReturn the JSON object now.');
+    var userMessage = userParts.join('\n\n');
+
+    statusEl.textContent = 'Analyzing ' + fmtInt(caseBlocks.length) + ' cases...';
+    var raw = await callClaude(systemPrompt, userMessage, CLAUDE_ANALYSIS_MAX_OUTPUT_TOKENS);
+
+    statusEl.textContent = 'Rendering...';
+    var parsed = parseAnalysisResponse(raw);
+    if (!parsed.markdown) throw new Error('Claude returned no narrative analysis.');
+
+    // Build display rows. If any annotations include rank, sort by rank ascending;
+    // otherwise preserve original (date_filed DESC) order.
+    var hasRank = false;
+    Object.keys(parsed.annotations).forEach(function(k) {
+      if (parsed.annotations[k].rank != null) hasRank = true;
+    });
+    var displayCases = caseRows.slice();
+    if (hasRank) {
+      displayCases.sort(function(a, b) {
+        var ra = parsed.annotations[a.cl_id] && parsed.annotations[a.cl_id].rank;
+        var rb = parsed.annotations[b.cl_id] && parsed.annotations[b.cl_id].rank;
+        // Cases with no rank go to the bottom, in original order.
+        if (ra == null && rb == null) return 0;
+        if (ra == null) return 1;
+        if (rb == null) return -1;
+        return ra - rb;
+      });
+    }
+
+    var shortLabel = prompt.length > 60 ? prompt.slice(0, 60) + '…' : prompt;
+
+    var newPage = {
+      page_id: stack.length,
+      operation_type: 'claude_analysis',
+      operation_label: 'Claude analysis: ' + shortLabel,
+      prompt: prompt,
+      generated_sql: null,
+      executed_sql: null,
+      filter_state: null,
+      incoming_cl_ids: incoming.slice(),
+      incoming_count: incomingCount,
+      outgoing_cl_ids: incoming.slice(),  // analysis does NOT narrow
+      outgoing_count: incomingCount,
+      cases: displayCases,
+      per_case_annotations: parsed.annotations,
+      artifact_markdown: parsed.markdown,
+      created_at: new Date().toISOString()
+    };
+    stack.push(newPage);
+    viewingIdx = stack.length - 1;
+    currentPagePagination = 0;
+    selectedCaseId = null;
+    modeArmed = false;
+    analysisLayout = 'top';   // reset to default whenever a new analysis page is created
+    closeDetail();
+    document.getElementById('analysis-prompt').value = '';
+
+  } catch (err) {
+    alert('Claude Analysis failed: ' + err.message);
+  }
+
+  statusEl.classList.remove('active');
+  statusEl.textContent = '';
+  btn.disabled = false;
+  btn.textContent = origLabel;
+  renderAll();
+}
+
+// Layout toggle for analysis pages. Flips between 'top' (artifact above table)
+// and 'right' (artifact in a right column, table fills the rest).
+function toggleAnalysisLayout() {
+  analysisLayout = (analysisLayout === 'top') ? 'right' : 'top';
+  renderAll();
+}
+
+// Click-handler for case-ref anchors inside rendered markdown. Scrolls to the
+// matching row in the table and pulses it.
+function jumpToCaseRow(clId) {
+  var rows = document.querySelectorAll('.ct tr[data-cl-id="' + clId + '"]');
+  if (rows.length === 0) return;
+  var row = rows[0];
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.remove('case-pulse');
+  // Force reflow to restart the animation
+  void row.offsetWidth;
+  row.classList.add('case-pulse');
+}
+
+// === MARKDOWN RENDERER ===
+//
+// Minimal inline markdown renderer. Covers exactly what Claude produces in
+// analysis output: headers (h1-h4), paragraphs, bold/italic, bullet/numbered
+// lists, links (especially #case-NNN refs), inline code, code blocks,
+// blockquotes, horizontal rules.
+//
+// Not a general-purpose renderer — intentionally limited to keep the surface
+// area small. If Claude's output uses a feature not handled here, it'll
+// degrade gracefully to escaped raw text.
+function renderMarkdown(md) {
+  if (!md) return '';
+  // Step 1: HTML-escape everything first to neutralize any embedded HTML.
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // Step 2: Pull out fenced code blocks first (so their contents aren't munged).
+  var codeBlocks = [];
+  md = md.replace(/```([\s\S]*?)```/g, function(_, body) {
+    codeBlocks.push(esc(body.trim()));
+    return '\u0000CB' + (codeBlocks.length - 1) + '\u0000';
+  });
+
+  // Step 3: Escape rest of input.
+  md = esc(md);
+
+  // Step 4: Block-level — process line by line.
+  var lines = md.split('\n');
+  var out = [];
+  var i = 0;
+  while (i < lines.length) {
+    var line = lines[i];
+
+    // Horizontal rule
+    if (/^\s*(\-\-\-|\*\*\*|___)\s*$/.test(line)) {
+      out.push('<hr>'); i++; continue;
+    }
+    // Headers
+    var hm = line.match(/^(#{1,4})\s+(.*)$/);
+    if (hm) {
+      var level = hm[1].length;
+      out.push('<h' + level + '>' + processInline(hm[2]) + '</h' + level + '>');
+      i++; continue;
+    }
+    // Blockquote
+    if (/^\s*&gt;\s+/.test(line)) {
+      var quote = [];
+      while (i < lines.length && /^\s*&gt;\s*/.test(lines[i])) {
+        quote.push(lines[i].replace(/^\s*&gt;\s?/, ''));
+        i++;
+      }
+      out.push('<blockquote>' + processInline(quote.join(' ')) + '</blockquote>');
+      continue;
+    }
+    // Unordered list
+    if (/^\s*[\-\*\+]\s+/.test(line)) {
+      var ul = [];
+      while (i < lines.length && /^\s*[\-\*\+]\s+/.test(lines[i])) {
+        ul.push('<li>' + processInline(lines[i].replace(/^\s*[\-\*\+]\s+/, '')) + '</li>');
+        i++;
+      }
+      out.push('<ul>' + ul.join('') + '</ul>');
+      continue;
+    }
+    // Ordered list
+    if (/^\s*\d+\.\s+/.test(line)) {
+      var ol = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        ol.push('<li>' + processInline(lines[i].replace(/^\s*\d+\.\s+/, '')) + '</li>');
+        i++;
+      }
+      out.push('<ol>' + ol.join('') + '</ol>');
+      continue;
+    }
+    // Blank line — paragraph break
+    if (/^\s*$/.test(line)) { i++; continue; }
+    // Paragraph: gather contiguous non-blank, non-block lines
+    var para = [line];
+    i++;
+    while (i < lines.length && !/^\s*$/.test(lines[i]) &&
+           !/^(#{1,4})\s+/.test(lines[i]) &&
+           !/^\s*[\-\*\+]\s+/.test(lines[i]) &&
+           !/^\s*\d+\.\s+/.test(lines[i]) &&
+           !/^\s*&gt;\s+/.test(lines[i]) &&
+           !/^\s*(\-\-\-|\*\*\*|___)\s*$/.test(lines[i])) {
+      para.push(lines[i]); i++;
+    }
+    out.push('<p>' + processInline(para.join(' ')) + '</p>');
+  }
+  var html = out.join('\n');
+
+  // Step 5: Restore code blocks.
+  html = html.replace(/\u0000CB(\d+)\u0000/g, function(_, n) {
+    return '<pre><code>' + codeBlocks[Number(n)] + '</code></pre>';
+  });
+  return html;
+}
+
+function processInline(s) {
+  // Inline code (process first to protect contents from other inline rules).
+  var codes = [];
+  s = s.replace(/`([^`]+)`/g, function(_, body) {
+    codes.push(body);
+    return '\u0000IC' + (codes.length - 1) + '\u0000';
+  });
+  // Links — special-case the case-ref form #case-NNN to wire the click handler.
+  // [text](#case-12345) → <a href="#case-12345" class="case-ref" onclick="jumpToCaseRow(12345); return false;">text</a>
+  s = s.replace(/\[([^\]]+)\]\(#case-(\d+)\)/g, function(_, text, id) {
+    return '<a href="#case-' + id + '" class="case-ref" onclick="jumpToCaseRow(' + id + '); return false;">' + text + '</a>';
+  });
+  // Other links.
+  s = s.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, function(_, text, href) {
+    // href is already escaped — unescape & and " for the URL but keep angle brackets escaped.
+    var safeHref = href.replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+    return '<a href="' + safeHref + '" target="_blank" rel="noopener">' + text + '</a>';
+  });
+  // Bold (**text** or __text__) — process before italic.
+  s = s.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  // Italic (*text* or _text_).
+  s = s.replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+  // Restore inline code.
+  s = s.replace(/\u0000IC(\d+)\u0000/g, function(_, n) {
+    return '<code>' + codes[Number(n)].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code>';
+  });
+  return s;
+}
+
+
+async function applyManualFilter() {
+  if (!isOnTip()) return;
+
+  transitionToActive();
+
+  var tip = stack[stack.length - 1];
+  var incoming = tip.operation_type === 'init' ? [] : tip.outgoing_cl_ids;
+
+  var fields = {
+    search:   document.getElementById('f-search').value.trim(),
+    name:     document.getElementById('f-name').value.trim(),
+    courts:   getSelectedCourts(),  // array of court codes
+    judge:    document.getElementById('f-judge').value,
+    caseType: document.getElementById('f-type').value,
+    cause:    document.getElementById('f-cause').value.trim(),
+    from:     document.getElementById('f-from').value,
+    to:       document.getElementById('f-to').value,
+    party:    document.getElementById('f-party').value.trim()
+  };
+
+  var parts = [];
+  if (incoming.length > 0) {
+    parts.push("cl_id IN (" + incoming.join(",") + ")");
+  }
+  if (fields.search) {
+    // Use FTS tsvector index on docket_entries.fts for performance.
+    parts.push("cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', '" + escSql(fields.search) + "'))");
+  }
+  if (fields.name) parts.push("case_name ILIKE '%" + escSql(fields.name) + "%'");
+  // Courts: if all checked, no constraint. If none checked, force empty result.
+  // Otherwise, IN-list of selected codes.
+  if (fields.courts.length === 0) {
+    parts.push("1=0");
+  } else if (fields.courts.length < allCourtCodes.length) {
+    parts.push("court IN (" + fields.courts.map(function(c) { return "'" + escSql(c) + "'"; }).join(",") + ")");
+  }
+  if (fields.judge) parts.push("judge = '" + escSql(fields.judge) + "'");
+  if (fields.caseType) parts.push("docket_number LIKE '%-" + escSql(fields.caseType) + "-%'");
+  if (fields.cause) parts.push("(cause ILIKE '%" + escSql(fields.cause) + "%' OR nature_of_suit ILIKE '%" + escSql(fields.cause) + "%')");
+  if (fields.from) parts.push("date_filed >= '" + fields.from + "'");
+  if (fields.to) parts.push("date_filed <= '" + fields.to + "'");
+  if (fields.party) parts.push("(plaintiff ILIKE '%" + escSql(fields.party) + "%' OR defendant ILIKE '%" + escSql(fields.party) + "%')");
+
+  var where = parts.length > 0 ? " WHERE " + parts.join(" AND ") : "";
+
+  // FIX (v6.4.3): The previous version did a single query with LIMIT 10000.
+  // That silently truncated outgoing_cl_ids whenever a query matched > 10K rows
+  // (e.g. "habeas" matches ~25K), which corrupted ALL downstream operations:
+  // they would operate on only the first 10K cl_ids without any signal.
+  //
+  // New approach: two queries. First gets ALL matching cl_ids (just integers,
+  // fast and small). Second fetches detailed row data only for the first 10K
+  // for display. outgoing_cl_ids gets the full set; downstream operations
+  // see the true field. cases (for display) is capped at 10K with a banner
+  // warning when truncated.
+  var idsSql = "SELECT cl_id FROM cases" + where + " ORDER BY date_filed DESC";
+  var rowsSql = "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases" + where + " ORDER BY date_filed DESC LIMIT 10000";
+
+  // Disable the commit button, show spinner in place
+  var btn = document.getElementById('btn-commit-filter');
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.innerHTML = '<span class="sp"></span> Applying...';
+
+  try {
+    // Query 1: get all matching cl_ids (no limit)
+    var idRows = await sbRpc("run_query", { query_text: idsSql }) || [];
+    var allClIds = idRows.map(function(r) { return r.cl_id; });
+
+    // Query 2: get display rows for first 10K
+    var rows = await sbRpc("run_query", { query_text: rowsSql }) || [];
+
+    var label = describeManualFilter(fields);
+    var newPage = {
+      page_id: stack.length,
+      operation_type: 'manual_filter',
+      operation_label: label,
+      prompt: null,
+      generated_sql: rowsSql,
+      filter_state: fields,
+      incoming_cl_ids: incoming.slice(),
+      incoming_count: (tip.operation_type === 'init' ? totalCaseCount : incoming.length),
+      outgoing_cl_ids: allClIds,        // FIX: was capped at 10K; now the true full set
+      outgoing_count: allClIds.length,  // FIX: was display count; now the true count
+      cases: rows,                       // display rows (capped at 10K — the ONLY place truncation lives)
+      per_case_annotations: null,
+      artifact_markdown: null,
+      created_at: new Date().toISOString()
+    };
+    stack.push(newPage);
+    viewingIdx = stack.length - 1;
+    currentPagePagination = 0;
+    selectedCaseId = null;
+    modeArmed = false; // new tip arrives locked; user must re-arm to narrow further
+    closeDetail();
+  } catch(err) {
+    alert('Filter failed: ' + err.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = originalLabel;
+  renderAll();
+}
+
+// Produce a short human-readable label summarizing applied filter fields.
+function describeManualFilter(fields) {
+  var parts = [];
+  if (fields.search)   parts.push('text~"' + shorten(fields.search, 22) + '"');
+  if (fields.name)     parts.push('name~"' + shorten(fields.name, 22) + '"');
+  // Courts label: 'all' is omitted; preset names if matching; otherwise codes or count.
+  if (fields.courts && fields.courts.length !== undefined) {
+    var preset = detectActivePreset(fields.courts);
+    if (preset === 'none') parts.push('courts=none');
+    else if (preset === 'district') parts.push('courts=districts');
+    else if (preset === 'circuit') parts.push('courts=circuits');
+    else if (preset === 'all') { /* omit */ }
+    else if (fields.courts.length <= 3) parts.push('courts=' + fields.courts.map(function(c) { return c.toUpperCase(); }).join('+'));
+    else parts.push('courts=' + fields.courts.length + ' selected');
+  }
+  if (fields.judge)    parts.push('judge=' + shorten(fields.judge, 22));
+  if (fields.caseType) parts.push('type=' + fields.caseType);
+  if (fields.cause)    parts.push('cause~"' + shorten(fields.cause, 16) + '"');
+  if (fields.from)     parts.push('from=' + fields.from);
+  if (fields.to)       parts.push('to=' + fields.to);
+  if (fields.party)    parts.push('party~"' + shorten(fields.party, 16) + '"');
+  if (parts.length === 0) return 'Filter: (no criteria)';
+  return 'Filter: ' + parts.join(', ');
+}
+function shorten(s, n) { return s.length > n ? s.substring(0, n-1) + '…' : s; }
+
+function clearFilters() {
+  ['f-search','f-name','f-cause','f-party'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('f-judge').value='';
+  document.getElementById('f-type').value=''; document.getElementById('f-from').value='2025-01-20';
+  document.getElementById('f-to').value='';
+  applyCourtPreset('all'); // reset courts to default
+}
+
+// Apply filter-state snapshot to form fields (used when viewing past page read-only).
+function loadFilterStateIntoForm(fs) {
+  if (!fs) return;
+  document.getElementById('f-search').value = fs.search || '';
+  document.getElementById('f-name').value = fs.name || '';
+  document.getElementById('f-judge').value = fs.judge || '';
+  document.getElementById('f-type').value = fs.caseType || '';
+  document.getElementById('f-cause').value = fs.cause || '';
+  document.getElementById('f-from').value = fs.from || '';
+  document.getElementById('f-to').value = fs.to || '';
+  document.getElementById('f-party').value = fs.party || '';
+  // Courts: restore from snapshot. Older snapshots may have had `court` (singular) — handle both.
+  var courtList;
+  if (fs.courts && fs.courts.length !== undefined) {
+    courtList = fs.courts;
+  } else if (fs.court) {
+    courtList = [fs.court]; // legacy single-court snapshot
+  } else {
+    courtList = allCourtCodes.slice(); // legacy "All Courts" (empty string) — treat as all
+  }
+  var targetSet = {};
+  courtList.forEach(function(c) { targetSet[c] = true; });
+  var boxes = document.querySelectorAll('#courts-list input[type=checkbox]');
+  Array.prototype.forEach.call(boxes, function(cb) { cb.checked = !!targetSet[cb.value]; });
+  updateCourtsUI();
+}
+
+// === NAVIGATION ===
+function isOnTip() { return viewingIdx === stack.length - 1; }
+
+function jumpToPage(idx) {
+  if (idx < 0 || idx >= stack.length) return;
+  viewingIdx = idx;
+  currentPagePagination = 0;
+  selectedCaseId = null;
+  modeArmed = false; // any navigation re-locks; returning to tip requires re-arming
+  closeDetail();
+  renderAll();
+}
+function jumpToTip() { jumpToPage(stack.length - 1); }
+
+// Back pops the stack tip (discarding it).
+function popTip() {
+  if (stack.length <= 1) return;
+  if (!confirm('Discard page ' + (stack.length - 1) + ' and return to the previous page?\n\n(The discarded page\'s results are not saved.)')) return;
+  stack.pop();
+  viewingIdx = stack.length - 1;
+  currentPagePagination = 0;
+  selectedCaseId = null;
+  modeArmed = false; // new tip arrives locked
+  closeDetail();
+  renderAll();
+}
+
+function resetSession() {
+  if (stack.length > 1) {
+    if (!confirm('Reset session? This discards all ' + (stack.length - 1) + ' exploration page(s).')) return;
+  }
+  initStack();
+  document.body.classList.remove('active-state');
+  document.body.classList.add('welcome-state');
+  hasTransitioned = false;
+  modeArmed = true; // welcome state form is always live
+  clearFilters();
+  selectedMode = 'manual_filter';
+  selectMode('manual_filter');
+  selectedCaseId = null;
+  closeDetail();
+  renderAll();
+}
+
+// Single-file download: one CSV per page, with operation metadata embedded as
+// `#`-prefixed comment lines at the top, then a blank separator, then the
+// standard CSV header + data rows.
+//
+// This replaces the v6.4.5 dual-download (separate .csv + .json) which Chrome
+// silently throttled — the second programmatic download from a page is dropped
+// unless the user explicitly enables "Automatic downloads" in site settings.
+// One file = one download = no throttle, ever.
+//
+// The `#`-prefixed lines are ignored by Python's csv module if you filter them
+// out (or pandas with comment='#'), and remain readable as plain text. Excel
+// and Sheets will show them as a few rows at the top — easy to delete.
+function downloadCurrentPage() {
+  var page = stack[viewingIdx];
+  var filename = 'ragtime-page-' + page.page_id + '.csv';
+
+  // Build metadata header. Multi-line values (SQL, prompts) get whitespace
+  // collapsed to single spaces so each metadata key stays on one line.
+  function metaLine(key, value) {
+    if (value == null) return null;
+    var s = String(value).replace(/\s+/g, ' ').trim();
+    if (!s) return null;
+    return '# ' + key + ': ' + s;
+  }
+  var headerLines = [
+    '# RAGtime Explorer — page export',
+    '# generated: ' + new Date().toISOString(),
+    metaLine('page_id', page.page_id),
+    metaLine('operation_type', page.operation_type),
+    metaLine('operation_label', page.operation_label),
+    metaLine('created_at', page.created_at),
+    metaLine('incoming_count', page.incoming_count),
+    metaLine('outgoing_count', page.outgoing_count),
+    metaLine('prompt', page.prompt),
+    metaLine('generated_sql', page.generated_sql),
+    '#'  // visual separator
+  ].filter(function(x) { return x !== null; });
+
+  // CSV body. For claude_read pages, include both kept and dropped cases, plus
+  // two extra columns (kept, reason) so the per-case judgment travels with the
+  // download. For claude_analysis pages, include any annotation columns Claude
+  // produced (rank, score, category, label), and embed the analysis markdown
+  // in the header. For other page types, just emit the kept-only display rows.
+  var isReadPage = (page.operation_type === 'claude_read');
+  var isAnalysisPage = (page.operation_type === 'claude_analysis');
+  var ann = page.per_case_annotations || {};
+
+  // For analysis: add the markdown narrative to the header lines (one big
+  // # MARKDOWN block, each line prefixed with "# ").
+  if (isAnalysisPage && page.artifact_markdown) {
+    headerLines.push('# --- analysis-markdown ---');
+    String(page.artifact_markdown).split('\n').forEach(function(ln) {
+      headerLines.push('# ' + ln);
+    });
+    headerLines.push('# --- end-analysis-markdown ---');
+    headerLines.push('#');
+  }
+
+  // For analysis: figure out which annotation dimensions exist (so we only
+  // emit columns Claude actually populated).
+  var aShowRank = false, aShowScore = false, aShowCategory = false, aShowLabel = false;
+  if (isAnalysisPage) {
+    Object.keys(ann).forEach(function(k) {
+      var a = ann[k];
+      if (a.rank != null) aShowRank = true;
+      if (a.score != null) aShowScore = true;
+      if (a.category != null) aShowCategory = true;
+      if (a.label != null) aShowLabel = true;
+    });
+  }
+
+  var headers = ['cl_id','case_name','docket_number','court','date_filed','judge','nature_of_suit','entry_count','courtlistener_url'];
+  if (isReadPage) headers.push('kept', 'reason');
+  if (isAnalysisPage) {
+    if (aShowRank) headers.push('rank');
+    if (aShowScore) headers.push('score');
+    if (aShowCategory) headers.push('category');
+    if (aShowLabel) headers.push('label');
+  }
+
+  var lines = headerLines.slice();
+  lines.push(headers.join(','));
+
+  function rowFor(c) {
+    var base = [c.cl_id, c.case_name, c.docket_number, c.court, c.date_filed, c.judge, c.nature_of_suit, c.entry_count, c.cl_url];
+    if (isReadPage) {
+      var a = ann[c.cl_id] || {};
+      base.push(a.keep ? 'true' : 'false');
+      base.push(a.reason || '');
+    }
+    if (isAnalysisPage) {
+      var an = ann[c.cl_id] || {};
+      if (aShowRank) base.push(an.rank != null ? an.rank : '');
+      if (aShowScore) base.push(an.score != null ? an.score : '');
+      if (aShowCategory) base.push(an.category || '');
+      if (aShowLabel) base.push(an.label || '');
+    }
+    return base.map(csvCell).join(',');
+  }
+
+  (page.cases || []).forEach(function(c) { lines.push(rowFor(c)); });
+  if (isReadPage) {
+    (page.dropped_cases || []).forEach(function(c) { lines.push(rowFor(c)); });
+  }
+
+  downloadBlob(lines.join('\n'), filename, 'text/csv');
+}
+function csvCell(v) {
+  var s = String(v == null ? '' : v);
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function downloadBlob(content, filename, mime) {
+  var blob = new Blob([content], { type: mime });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 100);
+}
+
+// === RENDER ===
+function renderAll() {
+  renderFieldReadout();
+  renderSidebarForViewState();
+  renderBreadcrumb();
+  renderViewBanner();
+  renderPageBand();
+  renderPageContent();
+  updateModeButtonVisibility();
+}
+
+// Sidebar: read-only notice when viewing past page; live form on tip (when armed).
+//
+// Three "form states":
+//   - Welcome (first session, no pages committed): form is always live.
+//   - Active, viewing past page: form disabled; snapshot preloaded; read-only notice shown.
+//   - Active, on tip:
+//       * modeArmed=false: all inputs disabled, no mode button highlighted,
+//         mode form dimmed, arm-prompt visible. This is the default whenever a new
+//         tip is established (after commit, after back, after jumping back to tip).
+//       * modeArmed=true: inputs live, selected mode button highlighted, arm-prompt hidden.
+function renderSidebarForViewState() {
+  var isTip = isOnTip();
+  var isWelcome = !hasTransitioned;
+  var formLive = isWelcome || (isTip && modeArmed);
+  document.getElementById('sidebar-readonly').style.display = isTip ? 'none' : 'block';
+
+  // Arm prompt: only shown in active state on tip when not armed
+  var armPrompt = document.getElementById('arm-prompt');
+  armPrompt.style.display = (!isWelcome && isTip && !modeArmed) ? 'block' : 'none';
+
+  // Claude access panel: visible in active state only (not welcome)
+  document.getElementById('claude-access').style.display = isWelcome ? 'none' : 'block';
+
+  // Back button: only meaningful on tip with a previous page to return to.
+  // Hidden in welcome state, on page 0, or when viewing a past page (use breadcrumb instead).
+  var navBack = document.getElementById('nav-back-btn');
+  navBack.style.display = (!isWelcome && isTip && stack.length > 1) ? 'block' : 'none';
+
+  // Mode buttons: disabled when viewing past page; claude_sql / claude_read / claude_analysis additionally require unlock.
+  // Active-class highlight only shown when modeArmed=true.
+  Array.prototype.forEach.call(document.querySelectorAll('.mode-btn'), function(btn) {
+    var mode = btn.dataset.mode;
+    var disabled = !isTip;
+    if ((mode === 'claude_sql' || mode === 'claude_read' || mode === 'claude_analysis') && !claudeAccessUnlocked()) disabled = true; // requires unlock
+    btn.disabled = disabled;
+    if (mode === 'claude_sql') {
+      btn.dataset.tip = claudeAccessUnlocked()
+        ? 'Describe a filter in natural language; Claude writes SQL.'
+        : 'Unlock Claude features above to use this mode.';
+    }
+    if (mode === 'claude_read') {
+      btn.dataset.tip = claudeAccessUnlocked()
+        ? 'Claude reads each case and keeps/drops per criterion.'
+        : 'Unlock Claude features above to use this mode.';
+    }
+    if (mode === 'claude_analysis') {
+      btn.dataset.tip = claudeAccessUnlocked()
+        ? 'Claude analyzes the cases and produces narrative + annotations.'
+        : 'Unlock Claude features above to use this mode.';
+    }
+    if (modeArmed && isTip && mode === selectedMode) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+
+  // Apply filter button (manual_filter): disabled when form is not live
+  document.getElementById('btn-commit-filter').disabled = !formLive;
+  // Generate query button (claude_sql): also requires unlock
+  document.getElementById('btn-commit-sql').disabled = !formLive || !claudeAccessUnlocked();
+  // Read cases button (claude_read): requires unlock AND scope ≤ CLAUDE_READ_MAX
+  var tipForRead = stack[stack.length - 1];
+  var incomingForRead = (tipForRead && tipForRead.operation_type === 'init')
+    ? totalCaseCount
+    : (tipForRead ? tipForRead.outgoing_count : 0);
+  var readOverCap = incomingForRead > CLAUDE_READ_MAX;
+  var btnRead = document.getElementById('btn-commit-read');
+  btnRead.disabled = !formLive || !claudeAccessUnlocked() || readOverCap;
+  btnRead.title = readOverCap
+    ? 'Field is ' + fmtInt(incomingForRead) + ' cases. Read mode is capped at ' + fmtInt(CLAUDE_READ_MAX) + '. Narrow the field first.'
+    : '';
+  // Analyze button (claude_analysis): requires unlock AND scope ≤ CLAUDE_ANALYSIS_MAX,
+  //   and also requires having an actual list — disabled on init page since there's nothing to analyze yet.
+  var analysisOverCap = incomingForRead > CLAUDE_ANALYSIS_MAX;
+  var analysisOnInit = (tipForRead && tipForRead.operation_type === 'init');
+  var btnAnalysis = document.getElementById('btn-commit-analysis');
+  btnAnalysis.disabled = !formLive || !claudeAccessUnlocked() || analysisOverCap || analysisOnInit;
+  if (analysisOnInit) btnAnalysis.title = 'Analysis requires a list. Apply at least one filter first.';
+  else if (analysisOverCap) btnAnalysis.title = 'Field is ' + fmtInt(incomingForRead) + ' cases. Analysis is capped at ' + fmtInt(CLAUDE_ANALYSIS_MAX) + '. Narrow the field first.';
+  else btnAnalysis.title = '';
+
+  // Filter-form inputs (manual_filter): disabled when form is not live
+  var formInputs = document.querySelectorAll('#form-manual_filter input, #form-manual_filter select');
+  Array.prototype.forEach.call(formInputs, function(el) { el.disabled = !formLive; });
+
+  // SQL prompt textarea (claude_sql): disabled when form is not live
+  document.getElementById('sql-prompt').disabled = !formLive;
+  // Read prompt textarea (claude_read): disabled when form is not live
+  document.getElementById('read-prompt').disabled = !formLive;
+  // Analysis prompt textarea (claude_analysis): disabled when form is not live
+  document.getElementById('analysis-prompt').disabled = !formLive;
+
+  // Court preset buttons: disabled when form is not live (they're <button>, not <input>)
+  Array.prototype.forEach.call(document.querySelectorAll('.court-preset'), function(btn) {
+    btn.disabled = !formLive;
+  });
+
+  // Dim the mode form visually when locked (unarmed on tip, or viewing past page)
+  Array.prototype.forEach.call(document.querySelectorAll('.mode-form'), function(form) {
+    if (!formLive && isTip) form.classList.add('locked');
+    else form.classList.remove('locked');
+  });
+
+  // If viewing a past page, preload the corresponding form's snapshot.
+  var page = stack[viewingIdx];
+  if (!isTip) {
+    if (page.operation_type === 'manual_filter' && page.filter_state) {
+      loadFilterStateIntoForm(page.filter_state);
+    } else if (page.operation_type === 'claude_sql' && page.prompt) {
+      document.getElementById('sql-prompt').value = page.prompt;
+    } else if (page.operation_type === 'claude_read' && page.prompt) {
+      document.getElementById('read-prompt').value = page.prompt;
+    } else if (page.operation_type === 'claude_analysis' && page.prompt) {
+      document.getElementById('analysis-prompt').value = page.prompt;
+    }
+  }
+
+  // Scope notes: describe what the operation will narrow *from* (on live tip).
+  var filterNote = document.getElementById('filter-scope-note');
+  var sqlNote = document.getElementById('sql-scope-note');
+  var readNote = document.getElementById('read-scope-note');
+  var readCost = document.getElementById('read-cost-note');
+  var analysisNote = document.getElementById('analysis-scope-note');
+  var analysisCost = document.getElementById('analysis-cost-note');
+  if (formLive && isTip) {
+    var tip = stack[stack.length - 1];
+    var scopeText, scopeCount;
+    if (tip.operation_type === 'init') {
+      scopeCount = totalCaseCount;
+      scopeText = 'Applying to all ' + fmtInt(totalCaseCount) + ' cases in the database.';
+    } else {
+      scopeCount = tip.outgoing_count;
+      scopeText = 'Applying to the ' + fmtInt(tip.outgoing_count) + ' cases from page ' + tip.page_id + '.';
+    }
+    filterNote.textContent = scopeText;
+    sqlNote.textContent = scopeText;
+    readNote.textContent = scopeText;
+    // Cost/time estimate for claude_read — heuristic, shown in advance.
+    var est = estimateClaudeReadCost(scopeCount);
+    if (scopeCount > CLAUDE_READ_MAX) {
+      readCost.innerHTML = '<strong style="color:#a33;">Field exceeds ' + fmtInt(CLAUDE_READ_MAX) + '-case cap for read mode.</strong> Narrow further before running.';
+    } else if (scopeCount > 0) {
+      readCost.innerHTML = 'Estimated cost: <strong>~$' + est.dollars.toFixed(2) + '</strong> · estimated time: <strong>~' + est.minutes + ' min</strong>';
+    } else {
+      readCost.textContent = '';
+    }
+    // Scope/cost for claude_analysis — distinct from read because it's one-shot.
+    if (tip.operation_type === 'init') {
+      analysisNote.textContent = 'Analysis requires a list. Apply at least one filter first.';
+      analysisCost.textContent = '';
+    } else {
+      analysisNote.textContent = scopeText;
+      var aest = estimateClaudeAnalysisCost(scopeCount);
+      if (scopeCount > CLAUDE_ANALYSIS_MAX) {
+        analysisCost.innerHTML = '<strong style="color:#a33;">Field exceeds ' + fmtInt(CLAUDE_ANALYSIS_MAX) + '-case cap for analysis.</strong> Narrow further before running.';
+      } else if (scopeCount > CLAUDE_ANALYSIS_SOFT_WARN) {
+        analysisCost.innerHTML = 'Estimated cost: <strong>~$' + aest.dollars.toFixed(2) + '</strong> · estimated time: <strong>~' + aest.seconds + ' sec</strong> · <span style="color:#a33;">large field — review carefully</span>';
+      } else if (scopeCount > 0) {
+        analysisCost.innerHTML = 'Estimated cost: <strong>~$' + aest.dollars.toFixed(2) + '</strong> · estimated time: <strong>~' + aest.seconds + ' sec</strong>';
+      } else {
+        analysisCost.textContent = '';
+      }
+    }
+  } else {
+    filterNote.textContent = '';
+    sqlNote.textContent = '';
+    readNote.textContent = '';
+    readCost.textContent = '';
+    analysisNote.textContent = '';
+    analysisCost.textContent = '';
+  }
+}
+
+// Field readout: prominent "you are here" badge showing the size of the currently-viewed field.
+// Hidden in welcome state (no field yet). In active state, shows viewingIdx's outgoing_count
+// (or totalCaseCount for the init page, which represents the whole universe).
+function renderFieldReadout() {
+  var readout = document.getElementById('field-readout');
+  if (!hasTransitioned) { readout.style.display = 'none'; return; }
+  readout.style.display = 'block';
+
+  var page = stack[viewingIdx];
+  var num = document.getElementById('field-readout-num');
+  var sub = document.getElementById('field-readout-sub');
+
+  if (page.operation_type === 'init') {
+    num.textContent = fmtInt(totalCaseCount);
+    sub.innerHTML = 'cases &middot; full database';
+  } else {
+    num.textContent = fmtInt(page.outgoing_count);
+    var from = fmtInt(page.incoming_count);
+    var suffix = isOnTip() ? '' : ' &middot; page ' + page.page_id;
+    sub.innerHTML = 'cases &middot; narrowed from ' + from + suffix;
+  }
+}
+
+function renderBreadcrumb() {
+  var bc = document.getElementById('breadcrumb');
+  bc.innerHTML = '';
+  stack.forEach(function(p, i) {
+    if (i > 0) {
+      var arrow = document.createElement('div'); arrow.className = 'crumb-arrow'; arrow.textContent = '→';
+      bc.appendChild(arrow);
+    }
+    var crumb = document.createElement('div');
+    crumb.className = 'crumb' + (i === viewingIdx ? ' current' : '');
+    crumb.onclick = function() { if (i !== viewingIdx) jumpToPage(i); };
+    var idx = document.createElement('div'); idx.className = 'crumb-idx';
+    idx.textContent = 'Page ' + i + ' · ' + p.operation_type.replace('_', ' ');
+    var lbl = document.createElement('div'); lbl.className = 'crumb-label';
+    lbl.textContent = p.operation_label;
+    var cnt = document.createElement('div'); cnt.className = 'crumb-count';
+    if (p.operation_type === 'init') {
+      cnt.textContent = 'start';
+    } else {
+      cnt.textContent = fmtInt(p.incoming_count) + ' → ' + fmtInt(p.outgoing_count);
+    }
+    crumb.appendChild(idx); crumb.appendChild(lbl); crumb.appendChild(cnt);
+    bc.appendChild(crumb);
+  });
+}
+
+function renderViewBanner() {
+  var banner = document.getElementById('view-banner');
+  if (isOnTip()) {
+    banner.style.display = 'none';
+  } else {
+    banner.style.display = 'flex';
+    document.getElementById('view-banner-text').textContent =
+      'Viewing page ' + viewingIdx + ' (past). Return to the current page (page ' + (stack.length - 1) + ') to make changes.';
+  }
+}
+
+function renderPageBand() {
+  var page = stack[viewingIdx];
+  var container = document.getElementById('page-band-container');
+
+  if (page.operation_type === 'init') {
+    container.innerHTML =
+      '<div class="page-band init">' +
+        '<div class="page-band-top">' +
+          '<div class="page-band-label">' + esc(page.operation_label) + '</div>' +
+        '</div>' +
+        '<div class="page-band-meta">All ' + fmtInt(totalCaseCount) + ' cases available · ready for first filter</div>' +
+      '</div>';
+    return;
+  }
+
+  var isAnalysis = (page.operation_type === 'claude_analysis');
+  var isClaudeSql = (page.operation_type === 'claude_sql');
+  var isClaudeRead = (page.operation_type === 'claude_read');
+  var typeChip = '';
+  if (isAnalysis) typeChip = '<span class="chip">Analysis</span>';
+  else if (isClaudeSql) typeChip = '<span class="chip">Claude SQL</span>';
+  else if (isClaudeRead) typeChip = '<span class="chip">Claude Read</span>';
+
+  // Back button moved to sidebar (alongside mode buttons) — page band keeps only Download.
+  var actionsHtml = '<button onclick="downloadCurrentPage()" title="Download CSV (operation metadata embedded as # comment lines at top)">Download ↓</button>';
+
+  // For claude_sql pages, show the prompt and a collapsible view of the generated SQL.
+  // For claude_read pages, show the criterion and a per-case-judgment summary.
+  var claudeBlock = '';
+  if (isClaudeSql) {
+    var scopeNote = (page.incoming_cl_ids && page.incoming_cl_ids.length > 0)
+      ? '<div style="font-size:10px;color:var(--text-muted);font-style:italic;margin-top:4px;">+ scope filter applied automatically: results restricted to the ' + fmtInt(page.incoming_count) + ' cases from page ' + (page.page_id - 1) + '</div>'
+      : '';
+    claudeBlock =
+      '<div class="claude-prompt-display"><strong>Asked:</strong> ' + esc(page.prompt) + '</div>' +
+      '<details class="generated-sql">' +
+        '<summary>View generated SQL ▾</summary>' +
+        '<pre>' + esc(page.generated_sql) + '</pre>' +
+        scopeNote +
+      '</details>';
+  } else if (isClaudeRead) {
+    // Summarize what Claude judged: kept vs dropped, with the most common drop reasons surfaced.
+    var ann = page.per_case_annotations || {};
+    var keptCount = page.outgoing_count;
+    var droppedCount = page.incoming_count - keptCount;
+    // Tally the most common drop reasons (helps the user see whether drops are
+    // mostly substantive judgments or mostly "no entries available").
+    var dropReasons = {};
+    Object.keys(ann).forEach(function(k) {
+      if (!ann[k].keep) {
+        var reason = ann[k].reason || '(no reason)';
+        // Bucket common system-generated reasons together
+        var bucket = reason;
+        if (/no docket entries/i.test(reason)) bucket = 'no docket entries available to analyze';
+        else if (/case row not found/i.test(reason)) bucket = 'case row not found in database';
+        else if (/batch failed/i.test(reason)) bucket = 'batch failed';
+        else if (/no judgment returned/i.test(reason)) bucket = 'no judgment returned by Claude';
+        dropReasons[bucket] = (dropReasons[bucket] || 0) + 1;
+      }
+    });
+    // Surface only system-generated buckets (substantive Claude reasons are per-case in the table).
+    var systemBuckets = [
+      'no docket entries available to analyze',
+      'case row not found in database',
+      'batch failed',
+      'no judgment returned by Claude'
+    ];
+    var systemNotes = [];
+    systemBuckets.forEach(function(b) {
+      if (dropReasons[b]) systemNotes.push(fmtInt(dropReasons[b]) + ' ' + b);
+    });
+    var systemNotesHtml = systemNotes.length > 0
+      ? '<div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:4px;">Auto-drops: ' + systemNotes.join(' · ') + '</div>'
+      : '';
+    claudeBlock =
+      '<div class="claude-prompt-display"><strong>Per-case criterion:</strong> ' + esc(page.prompt) + '</div>' +
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:6px;">' +
+        '<strong>' + fmtInt(keptCount) + '</strong> kept · <strong>' + fmtInt(droppedCount) + '</strong> dropped' +
+      '</div>' +
+      systemNotesHtml;
+  } else if (isAnalysis) {
+    // For analysis pages, show the prompt + a one-line summary of which annotation
+    // dimensions Claude returned. The artifact itself renders below the band.
+    var aann = page.per_case_annotations || {};
+    var hasAny = { rank: false, score: false, category: false, label: false };
+    Object.keys(aann).forEach(function(k) {
+      var a = aann[k];
+      if (a.rank != null) hasAny.rank = true;
+      if (a.score != null) hasAny.score = true;
+      if (a.category != null) hasAny.category = true;
+      if (a.label != null) hasAny.label = true;
+    });
+    var dims = [];
+    if (hasAny.rank) dims.push('rank');
+    if (hasAny.score) dims.push('score');
+    if (hasAny.category) dims.push('category');
+    if (hasAny.label) dims.push('label');
+    var dimsHtml = dims.length > 0
+      ? '<div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:4px;">Per-case annotations: ' + dims.join(', ') + '</div>'
+      : '<div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:4px;">Narrative analysis only (no per-case annotations)</div>';
+    claudeBlock =
+      '<div class="claude-prompt-display"><strong>Analytical prompt:</strong> ' + esc(page.prompt) + '</div>' +
+      dimsHtml;
+  }
+
+  // Truncation warning — shown when the display row count is less than the
+  // true outgoing count. This happens when a query matches > 10K cases; we cap
+  // displayed cases at 10K but the full set is still tracked in outgoing_cl_ids
+  // for downstream operations.
+  var displayedCount = (page.cases || []).length;
+  var truncationWarning = '';
+  if (displayedCount > 0 && displayedCount < page.outgoing_count) {
+    truncationWarning =
+      '<div style="font-size:11px;color:var(--text-secondary);font-style:italic;margin-top:6px;padding:6px 10px;background:var(--surface-alt);border-left:3px solid var(--text-muted);border-radius:0 4px 4px 0;">' +
+      'Displaying first ' + fmtInt(displayedCount) + ' of ' + fmtInt(page.outgoing_count) + ' cases (sorted by date filed, newest first). All ' + fmtInt(page.outgoing_count) + ' cases are in scope for further narrowing.' +
+      '</div>';
+  }
+
+  container.innerHTML =
+    '<div class="page-band' + (isAnalysis ? ' analysis' : '') + '">' +
+      '<div class="page-band-top">' +
+        '<div class="page-band-label">' + esc(page.operation_label) + typeChip + '</div>' +
+        '<div class="page-band-actions">' + actionsHtml + '</div>' +
+      '</div>' +
+      '<div class="page-band-meta">' +
+        fmtInt(page.incoming_count) + ' → ' + fmtInt(page.outgoing_count) + ' cases' +
+        '<span class="sep">·</span>' +
+        'Created ' + fmtTime(page.created_at) +
+      '</div>' +
+      claudeBlock +
+      truncationWarning +
+    '</div>';
+}
+
+function renderPageContent() {
+  var page = stack[viewingIdx];
+  var container = document.getElementById('page-content');
+
+  if (page.operation_type === 'init') {
+    container.innerHTML = '<div class="page-empty">Set filter criteria in the sidebar and click <strong>Apply filter</strong> to produce page 1.</div>';
+    return;
+  }
+
+  // Build case list table
+  var rows = page.cases || [];
+  var n = rows.length;
+  var pages = Math.max(1, Math.ceil(n / PAGE_SIZE));
+  if (currentPagePagination >= pages) currentPagePagination = 0;
+  var start = currentPagePagination * PAGE_SIZE;
+  var end = Math.min(start + PAGE_SIZE, n);
+  var slice = rows.slice(start, end);
+
+  var isReadPage = (page.operation_type === 'claude_read');
+  var isAnalysisPage = (page.operation_type === 'claude_analysis');
+  var ann = page.per_case_annotations || {};
+
+  // For analysis pages, determine which annotation dimensions are present
+  // so we can add columns dynamically. (Only show columns Claude actually used.)
+  var showRank = false, showScore = false, showCategory = false, showLabel = false;
+  if (isAnalysisPage) {
+    Object.keys(ann).forEach(function(k) {
+      var a = ann[k];
+      if (a.rank != null) showRank = true;
+      if (a.score != null) showScore = true;
+      if (a.category != null) showCategory = true;
+      if (a.label != null) showLabel = true;
+    });
+  }
+
+  // Build the table HTML.
+  var thead = '<th>Docket</th><th>Case Name</th><th>Filed</th>';
+  if (isAnalysisPage) {
+    if (showRank) thead = '<th style="width:40px;">#</th>' + thead;
+    if (showCategory) thead += '<th>Category</th>';
+    if (showLabel) thead += '<th>Label</th>';
+    if (showScore) thead += '<th style="width:60px;">Score</th>';
+    thead += '<th style="width:48px;">Entries</th>';
+  } else {
+    thead += '<th>Judge</th>' + (isReadPage ? '<th>Why kept</th>' : '<th>Cause</th>') + '<th>#</th>';
+  }
+
+  var tableHtml = '<table class="ct"><thead><tr>' + thead + '</tr></thead><tbody>';
+  slice.forEach(function(r) {
+    var rowHtml = '<tr data-cl-id="' + r.cl_id + '"' + (r.cl_id === selectedCaseId ? ' class="sel"' : '') + ' onclick="showDetail(' + r.cl_id + ')">';
+    if (isAnalysisPage) {
+      var a = ann[r.cl_id] || {};
+      if (showRank) {
+        rowHtml += '<td style="font-family:var(--font-mono);font-weight:600;color:var(--accent);text-align:center;">' + (a.rank != null ? a.rank : '—') + '</td>';
+      }
+      rowHtml += '<td><span class="dn">' + esc(r.docket_number) + '</span></td>';
+      rowHtml += '<td><span class="cn">' + esc(r.case_name) + '</span></td>';
+      rowHtml += '<td style="white-space:nowrap;font-size:11px">' + esc(r.date_filed) + '</td>';
+      if (showCategory) rowHtml += '<td>' + (a.category ? '<span class="cb">' + esc(a.category) + '</span>' : '') + '</td>';
+      if (showLabel) rowHtml += '<td style="font-size:12px;color:var(--text-secondary);max-width:280px;line-height:1.35;">' + esc(a.label || '') + '</td>';
+      if (showScore) rowHtml += '<td style="font-family:var(--font-mono);font-size:11px;text-align:center;">' + (a.score != null ? a.score : '') + '</td>';
+      rowHtml += '<td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">' + (r.entry_count||0) + '</td>';
+    } else {
+      rowHtml += '<td><span class="dn">' + esc(r.docket_number) + '</span></td>';
+      rowHtml += '<td><span class="cn">' + esc(r.case_name) + '</span></td>';
+      rowHtml += '<td style="white-space:nowrap;font-size:11px">' + esc(r.date_filed) + '</td>';
+      rowHtml += '<td style="font-size:11px;color:var(--text-secondary)">' + esc(r.judge||'') + '</td>';
+      if (isReadPage) {
+        var reason = (ann[r.cl_id] && ann[r.cl_id].reason) ? ann[r.cl_id].reason : '';
+        rowHtml += '<td style="font-size:12px;color:var(--text-secondary);max-width:340px;line-height:1.35;">' + esc(reason) + '</td>';
+      } else {
+        rowHtml += '<td>' + (r.cause ? '<span class="cb">' + esc(shortCause(r.cause)) + '</span>' : '') + '</td>';
+      }
+      rowHtml += '<td style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">' + (r.entry_count||0) + '</td>';
+    }
+    rowHtml += '</tr>';
+    tableHtml += rowHtml;
+  });
+  tableHtml += '</tbody></table>';
+
+  if (isAnalysisPage && page.artifact_markdown) {
+    // Render artifact panel + table together. Layout depends on analysisLayout.
+    var layoutClass = (analysisLayout === 'right') ? 'analysis-shell layout-right' : 'analysis-shell';
+    var toggleLabel = (analysisLayout === 'top') ? 'Move to side →' : '↑ Move to top';
+    var artifactHtml =
+      '<div class="artifact-panel">' +
+        '<div class="artifact-header">' +
+          '<div class="artifact-header-title">Analysis</div>' +
+          '<div class="artifact-header-actions">' +
+            '<button onclick="toggleAnalysisLayout()" title="Toggle layout">' + toggleLabel + '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="artifact-body"><div class="md-content">' + renderMarkdown(page.artifact_markdown) + '</div></div>' +
+      '</div>';
+
+    if (analysisLayout === 'right') {
+      // Right layout: table left (1fr), artifact in 360px column right.
+      container.innerHTML =
+        '<div class="' + layoutClass + '">' +
+          '<div>' + tableHtml + '</div>' +
+          artifactHtml +
+        '</div>';
+    } else {
+      // Top layout: artifact on top, table below.
+      container.innerHTML = artifactHtml + '<div>' + tableHtml + '</div>';
+    }
+  } else {
+    container.innerHTML = tableHtml;
+  }
+
+  // Pagination
+  renderPagination(n, pages);
+}
+
+function renderPagination(total, pages) {
+  var existing = document.querySelector('.pag');
+  if (existing) existing.remove();
+  if (pages <= 1) return;
+  var p = document.createElement('div'); p.className = 'pag';
+  function mk(lbl, pg, dis, act) {
+    var b = document.createElement('button'); b.textContent = lbl; b.disabled = dis;
+    if (act) b.className = 'ap';
+    b.onclick = function() { currentPagePagination = pg; renderPageContent(); };
+    p.appendChild(b);
+  }
+  mk('← Prev', currentPagePagination - 1, currentPagePagination === 0);
+  var s = Math.max(0, currentPagePagination - 3), e = Math.min(pages, s + 7);
+  for (var i = s; i < e; i++) mk(String(i + 1), i, false, i === currentPagePagination);
+  mk('Next →', currentPagePagination + 1, currentPagePagination >= pages - 1);
+  document.getElementById('page-content').appendChild(p);
+}
+
+// === CASE DETAIL ===
+async function showDetail(clId) {
+  selectedCaseId = clId;
+  document.getElementById('detail').style.display = 'block';
+  var page = stack[viewingIdx];
+  var c = (page.cases || []).find(function(r) { return r.cl_id === clId; });
+  if (!c) return;
+  document.getElementById('d-name').textContent = c.case_name;
+  document.getElementById('d-meta').innerHTML =
+    '<span>' + esc(c.docket_number) + '</span><span>' + (c.court||'').toUpperCase() + '</span>' +
+    '<span>Filed: ' + esc(c.date_filed) + '</span><span>Judge: ' + esc(c.judge) + '</span>' +
+    (c.cause ? '<span>' + esc(c.cause) + '</span>' : '') +
+    (c.cl_url ? '<a href="' + esc(c.cl_url) + '" target="_blank" style="color:var(--accent)">CL →</a>' : '');
+
+  try {
+    var entries = await sbRpc("run_query", {
+      query_text: "SELECT entry_number, entry_date, description FROM docket_entries WHERE cl_id = " + clId + " ORDER BY entry_number"
+    });
+    var el = document.getElementById('d-entries'); el.innerHTML = '';
+    (entries || []).forEach(function(e) {
+      var div = document.createElement('div'); div.className = 'ei';
+      div.innerHTML = '<span class="en"><a href="' + entryLink(c.cl_url, e.entry_number, c.court) +
+        '" target="_blank" rel="noopener" title="View on CourtListener">#' + e.entry_number + '</a></span>' +
+        '<span class="ed">' + esc(e.entry_date) + '</span>' +
+        '<span>' + renderDescription(e.description) + '</span>';
+      el.appendChild(div);
+    });
+  } catch(err) { console.error(err); }
+
+  document.getElementById('detail').scrollIntoView({ behavior: 'smooth' });
+  renderPageContent(); // re-render table to show selection highlight
+}
+function closeDetail() {
+  document.getElementById('detail').style.display = 'none';
+  selectedCaseId = null;
+}
+
+// === KEYBOARD ===
+// Enter in a filter input triggers Apply filter (except textareas, password fields).
+// Requires modeArmed so Enter doesn't fire when fields are locked.
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT' &&
+      e.target.id !== 'gate-pw' &&
+      selectedMode === 'manual_filter' && isOnTip() && modeArmed) {
+    // Only trigger if the input is part of the manual_filter form
+    if (e.target.closest('#form-manual_filter')) {
+      applyManualFilter();
+    }
+  }
+});
+</script>
+</body>
+</html>
