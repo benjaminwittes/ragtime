@@ -134,6 +134,13 @@
   .claude-access-form .form-buttons .btn-cancel { background:var(--bg); color:var(--text-secondary); }
   .claude-access-error { color:var(--danger); font-size:10px; margin-top:6px; }
 
+  /* v7.0.0: provider/model selectors inside access form */
+  .claude-access-form .llm-row { margin-bottom:8px; }
+  .claude-access-form .llm-row > label { display:block; font-family:var(--font-sans); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary); margin-bottom:2px; }
+  .claude-access-form .llm-row select { width:100%; padding:5px 7px; font-family:var(--font-mono); font-size:11px; border:1px solid var(--border); border-radius:3px; box-sizing:border-box; background:var(--bg); color:var(--text); }
+  .claude-access-form .llm-row select:disabled { opacity:0.6; cursor:not-allowed; }
+  .claude-access-form .llm-byo-help { font-size:10px; color:var(--text-muted); font-style:italic; margin-top:4px; line-height:1.4; }
+
   /* claude_sql form */
   .claude-sql-form textarea { width:100%; padding:8px 10px; font-family:var(--font-sans); font-size:13px; border:1px solid var(--border); border-radius:4px; box-sizing:border-box; resize:vertical; min-height:90px; line-height:1.4; }
   .claude-sql-form textarea:disabled { background:var(--surface); cursor:not-allowed; }
@@ -384,29 +391,42 @@
         The sidebar shows the state that produced this page. Return to the current page to make changes.
       </div>
 
-      <!-- Claude access panel (active state only; controls credentials for Claude modes) -->
+      <!-- AI access panel (active state only; controls credentials for AI modes) -->
       <div class="claude-access" id="claude-access" style="display:none;">
         <div class="claude-access-status">
           <div>
-            <div class="claude-access-label">Claude features</div>
+            <div class="claude-access-label">AI features</div>
             <div class="claude-access-state" id="claude-access-state">Locked</div>
           </div>
-          <button class="claude-access-toggle" id="claude-access-toggle" onclick="toggleClaudeAccessForm()">Unlock</button>
+          <button class="claude-access-toggle" id="claude-access-toggle" onclick="toggleLLMAccessForm()">Configure</button>
         </div>
         <div class="claude-access-form" id="claude-access-form">
-          <div class="radio-row">
-            <label><input type="radio" name="claude-auth" value="demo" checked onchange="toggleClaudeAuthMode()"> Demo password</label>
-            <label><input type="radio" name="claude-auth" value="byo" onchange="toggleClaudeAuthMode()"> My API key</label>
+          <div class="llm-row">
+            <label for="llm-provider">Provider</label>
+            <select id="llm-provider" onchange="onLLMProviderChange()">
+              <option value="anthropic">Claude (Anthropic)</option>
+              <option value="openai">OpenAI (GPT)</option>
+              <option value="google">Gemini (Google)</option>
+            </select>
           </div>
-          <div id="claude-auth-demo-block">
-            <input type="password" id="claude-demo-pw" placeholder="Demo password" onkeydown="if(event.key==='Enter')saveClaudeAccess()">
+          <div class="llm-row">
+            <label for="llm-model">Model</label>
+            <select id="llm-model"></select>
           </div>
-          <div id="claude-auth-byo-block" style="display:none;">
-            <input type="password" id="claude-byo-key" placeholder="sk-ant-api03-..." onkeydown="if(event.key==='Enter')saveClaudeAccess()">
+          <div class="radio-row" id="llm-auth-mode-row">
+            <label><input type="radio" name="llm-auth" value="demo" onchange="onLLMAuthModeChange()"> Demo password</label>
+            <label><input type="radio" name="llm-auth" value="byo" onchange="onLLMAuthModeChange()"> My API key</label>
+          </div>
+          <div id="llm-auth-demo-block">
+            <input type="password" id="llm-demo-pw" placeholder="Demo password (Lawfare)" onkeydown="if(event.key==='Enter')saveLLMAccess()">
+          </div>
+          <div id="llm-auth-byo-block" style="display:none;">
+            <input type="password" id="llm-byo-key" placeholder="API key" onkeydown="if(event.key==='Enter')saveLLMAccess()">
+            <div class="llm-byo-help" id="llm-byo-help"></div>
           </div>
           <div class="form-buttons">
-            <button class="btn-cancel" onclick="cancelClaudeAccessForm()">Cancel</button>
-            <button class="btn-save" onclick="saveClaudeAccess()">Unlock</button>
+            <button class="btn-cancel" onclick="cancelLLMAccessForm()">Cancel</button>
+            <button class="btn-save" onclick="saveLLMAccess()">Save</button>
           </div>
           <div class="claude-access-error" id="claude-access-error"></div>
         </div>
@@ -417,9 +437,9 @@
       <button class="nav-back" id="nav-back-btn" onclick="popTip()" style="display:none;">← Back to previous page</button>
       <div class="mode-row" id="mode-row">
         <button class="mode-btn" data-mode="manual_filter" onclick="selectMode('manual_filter')" data-tip="Set filter criteria and apply them to produce a narrowed page.">Filter manually</button>
-        <button class="mode-btn" data-mode="claude_sql" onclick="selectMode('claude_sql')" data-tip="Describe a filter in natural language; Claude writes SQL.">Claude writes SQL</button>
-        <button class="mode-btn" data-mode="claude_read" onclick="selectMode('claude_read')" data-tip="Claude reads each case and keeps/drops per criterion.">Claude reads each case</button>
-        <button class="mode-btn" data-mode="claude_analysis" onclick="selectMode('claude_analysis')" data-tip="Claude analyzes the full case list and produces narrative + annotations.">Claude analyzes</button>
+        <button class="mode-btn" data-mode="claude_sql" onclick="selectMode('claude_sql')" data-tip="Describe a filter in natural language; AI writes SQL.">AI writes SQL</button>
+        <button class="mode-btn" data-mode="claude_read" onclick="selectMode('claude_read')" data-tip="AI reads each case and keeps/drops per criterion.">AI reads each case</button>
+        <button class="mode-btn" data-mode="claude_analysis" onclick="selectMode('claude_analysis')" data-tip="AI analyzes the full case list and produces narrative + annotations.">AI analyzes</button>
       </div>
 
       <!-- Arm prompt (shown on tip when no mode is armed; explains why fields are locked) -->
@@ -451,7 +471,6 @@
           <div class="fg span-2"><label>Date Range</label>
             <div class="date-row"><input type="date" id="f-from" value="2025-01-20"><input type="date" id="f-to"></div>
           </div>
-          <div class="fg span-2"><label>Party Name</label><input type="text" id="f-party" placeholder="e.g. DHS, Noem, ACLU..."></div>
         </div>
         <div class="filter-actions">
           <button class="btn btn-primary" id="btn-commit-filter" onclick="applyManualFilter()">Apply filter</button>
@@ -480,7 +499,7 @@
           <label>Per-case criterion</label>
           <textarea id="read-prompt" placeholder="e.g. the court ordered the government to do something and the government didn't comply"></textarea>
         </div>
-        <p class="claude-sql-help">Claude reads each case's docket entries and decides keep/drop per case. Slow and expensive; available only when the field is ≤ 5,000 cases.</p>
+        <p class="claude-sql-help">The AI reads each case's docket entries and decides keep/drop per case. Slow and expensive; available only when the field is ≤ 5,000 cases.</p>
         <div class="filter-actions">
           <button class="btn btn-primary" id="btn-commit-read" onclick="applyClaudeRead()">Read cases</button>
           <button class="btn-clear" onclick="document.getElementById('read-prompt').value=''">Clear</button>
@@ -495,7 +514,7 @@
           <label>Analytical prompt</label>
           <textarea id="analysis-prompt" placeholder="e.g. rank by severity of non-compliance and explain each ranking; or: identify common patterns and group cases by pattern"></textarea>
         </div>
-        <p class="claude-sql-help">Claude reads all the cases and produces a written analysis plus optional per-case annotations (rank, score, category). The case list is not narrowed.</p>
+        <p class="claude-sql-help">The AI reads all the cases and produces a written analysis plus optional per-case annotations (rank, score, category). The case list is not narrowed.</p>
         <div class="filter-actions">
           <button class="btn btn-primary" id="btn-commit-analysis" onclick="applyClaudeAnalysis()">Analyze</button>
           <button class="btn-clear" onclick="document.getElementById('analysis-prompt').value=''">Clear</button>
@@ -555,9 +574,10 @@ var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
 var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpa2RianBybmRna3NpYmJ2Y2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTE0MjksImV4cCI6MjA5MjA4NzQyOX0.FzzHOU7mcixedWZXd7wZkd3Jpy-05dMFB66q-yPSPL4";
 var ACCESS_CODE = "lawfare2025";
 var PAGE_SIZE = 50;
-// Cloudflare Worker proxy for Anthropic API calls
+// Cloudflare Worker proxy for AI provider calls (multi-provider as of v7.0.0)
 var WORKER_URL = "https://ragtimeproxy.benjamin-wittes.workers.dev/ask";
-var CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+// Note: in v7+, the model is selected per-session via the AI features panel and
+// stored in llmAccess.model. No global CLAUDE_MODEL constant.
 var CLAUDE_MAX_ROWS = 10000; // SQL row cap (matches manual_filter LIMIT)
 var CLAUDE_MAX_RAW_ROWS = 200000; // Hard ceiling on Claude's pre-intersection result set
 
@@ -586,10 +606,69 @@ var CLAUDE_ANALYSIS_MAX_OUTPUT_TOKENS = 8000;   // analysis can be a long markdo
 //   Input: 900 × $3/Mtok = $0.0027/case; output amortized ~$0.0005/case ⇒ ~$0.003/case.
 var CLAUDE_ANALYSIS_COST_PER_CASE = 0.003;
 
-// === CLAUDE ACCESS STATE ===
-// Stored only in memory for the duration of this session — never persisted.
-// mode: 'locked' | 'demo' | 'byo'
-var claudeAccess = { mode: 'locked', demoPw: null, byoKey: null };
+// === LLM ACCESS STATE (v7.0.0: multi-provider) ===
+//
+// The user picks a provider (Anthropic / OpenAI / Google) and a model within
+// that provider. Auth is either the Lawfare demo password (Anthropic only) or
+// a per-provider API key the user supplies. Keys are kept in memory for this
+// session only — never written to localStorage and never sent anywhere except
+// to the worker, which forwards them to the matching provider.
+//
+//   mode:     'locked' | 'demo' | 'byo'
+//   provider: 'anthropic' | 'openai' | 'google'
+//   model:    string (a model ID under the active provider)
+//   demoPw:   string|null     (Lawfare demo password if in demo mode)
+//   byoKeys:  { anthropic: string|null, openai: string|null, google: string|null }
+var llmAccess = {
+  mode:     'locked',
+  provider: 'anthropic',
+  model:    'claude-sonnet-4-6',
+  demoPw:   null,
+  byoKeys:  { anthropic: null, openai: null, google: null }
+};
+
+// Provider catalog. Update model lists here as new releases ship.
+var LLM_PROVIDERS = {
+  anthropic: {
+    label: 'Claude (Anthropic)',
+    keyPrefixes: ['sk-ant-'],
+    keyPlaceholder: 'sk-ant-api03-...',
+    keyHelpText: 'Get a key at console.anthropic.com → API Keys.',
+    models: [
+      { id: 'claude-opus-4-7',           label: 'Opus 4.7 (most capable)' },
+      { id: 'claude-sonnet-4-6',         label: 'Sonnet 4.6 (recommended)' },
+      { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 (fast/cheap)' }
+    ],
+    defaultModel: 'claude-sonnet-4-6',
+    supportsDemo: true
+  },
+  openai: {
+    label: 'OpenAI (GPT)',
+    keyPrefixes: ['sk-'],
+    keyPlaceholder: 'sk-proj-... or sk-...',
+    keyHelpText: 'Get a key at platform.openai.com → API keys.',
+    models: [
+      { id: 'gpt-5.5',      label: 'GPT-5.5 (newest, slower)' },
+      { id: 'gpt-5.4',      label: 'GPT-5.4 (recommended)' },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini (fast/cheap)' }
+    ],
+    defaultModel: 'gpt-5.4',
+    supportsDemo: false
+  },
+  google: {
+    label: 'Gemini (Google)',
+    keyPrefixes: ['AIza'],
+    keyPlaceholder: 'AIza...',
+    keyHelpText: 'Get a key at aistudio.google.com → API keys.',
+    models: [
+      { id: 'gemini-3.1-pro-preview',        label: 'Gemini 3.1 Pro (most capable)' },
+      { id: 'gemini-3-flash-preview',        label: 'Gemini 3 Flash (recommended)' },
+      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (fast/cheap)' }
+    ],
+    defaultModel: 'gemini-3-flash-preview',
+    supportsDemo: false
+  }
+};
 
 // === STACK STATE ===
 //
@@ -858,7 +937,7 @@ async function initApp() {
       js.appendChild(o);
     });
 
-    renderClaudeAccessUI();
+    renderLLMAccessUI();
     renderAll();
   } catch(err) {
     document.getElementById('hstats').textContent = 'Connection error: ' + err.message;
@@ -909,115 +988,235 @@ function updateModeButtonVisibility() {
 //
 // Builds SQL that narrows the tip page's incoming set by filter criteria,
 // runs it, pushes a new page onto the stack.
-// === CLAUDE ACCESS UI ===
+// === LLM ACCESS UI (v7.0.0) ===
 //
-// The Claude access panel sits in the sidebar between the field readout and the
-// mode buttons. It governs whether claude_sql / claude_read / claude_analysis
-// modes can actually run. Three states:
-//   - locked (default): no creds; Claude mode buttons are disabled.
-//   - demo: shared password; goes through the worker's quota tracking.
-//   - byo: user's own Anthropic API key; not quota-tracked server-side.
-// State lives in `claudeAccess` (memory only — not persisted).
+// Sidebar panel for picking provider + model and supplying credentials.
+// Three modes:
+//   - locked: no creds; AI mode buttons are disabled.
+//   - demo: shared password; goes through worker's quota tracking. Anthropic only.
+//   - byo: user's own API key for the active provider; not quota-tracked server-side.
+// State lives in `llmAccess` (memory only — not persisted).
 
-function claudeAccessUnlocked() { return claudeAccess.mode !== 'locked'; }
+function llmAccessUnlocked() { return llmAccess.mode !== 'locked'; }
+// Compatibility shim: existing code in claude_sql / claude_read / claude_analysis
+// modes calls claudeAccessUnlocked(). Same answer, new name.
+function claudeAccessUnlocked() { return llmAccessUnlocked(); }
 
-function toggleClaudeAccessForm() {
+function toggleLLMAccessForm() {
   var form = document.getElementById('claude-access-form');
   if (form.classList.contains('active')) {
     form.classList.remove('active');
-  } else {
-    form.classList.add('active');
-    // Default to demo radio if not already unlocked with a specific mode
-    if (claudeAccess.mode === 'locked' || claudeAccess.mode === 'demo') {
-      document.querySelector('input[name=claude-auth][value=demo]').checked = true;
-    } else {
-      document.querySelector('input[name=claude-auth][value=byo]').checked = true;
-    }
-    toggleClaudeAuthMode();
-    document.getElementById('claude-access-error').textContent = '';
+    return;
   }
+  form.classList.add('active');
+  // Sync UI to current state.
+  document.getElementById('llm-provider').value = llmAccess.provider;
+  populateLLMModelDropdown(llmAccess.provider);
+  document.getElementById('llm-model').value = llmAccess.model;
+  // Default auth mode: keep current if unlocked; otherwise demo if available, else byo.
+  var defaultAuth;
+  if (llmAccess.mode === 'demo' || llmAccess.mode === 'byo') {
+    defaultAuth = llmAccess.mode;
+  } else {
+    defaultAuth = LLM_PROVIDERS[llmAccess.provider].supportsDemo ? 'demo' : 'byo';
+  }
+  var demoRadio = document.querySelector('input[name=llm-auth][value=demo]');
+  var byoRadio  = document.querySelector('input[name=llm-auth][value=byo]');
+  demoRadio.checked = (defaultAuth === 'demo');
+  byoRadio.checked  = (defaultAuth === 'byo');
+  applyLLMAuthVisibility();
+  // Pre-fill the BYO input if we already have a key for this provider in memory.
+  var existingKey = llmAccess.byoKeys[llmAccess.provider];
+  document.getElementById('llm-byo-key').value = existingKey || '';
+  document.getElementById('llm-demo-pw').value = '';
+  document.getElementById('claude-access-error').textContent = '';
 }
 
-function cancelClaudeAccessForm() {
+function cancelLLMAccessForm() {
   document.getElementById('claude-access-form').classList.remove('active');
   document.getElementById('claude-access-error').textContent = '';
 }
 
-// Show/hide the demo-pw vs byo-key input blocks based on the radio selection.
-function toggleClaudeAuthMode() {
-  var mode = document.querySelector('input[name=claude-auth]:checked').value;
-  document.getElementById('claude-auth-demo-block').style.display = (mode === 'demo') ? 'block' : 'none';
-  document.getElementById('claude-auth-byo-block').style.display = (mode === 'byo') ? 'block' : 'none';
+// Triggered when the user changes the Provider dropdown.
+function onLLMProviderChange() {
+  var newProvider = document.getElementById('llm-provider').value;
+  populateLLMModelDropdown(newProvider);
+  // If the newly selected provider doesn't support demo and the demo radio
+  // was checked, force a switch to byo. Disable the demo radio either way.
+  var demoRadio = document.querySelector('input[name=llm-auth][value=demo]');
+  var byoRadio  = document.querySelector('input[name=llm-auth][value=byo]');
+  if (!LLM_PROVIDERS[newProvider].supportsDemo) {
+    demoRadio.disabled = true;
+    if (demoRadio.checked) {
+      demoRadio.checked = false;
+      byoRadio.checked = true;
+    }
+  } else {
+    demoRadio.disabled = false;
+  }
+  // Repopulate the BYO input with whatever key (if any) we already have.
+  document.getElementById('llm-byo-key').value = llmAccess.byoKeys[newProvider] || '';
+  applyLLMAuthVisibility();
 }
 
-function saveClaudeAccess() {
-  var mode = document.querySelector('input[name=claude-auth]:checked').value;
+// Triggered when the user toggles the demo/byo radio.
+function onLLMAuthModeChange() {
+  applyLLMAuthVisibility();
+}
+
+// Show/hide the demo and byo input blocks based on current radio + provider state.
+function applyLLMAuthVisibility() {
+  var providerId = document.getElementById('llm-provider').value;
+  var providerCfg = LLM_PROVIDERS[providerId];
+  var checked = document.querySelector('input[name=llm-auth]:checked');
+  var mode = checked ? checked.value : (providerCfg.supportsDemo ? 'demo' : 'byo');
+  document.getElementById('llm-auth-demo-block').style.display = (mode === 'demo') ? 'block' : 'none';
+  document.getElementById('llm-auth-byo-block').style.display  = (mode === 'byo')  ? 'block' : 'none';
+  // Update placeholder + help text for the byo input
+  var keyInput = document.getElementById('llm-byo-key');
+  keyInput.placeholder = providerCfg.keyPlaceholder;
+  document.getElementById('llm-byo-help').textContent = providerCfg.keyHelpText
+    + ' Keys are kept in memory for this session only.';
+  // Hide the auth-mode row entirely if the provider doesn't support demo —
+  // there's only one option, no point showing the radio.
+  document.getElementById('llm-auth-mode-row').style.display = providerCfg.supportsDemo ? 'flex' : 'none';
+}
+
+function populateLLMModelDropdown(providerId) {
+  var sel = document.getElementById('llm-model');
+  sel.innerHTML = '';
+  var models = LLM_PROVIDERS[providerId].models;
+  models.forEach(function(m) {
+    var opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.label;
+    sel.appendChild(opt);
+  });
+  // Default selection: if the active llmAccess.model is in this provider's
+  // list, keep it; otherwise pick the provider's defaultModel.
+  var existingMatches = models.some(function(m) { return m.id === llmAccess.model; });
+  sel.value = existingMatches ? llmAccess.model : LLM_PROVIDERS[providerId].defaultModel;
+}
+
+function saveLLMAccess() {
   var errEl = document.getElementById('claude-access-error');
   errEl.textContent = '';
-  if (mode === 'demo') {
-    var pw = document.getElementById('claude-demo-pw').value;
-    if (!pw) { errEl.textContent = 'Enter the demo password.'; return; }
-    claudeAccess = { mode: 'demo', demoPw: pw, byoKey: null };
-  } else {
-    var key = document.getElementById('claude-byo-key').value.trim();
-    if (!key) { errEl.textContent = 'Enter your Anthropic API key.'; return; }
-    if (!/^sk-ant-/.test(key)) { errEl.textContent = 'API keys start with "sk-ant-".'; return; }
-    claudeAccess = { mode: 'byo', demoPw: null, byoKey: key };
+  var providerId = document.getElementById('llm-provider').value;
+  var modelId    = document.getElementById('llm-model').value;
+  var providerCfg = LLM_PROVIDERS[providerId];
+  if (!providerCfg) { errEl.textContent = 'Pick a provider.'; return; }
+  if (!modelId)     { errEl.textContent = 'Pick a model.'; return; }
+
+  var checked = document.querySelector('input[name=llm-auth]:checked');
+  var mode = checked ? checked.value : 'byo';
+  if (mode === 'demo' && !providerCfg.supportsDemo) {
+    errEl.textContent = 'The demo password only works with Claude. Switch to "My API key" or pick Claude.';
+    return;
   }
-  // Clear inputs after capture so they don't linger in the DOM
-  document.getElementById('claude-demo-pw').value = '';
-  document.getElementById('claude-byo-key').value = '';
+
+  if (mode === 'demo') {
+    var pw = document.getElementById('llm-demo-pw').value;
+    if (!pw) { errEl.textContent = 'Enter the demo password.'; return; }
+    llmAccess.mode      = 'demo';
+    llmAccess.provider  = providerId;
+    llmAccess.model     = modelId;
+    llmAccess.demoPw    = pw;
+    // Note: BYO keys for OTHER providers are intentionally preserved across
+    // mode switches — they're stored per-provider, only the active mode changes.
+  } else {
+    var key = document.getElementById('llm-byo-key').value.trim();
+    if (!key) { errEl.textContent = 'Enter your API key.'; return; }
+    var prefixOk = providerCfg.keyPrefixes.some(function(p) { return key.indexOf(p) === 0; });
+    if (!prefixOk) {
+      errEl.textContent = providerCfg.label + ' keys typically start with "'
+        + providerCfg.keyPrefixes.join('" or "') + '". Double-check the value.';
+      return;
+    }
+    llmAccess.mode     = 'byo';
+    llmAccess.provider = providerId;
+    llmAccess.model    = modelId;
+    llmAccess.byoKeys[providerId] = key;
+  }
+
+  // Clear the input fields after capture so they don't linger in the DOM.
+  document.getElementById('llm-demo-pw').value = '';
+  document.getElementById('llm-byo-key').value = '';
   document.getElementById('claude-access-form').classList.remove('active');
-  renderClaudeAccessUI();
+  renderLLMAccessUI();
   renderSidebarForViewState();
 }
 
-function lockClaudeAccess() {
-  claudeAccess = { mode: 'locked', demoPw: null, byoKey: null };
-  renderClaudeAccessUI();
+function lockLLMAccess() {
+  llmAccess.mode    = 'locked';
+  llmAccess.demoPw  = null;
+  llmAccess.byoKeys = { anthropic: null, openai: null, google: null };
+  renderLLMAccessUI();
   renderSidebarForViewState();
 }
 
 // Render the access panel header (locked/unlocked badge + toggle button label).
-function renderClaudeAccessUI() {
-  var stateEl = document.getElementById('claude-access-state');
+function renderLLMAccessUI() {
+  var stateEl  = document.getElementById('claude-access-state');
   var toggleEl = document.getElementById('claude-access-toggle');
-  if (claudeAccess.mode === 'locked') {
+  if (llmAccess.mode === 'locked') {
     stateEl.textContent = 'Locked';
     stateEl.classList.remove('unlocked');
-    toggleEl.textContent = 'Unlock';
-    toggleEl.onclick = toggleClaudeAccessForm;
+    toggleEl.textContent = 'Configure';
+    toggleEl.onclick = toggleLLMAccessForm;
   } else {
-    stateEl.textContent = '✓ Unlocked (' + (claudeAccess.mode === 'demo' ? 'demo' : 'your key') + ')';
+    var providerCfg = LLM_PROVIDERS[llmAccess.provider];
+    var modelEntry  = providerCfg.models.find(function(m) { return m.id === llmAccess.model; });
+    var modelLabel  = modelEntry ? modelEntry.label.split(' (')[0] : llmAccess.model;
+    var authLabel   = (llmAccess.mode === 'demo') ? 'demo' : 'your key';
+    // Just provider name + short model name; the full label can be long.
+    var providerShort = providerCfg.label.split(' (')[0];
+    stateEl.textContent = '✓ ' + providerShort + ' / ' + modelLabel + ' (' + authLabel + ')';
     stateEl.classList.add('unlocked');
-    toggleEl.textContent = 'Lock';
-    toggleEl.onclick = lockClaudeAccess;
+    toggleEl.textContent = 'Change';
+    toggleEl.onclick = toggleLLMAccessForm;
   }
 }
 
-// === CLAUDE API CALL ===
+// Compatibility shim: any older code paths that called the old name still work.
+function renderClaudeAccessUI() { return renderLLMAccessUI(); }
+
+// === LLM API CALL ===
 //
-// Posts to the Cloudflare Worker proxy with either a demo password or a BYO key.
+// Posts to the Cloudflare Worker proxy. The worker routes to the appropriate
+// provider (Anthropic / OpenAI / Google) based on `provider` in the body.
 // Returns the assistant's text content. Throws on any error.
 //
 // Auto-retries ONCE on fetch-layer failures (Safari "Load failed", network blips,
 // cold-Worker timeouts). The pattern observed in v6.4.2 testing was deterministic:
 // first call after a quiet period fails at the fetch layer, second call (warm
-// Worker, hot connection pool to api.anthropic.com) succeeds. We don't retry on
-// auth errors or Anthropic-returned errors — those are deterministic and a
-// retry would just delay user feedback.
+// Worker, hot connection pool to the upstream API) succeeds. We don't retry on
+// auth errors or provider-returned errors — those are deterministic and a retry
+// would just delay user feedback.
+//
+// Function name kept as `callClaude` for compatibility with existing call sites
+// in claude_sql / claude_read / claude_analysis modes; the alias below mirrors
+// the new naming for any future code.
 async function callClaude(systemPrompt, userContent, maxTok) {
-  if (!claudeAccessUnlocked()) {
-    throw new Error('Claude features are locked. Click "Unlock" in the sidebar.');
+  if (!llmAccessUnlocked()) {
+    throw new Error('AI features are locked. Click "Configure" in the sidebar.');
   }
   var body = {
-    model: CLAUDE_MODEL,
+    provider:   llmAccess.provider,
+    model:      llmAccess.model,
     max_tokens: maxTok || 4000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userContent }]
+    system:     systemPrompt,
+    messages:   [{ role: 'user', content: userContent }]
   };
-  if (claudeAccess.mode === 'demo') body.password = claudeAccess.demoPw;
-  else body.user_api_key = claudeAccess.byoKey;
+  if (llmAccess.mode === 'demo') {
+    body.password = llmAccess.demoPw;
+  } else {
+    var key = llmAccess.byoKeys[llmAccess.provider];
+    if (!key) {
+      throw new Error('No API key configured for ' + LLM_PROVIDERS[llmAccess.provider].label
+        + '. Click "Configure" and supply a key.');
+    }
+    body.user_api_key = key;
+  }
 
   var attempt = 0;
   var lastNetErr = null;
@@ -1031,16 +1230,13 @@ async function callClaude(systemPrompt, userContent, maxTok) {
         body: JSON.stringify(body)
       });
     } catch (netErr) {
-      // Fetch-layer failure (TLS handshake, timeout, "Load failed" in Safari, etc.)
-      // Retry once after a short delay to warm up the Worker / connection pool.
       lastNetErr = netErr;
       if (attempt < 2) {
         await new Promise(function(r) { setTimeout(r, 1500); });
         continue;
       }
-      throw new Error('Could not reach Claude proxy: ' + netErr.message + ' (retried once)');
+      throw new Error('Could not reach AI proxy: ' + netErr.message + ' (retried once)');
     }
-    // From here down, no retry — the request reached the proxy.
     var data;
     try { data = await resp.json(); }
     catch (e) { throw new Error('Proxy returned non-JSON (HTTP ' + resp.status + ')'); }
@@ -1052,9 +1248,11 @@ async function callClaude(systemPrompt, userContent, maxTok) {
     if (data.content && data.content[0] && data.content[0].text) return data.content[0].text;
     throw new Error('Unexpected response shape from proxy');
   }
-  // Unreachable (the loop either returns or throws), but for clarity:
-  throw new Error('Could not reach Claude proxy: ' + (lastNetErr ? lastNetErr.message : 'unknown'));
+  throw new Error('Could not reach AI proxy: ' + (lastNetErr ? lastNetErr.message : 'unknown'));
 }
+
+// New name; same function. Use callLLM for any new code.
+var callLLM = callClaude;
 
 // === CLAUDE SQL MODE ===
 //
@@ -1118,8 +1316,9 @@ async function applyClaudeSql() {
     "  judge TEXT,",
     "  cause TEXT,                 -- statutory cause of action, e.g. '5 U.S.C. § 702 Administrative Procedure Act', '28:2241 Habeas Corpus'",
     "  nature_of_suit TEXT,        -- NOS code/description, e.g. '530 Habeas Corpus (General)', '463 Habeas Corpus - Alien Detainee'",
-    "  plaintiff TEXT,",
-    "  defendant TEXT,             -- often where you'll find agency names like 'DHS', 'Mayorkas', 'Garland', 'BOP'",
+    "  -- NOTE: plaintiff and defendant exist on this table but are NULL for ~99.5% of cases.",
+    "  -- DO NOT write SQL against them. Use case_name (caption) for party-name searches and",
+    "  -- the FTS index on docket_entries.fts for agency/official queries.",
     "  entry_count INT,",
     "  cl_url TEXT",
     ")",
@@ -1164,7 +1363,7 @@ async function applyClaudeSql() {
     "5. Reserve ILIKE for unambiguous full phrases ('%Department of Homeland Security%') or proper names ('%Mayorkas%', '%Noem%').\n" +
     "6. case_name is rarely informative for topical queries. It's a caption like 'Doe v. Garland', not a description of what the case is about. Don't lean on it.\n" +
     "7. cause and nature_of_suit are coded fields. A habeas immigration case has cause '28:2241 Habeas Corpus' and NOS '530 Habeas Corpus' or '463 Habeas - Alien Detainee' — NOT 'immigration'. Don't filter on metadata words that won't be there.\n" +
-    "8. defendant is often the best metadata field for agency/official queries — but in habeas cases it's frequently the warden or facility director, not the agency. Always pair defendant ILIKE with an FTS branch (combined via OR).\n" +
+    "8. AGENCY AND OFFICIAL QUERIES GO THROUGH FTS, NOT METADATA. The plaintiff and defendant columns are NULL for ~99.5% of cases — do not use them. For agency/official queries, use FTS on docket_entries (which catches both agency-as-defendant cases and cases where the agency or official is mentioned in motion text), and optionally OR with case_name ILIKE for proper-name captions like 'Mayorkas' or 'Noem'.\n" +
     "9. SCOPE-AWARE ENRICHMENT — CHECK BEFORE OR-ING METADATA. Look at the CURRENT SCOPE description above. Before adding any `OR <metadata-condition>` branch, ask: would this condition match every case in the current scope? If yes, DO NOT add it. An OR branch that's true for the whole scope is a tautology — it makes your FTS branch irrelevant and your query returns the entire scope. Common traps:\n" +
     "   - Scope is 'habeas cases', and you add `OR nature_of_suit ILIKE '%habeas%'` → returns ALL habeas cases (the whole scope).\n" +
     "   - Scope is 'immigration cases', and you add `OR cause ILIKE '%immigration%'` → returns the whole immigration scope.\n" +
@@ -1173,21 +1372,19 @@ async function applyClaudeSql() {
     "QUERY-DESIGN PATTERNS:\n" +
     "- FTS syntax: cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'TERMS'))\n" +
     "  websearch_to_tsquery supports 'OR', quoted phrases, and 'and'. Example: 'detention OR removal OR \"final order of removal\"'.\n" +
-    "- For agency/official queries, OR-combine: (defendant ILIKE proper-names) OR (FTS for acronyms and concepts).\n" +
+    "- For agency/official queries, OR-combine: (case_name ILIKE proper-names) OR (FTS for acronyms and concepts on docket_entries).\n" +
     "- For topical queries, FTS is the workhorse; metadata filters are optional ENRICHMENT (added with OR), never RESTRICTION (added with AND).\n" +
     "- Use websearch_to_tsquery's 'OR' operator generously. 'detention OR custody OR confined OR removal OR deportation' will catch many phrasings of the same idea.\n\n" +
     "WORKED EXAMPLE 1 — agency/official query:\n" +
     "User: 'cases challenging DHS or ICE actions'\n" +
     "Good SQL:\n" +
     "  SELECT cl_id FROM cases WHERE\n" +
-    "      defendant ILIKE '%Department of Homeland Security%'\n" +
-    "      OR defendant ILIKE '%Mayorkas%'\n" +
-    "      OR defendant ILIKE '%Noem%'\n" +
-    "      OR defendant ILIKE '%Immigration and Customs Enforcement%'\n" +
+    "      case_name ILIKE '%Mayorkas%'\n" +
+    "      OR case_name ILIKE '%Noem%'\n" +
     "      OR cl_id IN (SELECT DISTINCT cl_id FROM docket_entries\n" +
     "                   WHERE fts @@ websearch_to_tsquery('english',\n" +
-    "                       'DHS OR ICE OR \"Department of Homeland Security\" OR \"Immigration and Customs Enforcement\" OR \"Homeland Security\"'))\n" +
-    "Why it works: ORs proper names (ILIKE-safe) with FTS for acronyms (avoids substring traps). Catches both wardens-as-defendant cases (via FTS on entries) and agency-as-defendant cases (via ILIKE).\n\n" +
+    "                       'DHS OR ICE OR \"Department of Homeland Security\" OR \"Immigration and Customs Enforcement\" OR \"Homeland Security\" OR Mayorkas OR Noem'))\n" +
+    "Why it works: FTS on docket_entries is the workhorse — it catches the agency name, acronyms, and official names wherever they appear in motion or order text. The case_name OR-branches add proper-name captions on top. Note: we do NOT touch plaintiff/defendant — they're empty for ~99.5% of cases.\n\n" +
     "WORKED EXAMPLE 2 — topical/conceptual query:\n" +
     "User: 'cases involving immigration detention'\n" +
     "Good SQL:\n" +
@@ -2106,8 +2303,7 @@ async function applyManualFilter() {
     caseType: document.getElementById('f-type').value,
     cause:    document.getElementById('f-cause').value.trim(),
     from:     document.getElementById('f-from').value,
-    to:       document.getElementById('f-to').value,
-    party:    document.getElementById('f-party').value.trim()
+    to:       document.getElementById('f-to').value
   };
 
   var parts = [];
@@ -2131,7 +2327,6 @@ async function applyManualFilter() {
   if (fields.cause) parts.push("(cause ILIKE '%" + escSql(fields.cause) + "%' OR nature_of_suit ILIKE '%" + escSql(fields.cause) + "%')");
   if (fields.from) parts.push("date_filed >= '" + fields.from + "'");
   if (fields.to) parts.push("date_filed <= '" + fields.to + "'");
-  if (fields.party) parts.push("(plaintiff ILIKE '%" + escSql(fields.party) + "%' OR defendant ILIKE '%" + escSql(fields.party) + "%')");
 
   var where = parts.length > 0 ? " WHERE " + parts.join(" AND ") : "";
 
@@ -2214,14 +2409,13 @@ function describeManualFilter(fields) {
   if (fields.cause)    parts.push('cause~"' + shorten(fields.cause, 16) + '"');
   if (fields.from)     parts.push('from=' + fields.from);
   if (fields.to)       parts.push('to=' + fields.to);
-  if (fields.party)    parts.push('party~"' + shorten(fields.party, 16) + '"');
   if (parts.length === 0) return 'Filter: (no criteria)';
   return 'Filter: ' + parts.join(', ');
 }
 function shorten(s, n) { return s.length > n ? s.substring(0, n-1) + '…' : s; }
 
 function clearFilters() {
-  ['f-search','f-name','f-cause','f-party'].forEach(function(id){document.getElementById(id).value='';});
+  ['f-search','f-name','f-cause'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('f-judge').value='';
   document.getElementById('f-type').value=''; document.getElementById('f-from').value='2025-01-20';
   document.getElementById('f-to').value='';
@@ -2238,7 +2432,6 @@ function loadFilterStateIntoForm(fs) {
   document.getElementById('f-cause').value = fs.cause || '';
   document.getElementById('f-from').value = fs.from || '';
   document.getElementById('f-to').value = fs.to || '';
-  document.getElementById('f-party').value = fs.party || '';
   // Courts: restore from snapshot. Older snapshots may have had `court` (singular) — handle both.
   var courtList;
   if (fs.courts && fs.courts.length !== undefined) {
@@ -2468,18 +2661,18 @@ function renderSidebarForViewState() {
     btn.disabled = disabled;
     if (mode === 'claude_sql') {
       btn.dataset.tip = claudeAccessUnlocked()
-        ? 'Describe a filter in natural language; Claude writes SQL.'
-        : 'Unlock Claude features above to use this mode.';
+        ? 'Describe a filter in natural language; AI writes SQL.'
+        : 'Configure AI features above to use this mode.';
     }
     if (mode === 'claude_read') {
       btn.dataset.tip = claudeAccessUnlocked()
-        ? 'Claude reads each case and keeps/drops per criterion.'
-        : 'Unlock Claude features above to use this mode.';
+        ? 'AI reads each case and keeps/drops per criterion.'
+        : 'Configure AI features above to use this mode.';
     }
     if (mode === 'claude_analysis') {
       btn.dataset.tip = claudeAccessUnlocked()
-        ? 'Claude analyzes the cases and produces narrative + annotations.'
-        : 'Unlock Claude features above to use this mode.';
+        ? 'AI analyzes the cases and produces narrative + annotations.'
+        : 'Configure AI features above to use this mode.';
     }
     if (modeArmed && isTip && mode === selectedMode) btn.classList.add('active');
     else btn.classList.remove('active');
