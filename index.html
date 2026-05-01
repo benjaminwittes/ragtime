@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v8.0.0 — adds three-option login screen + paid Lawfare tier (Supabase auth + Stripe checkout). -->
+<!-- Requires worker v3 at ragtimeproxy.benjamin-wittes.workers.dev with /api/checkout, /api/balance, /api/account, /api/stripe/webhook live. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:ital,wght@0,400;0,700;1,400&display=swap');
   :root {
@@ -30,12 +33,12 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:var(--font-sans); background:var(--bg); color:var(--text); line-height:1.5; }
 
-  /* Gate */
+  /* Gate
+     v8.0: the old access-code gate (single password input + Enter button) is gone,
+     replaced by the three-option chooser. The container layout (centered flex column)
+     is preserved; per-element rules (#gate input, #gate button, .error) have been
+     removed — new styles live under "v8.0 — LOGIN CHOOSER" further down. */
   #gate { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; gap:16px; }
-  #gate h1 { font-family:var(--font-serif); font-size:28px; color:var(--accent); }
-  #gate input { padding:10px 16px; border:1px solid var(--border); border-radius:4px; font-size:15px; width:260px; text-align:center; }
-  #gate button { padding:10px 24px; background:var(--accent); color:white; border:none; border-radius:5px; font-size:15px; font-weight:600; cursor:pointer; }
-  #gate button:hover { background:var(--accent-light); }
   #gate .error { color:var(--highlight); font-size:13px; }
 
   /* Header */
@@ -340,19 +343,196 @@
     padding:5px 9px; border-radius:3px; white-space:normal; width:max-content; max-width:220px;
     text-align:center; line-height:1.4; z-index:100; pointer-events:none;
   }
+
+  /* ============================================
+     v8.0 — LOGIN CHOOSER
+     ============================================ */
+  /* Reuses #gate as the container; we just rebuild what's inside it. */
+  #gate { padding:60px 24px; }
+  .gate-title { font-family:var(--font-serif); font-weight:700; font-size:54px; color:var(--text); line-height:1; letter-spacing:-.01em; margin-bottom:6px; }
+  .gate-tagline { font-family:var(--font-sans); font-style:italic; font-size:16px; color:var(--text-secondary); margin-bottom:8px; font-weight:400; }
+  .gate-lawfare { display:flex; align-items:center; justify-content:center; gap:8px; font-family:var(--font-sans); font-size:14px; color:var(--text-secondary); margin-bottom:36px; font-weight:400; }
+  .gate-lawfare img { height:21px; width:auto; vertical-align:middle; }
+
+  .chooser { display:flex; flex-direction:column; gap:14px; max-width:440px; width:100%; }
+  .chooser-prompt { text-align:center; font-family:var(--font-serif); font-size:14px; font-style:italic; color:var(--text-secondary); margin-bottom:6px; }
+  .pick {
+    display:block; width:100%; padding:18px 22px; background:var(--bg);
+    border:1px solid var(--border); border-radius:6px; cursor:pointer;
+    text-align:left; transition:all .15s; font-family:var(--font-sans);
+  }
+  .pick:hover { border-color:var(--accent); background:var(--accent-bg); }
+  .pick-title { font-family:var(--font-serif); font-weight:700; font-size:17px; color:var(--accent); margin-bottom:4px; line-height:1.2; }
+  .pick-sub { font-family:var(--font-sans); font-size:13px; color:var(--text-secondary); line-height:1.45; }
+  .pick.featured { border-color:var(--accent-light); background:var(--accent-bg); }
+  .pick.featured:hover { background:white; }
+  .pick-badge { display:inline-block; font-family:var(--font-sans); font-size:9px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; background:var(--accent); color:white; padding:2px 6px; border-radius:2px; margin-left:8px; vertical-align:1px; }
+
+  .gate-foot { font-family:var(--font-sans); font-size:11px; color:var(--text-muted); margin-top:28px; text-align:center; max-width:440px; line-height:1.55; }
+  .gate-foot a { color:var(--accent); text-decoration:underline; cursor:pointer; }
+
+  /* Magic-link subscreen */
+  .gate-back { background:none; border:none; color:var(--text-muted); font-size:12px; cursor:pointer; font-family:var(--font-sans); padding:6px 0; align-self:flex-start; }
+  .gate-back:hover { color:var(--accent); }
+  .gate-back::before { content:'← '; }
+  .magic-form { max-width:440px; width:100%; display:flex; flex-direction:column; gap:14px; }
+  .magic-form h2 { font-family:var(--font-serif); font-size:24px; font-weight:700; color:var(--accent); }
+  .magic-form p { font-family:var(--font-sans); font-size:14px; color:var(--text-secondary); line-height:1.55; }
+  .magic-form input { padding:11px 14px; border:1px solid var(--border); border-radius:5px; font-size:15px; font-family:var(--font-sans); width:100%; }
+  .magic-form input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-bg); }
+  .magic-form button.btn-primary { padding:11px 24px; font-size:15px; }
+  .magic-form .small { font-size:12px; color:var(--text-muted); font-style:italic; }
+  .magic-sent { background:var(--accent-bg); border:1px solid var(--accent-light); border-radius:5px; padding:18px 20px; }
+  .magic-sent strong { color:var(--accent); font-family:var(--font-serif); }
+
+  /* ============================================
+     v8.0 — BALANCE WIDGET (header)
+     ============================================ */
+  .balance-widget {
+    display:flex; align-items:center; gap:8px; padding:5px 12px;
+    background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2);
+    border-radius:14px; font-family:var(--font-sans); font-size:12px;
+    color:white;
+  }
+  .balance-widget .bal-amount { font-weight:700; font-family:var(--font-mono); font-size:13px; }
+  .balance-widget .bal-amount.low { color:#ffd966; }
+  .balance-widget .bal-amount.empty { color:#ff9aa2; }
+  .balance-widget .bal-topup {
+    background:white; color:var(--accent); border:none; border-radius:10px;
+    padding:3px 10px; font-size:11px; font-weight:700; cursor:pointer;
+    font-family:var(--font-sans); letter-spacing:.02em;
+  }
+  .balance-widget .bal-topup:hover { background:#FFD966; }
+  .balance-widget .bal-email { font-size:11px; opacity:.85; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .balance-widget .bal-signout { background:none; border:none; color:white; opacity:.7; font-size:11px; cursor:pointer; padding:2px 4px; text-decoration:underline; font-family:var(--font-sans); }
+  .balance-widget .bal-signout:hover { opacity:1; }
+
+  /* ============================================
+     v8.0 — MODALS (cost preview, buy more, etc.)
+     ============================================ */
+  .modal-backdrop {
+    position:fixed; inset:0; background:rgba(20,20,20,0.55);
+    display:none; align-items:center; justify-content:center; z-index:1000;
+    padding:20px;
+  }
+  .modal-backdrop.active { display:flex; }
+  .modal {
+    background:var(--bg); border-radius:8px; max-width:520px; width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,0.25); overflow:hidden;
+    max-height:calc(100vh - 40px); display:flex; flex-direction:column;
+  }
+  .modal-head {
+    padding:18px 22px 14px; border-bottom:1px solid var(--border-light);
+    background:var(--accent-bg);
+  }
+  .modal-head h3 { font-family:var(--font-serif); font-size:19px; font-weight:700; color:var(--accent); }
+  .modal-head .modal-sub { font-family:var(--font-sans); font-size:12px; color:var(--text-secondary); margin-top:3px; }
+  .modal-body { padding:18px 22px; font-family:var(--font-sans); font-size:14px; color:var(--text); line-height:1.55; overflow-y:auto; }
+  .modal-foot {
+    padding:14px 22px; border-top:1px solid var(--border-light);
+    display:flex; gap:10px; justify-content:flex-end; background:var(--surface);
+  }
+  .modal-foot .btn { padding:9px 18px; font-size:13px; }
+  .modal-foot .btn-cancel { background:var(--bg); border:1px solid var(--border); color:var(--text-secondary); }
+  .modal-foot .btn-cancel:hover { background:var(--surface-alt); color:var(--text); }
+  .modal-foot .btn-primary { width:auto; }
+
+  /* Cost preview */
+  .cost-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-light); }
+  .cost-row:last-child { border-bottom:none; }
+  .cost-row .lbl { color:var(--text-secondary); font-size:13px; }
+  .cost-row .val { font-family:var(--font-mono); font-size:13px; color:var(--text); font-weight:600; }
+  .cost-row.range .val { font-family:var(--font-serif); font-size:18px; color:var(--accent); }
+  .cost-warn { background:#FFF6E0; border:1px solid #F0D78A; border-radius:5px; padding:10px 12px; margin-top:14px; font-size:12px; color:#7A5800; line-height:1.5; }
+  .cost-info { background:var(--surface); border:1px solid var(--border-light); border-radius:5px; padding:10px 12px; margin-top:14px; font-size:12px; color:var(--text-secondary); line-height:1.5; font-style:italic; }
+
+  /* Buy-more block options */
+  .blocks { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:16px 0 8px; }
+  .block-opt {
+    border:2px solid var(--border); border-radius:6px; padding:14px 10px;
+    text-align:center; cursor:pointer; background:var(--bg); transition:all .15s;
+    position:relative;
+  }
+  .block-opt:hover { border-color:var(--accent-light); background:var(--accent-bg); }
+  .block-opt.selected { border-color:var(--accent); background:var(--accent-bg); box-shadow:0 0 0 1px var(--accent); }
+  .block-amount { font-family:var(--font-serif); font-size:24px; font-weight:700; color:var(--accent); line-height:1; }
+  .block-label { font-family:var(--font-sans); font-size:11px; color:var(--text-muted); margin-top:6px; text-transform:uppercase; letter-spacing:.05em; }
+  .block-opt.popular::before {
+    content:'Most popular';
+    position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    background:var(--accent); color:white; font-family:var(--font-sans);
+    font-size:9px; font-weight:700; padding:2px 8px; border-radius:10px;
+    letter-spacing:.06em; text-transform:uppercase; white-space:nowrap;
+  }
+
+  /* Empty balance / processing payment */
+  .modal-icon { font-family:var(--font-serif); font-size:42px; color:var(--accent); text-align:center; margin-bottom:6px; }
+  .modal-center { text-align:center; }
+  .modal-spinner { display:inline-block; width:22px; height:22px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+
+  /* Per-query cost ribbon (after a paid query completes) */
+  .query-cost-ribbon {
+    background:var(--accent-bg); border:1px solid var(--accent-light); border-left:3px solid var(--accent);
+    border-radius:0 4px 4px 0; padding:6px 12px; margin:0 0 10px;
+    font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);
+    display:flex; gap:14px; align-items:center;
+  }
+  .query-cost-ribbon strong { color:var(--accent); font-weight:700; }
+  .query-cost-ribbon .qcr-sep { opacity:.5; }
 </style>
 </head>
 <body>
 
-<!-- PASSWORD GATE -->
+<!-- LOGIN CHOOSER (v8.0 — replaces the access-code gate) -->
 <div id="gate">
-  <h1>RAGtime</h1>
-  <p style="color:var(--text-secondary);max-width:400px;text-align:center;font-size:14px;font-family:var(--font-sans);font-style:italic;">
-    A Federal Litigation Research Tool from Lawfare
-  </p>
-  <input type="password" id="gate-pw" placeholder="Enter access code" onkeydown="if(event.key==='Enter')checkGate()">
-  <button onclick="checkGate()">Enter</button>
-  <div class="error" id="gate-err"></div>
+  <div class="gate-title">RAGtime</div>
+  <div class="gate-tagline">A Federal Litigation Research Tool</div>
+  <div class="gate-lawfare">
+    <span>from</span>
+    <img src="https://lawfare-assets-new.azureedge.net/assets/images/default-source/default-album/site-logo.png?sfvrsn=1d7ccf3d_1" alt="Lawfare" onerror="this.style.display='none'">
+  </div>
+
+  <!-- Chooser: three first-class options -->
+  <div class="chooser" id="chooser-screen">
+    <div class="chooser-prompt">How would you like to use RAGtime?</div>
+    <button class="pick" onclick="pickLocal()">
+      <div class="pick-title">Local search only</div>
+      <div class="pick-sub">Browse and filter the public dataset. No account, no AI features, no payment.</div>
+    </button>
+    <button class="pick" onclick="pickBYOK()">
+      <div class="pick-title">Bring your own API key</div>
+      <div class="pick-sub">No account. Supply your own Anthropic, OpenAI, or Google key. You pay your provider directly.</div>
+    </button>
+    <button class="pick featured" onclick="pickLawfare()">
+      <div class="pick-title">Sign in with Lawfare<span class="pick-badge">Paid</span></div>
+      <div class="pick-sub">Email magic link. Lawfare handles API costs; you pre-pay in $5 / $20 / $50 blocks. No per-query load caps.</div>
+    </button>
+  </div>
+
+  <!-- Magic-link email subscreen -->
+  <div class="magic-form" id="magic-screen" style="display:none;">
+    <button class="gate-back" onclick="showChooser()">Back</button>
+    <h2>Sign in with Lawfare</h2>
+    <p>Enter your email. We'll send you a one-time link — no password to remember. The link signs you in to RAGtime and enables paid usage of Lawfare's API quota.</p>
+    <input type="email" id="magic-email" placeholder="you@example.com" autocomplete="email" onkeydown="if(event.key==='Enter')submitMagicLink()">
+    <button class="btn btn-primary" onclick="submitMagicLink()">Send link</button>
+    <div class="error" id="magic-err"></div>
+    <div class="small">By continuing you agree to be billed via Stripe for AI queries you run. Test mode is on; no real charges yet.</div>
+  </div>
+
+  <!-- "Check your email" state -->
+  <div class="magic-form" id="magic-sent-screen" style="display:none;">
+    <button class="gate-back" onclick="showChooser()">Use a different option</button>
+    <h2>Check your email</h2>
+    <div class="magic-sent">
+      <p>We sent a sign-in link to <strong id="magic-sent-addr"></strong>. Open it in this browser to finish signing in.</p>
+    </div>
+    <p class="small">Didn't get it? Check spam, or <a onclick="showMagicForm()" style="cursor:pointer;">try another address</a>. Links expire after one hour.</p>
+  </div>
+
+  <div class="gate-foot" id="gate-foot">
+    Public dataset · cases filed since Jan 20, 2025 · federal district + circuit courts
+  </div>
 </div>
 
 <!-- MAIN APP -->
@@ -361,6 +541,13 @@
     <h1>RAGtime</h1>
     <div class="header-right">
       <span class="stats" id="hstats"><span class="sp"></span> Connecting...</span>
+      <!-- v8.0 balance widget — only shown in paid mode -->
+      <div class="balance-widget" id="balance-widget" style="display:none;">
+        <span class="bal-email" id="bal-email"></span>
+        <span class="bal-amount" id="bal-amount">—</span>
+        <button class="bal-topup" onclick="showBuyModal()">Top up</button>
+        <button class="bal-signout" onclick="paidSignOut()" title="Sign out of Lawfare account">Sign out</button>
+      </div>
       <button class="reset-link" onclick="resetSession()" title="Discard stack and return to page 0">Reset session</button>
     </div>
   </header>
@@ -566,13 +753,152 @@
     </ul>
     <div class="cta">Set a filter or type a question to begin.</div>
   </div>
+
+  <!-- ============================================
+       v8.0 — MODALS (paid tier)
+       ============================================ -->
+
+  <!-- Cost preview (shown before each AI query in paid mode) -->
+  <div class="modal-backdrop" id="modal-cost-preview">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Confirm AI query</h3>
+        <div class="modal-sub">Review the estimated cost before running.</div>
+      </div>
+      <div class="modal-body">
+        <div class="cost-row range">
+          <div class="lbl">Estimated cost</div>
+          <div class="val" id="cp-range">—</div>
+        </div>
+        <div class="cost-row">
+          <div class="lbl">Your balance</div>
+          <div class="val" id="cp-balance">—</div>
+        </div>
+        <div class="cost-row">
+          <div class="lbl">Per-query cap</div>
+          <div class="val" id="cp-cap">—</div>
+        </div>
+        <div id="cp-warn-block"></div>
+        <div class="cost-info" id="cp-info">
+          Final cost is computed from actual tokens used; you'll see the exact charge after the query runs.
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-cancel" onclick="closeCostPreview(false)">Cancel</button>
+        <button class="btn btn-primary" id="cp-proceed-btn" onclick="closeCostPreview(true)">Proceed</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Buy more credits -->
+  <div class="modal-backdrop" id="modal-buy">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Top up your balance</h3>
+        <div class="modal-sub">Pre-paid blocks. Charged via Stripe; no subscription.</div>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;">
+          Pick a block. Larger blocks are the same price-per-dollar — they just save you the hassle of topping up more often.
+        </p>
+        <div class="blocks">
+          <div class="block-opt" data-block="5" onclick="selectBlock('5')">
+            <div class="block-amount">$5</div>
+            <div class="block-label">Try it out</div>
+          </div>
+          <div class="block-opt selected popular" data-block="20" onclick="selectBlock('20')">
+            <div class="block-amount">$20</div>
+            <div class="block-label">Recommended</div>
+          </div>
+          <div class="block-opt" data-block="50" onclick="selectBlock('50')">
+            <div class="block-amount">$50</div>
+            <div class="block-label">Heavy use</div>
+          </div>
+        </div>
+        <div class="cost-info" style="margin-top:18px;">
+          You'll be redirected to Stripe (test mode) to complete payment. Test card <code style="font-family:var(--font-mono);background:var(--surface-alt);padding:1px 4px;border-radius:2px;">4242 4242 4242 4242</code> works without real charges. After payment you'll return here automatically.
+        </div>
+        <div class="error" id="buy-err" style="margin-top:10px;color:#b91c1c;font-size:12px;"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-cancel" onclick="closeBuyModal()">Cancel</button>
+        <button class="btn btn-primary" id="buy-btn" onclick="startCheckout()">Buy &amp; pay with Stripe</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty balance hard stop -->
+  <div class="modal-backdrop" id="modal-empty-balance">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Your balance is too low</h3>
+        <div class="modal-sub">Top up to continue running AI queries.</div>
+      </div>
+      <div class="modal-body">
+        <p id="empty-balance-text" style="margin-bottom:14px;">
+          Your remaining balance isn't enough to safely run this query. AI features are paused until you top up.
+        </p>
+        <div class="cost-row">
+          <div class="lbl">Current balance</div>
+          <div class="val" id="eb-balance">—</div>
+        </div>
+        <div class="cost-info">
+          Local search and "Bring your own API key" remain available — you can switch by signing out and choosing a different option.
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-cancel" onclick="closeEmptyBalance()">Close</button>
+        <button class="btn btn-primary" onclick="closeEmptyBalance(); showBuyModal();">Top up now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checkout-return processing state -->
+  <div class="modal-backdrop" id="modal-checkout-processing">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Confirming your payment</h3>
+        <div class="modal-sub">Stripe charged your card; we're crediting your account.</div>
+      </div>
+      <div class="modal-body modal-center">
+        <div style="padding:18px 0;"><span class="modal-spinner"></span></div>
+        <div id="checkout-status" style="font-size:13px;color:var(--text-secondary);">
+          Waiting for payment confirmation…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checkout-return success state -->
+  <div class="modal-backdrop" id="modal-checkout-success">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Payment received</h3>
+        <div class="modal-sub">Your balance has been credited.</div>
+      </div>
+      <div class="modal-body modal-center">
+        <div class="modal-icon">✓</div>
+        <div style="font-size:14px;color:var(--text);margin-top:6px;">
+          New balance: <strong id="success-balance">—</strong>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">
+          You can run AI queries against this balance. The pre-query cost preview will tell you what each one will cost.
+        </div>
+      </div>
+      <div class="modal-foot" style="justify-content:center;">
+        <button class="btn btn-primary" style="width:auto;padding:9px 28px;" onclick="closeCheckoutSuccess()">Continue</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
 // === CONFIG ===
 var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
 var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpa2RianBybmRna3NpYmJ2Y2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTE0MjksImV4cCI6MjA5MjA4NzQyOX0.FzzHOU7mcixedWZXd7wZkd3Jpy-05dMFB66q-yPSPL4";
-var ACCESS_CODE = "lawfare2025";
+// v8.0: ACCESS_CODE removed — the access-code gate has been replaced by the
+// three-option login chooser (Local / BYOK / Sign in with Lawfare).
 var PAGE_SIZE = 50;
 // Cloudflare Worker proxy for AI provider calls (multi-provider as of v7.0.0)
 var WORKER_URL = "https://ragtimeproxy.benjamin-wittes.workers.dev/ask";
@@ -614,8 +940,9 @@ var CLAUDE_ANALYSIS_COST_PER_CASE = 0.003;
 // session only — never written to localStorage and never sent anywhere except
 // to the worker, which forwards them to the matching provider.
 //
-//   mode:     'locked' | 'demo' | 'byo'
-//   provider: 'anthropic' | 'openai' | 'google'
+//   mode:     'locked' | 'demo' | 'byo' | 'paid'
+//                                          ^^^^^^ v8.0: signed-in Lawfare account
+//   provider: 'anthropic' | 'openai' | 'google'   (paid mode is always 'anthropic')
 //   model:    string (a model ID under the active provider)
 //   demoPw:   string|null     (Lawfare demo password if in demo mode)
 //   byoKeys:  { anthropic: string|null, openai: string|null, google: string|null }
@@ -626,6 +953,37 @@ var llmAccess = {
   demoPw:   null,
   byoKeys:  { anthropic: null, openai: null, google: null }
 };
+
+// === PAID ACCESS STATE (v8.0) ===
+//
+// Tracks the signed-in Lawfare account: Supabase session, balance, per-query cap,
+// and the most recent ledger. Populated on successful magic-link sign-in and
+// refreshed after every paid query and after Stripe checkout returns.
+var paidAccess = {
+  signedIn: false,
+  session:  null,        // Supabase session object (has access_token, user, ...)
+  email:    null,
+  balanceCents:      0,
+  perQueryCapCents:  500,
+  ledger:   []
+};
+
+// Supabase client (created on DOMContentLoaded). All auth + balance API calls
+// for the paid tier flow through this client and the worker, NOT through sbRpc
+// (which uses the anon key for the public dataset).
+var sbClient = null;
+
+// Worker base URL (without the /ask suffix) — the paid endpoints live at
+// /api/checkout, /api/balance, /api/account, /api/stripe/webhook.
+var WORKER_BASE = "https://ragtimeproxy.benjamin-wittes.workers.dev";
+
+// Anthropic pricing for cost-preview math (Sonnet 4.5 as of 2026; matches worker).
+// Worker applies a 1.35× markup before debiting; we mirror that here.
+var PAID_INPUT_RATE_PER_MTOK_CENTS  = 300;   // $3.00 / 1M input tokens, in cents
+var PAID_OUTPUT_RATE_PER_MTOK_CENTS = 1500;  // $15.00 / 1M output tokens, in cents
+var PAID_MARKUP                     = 1.35;
+var PAID_MIN_OUTPUT_TOKENS          = 200;   // floor for low-end estimate
+var PAID_CHARS_PER_TOKEN            = 3.5;   // matches worker's estimateInputTokens
 
 // Provider catalog. Update model lists here as new releases ship.
 var LLM_PROVIDERS = {
@@ -852,14 +1210,209 @@ function updateCourtsUI() {
 function onCourtCheckboxChange() { updateCourtsUI(); }
 
 // === PASSWORD GATE ===
-function checkGate() {
-  if (document.getElementById('gate-pw').value === ACCESS_CODE) {
-    document.getElementById('gate').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    document.body.classList.add('welcome-state');
-    initApp();
+// === v8.0 BOOT + LOGIN ============================================
+//
+// Three first-class options replace the old access-code gate:
+//   1. Local search only — opens app with LLM panel locked.
+//   2. Bring your own API key — opens app and pre-opens the BYO form.
+//   3. Sign in with Lawfare — magic-link email → returns to app in paid mode.
+//
+// On page load, before showing the chooser, we check for:
+//   - Existing Supabase session in localStorage (returning paid user) → straight in.
+//   - ?checkout=success in URL (return from Stripe) → enter app + show processing modal.
+//   - ?checkout=cancel in URL → enter app, show cancel toast (or just clean URL).
+//   - URL hash with Supabase tokens (return from magic link) — Supabase JS handles
+//     this automatically and emits an auth state change; we listen and route accordingly.
+
+function showChooser() {
+  document.getElementById('chooser-screen').style.display = '';
+  document.getElementById('magic-screen').style.display = 'none';
+  document.getElementById('magic-sent-screen').style.display = 'none';
+  document.getElementById('gate-foot').style.display = '';
+}
+function showMagicForm() {
+  document.getElementById('chooser-screen').style.display = 'none';
+  document.getElementById('magic-screen').style.display = '';
+  document.getElementById('magic-sent-screen').style.display = 'none';
+  document.getElementById('gate-foot').style.display = 'none';
+  document.getElementById('magic-err').textContent = '';
+  setTimeout(function() { document.getElementById('magic-email').focus(); }, 0);
+}
+function showMagicSent(email) {
+  document.getElementById('chooser-screen').style.display = 'none';
+  document.getElementById('magic-screen').style.display = 'none';
+  document.getElementById('magic-sent-screen').style.display = '';
+  document.getElementById('gate-foot').style.display = 'none';
+  document.getElementById('magic-sent-addr').textContent = email;
+}
+
+function pickLocal() {
+  // Local search only: just enter the app. AI panel stays locked; user can configure
+  // demo or BYO later via the sidebar if they want AI features.
+  enterApp({ paid: false });
+}
+
+function pickBYOK() {
+  // BYOK: enter the app, then auto-open the LLM access form pre-set to BYO so the
+  // user can paste a key immediately. The form's existing logic handles the rest.
+  enterApp({ paid: false, openByoForm: true });
+}
+
+function pickLawfare() {
+  showMagicForm();
+}
+
+async function submitMagicLink() {
+  var errEl = document.getElementById('magic-err');
+  errEl.textContent = '';
+  var email = (document.getElementById('magic-email').value || '').trim();
+  if (!email || email.indexOf('@') < 1) {
+    errEl.textContent = 'Enter a valid email address.'; return;
+  }
+  if (!sbClient) { errEl.textContent = 'Auth client not ready. Reload and try again.'; return; }
+  var btn = document.querySelector('#magic-screen button.btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    // Bring user back to this exact page after they click the link.
+    var redirectTo = window.location.origin + window.location.pathname;
+    var res = await sbClient.auth.signInWithOtp({
+      email: email,
+      options: { emailRedirectTo: redirectTo }
+    });
+    if (res.error) throw new Error(res.error.message || 'Sign-in failed.');
+    showMagicSent(email);
+  } catch (err) {
+    errEl.textContent = err.message || 'Could not send sign-in link.';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send link'; }
+  }
+}
+
+// Sign out of paid mode and return to the chooser.
+async function paidSignOut() {
+  try { if (sbClient) await sbClient.auth.signOut(); } catch (e) { /* ignore */ }
+  paidAccess = {
+    signedIn: false, session: null, email: null,
+    balanceCents: 0, perQueryCapCents: 500, ledger: []
+  };
+  // Lock LLM access too (was 'paid')
+  llmAccess.mode = 'locked';
+  document.getElementById('balance-widget').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('gate').style.display = 'flex';
+  showChooser();
+}
+
+// Common entry point for all three picks.
+//   opts.paid       — true if signed in via Supabase magic link (Lawfare paid tier).
+//   opts.openByoForm — true if we should auto-open the BYO key form post-init.
+async function enterApp(opts) {
+  opts = opts || {};
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.body.classList.add('welcome-state');
+
+  if (opts.paid) {
+    // Configure llmAccess for paid mode. Provider is forced to anthropic (worker
+    // rejects paid + non-anthropic with 400). Model picks the recommended Sonnet.
+    llmAccess.mode     = 'paid';
+    llmAccess.provider = 'anthropic';
+    llmAccess.model    = LLM_PROVIDERS.anthropic.defaultModel;
+    document.getElementById('balance-widget').style.display = '';
+    if (paidAccess.email) document.getElementById('bal-email').textContent = paidAccess.email;
+  }
+
+  await initApp();
+
+  if (opts.paid) {
+    // Pull balance + cap so the widget and cost previews can use real numbers.
+    await refreshBalance();
+  }
+
+  if (opts.openByoForm) {
+    // Pop the existing access form pre-set to BYO.
+    toggleLLMAccessForm();
+    var byo = document.querySelector('input[name=llm-auth][value=byo]');
+    if (byo) { byo.checked = true; applyLLMAuthVisibility(); }
+  }
+}
+
+// Boot — runs once on DOMContentLoaded.
+async function bootApp() {
+  // 1. Stand up the Supabase client. This also kicks off URL-fragment session
+  //    detection; if we just returned from a magic link, the client picks up
+  //    the access_token from window.location.hash automatically.
+  try {
+    sbClient = window.supabase.createClient(SB_URL, SB_KEY, {
+      auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+    });
+  } catch (e) {
+    console.error('Could not initialize Supabase client:', e);
+    // Fall through; chooser still works for Local + BYOK.
+  }
+
+  // 2. Do we already have a session? (Magic-link return, or returning user.)
+  var session = null;
+  if (sbClient) {
+    try {
+      var res = await sbClient.auth.getSession();
+      session = (res && res.data && res.data.session) ? res.data.session : null;
+    } catch (e) { /* swallow; treat as no session */ }
+  }
+
+  // 3. Check for checkout-return query params before anything else.
+  var url = new URL(window.location.href);
+  var checkoutResult = url.searchParams.get('checkout');
+  if (checkoutResult) {
+    // Strip the checkout params from the URL so reloads are clean.
+    url.searchParams.delete('checkout');
+    url.searchParams.delete('session_id');
+    history.replaceState({}, '', url.toString());
+  }
+
+  // 4. Route.
+  if (session) {
+    paidAccess.signedIn = true;
+    paidAccess.session  = session;
+    paidAccess.email    = (session.user && session.user.email) || null;
+    await enterApp({ paid: true });
+    if (checkoutResult === 'success') {
+      // Show processing modal and poll balance until it reflects the new credit.
+      showCheckoutProcessing();
+      pollBalanceAfterCheckout();
+    } else if (checkoutResult === 'cancel') {
+      // No-op — user cancelled at Stripe. They can retry via Top up.
+    }
   } else {
-    document.getElementById('gate-err').textContent = 'Incorrect code.';
+    showChooser();
+  }
+
+  // 5. Listen for auth state changes (e.g., sign-in on this tab via another mechanism).
+  if (sbClient) {
+    sbClient.auth.onAuthStateChange(function(event, newSession) {
+      if (event === 'SIGNED_IN' && newSession && !paidAccess.signedIn) {
+        paidAccess.signedIn = true;
+        paidAccess.session  = newSession;
+        paidAccess.email    = (newSession.user && newSession.user.email) || null;
+        // If the gate is still visible (just clicked the magic link), enter the app.
+        if (document.getElementById('gate').style.display !== 'none') {
+          enterApp({ paid: true });
+        } else {
+          // Already in app (local/BYOK) — refresh state to paid.
+          llmAccess.mode = 'paid';
+          llmAccess.provider = 'anthropic';
+          llmAccess.model = LLM_PROVIDERS.anthropic.defaultModel;
+          document.getElementById('balance-widget').style.display = '';
+          document.getElementById('bal-email').textContent = paidAccess.email || '';
+          refreshBalance();
+          renderLLMAccessUI();
+        }
+      } else if (event === 'TOKEN_REFRESHED' && newSession) {
+        paidAccess.session = newSession;
+      } else if (event === 'SIGNED_OUT') {
+        // Already handled by paidSignOut. No-op here to avoid double-handling.
+      }
+    });
   }
 }
 
@@ -1167,7 +1720,10 @@ function renderLLMAccessUI() {
     var providerCfg = LLM_PROVIDERS[llmAccess.provider];
     var modelEntry  = providerCfg.models.find(function(m) { return m.id === llmAccess.model; });
     var modelLabel  = modelEntry ? modelEntry.label.split(' (')[0] : llmAccess.model;
-    var authLabel   = (llmAccess.mode === 'demo') ? 'demo' : 'your key';
+    var authLabel;
+    if (llmAccess.mode === 'paid')      authLabel = 'Lawfare paid';
+    else if (llmAccess.mode === 'demo') authLabel = 'demo';
+    else                                authLabel = 'your key';
     // Just provider name + short model name; the full label can be long.
     var providerShort = providerCfg.label.split(' (')[0];
     stateEl.textContent = '✓ ' + providerShort + ' / ' + modelLabel + ' (' + authLabel + ')';
@@ -1186,6 +1742,12 @@ function renderClaudeAccessUI() { return renderLLMAccessUI(); }
 // provider (Anthropic / OpenAI / Google) based on `provider` in the body.
 // Returns the assistant's text content. Throws on any error.
 //
+// v8.0: when llmAccess.mode === 'paid', we send Authorization: Bearer <jwt>
+// instead of password/user_api_key. The worker debits the user's balance,
+// returns the response with annotation fields _cost_cents and _balance_cents,
+// or rejects with 402 if the balance is too low (we surface the empty-balance
+// modal in that case).
+//
 // Auto-retries ONCE on fetch-layer failures (Safari "Load failed", network blips,
 // cold-Worker timeouts). The pattern observed in v6.4.2 testing was deterministic:
 // first call after a quiet period fails at the fetch layer, second call (warm
@@ -1196,10 +1758,20 @@ function renderClaudeAccessUI() { return renderLLMAccessUI(); }
 // Function name kept as `callClaude` for compatibility with existing call sites
 // in claude_sql / claude_read / claude_analysis modes; the alias below mirrors
 // the new naming for any future code.
-async function callClaude(systemPrompt, userContent, maxTok) {
+async function callClaude(systemPrompt, userContent, maxTok, opts) {
+  opts = opts || {};
   if (!llmAccessUnlocked()) {
     throw new Error('AI features are locked. Click "Configure" in the sidebar.');
   }
+
+  // v8.0: paid mode shows a cost-preview modal before hitting the worker, unless
+  // the caller has opted out (e.g., claude_read shows its own multi-batch cost
+  // up-front, then suppresses per-batch previews). One operation = one preview.
+  if (llmAccess.mode === 'paid' && !opts.skipPreview) {
+    var ok = await showCostPreviewModal(systemPrompt, userContent, maxTok || 4000);
+    if (!ok) throw new Error('Query cancelled.');
+  }
+
   var body = {
     provider:   llmAccess.provider,
     model:      llmAccess.model,
@@ -1207,7 +1779,17 @@ async function callClaude(systemPrompt, userContent, maxTok) {
     system:     systemPrompt,
     messages:   [{ role: 'user', content: userContent }]
   };
-  if (llmAccess.mode === 'demo') {
+  var headers = { 'Content-Type': 'application/json' };
+
+  if (llmAccess.mode === 'paid') {
+    if (!paidAccess.session || !paidAccess.session.access_token) {
+      throw new Error('Lawfare session expired. Sign in again.');
+    }
+    headers['Authorization'] = 'Bearer ' + paidAccess.session.access_token;
+    // Worker rejects paid + non-anthropic with 400; we already force provider
+    // to 'anthropic' in enterApp, but be defensive in case state was mutated.
+    body.provider = 'anthropic';
+  } else if (llmAccess.mode === 'demo') {
     body.password = llmAccess.demoPw;
   } else {
     var key = llmAccess.byoKeys[llmAccess.provider];
@@ -1226,7 +1808,7 @@ async function callClaude(systemPrompt, userContent, maxTok) {
     try {
       resp = await fetch(WORKER_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(body)
       });
     } catch (netErr) {
@@ -1240,11 +1822,39 @@ async function callClaude(systemPrompt, userContent, maxTok) {
     var data;
     try { data = await resp.json(); }
     catch (e) { throw new Error('Proxy returned non-JSON (HTTP ' + resp.status + ')'); }
+
+    // v8.0: paid-mode 402 handling — surface empty-balance modal and throw.
+    if (resp.status === 402 && llmAccess.mode === 'paid') {
+      var code = (data && data.error && data.error.code) || (data && data.code) || '';
+      var balance = (typeof data.balance_cents === 'number') ? data.balance_cents
+                  : (data && data.error && typeof data.error.balance_cents === 'number') ? data.error.balance_cents
+                  : paidAccess.balanceCents;
+      paidAccess.balanceCents = balance;
+      renderBalanceWidget();
+      showEmptyBalanceModal({
+        code: code,
+        balanceCents: balance,
+        estimatedMaxCents: (data && data.error && data.error.estimated_max_cents) || null
+      });
+      throw new Error('Balance too low to run this query.');
+    }
     if (!resp.ok) {
       var msg = (data && data.error && data.error.message) ? data.error.message : ('Proxy error ' + resp.status);
       throw new Error(msg);
     }
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+    // v8.0: capture _cost_cents / _balance_cents annotations and surface them.
+    if (llmAccess.mode === 'paid') {
+      if (typeof data._balance_cents === 'number') {
+        paidAccess.balanceCents = data._balance_cents;
+        renderBalanceWidget();
+      }
+      if (typeof data._cost_cents === 'number') {
+        showQueryCostRibbon(data._cost_cents, paidAccess.balanceCents);
+      }
+    }
+
     if (data.content && data.content[0] && data.content[0].text) return data.content[0].text;
     throw new Error('Unexpected response shape from proxy');
   }
@@ -1253,6 +1863,246 @@ async function callClaude(systemPrompt, userContent, maxTok) {
 
 // New name; same function. Use callLLM for any new code.
 var callLLM = callClaude;
+
+// === v8.0 PAID-MODE HELPERS =======================================
+//
+// Balance widget, cost-preview modal, post-query cost ribbon, buy-more modal,
+// Stripe checkout redirect + return polling, empty-balance hard-stop.
+
+// Format cents as $X.XX with comma-thousands.
+function fmtCents(cents) {
+  if (typeof cents !== 'number' || isNaN(cents)) return '$—';
+  var dollars = cents / 100;
+  var sign = dollars < 0 ? '−' : '';
+  var abs = Math.abs(dollars);
+  return sign + '$' + abs.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// Refresh balance + cap + ledger from /api/balance. Updates paidAccess and the
+// header widget. Safe to call any time we're in paid mode.
+async function refreshBalance() {
+  if (!paidAccess.signedIn || !paidAccess.session) return null;
+  try {
+    var resp = await fetch(WORKER_BASE + '/api/balance', {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + paidAccess.session.access_token }
+    });
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        // JWT expired — try refresh once via Supabase, then retry. If still 401,
+        // sign out so the user re-auths cleanly.
+        try {
+          var ref = await sbClient.auth.refreshSession();
+          if (ref && ref.data && ref.data.session) {
+            paidAccess.session = ref.data.session;
+            return refreshBalance();
+          }
+        } catch (e) { /* fall through to signout */ }
+        await paidSignOut();
+        return null;
+      }
+      console.warn('refreshBalance: HTTP ' + resp.status);
+      return null;
+    }
+    var data = await resp.json();
+    paidAccess.balanceCents     = (typeof data.balance_cents === 'number') ? data.balance_cents : 0;
+    paidAccess.perQueryCapCents = (typeof data.per_query_cap_cents === 'number') ? data.per_query_cap_cents : 500;
+    paidAccess.ledger           = Array.isArray(data.ledger) ? data.ledger : [];
+    renderBalanceWidget();
+    return data;
+  } catch (e) {
+    console.warn('refreshBalance error:', e);
+    return null;
+  }
+}
+
+function renderBalanceWidget() {
+  if (!paidAccess.signedIn) return;
+  var el = document.getElementById('bal-amount');
+  if (!el) return;
+  el.textContent = fmtCents(paidAccess.balanceCents);
+  el.classList.remove('low', 'empty');
+  if (paidAccess.balanceCents <= 50)        el.classList.add('empty');
+  else if (paidAccess.balanceCents <= 500)  el.classList.add('low');
+  if (paidAccess.email) document.getElementById('bal-email').textContent = paidAccess.email;
+}
+
+// Cost-preview modal — returns a Promise that resolves to true (proceed) or false (cancel).
+function showCostPreviewModal(systemPrompt, userContent, maxTok) {
+  return new Promise(function(resolve) {
+    // Estimate input tokens from char counts. Worker uses 3.5 chars/token; we mirror.
+    var charCount = (systemPrompt ? systemPrompt.length : 0) + (userContent ? userContent.length : 0);
+    var estInputTokens = Math.ceil(charCount / PAID_CHARS_PER_TOKEN);
+    function calcCents(inputTok, outputTok) {
+      var raw = (inputTok * PAID_INPUT_RATE_PER_MTOK_CENTS + outputTok * PAID_OUTPUT_RATE_PER_MTOK_CENTS) / 1e6;
+      return Math.ceil(raw * PAID_MARKUP);
+    }
+    var minCents = calcCents(estInputTokens, PAID_MIN_OUTPUT_TOKENS);
+    var maxCents = calcCents(estInputTokens, maxTok);
+
+    document.getElementById('cp-range').textContent =
+      fmtCents(minCents) + ' to ' + fmtCents(maxCents);
+    document.getElementById('cp-balance').textContent = fmtCents(paidAccess.balanceCents);
+    document.getElementById('cp-cap').textContent = fmtCents(paidAccess.perQueryCapCents) + ' per query';
+
+    // Cap warning
+    var warnBlock = document.getElementById('cp-warn-block');
+    warnBlock.innerHTML = '';
+    var proceedBtn = document.getElementById('cp-proceed-btn');
+    proceedBtn.disabled = false;
+    proceedBtn.textContent = 'Proceed';
+    if (maxCents > paidAccess.perQueryCapCents) {
+      var w = document.createElement('div');
+      w.className = 'cost-warn';
+      w.innerHTML = 'Maximum estimate (' + fmtCents(maxCents) +
+        ') exceeds your per-query cap (' + fmtCents(paidAccess.perQueryCapCents) +
+        '). You can refine the query to reduce the estimate, or proceed once as an override.';
+      warnBlock.appendChild(w);
+      proceedBtn.textContent = 'Proceed (override cap)';
+    } else if (maxCents > paidAccess.balanceCents) {
+      var w2 = document.createElement('div');
+      w2.className = 'cost-warn';
+      w2.innerHTML = 'Maximum estimate exceeds your balance. The query may run and complete cheaper than the high estimate, but if it would push the balance below zero, the worker will stop it.';
+      warnBlock.appendChild(w2);
+    }
+
+    var modal = document.getElementById('modal-cost-preview');
+    modal.classList.add('active');
+
+    // One-shot resolution
+    window._cpResolve = function(ok) {
+      modal.classList.remove('active');
+      window._cpResolve = null;
+      resolve(!!ok);
+    };
+  });
+}
+
+function closeCostPreview(ok) {
+  if (typeof window._cpResolve === 'function') window._cpResolve(ok);
+}
+
+// Per-query cost ribbon — slipped into the page above the result of the most
+// recent paid query. We render it inside the page band container so it shows
+// up after each successful query and gets re-rendered along with the page.
+function showQueryCostRibbon(costCents, balanceCents) {
+  var container = document.getElementById('page-band-container');
+  if (!container) return;
+  // Remove any prior ribbon.
+  var old = container.querySelector('.query-cost-ribbon');
+  if (old) old.remove();
+  var div = document.createElement('div');
+  div.className = 'query-cost-ribbon';
+  div.innerHTML =
+    '<span>This query: <strong>' + fmtCents(costCents) + '</strong></span>' +
+    '<span class="qcr-sep">·</span>' +
+    '<span>Balance: <strong>' + fmtCents(balanceCents) + '</strong></span>';
+  container.insertBefore(div, container.firstChild);
+}
+
+// Buy-more modal
+var _selectedBlock = '20';
+function showBuyModal() {
+  if (!paidAccess.signedIn) return;
+  document.getElementById('buy-err').textContent = '';
+  selectBlock('20');
+  document.getElementById('modal-buy').classList.add('active');
+}
+function closeBuyModal() {
+  document.getElementById('modal-buy').classList.remove('active');
+}
+function selectBlock(amount) {
+  _selectedBlock = String(amount);
+  Array.prototype.forEach.call(document.querySelectorAll('.block-opt'), function(el) {
+    if (el.dataset.block === _selectedBlock) el.classList.add('selected');
+    else el.classList.remove('selected');
+  });
+}
+
+async function startCheckout() {
+  if (!paidAccess.session || !paidAccess.session.access_token) {
+    document.getElementById('buy-err').textContent = 'Session expired. Sign in again.';
+    return;
+  }
+  var btn = document.getElementById('buy-btn');
+  btn.disabled = true; btn.textContent = 'Redirecting…';
+  document.getElementById('buy-err').textContent = '';
+  try {
+    var resp = await fetch(WORKER_BASE + '/api/checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + paidAccess.session.access_token
+      },
+      body: JSON.stringify({ block: _selectedBlock })
+    });
+    var data = await resp.json();
+    if (!resp.ok) {
+      var msg = (data && data.error && data.error.message) ? data.error.message : ('Checkout error ' + resp.status);
+      throw new Error(msg);
+    }
+    if (!data.checkout_url) throw new Error('No checkout URL returned.');
+    // Redirect — Stripe takes over the page.
+    window.location.href = data.checkout_url;
+  } catch (e) {
+    document.getElementById('buy-err').textContent = e.message || 'Could not start checkout.';
+    btn.disabled = false; btn.textContent = 'Buy & pay with Stripe';
+  }
+}
+
+// Checkout-return processing: poll /api/balance every 2s for up to 30s; once
+// the balance has increased over what we had pre-checkout, switch to success.
+function showCheckoutProcessing() {
+  document.getElementById('modal-checkout-processing').classList.add('active');
+}
+function closeCheckoutProcessing() {
+  document.getElementById('modal-checkout-processing').classList.remove('active');
+}
+function showCheckoutSuccess() {
+  document.getElementById('success-balance').textContent = fmtCents(paidAccess.balanceCents);
+  document.getElementById('modal-checkout-success').classList.add('active');
+}
+function closeCheckoutSuccess() {
+  document.getElementById('modal-checkout-success').classList.remove('active');
+}
+
+async function pollBalanceAfterCheckout() {
+  var prevBalance = paidAccess.balanceCents;
+  var statusEl = document.getElementById('checkout-status');
+  var maxTries = 15;          // 15 × 2s = 30s
+  for (var i = 0; i < maxTries; i++) {
+    await new Promise(function(r) { setTimeout(r, 2000); });
+    var data = await refreshBalance();
+    if (data && data.balance_cents > prevBalance) {
+      closeCheckoutProcessing();
+      showCheckoutSuccess();
+      return;
+    }
+    if (statusEl) statusEl.textContent = 'Waiting for payment confirmation… (' + ((i + 1) * 2) + 's)';
+  }
+  // Timeout — close processing modal and show a fallback message in the buy modal.
+  closeCheckoutProcessing();
+  document.getElementById('buy-err').textContent =
+    'Stripe took longer than expected to confirm. Refresh in a minute; the credit will appear once the webhook lands.';
+  document.getElementById('modal-buy').classList.add('active');
+}
+
+// Empty-balance hard stop
+function showEmptyBalanceModal(info) {
+  info = info || {};
+  document.getElementById('eb-balance').textContent = fmtCents(info.balanceCents != null ? info.balanceCents : paidAccess.balanceCents);
+  var txt = document.getElementById('empty-balance-text');
+  if (info.code === 'insufficient_for_estimate' && info.estimatedMaxCents != null) {
+    txt.textContent = 'This query could cost up to ' + fmtCents(info.estimatedMaxCents) +
+      ', which is more than your remaining balance can safely cover. Top up to continue.';
+  } else {
+    txt.textContent = 'Your remaining balance is below the floor needed to safely run AI queries. Top up to continue.';
+  }
+  document.getElementById('modal-empty-balance').classList.add('active');
+}
+function closeEmptyBalance() {
+  document.getElementById('modal-empty-balance').classList.remove('active');
+}
 
 // === CLAUDE SQL MODE ===
 //
@@ -1686,7 +2536,7 @@ async function processClaudeReadBatch(criterion, batch) {
   userParts.push('\nReturn the JSON array now.');
   var userMessage = userParts.join('\n\n');
 
-  var raw = await callClaude(systemPrompt, userMessage, 4000);
+  var raw = await callClaude(systemPrompt, userMessage, 4000, { skipPreview: true });
   return parseReadBatchResponse(raw, batch.map(function(b) { return b.caseRow.cl_id; }));
 }
 
@@ -3159,17 +4009,29 @@ function closeDetail() {
 }
 
 // === KEYBOARD ===
-// Enter in a filter input triggers Apply filter (except textareas, password fields).
-// Requires modeArmed so Enter doesn't fire when fields are locked.
+// Enter in a manual_filter input triggers Apply filter. Excludes textareas via
+// tag check. (v8.0: the old #gate-pw input is gone; the new login chooser uses
+// dedicated buttons + onkeydown handlers, so no exclusion needed here.)
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && e.target.tagName === 'INPUT' &&
-      e.target.id !== 'gate-pw' &&
       selectedMode === 'manual_filter' && isOnTip() && modeArmed) {
     // Only trigger if the input is part of the manual_filter form
     if (e.target.closest('#form-manual_filter')) {
       applyManualFilter();
     }
   }
+});
+
+// === v8.0 BOOT ===
+// On DOMContentLoaded: bring up the Supabase client, check for an existing
+// session (returning paid user or magic-link return), check for ?checkout=...
+// query params, and route to chooser or app accordingly. The old access-code
+// gate is gone — the chooser is the new front door.
+document.addEventListener('DOMContentLoaded', function() {
+  bootApp().catch(function(e) {
+    console.error('Boot error:', e);
+    showChooser();
+  });
 });
 </script>
 </body>
