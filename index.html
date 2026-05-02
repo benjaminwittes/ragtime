@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v8.0.1 — robust JSON extraction for Claude responses. Replaces the greedy
+     regex fallback with a brace/bracket-balanced walker that respects string
+     literals, so postambles after the JSON value (alt versions, explanations,
+     prose with stray braces) no longer break SQL generation, read-batch
+     classification, or analysis parsing. Also widens raw-output capture in
+     error messages from 200 to 500 chars to ease future debugging. -->
 <!-- v8.0.0 — adds three-option login screen + paid Lawfare tier (Supabase auth + Stripe checkout). -->
 <!-- Requires worker v3 at ragtimeproxy.benjamin-wittes.workers.dev with /api/checkout, /api/balance, /api/account, /api/stripe/webhook live. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -33,12 +39,12 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:var(--font-sans); background:var(--bg); color:var(--text); line-height:1.5; }
 
-  /* Gate
-     v8.0: the old access-code gate (single password input + Enter button) is gone,
-     replaced by the three-option chooser. The container layout (centered flex column)
-     is preserved; per-element rules (#gate input, #gate button, .error) have been
-     removed — new styles live under "v8.0 — LOGIN CHOOSER" further down. */
+  /* Gate */
   #gate { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; gap:16px; }
+  #gate h1 { font-family:var(--font-serif); font-size:28px; color:var(--accent); }
+  #gate input { padding:10px 16px; border:1px solid var(--border); border-radius:4px; font-size:15px; width:260px; text-align:center; }
+  #gate button { padding:10px 24px; background:var(--accent); color:white; border:none; border-radius:5px; font-size:15px; font-weight:600; cursor:pointer; }
+  #gate button:hover { background:var(--accent-light); }
   #gate .error { color:var(--highlight); font-size:13px; }
 
   /* Header */
@@ -531,7 +537,8 @@
   </div>
 
   <div class="gate-foot" id="gate-foot">
-    Public dataset · cases filed since Jan 20, 2025 · federal district + circuit courts
+    Public dataset · cases filed since Jan 20, 2025 · federal district + circuit courts<br>
+    Issues? Email <a href="mailto:research@lawfaremedia.org">research@lawfaremedia.org</a>
   </div>
 </div>
 
@@ -1864,6 +1871,42 @@ async function callClaude(systemPrompt, userContent, maxTok, opts) {
 // New name; same function. Use callLLM for any new code.
 var callLLM = callClaude;
 
+// === v8.0.1 ROBUST JSON EXTRACTION ================================
+//
+// Claude is told to return JSON only, but compliance is probabilistic.
+// Some prompts cause Sonnet to append a postamble — an explanation, an
+// alternate-version JSON object, or prose that contains stray braces.
+// JSON.parse(cleaned) then throws "Unexpected non-whitespace character
+// after JSON at position N". The previous fallback (greedy `\{[\s\S]*\}`
+// regex) failed on the same input because it grabbed from the first
+// open-brace to the LAST close-brace, spanning the postamble.
+//
+// This walker starts at the first opening brace/bracket and consumes
+// characters until the matching close, respecting string literals and
+// escape sequences. It returns exactly the first complete JSON value
+// and ignores anything Claude appends afterward.
+//
+// `kind` is 'object' (for {...}) or 'array' (for [...]).
+function extractFirstJsonValue(s, kind) {
+  var openCh = kind === 'array' ? '[' : '{';
+  var closeCh = kind === 'array' ? ']' : '}';
+  var start = s.indexOf(openCh);
+  if (start < 0) return null;
+  var depth = 0, inStr = false, esc = false;
+  for (var i = start; i < s.length; i++) {
+    var c = s[i];
+    if (esc) { esc = false; continue; }
+    if (inStr && c === '\\') { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === openCh) depth++;
+    else if (c === closeCh) {
+      if (--depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 // === v8.0 PAID-MODE HELPERS =======================================
 //
 // Balance widget, cost-preview modal, post-query cost ribbon, buy-more modal,
@@ -2273,15 +2316,17 @@ async function applyClaudeSql() {
     statusEl.textContent = 'Designing query...';
     var raw = await callClaude(systemPrompt, userMessage, 2000);
 
-    // Parse — tolerate accidental code fences or surrounding text
+    // Parse — tolerate accidental code fences, surrounding text, and
+    // postambles that contain stray braces. See extractFirstJsonValue
+    // (v8.0.1) for why the prior greedy-regex fallback was insufficient.
     var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     var parsed;
     try {
       parsed = JSON.parse(cleaned);
     } catch (pe) {
-      var m = cleaned.match(/\{[\s\S]*\}/);
-      if (m) parsed = JSON.parse(m[0]);
-      else throw new Error('Claude did not return valid JSON. Raw output: ' + raw.slice(0, 200));
+      var firstObj = extractFirstJsonValue(cleaned, 'object');
+      if (firstObj) parsed = JSON.parse(firstObj);
+      else throw new Error('Claude did not return valid JSON. Raw output: ' + raw.slice(0, 500));
     }
 
     var generatedSql = (parsed.sql || '').trim();
@@ -2491,16 +2536,17 @@ function buildReadCaseBlock(caseRow, entries) {
   return meta + '\n' + entriesBlock;
 }
 
-// Parse Claude's JSON-array response for a batch. Tolerates code fences and
-// surrounding chatter. Returns { cl_id: {keep, reason} }.
+// Parse Claude's JSON-array response for a batch. Tolerates code fences,
+// surrounding chatter, and postambles containing stray brackets (see
+// extractFirstJsonValue, v8.0.1). Returns { cl_id: {keep, reason} }.
 function parseReadBatchResponse(raw, expectedClIds) {
   var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   var arr;
   try { arr = JSON.parse(cleaned); }
   catch (pe) {
-    var m = cleaned.match(/\[[\s\S]*\]/);
-    if (m) arr = JSON.parse(m[0]);
-    else throw new Error('Claude did not return a valid JSON array. Raw: ' + raw.slice(0, 200));
+    var firstArr = extractFirstJsonValue(cleaned, 'array');
+    if (firstArr) arr = JSON.parse(firstArr);
+    else throw new Error('Claude did not return a valid JSON array. Raw: ' + raw.slice(0, 500));
   }
   if (!Array.isArray(arr)) throw new Error('Claude response was not a JSON array.');
   var out = {};
@@ -2798,15 +2844,16 @@ async function fetchEntriesForAnalysis(clIds) {
 
 // Parse Claude's analysis response. Expected JSON shape:
 //   { "markdown": "...", "annotations": [ { "cl_id": int, "rank"?: int, "score"?: number, "category"?: string, "label"?: string } ] }
-// Tolerates code fences and surrounding chatter.
+// Tolerates code fences, surrounding chatter, and postambles containing
+// stray braces (see extractFirstJsonValue, v8.0.1).
 function parseAnalysisResponse(raw) {
   var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   var parsed;
   try { parsed = JSON.parse(cleaned); }
   catch (pe) {
-    var m = cleaned.match(/\{[\s\S]*\}/);
-    if (m) parsed = JSON.parse(m[0]);
-    else throw new Error('Claude did not return valid JSON. Raw: ' + raw.slice(0, 200));
+    var firstObj = extractFirstJsonValue(cleaned, 'object');
+    if (firstObj) parsed = JSON.parse(firstObj);
+    else throw new Error('Claude did not return valid JSON. Raw: ' + raw.slice(0, 500));
   }
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Analysis response was not an object.');
   var markdown = String(parsed.markdown || '').trim();
