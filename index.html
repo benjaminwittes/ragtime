@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v8.0.3 — model-agnostic error messages + better parse-failure diagnostics
+              + SQL mode output ceiling raised.
+     (1) User-facing errors and alerts no longer hardcode "Claude" — they use
+         a new aiName() helper that reflects whichever provider is active
+         (Claude / GPT / Gemini). Was producing "Claude SQL failed: Claude
+         did not return valid JSON" even when the user was on Gemini.
+     (2) When JSON parsing fails (SQL / Read / Analysis modes), the alert
+         now shows up to 1500 chars of raw output instead of 500, hints at
+         possible truncation when extractFirstJsonValue can't find a balanced
+         close, and the FULL raw response is logged to console.error so we
+         can copy it for debugging when a user reports a parse failure.
+     (3) SQL mode max_tokens raised 2000 → 4000 (parity with Read mode).
+         Verbose models (Gemini Flash, GPT mini) producing FTS queries with
+         many OR-alternations were hitting the 2000 cap mid-string, leaving
+         truncated JSON. Paid-mode cost preview reflects the new ceiling. -->
 <!-- v8.0.2 — magic-link error handling + PDF download for analysis output.
      (1) Detect Supabase magic-link errors in the URL fragment on boot
          (#error=access_denied&error_code=otp_expired&...). Surface an amber
@@ -1970,6 +1985,17 @@ async function callClaude(systemPrompt, userContent, maxTok, opts) {
 // New name; same function. Use callLLM for any new code.
 var callLLM = callClaude;
 
+// Friendly short name for the active model — used in user-facing error
+// messages so we don't tell a Gemini user that "Claude failed". Falls back
+// to a generic "AI" if the provider is unrecognized.
+function aiName() {
+  var p = llmAccess && llmAccess.provider;
+  if (p === 'anthropic') return 'Claude';
+  if (p === 'openai')    return 'GPT';
+  if (p === 'google')    return 'Gemini';
+  return 'AI';
+}
+
 // === v8.0.1 ROBUST JSON EXTRACTION ================================
 //
 // Claude is told to return JSON only, but compliance is probabilistic.
@@ -2413,7 +2439,7 @@ async function applyClaudeSql() {
 
   try {
     statusEl.textContent = 'Designing query...';
-    var raw = await callClaude(systemPrompt, userMessage, 2000);
+    var raw = await callClaude(systemPrompt, userMessage, 4000);
 
     // Parse — tolerate accidental code fences, surrounding text, and
     // postambles that contain stray braces. See extractFirstJsonValue
@@ -2425,12 +2451,20 @@ async function applyClaudeSql() {
     } catch (pe) {
       var firstObj = extractFirstJsonValue(cleaned, 'object');
       if (firstObj) parsed = JSON.parse(firstObj);
-      else throw new Error('Claude did not return valid JSON. Raw output: ' + raw.slice(0, 500));
+      else {
+        // extractFirstJsonValue returning null usually means the response
+        // was truncated mid-JSON (output tokens exhausted) — tell the user.
+        console.error('[' + aiName() + ' SQL] Full raw response:', raw);
+        var hint = (firstObj === null && cleaned.indexOf('{') >= 0)
+          ? ' (response may have been truncated — try a simpler prompt)'
+          : '';
+        throw new Error(aiName() + ' did not return valid JSON' + hint + '. Raw output: ' + raw.slice(0, 1500));
+      }
     }
 
     var generatedSql = (parsed.sql || '').trim();
     var generatedLabel = (parsed.label || prompt.slice(0, 50)).trim();
-    if (!generatedSql) throw new Error('Claude did not return a SQL query.');
+    if (!generatedSql) throw new Error(aiName() + ' did not return a SQL query.');
 
     // Strip any LIMIT/OFFSET Claude included despite instructions, and any
     // trailing semicolon. Defensive — Claude is told not to include these,
@@ -2467,7 +2501,7 @@ async function applyClaudeSql() {
     if (!Array.isArray(rows)) throw new Error('Query result was not a list of rows.');
 
     if (rows.length > CLAUDE_MAX_RAW_ROWS) {
-      throw new Error('Claude\'s query matched ' + fmtInt(rows.length) + ' cases (cap is ' + fmtInt(CLAUDE_MAX_RAW_ROWS) + '). Try a more specific prompt.');
+      throw new Error(aiName() + '\'s query matched ' + fmtInt(rows.length) + ' cases (cap is ' + fmtInt(CLAUDE_MAX_RAW_ROWS) + '). Try a more specific prompt.');
     }
 
     // Extract cl_ids and intersect with the incoming scope (if any).
@@ -2520,7 +2554,7 @@ async function applyClaudeSql() {
 
     document.getElementById('sql-prompt').value = '';
   } catch (err) {
-    alert('Claude SQL failed: ' + err.message);
+    alert(aiName() + ' SQL failed: ' + err.message);
   }
 
   statusEl.classList.remove('active');
@@ -2645,9 +2679,15 @@ function parseReadBatchResponse(raw, expectedClIds) {
   catch (pe) {
     var firstArr = extractFirstJsonValue(cleaned, 'array');
     if (firstArr) arr = JSON.parse(firstArr);
-    else throw new Error('Claude did not return a valid JSON array. Raw: ' + raw.slice(0, 500));
+    else {
+      console.error('[' + aiName() + ' Read] Full raw response:', raw);
+      var hint = (cleaned.indexOf('[') >= 0)
+        ? ' (response may have been truncated — try a smaller batch)'
+        : '';
+      throw new Error(aiName() + ' did not return a valid JSON array' + hint + '. Raw: ' + raw.slice(0, 1500));
+    }
   }
-  if (!Array.isArray(arr)) throw new Error('Claude response was not a JSON array.');
+  if (!Array.isArray(arr)) throw new Error(aiName() + ' response was not a JSON array.');
   var out = {};
   arr.forEach(function(item) {
     if (item && item.cl_id != null) {
@@ -2859,7 +2899,7 @@ async function applyClaudeRead() {
       );
     }
   } catch (err) {
-    alert('Claude Read failed: ' + err.message);
+    alert(aiName() + ' Read failed: ' + err.message);
   }
 
   statusEl.classList.remove('active');
@@ -2952,7 +2992,13 @@ function parseAnalysisResponse(raw) {
   catch (pe) {
     var firstObj = extractFirstJsonValue(cleaned, 'object');
     if (firstObj) parsed = JSON.parse(firstObj);
-    else throw new Error('Claude did not return valid JSON. Raw: ' + raw.slice(0, 500));
+    else {
+      console.error('[' + aiName() + ' Analysis] Full raw response:', raw);
+      var hint = (cleaned.indexOf('{') >= 0)
+        ? ' (response may have been truncated — try a narrower scope)'
+        : '';
+      throw new Error(aiName() + ' did not return valid JSON' + hint + '. Raw: ' + raw.slice(0, 1500));
+    }
   }
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Analysis response was not an object.');
   var markdown = String(parsed.markdown || '').trim();
@@ -3071,7 +3117,7 @@ async function applyClaudeAnalysis() {
 
     statusEl.textContent = 'Rendering...';
     var parsed = parseAnalysisResponse(raw);
-    if (!parsed.markdown) throw new Error('Claude returned no narrative analysis.');
+    if (!parsed.markdown) throw new Error(aiName() + ' returned no narrative analysis.');
 
     // Build display rows. If any annotations include rank, sort by rank ascending;
     // otherwise preserve original (date_filed DESC) order.
@@ -3121,7 +3167,7 @@ async function applyClaudeAnalysis() {
     document.getElementById('analysis-prompt').value = '';
 
   } catch (err) {
-    alert('Claude Analysis failed: ' + err.message);
+    alert(aiName() + ' Analysis failed: ' + err.message);
   }
 
   statusEl.classList.remove('active');
