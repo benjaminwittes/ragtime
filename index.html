@@ -4,12 +4,33 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
-<!-- v8.0.1 — robust JSON extraction for Claude responses. Replaces the greedy
-     regex fallback with a brace/bracket-balanced walker that respects string
-     literals, so postambles after the JSON value (alt versions, explanations,
-     prose with stray braces) no longer break SQL generation, read-batch
-     classification, or analysis parsing. Also widens raw-output capture in
-     error messages from 200 to 500 chars to ease future debugging. -->
+<!-- v8.0.2 — magic-link error handling + PDF download for analysis output.
+     (1) Detect Supabase magic-link errors in the URL fragment on boot
+         (#error=access_denied&error_code=otp_expired&...). Surface an amber
+         banner above the chooser with copy specific to the error code and
+         clean the URL fragment via history.replaceState so reloads and
+         bookmarks don't replay the error.
+     (2) "Download PDF ↓" button in the page-band actions, shown alongside
+         the existing "Download CSV ↓" when viewing an analysis page that
+         has artifact_markdown. Opens a same-origin popup containing a
+         print-styled, self-contained HTML document (Lawfare typography,
+         metadata header with prompt/scope/date, rendered markdown narrative,
+         footer) and auto-triggers window.print(). User picks "Save as PDF"
+         in their browser's print dialog. Zero new dependencies. -->
+<!-- v8.0.1 — three regression fixes plus robust JSON extraction.
+     (1) Robust JSON extraction for Claude responses: replaces the greedy
+         regex fallback at three parse sites with a brace/bracket-balanced
+         walker that respects string literals. Postambles after the JSON
+         (alt versions, prose with stray braces) no longer break SQL
+         generation, read-batch classification, or analysis parsing.
+     (2) Removes legacy v7 #gate input/button/h1 rules that were causing
+         a specificity collision (#gate button = 101 beats .pick = 10),
+         painting the chooser buttons dark teal with invisible dark-teal
+         title text. The new chooser styles now apply as designed.
+     (3) Removes the fabricated research@lawfaremedia.org email from the
+         gate footer and the you@example.com placeholder from the
+         magic-link input. Both were prior fixes that regressed when
+         v8.0.0 was re-uploaded to the project. -->
 <!-- v8.0.0 — adds three-option login screen + paid Lawfare tier (Supabase auth + Stripe checkout). -->
 <!-- Requires worker v3 at ragtimeproxy.benjamin-wittes.workers.dev with /api/checkout, /api/balance, /api/account, /api/stripe/webhook live. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -39,12 +60,14 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:var(--font-sans); background:var(--bg); color:var(--text); line-height:1.5; }
 
-  /* Gate */
+  /* Gate
+     v8.0: the old access-code gate (single password input + Enter button) is gone,
+     replaced by the three-option chooser. The container layout (centered flex column)
+     is preserved; per-element rules (#gate input, #gate button, #gate h1) have been
+     removed — new styles live under "v8.0 — LOGIN CHOOSER" further down. Keeping
+     these stale rules causes a specificity collision where #gate button (101) beats
+     .pick (10) and paints the chooser buttons teal-on-teal-invisible-text. */
   #gate { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; gap:16px; }
-  #gate h1 { font-family:var(--font-serif); font-size:28px; color:var(--accent); }
-  #gate input { padding:10px 16px; border:1px solid var(--border); border-radius:4px; font-size:15px; width:260px; text-align:center; }
-  #gate button { padding:10px 24px; background:var(--accent); color:white; border:none; border-radius:5px; font-size:15px; font-weight:600; cursor:pointer; }
-  #gate button:hover { background:var(--accent-light); }
   #gate .error { color:var(--highlight); font-size:13px; }
 
   /* Header */
@@ -377,6 +400,17 @@
   .gate-foot { font-family:var(--font-sans); font-size:11px; color:var(--text-muted); margin-top:28px; text-align:center; max-width:440px; line-height:1.55; }
   .gate-foot a { color:var(--accent); text-decoration:underline; cursor:pointer; }
 
+  /* v8.0.2 — Auth error banner. Shown above the chooser when the user returns
+     from a Supabase magic-link with #error=... in the hash (expired or invalid
+     link). Amber palette: noticeable but not alarming. */
+  .auth-error-banner {
+    max-width:440px; width:100%; background:#FFF4E6; border:1px solid #E6A35A;
+    border-left:3px solid #C47C2A; border-radius:5px; padding:14px 18px;
+    margin-bottom:6px; font-family:var(--font-sans); font-size:13.5px;
+    color:#5C3D14; line-height:1.5;
+  }
+  .auth-error-banner .auth-error-title { font-weight:700; margin-bottom:4px; }
+
   /* Magic-link subscreen */
   .gate-back { background:none; border:none; color:var(--text-muted); font-size:12px; cursor:pointer; font-family:var(--font-sans); padding:6px 0; align-self:flex-start; }
   .gate-back:hover { color:var(--accent); }
@@ -498,6 +532,13 @@
     <img src="https://lawfare-assets-new.azureedge.net/assets/images/default-source/default-album/site-logo.png?sfvrsn=1d7ccf3d_1" alt="Lawfare" onerror="this.style.display='none'">
   </div>
 
+  <!-- v8.0.2 — Auth error banner. Populated by showAuthErrorBanner() when
+       the URL hash contains a Supabase auth error (e.g. expired magic link). -->
+  <div class="auth-error-banner" id="auth-error-banner" style="display:none;">
+    <div class="auth-error-title" id="auth-error-title"></div>
+    <div id="auth-error-detail"></div>
+  </div>
+
   <!-- Chooser: three first-class options -->
   <div class="chooser" id="chooser-screen">
     <div class="chooser-prompt">How would you like to use RAGtime?</div>
@@ -520,7 +561,7 @@
     <button class="gate-back" onclick="showChooser()">Back</button>
     <h2>Sign in with Lawfare</h2>
     <p>Enter your email. We'll send you a one-time link — no password to remember. The link signs you in to RAGtime and enables paid usage of Lawfare's API quota.</p>
-    <input type="email" id="magic-email" placeholder="you@example.com" autocomplete="email" onkeydown="if(event.key==='Enter')submitMagicLink()">
+    <input type="email" id="magic-email" autocomplete="email" onkeydown="if(event.key==='Enter')submitMagicLink()">
     <button class="btn btn-primary" onclick="submitMagicLink()">Send link</button>
     <div class="error" id="magic-err"></div>
     <div class="small">By continuing you agree to be billed via Stripe for AI queries you run. Test mode is on; no real charges yet.</div>
@@ -537,8 +578,7 @@
   </div>
 
   <div class="gate-foot" id="gate-foot">
-    Public dataset · cases filed since Jan 20, 2025 · federal district + circuit courts<br>
-    Issues? Email <a href="mailto:research@lawfaremedia.org">research@lawfaremedia.org</a>
+    Public dataset · cases filed since Jan 20, 2025 · federal district + circuit courts
   </div>
 </div>
 
@@ -1231,6 +1271,49 @@ function onCourtCheckboxChange() { updateCourtsUI(); }
 //   - URL hash with Supabase tokens (return from magic link) — Supabase JS handles
 //     this automatically and emits an auth state change; we listen and route accordingly.
 
+// v8.0.2 — Parse auth error info from the URL hash. Supabase magic-link
+// redirects encode failures as `#error=...&error_code=...&error_description=...`
+// (links can expire after the configured TTL, be re-used, or be malformed).
+// Returns null when the hash contains no auth error.
+function parseAuthErrorFromHash() {
+  var hash = window.location.hash || '';
+  if (hash.indexOf('error=') < 0) return null;
+  if (hash.charAt(0) === '#') hash = hash.slice(1);
+  try {
+    var params = new URLSearchParams(hash);
+    if (!params.get('error')) return null;
+    return {
+      error: params.get('error') || 'unknown',
+      code: params.get('error_code') || '',
+      description: params.get('error_description') || ''
+    };
+  } catch (e) { return null; }
+}
+
+// v8.0.2 — Render a friendly error banner above the chooser. Copy is tailored
+// to the most common code (otp_expired) and falls back gracefully for others.
+function showAuthErrorBanner(info) {
+  var banner = document.getElementById('auth-error-banner');
+  var titleEl = document.getElementById('auth-error-title');
+  var detailEl = document.getElementById('auth-error-detail');
+  if (!banner || !titleEl || !detailEl) return;
+  var title, detail;
+  if (info.code === 'otp_expired') {
+    title = 'Your sign-in link has expired.';
+    detail = 'Magic links last about an hour. Choose “Sign in with Lawfare” below to request a new one.';
+  } else if (info.error === 'access_denied') {
+    title = 'Sign-in link was rejected.';
+    detail = (info.description || 'The link may be invalid or already used.') +
+             ' Try requesting a new one below.';
+  } else {
+    title = 'Sign-in failed.';
+    detail = info.description || 'Try again below.';
+  }
+  titleEl.textContent = title;
+  detailEl.textContent = detail;
+  banner.style.display = '';
+}
+
 function showChooser() {
   document.getElementById('chooser-screen').style.display = '';
   document.getElementById('magic-screen').style.display = 'none';
@@ -1243,6 +1326,11 @@ function showMagicForm() {
   document.getElementById('magic-sent-screen').style.display = 'none';
   document.getElementById('gate-foot').style.display = 'none';
   document.getElementById('magic-err').textContent = '';
+  // v8.0.2: hide the auth-error banner once the user takes corrective action.
+  // Keeping a "your link expired" banner up while they're entering an email
+  // for a fresh link feels stale.
+  var banner = document.getElementById('auth-error-banner');
+  if (banner) banner.style.display = 'none';
   setTimeout(function() { document.getElementById('magic-email').focus(); }, 0);
 }
 function showMagicSent(email) {
@@ -1346,6 +1434,17 @@ async function enterApp(opts) {
 
 // Boot — runs once on DOMContentLoaded.
 async function bootApp() {
+  // v8.0.2: 0. Detect magic-link errors in the URL fragment BEFORE the Supabase
+  //    client tries to consume the hash. Expired/invalid links surface here as
+  //    #error=...; we show a friendly banner above the chooser and clean the URL
+  //    fragment so reloads and bookmarks don't replay the error.
+  var hashErr = parseAuthErrorFromHash();
+  if (hashErr) {
+    showAuthErrorBanner(hashErr);
+    var cleanUrl = window.location.origin + window.location.pathname + window.location.search;
+    history.replaceState({}, '', cleanUrl);
+  }
+
   // 1. Stand up the Supabase client. This also kicks off URL-fragment session
   //    detection; if we just returned from a magic link, the client picks up
   //    the access_token from window.location.hash automatically.
@@ -3184,6 +3283,106 @@ function processInline(s) {
 }
 
 
+// v8.0.2 — PDF download for analysis artifact.
+//
+// Approach: open a same-origin popup window, write a self-contained, print-styled
+// HTML document into it (Lawfare typography; metadata header with prompt, scope,
+// generated-at; rendered markdown narrative; footer attribution), then auto-trigger
+// window.print(). The user picks "Save as PDF" in their browser's print dialog.
+// Zero new dependencies; works in every modern browser; layout fidelity is whatever
+// the browser's print engine produces — generally excellent for HTML this simple.
+//
+// Markdown is rendered through the same renderMarkdown() the artifact panel uses,
+// so output matches what the user sees on-screen (including case-ref anchors,
+// which become normal links in the popup since jumpToCaseRow doesn't exist there;
+// that's fine — the case-ref text is still readable).
+function downloadAnalysisPdf() {
+  var page = stack[viewingIdx];
+  if (!page || page.operation_type !== 'claude_analysis' || !page.artifact_markdown) {
+    alert('No analysis content to download. Run an "AI analyzes" operation first.');
+    return;
+  }
+
+  var renderedHtml = renderMarkdown(page.artifact_markdown);
+  var prompt = page.prompt || '(no prompt recorded)';
+  var scopeCount = page.incoming_count || 0;
+  var scopeLine = fmtInt(scopeCount) + ' case' + (scopeCount === 1 ? '' : 's') + ' analyzed';
+  var generatedAt = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
+
+  var doc =
+    '<!DOCTYPE html><html lang="en"><head>' +
+    '<meta charset="UTF-8">' +
+    '<title>RAGtime Analysis</title>' +
+    '<style>' +
+    '@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:ital,wght@0,400;0,700&display=swap");' +
+    '@page { margin: 0.75in; }' +
+    'body { font-family: Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#303030; line-height:1.55; font-size:11pt; margin:0; padding:0; }' +
+    '.pdf-header { border-bottom: 2px solid #006A72; padding-bottom: 14pt; margin-bottom: 18pt; }' +
+    '.pdf-title { font-family: "EB Garamond", Garamond, Georgia, serif; font-size: 28pt; color: #006A72; font-weight: 700; line-height: 1.1; margin-bottom: 4pt; }' +
+    '.pdf-subtitle { font-family: "EB Garamond", Garamond, Georgia, serif; font-size: 13pt; font-style: italic; color: #555; margin-bottom: 12pt; }' +
+    '.pdf-meta { font-family: Lato, sans-serif; font-size: 9.5pt; color: #555; }' +
+    '.pdf-meta .meta-row { margin-bottom: 3pt; }' +
+    '.pdf-meta .meta-key { font-weight: 700; color: #303030; }' +
+    '.md-content h1 { font-family: "EB Garamond", serif; font-size: 18pt; color: #006A72; margin: 18pt 0 8pt; font-weight: 700; }' +
+    '.md-content h2 { font-family: "EB Garamond", serif; font-size: 15pt; color: #006A72; margin: 14pt 0 6pt; font-weight: 700; }' +
+    '.md-content h3 { font-family: "EB Garamond", serif; font-size: 12.5pt; color: #303030; margin: 12pt 0 4pt; font-weight: 700; }' +
+    '.md-content h4 { font-family: Lato, sans-serif; font-size: 11pt; color: #303030; margin: 10pt 0 3pt; font-weight: 700; }' +
+    '.md-content p { margin: 0 0 8pt; }' +
+    '.md-content ul, .md-content ol { margin: 0 0 8pt 24pt; padding: 0; }' +
+    '.md-content li { margin-bottom: 3pt; }' +
+    '.md-content blockquote { border-left: 3px solid #006A72; padding: 2pt 12pt; margin: 8pt 0; color: #555; font-style: italic; }' +
+    '.md-content code { font-family: ui-monospace, "SF Mono", Monaco, Menlo, monospace; font-size: 9.5pt; background: #f3f3f3; padding: 1pt 4pt; border-radius: 2pt; }' +
+    '.md-content pre { background: #f3f3f3; padding: 8pt 10pt; border-radius: 3pt; overflow-x: auto; margin: 8pt 0; page-break-inside: avoid; }' +
+    '.md-content pre code { background: none; padding: 0; font-size: 9pt; }' +
+    '.md-content a { color: #006A72; text-decoration: none; border-bottom: 1px solid #006A72; }' +
+    '.md-content a.case-ref { color: #303030; border-bottom: 1px dotted #777; font-family: ui-monospace, monospace; font-size: 10pt; }' +
+    '.md-content hr { border: none; border-top: 1px solid #ddd; margin: 14pt 0; }' +
+    '.pdf-footer { margin-top: 28pt; padding-top: 8pt; border-top: 1px solid #ddd; font-size: 8.5pt; color: #777; text-align: center; font-family: Lato, sans-serif; }' +
+    '.pdf-foot-brand { color: #006A72; font-weight: 700; }' +
+    '@media print {' +
+    '  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+    '  h1, h2, h3, h4 { page-break-after: avoid; }' +
+    '  blockquote, pre { page-break-inside: avoid; }' +
+    '}' +
+    '</style></head><body>' +
+    '<div class="pdf-header">' +
+    '<div class="pdf-title">RAGtime Analysis</div>' +
+    '<div class="pdf-subtitle">A Federal Litigation Research Tool from Lawfare</div>' +
+    '<div class="pdf-meta">' +
+    '<div class="meta-row"><span class="meta-key">Prompt:</span> ' + esc(prompt) + '</div>' +
+    '<div class="meta-row"><span class="meta-key">Scope:</span> ' + esc(scopeLine) + '</div>' +
+    '<div class="meta-row"><span class="meta-key">Generated:</span> ' + esc(generatedAt) + '</div>' +
+    '</div></div>' +
+    '<div class="md-content">' + renderedHtml + '</div>' +
+    '<div class="pdf-footer">' +
+    'Generated by <span class="pdf-foot-brand">RAGtime</span> &mdash; A Federal Litigation Research Tool from Lawfare' +
+    '</div>' +
+    '</body></html>';
+
+  var w;
+  try { w = window.open('', '_blank'); } catch (e) { w = null; }
+  if (!w) {
+    alert('Could not open print window. Allow pop-ups for this site, then try again.');
+    return;
+  }
+  w.document.open();
+  w.document.write(doc);
+  w.document.close();
+
+  // Trigger print after the document has had a moment to load fonts and reflow.
+  // onload doesn't always fire reliably for written documents, so the setTimeout
+  // is a backup. Both call sites guard against double-printing.
+  var printed = false;
+  function doPrint() {
+    if (printed) return;
+    printed = true;
+    try { w.focus(); w.print(); } catch (e) { /* user can still print manually */ }
+  }
+  w.onload = function() { setTimeout(doPrint, 250); };
+  setTimeout(doPrint, 800);
+}
+
+
 async function applyManualFilter() {
   if (!isOnTip()) return;
 
@@ -3775,8 +3974,17 @@ function renderPageBand() {
   else if (isClaudeSql) typeChip = '<span class="chip">Claude SQL</span>';
   else if (isClaudeRead) typeChip = '<span class="chip">Claude Read</span>';
 
-  // Back button moved to sidebar (alongside mode buttons) — page band keeps only Download.
-  var actionsHtml = '<button onclick="downloadCurrentPage()" title="Download CSV (operation metadata embedded as # comment lines at top)">Download ↓</button>';
+  // Back button moved to sidebar (alongside mode buttons) — page band keeps the
+  // CSV download for every page type, plus a PDF button on analysis pages so
+  // the narrative is shareable without cut-and-paste (v8.0.2).
+  var actionsHtml;
+  if (isAnalysis && page.artifact_markdown) {
+    actionsHtml =
+      '<button onclick="downloadCurrentPage()" title="Download CSV (operation metadata embedded as # comment lines at top)">Download CSV ↓</button>' +
+      '<button onclick="downloadAnalysisPdf()" title="Download analysis as PDF — opens print dialog; choose Save as PDF">Download PDF ↓</button>';
+  } else {
+    actionsHtml = '<button onclick="downloadCurrentPage()" title="Download CSV (operation metadata embedded as # comment lines at top)">Download ↓</button>';
+  }
 
   // For claude_sql pages, show the prompt and a collapsible view of the generated SQL.
   // For claude_read pages, show the criterion and a per-case-judgment summary.
