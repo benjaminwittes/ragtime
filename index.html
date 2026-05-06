@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v8.0.4 — restore the access-code gate.
+     v8.0.0 replaced the v7 password gate with the three-option login chooser,
+     which inadvertently opened the app to anyone with the URL. This adds a
+     front-door access-code overlay (#access-gate) that sits in front of the
+     chooser. Correct code stores a flag in localStorage so verified users
+     enter it once per browser, not every visit. The new gate uses a distinct
+     ID (#access-gate, NOT #gate) so it can't reintroduce the v8.0.1
+     specificity collision between #gate button and .pick. The chooser, paid
+     auth, and main app are unchanged. -->
 <!-- v8.0.3 — model-agnostic error messages + better parse-failure diagnostics
               + SQL mode output ceiling raised.
      (1) User-facing errors and alerts no longer hardcode "Claude" — they use
@@ -84,6 +93,26 @@
      .pick (10) and paints the chooser buttons teal-on-teal-invisible-text. */
   #gate { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; gap:16px; }
   #gate .error { color:var(--highlight); font-size:13px; }
+
+  /* v8.0.4 — Access-code gate (restored).
+     Self-contained overlay that covers the viewport in front of #gate (chooser).
+     Distinct ID (#access-gate) so its per-element rules can't collide with the
+     chooser's .pick buttons the way the old #gate-scoped rules did pre-v8.0.1. */
+  #access-gate {
+    position:fixed; inset:0; z-index:1000; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; padding:60px 24px;
+  }
+  #access-gate .ag-title { font-family:var(--font-serif); font-weight:700; font-size:54px; color:var(--text); line-height:1; letter-spacing:-.01em; margin-bottom:6px; }
+  #access-gate .ag-tagline { font-family:var(--font-sans); font-style:italic; font-size:16px; color:var(--text-secondary); margin-bottom:8px; font-weight:400; }
+  #access-gate .ag-lawfare { display:flex; align-items:center; gap:8px; font-family:var(--font-sans); font-size:14px; color:var(--text-secondary); margin-bottom:32px; font-weight:400; }
+  #access-gate .ag-lawfare img { height:21px; width:auto; vertical-align:middle; }
+  #access-gate input { padding:10px 16px; border:1px solid var(--border); border-radius:4px; font-size:15px; width:280px; text-align:center; font-family:var(--font-sans); background:var(--bg); color:var(--text); }
+  #access-gate input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-bg); }
+  #access-gate button { padding:10px 28px; background:var(--accent); color:white; border:none; border-radius:5px; font-size:15px; font-weight:600; cursor:pointer; font-family:var(--font-sans); }
+  #access-gate button:hover { background:var(--accent-light); }
+  #access-gate .ag-error { color:var(--highlight); font-size:13px; min-height:16px; font-family:var(--font-sans); }
+  #access-gate .ag-foot { font-family:var(--font-sans); font-size:11px; color:var(--text-muted); margin-top:28px; text-align:center; max-width:440px; line-height:1.55; }
 
   /* Header */
   header { background:var(--accent); color:white; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; }
@@ -537,6 +566,25 @@
 </style>
 </head>
 <body>
+
+<!-- v8.0.4 — ACCESS-CODE GATE (restored).
+     Sits in front of the chooser as a fixed-position overlay. Hidden by JS
+     when localStorage flag is set or when the user enters the correct code.
+     The chooser/app underneath are unchanged; they just stay covered until
+     the gate clears. -->
+<div id="access-gate">
+  <div class="ag-title">RAGtime</div>
+  <div class="ag-tagline">A Federal Litigation Research Tool</div>
+  <div class="ag-lawfare">
+    <span>from</span>
+    <img src="https://lawfare-assets-new.azureedge.net/assets/images/default-source/default-album/site-logo.png?sfvrsn=1d7ccf3d_1" alt="Lawfare" onerror="this.style.display='none'">
+  </div>
+  <input type="password" id="ag-pw" placeholder="Enter access code" autofocus
+         onkeydown="if(event.key==='Enter')checkAccessGate()">
+  <button onclick="checkAccessGate()">Enter</button>
+  <div class="ag-error" id="ag-err"></div>
+  <div class="ag-foot">Private research preview. Contact a Lawfare editor for an access code.</div>
+</div>
 
 <!-- LOGIN CHOOSER (v8.0 — replaces the access-code gate) -->
 <div id="gate">
@@ -1444,6 +1492,45 @@ async function enterApp(opts) {
     toggleLLMAccessForm();
     var byo = document.querySelector('input[name=llm-auth][value=byo]');
     if (byo) { byo.checked = true; applyLLMAuthVisibility(); }
+  }
+}
+
+// === v8.0.4 ACCESS-CODE GATE ===
+// Restores the v7-era password gate that v8.0.0 inadvertently removed. Sits in
+// front of the chooser as a fixed overlay (#access-gate). On correct code we
+// set a localStorage flag so verified users only enter it once per browser.
+// This is a soft gate — the code is in the client, anyone can read source —
+// but it does the job of keeping the app off Google and out of casual hands.
+var ACCESS_CODE = "lawfare2025";
+var LS_ACCESS_KEY = 'ragtime_access_unlocked_v1';
+
+function isAccessUnlocked() {
+  try { return localStorage.getItem(LS_ACCESS_KEY) === '1'; }
+  catch (e) { return false; }
+}
+function setAccessUnlocked() {
+  try { localStorage.setItem(LS_ACCESS_KEY, '1'); } catch (e) { /* private mode — fine, just won't persist */ }
+}
+function hideAccessGate() {
+  var g = document.getElementById('access-gate');
+  if (g) g.style.display = 'none';
+}
+function checkAccessGate() {
+  var input = document.getElementById('ag-pw');
+  var err = document.getElementById('ag-err');
+  if (!input) return;
+  if (input.value === ACCESS_CODE) {
+    setAccessUnlocked();
+    hideAccessGate();
+    if (err) err.textContent = '';
+    // Now run the rest of boot — Supabase client, session check, chooser routing.
+    bootApp().catch(function(e) {
+      console.error('Boot error after gate:', e);
+      showChooser();
+    });
+  } else {
+    if (err) err.textContent = 'Incorrect code.';
+    input.select();
   }
 }
 
@@ -4324,15 +4411,22 @@ document.addEventListener('keydown', function(e) {
 });
 
 // === v8.0 BOOT ===
-// On DOMContentLoaded: bring up the Supabase client, check for an existing
-// session (returning paid user or magic-link return), check for ?checkout=...
-// query params, and route to chooser or app accordingly. The old access-code
-// gate is gone — the chooser is the new front door.
+// On DOMContentLoaded: if the access gate has already been cleared on this
+// browser (localStorage flag), hide the gate overlay and run bootApp() as
+// before. Otherwise leave the gate visible and focus the input — bootApp()
+// will run from inside checkAccessGate() once the correct code is entered.
+// (v8.0.4 — restored the access-code gate that v8.0.0 inadvertently removed.)
 document.addEventListener('DOMContentLoaded', function() {
-  bootApp().catch(function(e) {
-    console.error('Boot error:', e);
-    showChooser();
-  });
+  if (isAccessUnlocked()) {
+    hideAccessGate();
+    bootApp().catch(function(e) {
+      console.error('Boot error:', e);
+      showChooser();
+    });
+  } else {
+    var inp = document.getElementById('ag-pw');
+    if (inp) inp.focus();
+  }
 });
 </script>
 </body>
