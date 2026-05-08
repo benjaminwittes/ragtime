@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v9.0.1 — AMA large-scope fix.
+     v9.0.0 inlined the current page's cl_id list as a Postgres array literal
+     to scope AMA queries, with a 50K-id sanity ceiling. Filtering to all 2025+
+     civil cases (~428K) tripped that ceiling on the very first real test. Fix:
+     use the page's executed_sql (manual_filter / claude_sql) as the scope CTE
+     source when the cl_id list is too large to inline (now > 25K). Also save
+     idsSql as executed_sql on manual_filter pages so the AMA can reach it. -->
 <!-- v9.0.0 — lift size caps + AMA mode.
      Two changes for the demo package:
      (1) The hard size caps on Read mode (5,000) and Analysis mode (150) are
@@ -3592,19 +3599,37 @@ function parseAmaPlan(raw) {
 // Run the planned SQL queries. If scope.cl_ids is non-null, prepend CTEs that
 // expose `scoped_cases` and `scoped_docket_entries` so the agent's query can
 // reference them by those names. (Planning prompt instructs the agent on this.)
+//
+// v9.0.1 — for large scopes (> SCOPE_LITERAL_LIMIT cl_ids), inlining the id
+// list as a Postgres array literal would crush the Supabase REST body limit.
+// We fall back to reusing the page's source SQL (manual_filter.executed_sql /
+// claude_sql.executed_sql) as the scope_ids source, which is much smaller on
+// the wire and exact.
 async function executeAmaPlan(plan, scope) {
   var results = [];
-  // Build the scope CTE prefix once if scope is narrowed.
+  var SCOPE_LITERAL_LIMIT = 25000;  // cl_ids inlined up to this; above, use page's SQL.
   var scopePrefix = '';
   if (scope.cl_ids && scope.cl_ids.length > 0) {
-    if (scope.cl_ids.length > 50000) {
-      throw new Error('AMA: scope is ' + fmtInt(scope.cl_ids.length) + ' cases — too large to inject as a literal id list. Narrow the field first.');
+    var tip = stack[stack.length - 1];
+    if (scope.cl_ids.length <= SCOPE_LITERAL_LIMIT) {
+      // Small scope — inline the cl_id list directly.
+      var arrLit = '{' + scope.cl_ids.join(',') + '}';
+      scopePrefix =
+        'WITH scope_ids AS (SELECT unnest(\'' + arrLit + '\'::bigint[]) AS cl_id), ' +
+        'scoped_cases AS (SELECT c.* FROM cases c WHERE c.cl_id IN (SELECT cl_id FROM scope_ids)), ' +
+        'scoped_docket_entries AS (SELECT d.* FROM docket_entries d WHERE d.cl_id IN (SELECT cl_id FROM scope_ids)) ';
+    } else if (tip && tip.executed_sql) {
+      // Large scope — reuse the page's source SQL. Wrap it so scope_ids
+      // exposes only the cl_id column, regardless of what the source SQL
+      // selects.
+      scopePrefix =
+        'WITH scope_ids AS (SELECT cl_id FROM (' + tip.executed_sql + ') src), ' +
+        'scoped_cases AS (SELECT c.* FROM cases c WHERE c.cl_id IN (SELECT cl_id FROM scope_ids)), ' +
+        'scoped_docket_entries AS (SELECT d.* FROM docket_entries d WHERE d.cl_id IN (SELECT cl_id FROM scope_ids)) ';
+      appendAmaLog('Scope.', 'Using page SQL filter (' + fmtInt(scope.cl_ids.length) + ' cases) — too many ids to inline.', '');
+    } else {
+      throw new Error('AMA: scope is ' + fmtInt(scope.cl_ids.length) + ' cases — too large to inject directly, and the source page has no executable SQL to reuse. This usually means the page was created before v9.0.1; rerun the original filter to refresh the page, or narrow further before running AMA.');
     }
-    var arrLit = '{' + scope.cl_ids.join(',') + '}';
-    scopePrefix =
-      'WITH scope_ids AS (SELECT unnest(\'' + arrLit + '\'::bigint[]) AS cl_id), ' +
-      'scoped_cases AS (SELECT c.* FROM cases c WHERE c.cl_id IN (SELECT cl_id FROM scope_ids)), ' +
-      'scoped_docket_entries AS (SELECT d.* FROM docket_entries d WHERE d.cl_id IN (SELECT cl_id FROM scope_ids)) ';
   }
   for (var i = 0; i < plan.queries.length; i++) {
     var q = plan.queries[i];
@@ -4293,6 +4318,9 @@ async function applyManualFilter() {
       operation_label: label,
       prompt: null,
       generated_sql: rowsSql,
+      // v9.0.1 — save the cl_id-producing query. AMA needs this to define a
+      // scope CTE without inlining the cl_id list when the field is large.
+      executed_sql: idsSql,
       filter_state: fields,
       incoming_cl_ids: incoming.slice(),
       incoming_count: (tip.operation_type === 'init' ? totalCaseCount : incoming.length),
