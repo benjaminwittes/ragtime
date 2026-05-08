@@ -4,6 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v9.0.0 — lift size caps + AMA mode.
+     Two changes for the demo package:
+     (1) The hard size caps on Read mode (5,000) and Analysis mode (150) are
+         removed. Both modes are gated only by the cost-preview modal, which
+         already supports a per-query-cap override. Cheap queries (estimated
+         ≤ CONFIRM_THRESHOLD_CENTS, default 25¢) skip the modal entirely.
+         Above the threshold, the modal shows the estimate and the user
+         confirms or cancels — matching Ben's "anything under 25 cents just
+         do it; anything above, give an estimate" directive.
+     (2) New 5th mode: AMA — a natural-language "ask me anything" over the
+         current case list, implemented as an iterative agent loop (recon →
+         plan → execute → synthesize) using the existing callClaude proxy
+         with skipPreview:true. Three output modes: list (narrows the field
+         like a smart filter), narrative (analytical answer, doesn't change
+         the field), and hybrid (both). All steps land in the existing
+         ledger as normal query rows; session-id aggregation is deferred to
+         a future worker change. See RAGtime-AMA-design.md for full spec. -->
 <!-- v8.0.4 — restore the access-code gate.
      v8.0.0 replaced the v7 password gate with the three-option login chooser,
      which inadvertently opened the app to anyone with the URL. This adds a
@@ -223,6 +240,14 @@
   .claude-sql-help { font-size:10px; color:var(--text-muted); font-style:italic; margin-top:4px; line-height:1.4; }
   .claude-status { font-size:11px; color:var(--accent); font-style:italic; margin-top:6px; display:none; }
   .claude-status.active { display:block; }
+
+  /* v9.0.0 — AMA session log: per-step progress shown inline below the form */
+  .ama-log { margin-top:10px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:4px; font-size:11px; line-height:1.5; max-height:240px; overflow-y:auto; }
+  .ama-log-step { padding:3px 0; color:var(--text-secondary); font-family:var(--font-sans); }
+  .ama-log-step.done { color:var(--text); }
+  .ama-log-step.error { color:#a33; }
+  .ama-log-step .label { font-weight:600; color:var(--text); margin-right:6px; }
+  .ama-log-cost { margin-top:6px; padding-top:6px; border-top:1px dashed var(--border); font-weight:600; color:var(--accent); font-family:var(--font-sans); font-size:11px; }
 
   /* Generated SQL display in page band */
   .generated-sql { margin-top:8px; }
@@ -737,6 +762,7 @@
         <button class="mode-btn" data-mode="claude_sql" onclick="selectMode('claude_sql')" data-tip="Describe a filter in natural language; AI writes SQL.">AI writes SQL</button>
         <button class="mode-btn" data-mode="claude_read" onclick="selectMode('claude_read')" data-tip="AI reads each case and keeps/drops per criterion.">AI reads each case</button>
         <button class="mode-btn" data-mode="claude_analysis" onclick="selectMode('claude_analysis')" data-tip="AI analyzes the full case list and produces narrative + annotations.">AI analyzes</button>
+        <button class="mode-btn" data-mode="claude_ama" onclick="selectMode('claude_ama')" data-tip="Ask anything about the current case list. AI plans, runs queries, and answers — narrows the field, gives a narrative answer, or both.">AMA</button>
       </div>
 
       <!-- Arm prompt (shown on tip when no mode is armed; explains why fields are locked) -->
@@ -796,7 +822,7 @@
           <label>Per-case criterion</label>
           <textarea id="read-prompt" placeholder="e.g. the court ordered the government to do something and the government didn't comply"></textarea>
         </div>
-        <p class="claude-sql-help">The AI reads each case's docket entries and decides keep/drop per case. Slow and expensive; available only when the field is ≤ 5,000 cases.</p>
+        <p class="claude-sql-help">The AI reads each case's docket entries and decides keep/drop per case. Slow and expensive — you'll see a cost estimate before anything runs.</p>
         <div class="filter-actions">
           <button class="btn btn-primary" id="btn-commit-read" onclick="applyClaudeRead()">Read cases</button>
           <button class="btn-clear" onclick="document.getElementById('read-prompt').value=''">Clear</button>
@@ -819,6 +845,24 @@
         <div class="claude-status" id="claude-analysis-status"></div>
         <p class="ctx-note" id="analysis-scope-note"></p>
         <p class="ctx-note" id="analysis-cost-note" style="margin-top:4px;"></p>
+      </div>
+      <!-- v9.0.0 — claude_ama: agentic AMA over the current case list. Plans
+           queries, executes them, synthesizes an answer. Output mode is one of
+           list (narrows the field), narrative (analytical answer), or hybrid
+           (both). See RAGtime-AMA-design.md for the spec. -->
+      <div class="mode-form claude-sql-form" id="form-claude_ama">
+        <div class="fg">
+          <label>Ask anything about the current case list</label>
+          <textarea id="ama-prompt" placeholder="e.g. Are drug prosecutions up or down? Or: show me cases where states are suing the federal government over federalism. Or: how badly is ICE doing in immigration litigation?"></textarea>
+        </div>
+        <p class="claude-sql-help">The AI will plan a strategy, estimate the cost, ask before spending more than 25¢, then run queries against the current case list and answer. May narrow the field, produce a narrative analysis, or both — it picks the right shape for the question.</p>
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="btn-commit-ama" onclick="applyClaudeAma()">Ask</button>
+          <button class="btn-clear" onclick="document.getElementById('ama-prompt').value=''">Clear</button>
+        </div>
+        <div class="claude-status" id="claude-ama-status"></div>
+        <p class="ctx-note" id="ama-scope-note"></p>
+        <div id="ama-session-log" class="ama-log" style="display:none;"></div>
       </div>
     </aside>
 
@@ -896,6 +940,48 @@
       <div class="modal-foot">
         <button class="btn btn-cancel" onclick="closeCostPreview(false)">Cancel</button>
         <button class="btn btn-primary" id="cp-proceed-btn" onclick="closeCostPreview(true)">Proceed</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v9.0.0 — AMA pre-flight modal. Shown after the agent's planning step
+       when estimated cost > CONFIRM_THRESHOLD_CENTS. Displays the plan,
+       estimated cost, expected output mode, and any candor caveats. -->
+  <div class="modal-backdrop" id="modal-ama-preflight">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>AMA pre-flight</h3>
+        <div class="modal-sub">Review the plan and estimated cost before running.</div>
+      </div>
+      <div class="modal-body">
+        <div class="cost-row range">
+          <div class="lbl">Estimated cost</div>
+          <div class="val" id="ama-pf-cost">—</div>
+        </div>
+        <div class="cost-row">
+          <div class="lbl">Output</div>
+          <div class="val" id="ama-pf-mode">—</div>
+        </div>
+        <div class="cost-row">
+          <div class="lbl">Your balance</div>
+          <div class="val" id="ama-pf-balance">—</div>
+        </div>
+        <div style="margin-top:10px;font-size:13px;">
+          <div style="font-weight:600;color:var(--text);margin-bottom:4px;">Plan</div>
+          <div id="ama-pf-plan" style="color:var(--text-secondary);line-height:1.45;"></div>
+        </div>
+        <div id="ama-pf-candor-wrap" style="margin-top:10px;font-size:13px;display:none;">
+          <div style="font-weight:600;color:var(--text);margin-bottom:4px;">Caveats</div>
+          <ul id="ama-pf-candor" style="margin:0;padding-left:18px;color:var(--text-secondary);line-height:1.5;"></ul>
+        </div>
+        <div id="ama-pf-warn-block"></div>
+        <div class="cost-info">
+          Estimate is from the agent's planning step and may be off; you'll see the actual running cost as the query executes. Cancel and refine the question if you want to narrow scope.
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-cancel" onclick="closeAmaPreflight(false)">Cancel</button>
+        <button class="btn btn-primary" id="ama-pf-proceed-btn" onclick="closeAmaPreflight(true)">Proceed</button>
       </div>
     </div>
   </div>
@@ -1017,8 +1103,18 @@ var WORKER_URL = "https://ragtimeproxy.benjamin-wittes.workers.dev/ask";
 var CLAUDE_MAX_ROWS = 10000; // SQL row cap (matches manual_filter LIMIT)
 var CLAUDE_MAX_RAW_ROWS = 200000; // Hard ceiling on Claude's pre-intersection result set
 
+// v9.0.0 — "anything under this estimate just runs; anything above it shows
+// a confirmation modal." Per Ben's directive on lifting button-level caps:
+// the cost-preview modal is the gate, not size. Cheap queries don't need a
+// modal at all. 25¢ default; configurable per user is a future enhancement.
+var CONFIRM_THRESHOLD_CENTS = 25;
+
 // claude_read mode (Phase 5) tunables.
-var CLAUDE_READ_MAX = 5000;            // hard cap on incoming case count (spec: "≤ 5,000")
+// v9.0.0 — was a hard cap that blocked the button. Now a soft hint for the
+// "this is a large field — review carefully" UX inside the cost-preview flow;
+// the actual gate is cost. Bumped 5,000 → 25,000 to give plenty of headroom
+// before the soft warning fires.
+var CLAUDE_READ_MAX = 25000;           // soft hint — large-field warning threshold
 var CLAUDE_READ_BATCH_SIZE = 25;       // cases per Claude API call (~60K input tokens at typical case size)
 var CLAUDE_READ_CONCURRENCY = 4;       // parallel API calls (4 × 25 = 100 cases in flight)
 var CLAUDE_READ_MAX_ENTRIES_PER_CASE = 30; // most recent entries to send Claude per case
@@ -1033,8 +1129,12 @@ var CLAUDE_READ_COST_PER_CASE = 0.005;
 // so context budget is the binding constraint, not API cost. Per case: metadata + N entries.
 // At ~800 tokens/case with 15 entries × 400 chars, 150 cases ≈ 120K input tokens — comfortable
 // within 200K context with system prompt + reasoning headroom.
-var CLAUDE_ANALYSIS_MAX = 150;                  // hard cap on incoming case count
-var CLAUDE_ANALYSIS_SOFT_WARN = 100;            // confirm before running above this
+// v9.0.0 — was a hard cap that blocked the button. Now a soft hint; cost-preview is the gate.
+// Bumped 150 → 1,000 (context window will likely be the actual constraint at the high end,
+// and the cost-preview modal warns before that point). The SOFT_WARN at 100 is preserved for
+// the "review carefully" inline note.
+var CLAUDE_ANALYSIS_MAX = 1000;                 // soft hint — large-field warning threshold
+var CLAUDE_ANALYSIS_SOFT_WARN = 100;            // inline "review carefully" hint above this
 var CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE = 15;  // most recent entries to send per case
 var CLAUDE_ANALYSIS_MAX_ENTRY_CHARS = 400;      // per-entry char cap
 var CLAUDE_ANALYSIS_MAX_OUTPUT_TOKENS = 8000;   // analysis can be a long markdown doc
@@ -1728,7 +1828,8 @@ function selectMode(mode) {
   renderSidebarForViewState(); // reflect armed state (unlock fields, hide arm-prompt)
 }
 
-// Page 0 hides claude_read and claude_analysis (nothing to operate on)
+// Page 0 hides claude_read and claude_analysis (nothing to operate on);
+// AMA is shown on page 0 too — it operates on the implicit "all cases" list.
 function updateModeButtonVisibility() {
   var tip = stack[stack.length - 1];
   var isPage0 = (stack.length === 1);
@@ -1740,9 +1841,9 @@ function updateModeButtonVisibility() {
       btn.classList.remove('hidden');
     }
   });
-  // Adjust grid layout to 2-col or 4-col based on visibility
+  // Adjust grid layout. Page 0 shows 3 modes; active shows 5.
   var row = document.getElementById('mode-row');
-  row.style.gridTemplateColumns = isPage0 ? '1fr 1fr' : 'repeat(4, 1fr)';
+  row.style.gridTemplateColumns = isPage0 ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)';
 }
 
 // === MANUAL FILTER OPERATION ===
@@ -2183,6 +2284,8 @@ function renderBalanceWidget() {
 }
 
 // Cost-preview modal — returns a Promise that resolves to true (proceed) or false (cancel).
+// v9.0.0 — auto-resolves to true (no modal) when the maximum estimate is at or below
+// CONFIRM_THRESHOLD_CENTS. Pennies-cost queries no longer interrupt the user.
 function showCostPreviewModal(systemPrompt, userContent, maxTok) {
   return new Promise(function(resolve) {
     // Estimate input tokens from char counts. Worker uses 3.5 chars/token; we mirror.
@@ -2194,6 +2297,13 @@ function showCostPreviewModal(systemPrompt, userContent, maxTok) {
     }
     var minCents = calcCents(estInputTokens, PAID_MIN_OUTPUT_TOKENS);
     var maxCents = calcCents(estInputTokens, maxTok);
+
+    // v9.0.0 — auto-proceed when the worst-case estimate is at or below the
+    // confirm threshold AND the balance can cover it. Skips the modal entirely.
+    if (maxCents <= CONFIRM_THRESHOLD_CENTS && maxCents <= paidAccess.balanceCents && maxCents <= paidAccess.perQueryCapCents) {
+      resolve(true);
+      return;
+    }
 
     document.getElementById('cp-range').textContent =
       fmtCents(minCents) + ' to ' + fmtCents(maxCents);
@@ -2656,7 +2766,8 @@ async function applyClaudeSql() {
 //
 // User describes a per-case criterion in natural language; Claude reads each
 // case's docket entries and decides keep/drop per case, with a one-sentence
-// reason. Slow and expensive — capped at CLAUDE_READ_MAX cases per spec.
+// reason. Slow and expensive — gated by the cost-preview modal. Above
+// CLAUDE_READ_MAX (soft hint) the user gets a "this is unusually large" prompt.
 //
 // Pipeline:
 //   1. Fetch top-N most-recent docket entries for each incoming cl_id (chunked).
@@ -2825,9 +2936,13 @@ async function applyClaudeRead() {
   var tip = stack[stack.length - 1];
   var incoming = tip.operation_type === 'init' ? [] : tip.outgoing_cl_ids.slice();
   var incomingCount = tip.operation_type === 'init' ? totalCaseCount : incoming.length;
+  // v9.0.0 — hard cap removed; cost-preview modal is the gate. Soft warning
+  // for unusually large fields shows in the inline cost note and as a one-line
+  // confirm here so the user has a chance to back out before paying for recon.
   if (incomingCount > CLAUDE_READ_MAX) {
-    alert('Field is ' + fmtInt(incomingCount) + ' cases. Read mode is capped at ' + fmtInt(CLAUDE_READ_MAX) + '. Narrow the field first.');
-    return;
+    var goRead = confirm('Field is ' + fmtInt(incomingCount) + ' cases — unusually large for Read mode. ' +
+      'You\'ll be shown a cost estimate before anything runs. Continue?');
+    if (!goRead) return;
   }
   if (incomingCount === 0) { alert('No cases in scope.'); return; }
 
@@ -3122,9 +3237,14 @@ async function applyClaudeAnalysis() {
   var incoming = tip.outgoing_cl_ids.slice();
   var incomingCount = incoming.length;
   if (incomingCount === 0) { alert('No cases in scope.'); return; }
+  // v9.0.0 — hard cap removed; cost-preview modal is the gate. Above the soft
+  // hint, give a heads-up about context-window risk; above ANALYSIS_SOFT_WARN,
+  // existing warning about attention degradation still fires below.
   if (incomingCount > CLAUDE_ANALYSIS_MAX) {
-    alert('Field is ' + fmtInt(incomingCount) + ' cases. Analysis is capped at ' + fmtInt(CLAUDE_ANALYSIS_MAX) + '. Narrow the field first.');
-    return;
+    var goAnalysis = confirm('Field is ' + fmtInt(incomingCount) + ' cases — unusually large for one-shot Analysis. ' +
+      'Beyond ~1,000 cases the model\'s context window may not fit them all and the call could fail. ' +
+      'You\'ll be shown a cost estimate before anything runs. Continue?');
+    if (!goAnalysis) return;
   }
 
   // Soft-warn confirm above the comfort threshold.
@@ -3262,6 +3382,585 @@ async function applyClaudeAnalysis() {
   btn.disabled = false;
   btn.textContent = origLabel;
   renderAll();
+}
+
+// =================================================================
+// === CLAUDE AMA MODE (v9.0.0) ===
+// =================================================================
+//
+// Agentic "ask me anything" over the current case list. Two-pass agent:
+//   1. Planning call: model is given the question, the current scope, and
+//      the schema. It returns a JSON plan with output_mode (list / narrative
+//      / hybrid), an estimated cost in cents, candor caveats, and an array
+//      of SQL queries to execute. Cheap (~3-8¢).
+//   2. Pre-flight: if estimated_cost_cents > CONFIRM_THRESHOLD_CENTS, the
+//      pre-flight modal shows the plan and waits for user confirmation.
+//   3. Execution: each planned SQL query is run via sbRpc('run_query'),
+//      results are collected.
+//   4. Synthesis call: model is given the question, plan, and results.
+//      Returns answer_markdown plus (for list/hybrid mode) cl_ids[].
+//   5. Commit: a new page is pushed with operation_type 'claude_ama'.
+//      List/hybrid pages narrow the field; narrative pages pass through.
+//
+// All model calls go through callClaude with skipPreview:true; the per-step
+// ledger entries land in the existing paydown system unchanged. The running
+// cost is summed from _cost_cents annotations on each response.
+
+var amaSessionCostCents = 0;  // running tally for current AMA session
+
+// Append a line to the AMA log panel; visible during the session.
+function appendAmaLog(label, msg, status) {
+  var log = document.getElementById('ama-session-log');
+  if (!log) return;
+  log.style.display = 'block';
+  var div = document.createElement('div');
+  div.className = 'ama-log-step' + (status ? ' ' + status : '');
+  var labelSpan = document.createElement('span');
+  labelSpan.className = 'label';
+  labelSpan.textContent = label;
+  div.appendChild(labelSpan);
+  // Plain text msg appended as a text node — safe even if msg contains HTML.
+  div.appendChild(document.createTextNode(msg));
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearAmaLog() {
+  var log = document.getElementById('ama-session-log');
+  if (!log) return;
+  log.innerHTML = '';
+  log.style.display = 'none';
+}
+
+function renderAmaCostLine() {
+  var log = document.getElementById('ama-session-log');
+  if (!log) return;
+  // Replace any existing cost line
+  var existing = log.querySelector('.ama-log-cost');
+  if (existing) existing.remove();
+  var div = document.createElement('div');
+  div.className = 'ama-log-cost';
+  div.textContent = 'Spent so far: ' + fmtCents(amaSessionCostCents);
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// Wrap callClaude so the AMA session can sum cost across multiple steps from
+// the _cost_cents annotation. Each step gets skipPreview:true; the AMA's own
+// pre-flight modal handles confirmation at the session level.
+async function amaCallClaude(systemPrompt, userContent, maxTok) {
+  // Snapshot balance before; subtract after to derive this step's cost.
+  var balBefore = paidAccess.balanceCents;
+  var raw = await callClaude(systemPrompt, userContent, maxTok, { skipPreview: true });
+  var balAfter = paidAccess.balanceCents;
+  if (llmAccess.mode === 'paid' && typeof balAfter === 'number' && typeof balBefore === 'number') {
+    var stepCost = Math.max(0, balBefore - balAfter);
+    amaSessionCostCents += stepCost;
+    renderAmaCostLine();
+  }
+  return raw;
+}
+
+// Build the scope summary that goes into the planning prompt.
+function buildAmaScopeSummary() {
+  var tip = stack[stack.length - 1];
+  if (!tip || tip.operation_type === 'init') {
+    return {
+      count: totalCaseCount,
+      isFullDatabase: true,
+      description: 'The full database — ' + fmtInt(totalCaseCount) + ' cases across all federal courts.',
+      cl_ids: null  // unconstrained
+    };
+  }
+  return {
+    count: tip.outgoing_count,
+    isFullDatabase: false,
+    description: fmtInt(tip.outgoing_count) + ' cases from page ' + tip.page_id + ' (' + (tip.operation_label || tip.operation_type) + ').',
+    cl_ids: tip.outgoing_cl_ids.slice()
+  };
+}
+
+// SQL schema documentation that the planning model is given. Trimmed but accurate.
+var AMA_SCHEMA_DOC = [
+  'TABLE: cases — one row per federal court case.',
+  '  cl_id (bigint, PK)            — CourtListener case id; use this to identify a case in your output.',
+  '  case_name (text)              — e.g. "United States v. Smith"; FTS-indexed in column "fts" via to_tsvector.',
+  '  docket_number (text)          — e.g. "1:25-cv-00123".',
+  '  court (text)                  — court code, e.g. dcd, nyed, txsd, ca9.',
+  '  date_filed (date)             — case filing date.',
+  '  date_terminated (date)        — null if open.',
+  '  judge (text)                  — judge name; may be empty.',
+  '  cause (text)                  — statutory cause / FRCP basis.',
+  '  nature_of_suit (text)         — federal NOS code/label, e.g. "440 Civil Rights".',
+  '  jurisdiction_type (text)      — e.g. "Federal Question".',
+  '  plaintiff (text)              — plaintiff name(s).',
+  '  defendant (text)              — defendant name(s).',
+  '  fts (tsvector, generated)     — to_tsvector("english", case_name) — use for case-name FTS.',
+  '',
+  'TABLE: docket_entries — many rows per case.',
+  '  cl_id (bigint, FK→cases.cl_id)',
+  '  entry_number (bigint)         — sequential within a case.',
+  '  entry_date (text)             — ISO date string.',
+  '  description (text)            — entry text.',
+  '  court (text)',
+  '  fts (tsvector, generated)     — to_tsvector("english", description).',
+  '',
+  'NOTES:',
+  '- Case-level FTS: WHERE cases.fts @@ websearch_to_tsquery(\'english\', \'your search\').',
+  '- Entry-level FTS: WHERE docket_entries.fts @@ websearch_to_tsquery(\'english\', \'your search\').',
+  '- Use websearch_to_tsquery for natural-language input; supports quotes and OR.',
+  '- "Trump II" / current administration: filter by date_filed >= \'2025-01-20\'.',
+  '- "Federal agency defendant": defendant ILIKE \'%United States%\' OR defendant ILIKE \'%Department of%\' OR defendant ILIKE \'%Agency%\' (varies — sample first if uncertain).',
+  '- Read-only: only SELECT statements are accepted; LIMIT yourself to ≤ 10000 rows per query.'
+].join('\n');
+
+function buildAmaPlanningSystem() {
+  return [
+    'You are the planner for an agentic "ask me anything" tool over a federal litigation database. Your job is to look at a user question and the current scope, then return a JSON plan describing how you would answer it.',
+    '',
+    'You have access to a Postgres database (read-only) via SELECT queries. Schema:',
+    '',
+    AMA_SCHEMA_DOC,
+    '',
+    'Output a single JSON object with these keys (no prose, no code fences):',
+    '{',
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    '       // list = the question wants a refined set of cases (the field will be narrowed).',
+    '       // narrative = the question wants an analytical answer; the field is unchanged.',
+    '       // hybrid = both — narrative summary plus a refined list (most aggregate-with-examples questions).',
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats the user should see — e.g. fuzzy semantic categories you defined, sampling, fields you wished existed but don\'t"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ...; -- read-only, LIMIT ≤ 10000"},',
+    '    ...',
+    '  ],',
+    '  "estimated_cost_cents": <integer>,',
+    '       // your estimate of the synthesis call cost in cents (the planning call is already paid).',
+    '       // Synthesis input ≈ all query results in JSON (be honest about size); output ≈ 800-2000 tokens.',
+    '       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.',
+    '  "wants_synthesis": true',
+    '}',
+    '',
+    'Rules:',
+    '- Be ruthlessly economical with queries. Aggregate where possible (COUNT, AVG, group-by) rather than pulling raw rows. Only pull case rows when the user wants a list, and cap to 500 rows in that query unless the user explicitly asked for more.',
+    '- For trend questions, prefer one query that groups by year (or month) over many narrow queries.',
+    '- For "are X up or down" questions, compare two periods in one query.',
+    '- Do NOT plan to read docket-entry text in v9; if a question really needs it, say so in candor_notes ("would benefit from reading entries — not done in v9; consider Read mode after narrowing"). FTS over docket_entries.description is fine for identifying cases by topic.',
+    '- WHEN THE CURRENT SCOPE IS NARROWED (cl_ids list provided): use the names "scoped_cases" instead of "cases" and "scoped_docket_entries" instead of "docket_entries". The runner pre-defines these as CTEs already filtered to the current scope. WHEN SCOPE IS THE FULL DATABASE: use the regular table names "cases" and "docket_entries".',
+    '- For sampling at top-of-stack, you can use "ORDER BY random()" but be aware that\'s expensive on huge tables; prefer "ORDER BY date_filed DESC" with a LIMIT if you want a recency-biased sample.',
+    '- Output strict JSON only. No markdown. No code fences. No prose outside the object.'
+  ].join('\n');
+}
+
+function buildAmaPlanningUser(question, scope) {
+  return [
+    'USER QUESTION:',
+    question,
+    '',
+    'CURRENT SCOPE:',
+    scope.description,
+    scope.isFullDatabase
+      ? '(no cl_id constraint — your queries run against the full database; use table names "cases" and "docket_entries")'
+      : '(narrowed to ' + fmtInt(scope.count) + ' cl_ids; the runner will pre-define CTEs named scoped_cases and scoped_docket_entries — use THOSE names in your queries)',
+    '',
+    'Return the JSON plan now.'
+  ].join('\n');
+}
+
+function parseAmaPlan(raw) {
+  var cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  var v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    var firstObj = extractFirstJsonValue(cleaned, 'object');
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error('Plan parse failed — JSON.parse error: ' + pe2.message); }
+    } else {
+      throw new Error('Plan parse failed — could not find a JSON object in the response.');
+    }
+  }
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('Plan parse failed — top-level value is not an object.');
+  if (['list', 'narrative', 'hybrid'].indexOf(v.output_mode) < 0) throw new Error('Plan parse failed — output_mode must be list, narrative, or hybrid.');
+  if (!Array.isArray(v.queries)) throw new Error('Plan parse failed — queries must be an array.');
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || '').trim();
+  return v;
+}
+
+// Run the planned SQL queries. If scope.cl_ids is non-null, prepend CTEs that
+// expose `scoped_cases` and `scoped_docket_entries` so the agent's query can
+// reference them by those names. (Planning prompt instructs the agent on this.)
+async function executeAmaPlan(plan, scope) {
+  var results = [];
+  // Build the scope CTE prefix once if scope is narrowed.
+  var scopePrefix = '';
+  if (scope.cl_ids && scope.cl_ids.length > 0) {
+    if (scope.cl_ids.length > 50000) {
+      throw new Error('AMA: scope is ' + fmtInt(scope.cl_ids.length) + ' cases — too large to inject as a literal id list. Narrow the field first.');
+    }
+    var arrLit = '{' + scope.cl_ids.join(',') + '}';
+    scopePrefix =
+      'WITH scope_ids AS (SELECT unnest(\'' + arrLit + '\'::bigint[]) AS cl_id), ' +
+      'scoped_cases AS (SELECT c.* FROM cases c WHERE c.cl_id IN (SELECT cl_id FROM scope_ids)), ' +
+      'scoped_docket_entries AS (SELECT d.* FROM docket_entries d WHERE d.cl_id IN (SELECT cl_id FROM scope_ids)) ';
+  }
+  for (var i = 0; i < plan.queries.length; i++) {
+    var q = plan.queries[i];
+    var label = q.label || ('query ' + (i + 1));
+    var sql = String(q.sql || '').trim();
+    if (!sql) continue;
+    sql = sql.replace(/;\s*$/, '').trim();
+    var execSql;
+    if (scopePrefix) {
+      // If the agent's SQL begins with WITH ..., merge into our scope prefix
+      // by stripping the agent's WITH keyword and prepending a comma. Otherwise
+      // just concatenate.
+      var withMatch = sql.match(/^WITH\s+/i);
+      if (withMatch) {
+        execSql = scopePrefix + ', ' + sql.slice(withMatch[0].length);
+      } else {
+        execSql = scopePrefix + sql;
+      }
+    } else {
+      execSql = sql;
+    }
+    appendAmaLog('Query ' + (i + 1) + '.', label, '');
+    var rows;
+    try {
+      rows = await sbRpc('run_query', { query_text: execSql });
+    } catch (err) {
+      appendAmaLog('Query ' + (i + 1) + '.', 'failed: ' + err.message, 'error');
+      throw new Error('Query "' + label + '" failed: ' + err.message);
+    }
+    appendAmaLog('  →', fmtInt(rows.length) + ' row' + (rows.length === 1 ? '' : 's'), 'done');
+    // Truncate per-query to keep synthesis input bounded.
+    var truncated = (rows.length > 500) ? rows.slice(0, 500) : rows;
+    results.push({ label: label, sql: sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 500 });
+  }
+  return results;
+}
+
+function buildAmaSynthesisSystem(outputMode) {
+  var listClause = (outputMode === 'list' || outputMode === 'hybrid')
+    ? '"cl_ids": [<bigint>, ...]   // the cl_ids the user should see; pulled from your query results.'
+    : '"cl_ids": null';
+  return [
+    'You are the synthesis step for an agentic AMA over a federal litigation database. The planner has already run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.',
+    '',
+    'Output a single JSON object (no prose, no code fences) with these keys:',
+    '{',
+    '  "answer_markdown": "...",  // markdown narrative; embed [case-ref:CL_ID] tokens to cite specific cases.',
+    '  ' + listClause + ',',
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    '}',
+    '',
+    'Rules:',
+    '- LEAD with caveats when your confidence is materially lower than the user might assume. "Of a sample of 500..." is a different sentence from "All cases in the system show...".',
+    '- For list and hybrid output_modes, cl_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable cases, downgrade to narrative mode and explain.',
+    '- When citing a case, use the form [case-ref:12345] inline in the markdown — the UI replaces it with a clickable link.',
+    '- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.',
+    '- Output strict JSON only. No markdown outside answer_markdown. No code fences.'
+  ].join('\n');
+}
+
+function buildAmaSynthesisUser(question, plan, results) {
+  var resultsForModel = results.map(function(r) {
+    return {
+      label: r.label,
+      total_rows: r.total_rows,
+      was_truncated: r.was_truncated,
+      rows: r.rows
+    };
+  });
+  return [
+    'USER QUESTION:',
+    question,
+    '',
+    'YOUR PLAN (from the planning step):',
+    plan.approach_summary,
+    '',
+    'PLANNED OUTPUT MODE: ' + plan.output_mode,
+    '',
+    'CANDOR NOTES FROM PLANNING:',
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function(n) { return '- ' + n; }).join('\n') : '(none)',
+    '',
+    'QUERY RESULTS (JSON):',
+    JSON.stringify(resultsForModel, null, 2),
+    '',
+    'Return the synthesis JSON now.'
+  ].join('\n');
+}
+
+function parseAmaSynthesis(raw, outputMode) {
+  var cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  var v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    var firstObj = extractFirstJsonValue(cleaned, 'object');
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error('Synthesis parse failed — JSON.parse error: ' + pe2.message); }
+    } else {
+      throw new Error('Synthesis parse failed — could not find a JSON object.');
+    }
+  }
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('Synthesis parse failed — top-level value is not an object.');
+  if (typeof v.answer_markdown !== 'string' || !v.answer_markdown.trim()) {
+    throw new Error('Synthesis parse failed — answer_markdown is empty.');
+  }
+  if (outputMode === 'list' || outputMode === 'hybrid') {
+    if (!Array.isArray(v.cl_ids) || v.cl_ids.length === 0) {
+      // Degrade rather than fail outright.
+      v.cl_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(['Output mode requested a case list but synthesis returned none — showing narrative only.']);
+    } else {
+      v.cl_ids = v.cl_ids.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.cl_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+// Pre-flight modal — returns Promise<bool>.
+function showAmaPreflight(plan) {
+  return new Promise(function(resolve) {
+    document.getElementById('ama-pf-cost').textContent = fmtCents(plan.estimated_cost_cents) + ' (estimated)';
+    var modeLabel = plan.output_mode === 'list' ? 'List (narrows the field)'
+                  : plan.output_mode === 'narrative' ? 'Narrative answer'
+                  : 'Hybrid (narrative + list)';
+    document.getElementById('ama-pf-mode').textContent = modeLabel;
+    document.getElementById('ama-pf-balance').textContent = fmtCents(paidAccess.balanceCents);
+    document.getElementById('ama-pf-plan').textContent = plan.approach_summary || '(no plan summary)';
+
+    var candorWrap = document.getElementById('ama-pf-candor-wrap');
+    var candorList = document.getElementById('ama-pf-candor');
+    candorList.innerHTML = '';
+    if (plan.candor_notes && plan.candor_notes.length) {
+      plan.candor_notes.forEach(function(n) {
+        var li = document.createElement('li');
+        li.textContent = n;
+        candorList.appendChild(li);
+      });
+      candorWrap.style.display = 'block';
+    } else {
+      candorWrap.style.display = 'none';
+    }
+
+    var warnBlock = document.getElementById('ama-pf-warn-block');
+    warnBlock.innerHTML = '';
+    var proceedBtn = document.getElementById('ama-pf-proceed-btn');
+    proceedBtn.disabled = false;
+    proceedBtn.textContent = 'Proceed';
+    if (plan.estimated_cost_cents > paidAccess.perQueryCapCents) {
+      var w = document.createElement('div');
+      w.className = 'cost-warn';
+      w.innerHTML = 'Plan estimate (' + fmtCents(plan.estimated_cost_cents) + ') exceeds your per-query cap (' + fmtCents(paidAccess.perQueryCapCents) + '). You can refine the question or proceed once as an override.';
+      warnBlock.appendChild(w);
+      proceedBtn.textContent = 'Proceed (override cap)';
+    } else if (plan.estimated_cost_cents > paidAccess.balanceCents) {
+      var w2 = document.createElement('div');
+      w2.className = 'cost-warn';
+      w2.innerHTML = 'Plan estimate exceeds your balance. The query may still run if actual usage is lower; the worker will stop the call if it would push the balance below zero.';
+      warnBlock.appendChild(w2);
+    }
+
+    var modal = document.getElementById('modal-ama-preflight');
+    modal.classList.add('active');
+    window._amaPfResolve = function(ok) {
+      modal.classList.remove('active');
+      window._amaPfResolve = null;
+      resolve(!!ok);
+    };
+  });
+}
+
+function closeAmaPreflight(ok) {
+  if (typeof window._amaPfResolve === 'function') window._amaPfResolve(ok);
+}
+
+// === Main entry point ===
+async function applyClaudeAma() {
+  if (!isOnTip()) return;
+  if (!claudeAccessUnlocked()) {
+    alert('Click "Unlock" in the AI features panel to use this mode.');
+    return;
+  }
+  var promptEl = document.getElementById('ama-prompt');
+  var question = promptEl.value.trim();
+  if (!question) { alert('Type a question first.'); return; }
+
+  var btn = document.getElementById('btn-commit-ama');
+  var origLabel = btn.textContent;
+  var statusEl = document.getElementById('claude-ama-status');
+  btn.disabled = true; btn.textContent = 'Working…';
+  statusEl.classList.add('active');
+  statusEl.textContent = 'Planning…';
+
+  amaSessionCostCents = 0;
+  clearAmaLog();
+  appendAmaLog('Step 1/3.', 'Planning the query…', '');
+
+  try {
+    var scope = buildAmaScopeSummary();
+
+    // === Planning step ===
+    var planSys = buildAmaPlanningSystem();
+    var planUser = buildAmaPlanningUser(question, scope);
+    var planRaw;
+    try {
+      planRaw = await amaCallClaude(planSys, planUser, 1500);
+    } catch (err) {
+      throw new Error('Planning step: ' + err.message);
+    }
+    var plan;
+    try { plan = parseAmaPlan(planRaw); }
+    catch (err) {
+      console.error('AMA plan parse — raw response:', planRaw);
+      throw new Error('Could not parse plan from ' + aiName() + '. Raw output start: ' + planRaw.slice(0, 600));
+    }
+    appendAmaLog('Plan.', plan.output_mode + ' · ' + plan.queries.length + ' quer' + (plan.queries.length === 1 ? 'y' : 'ies') + ' · est. ' + fmtCents(plan.estimated_cost_cents), 'done');
+
+    // === Pre-flight ===
+    // Pre-flight modal is a paid-mode UX (it shows balance / cap). In demo or
+    // BYO modes, the user is their own gate; skip the modal but still log the
+    // estimate so they can see what the agent thinks it will cost.
+    if (plan.estimated_cost_cents > CONFIRM_THRESHOLD_CENTS) {
+      if (llmAccess.mode === 'paid') {
+        statusEl.textContent = 'Awaiting confirmation…';
+        var ok = await showAmaPreflight(plan);
+        if (!ok) {
+          appendAmaLog('Cancelled.', 'User cancelled at pre-flight.', 'error');
+          throw new Error('AMA cancelled at pre-flight.');
+        }
+      } else {
+        appendAmaLog('Note.', 'Estimated cost ' + fmtCents(plan.estimated_cost_cents) + ' (no pre-flight in ' + llmAccess.mode + ' mode).', '');
+      }
+    }
+
+    // === Execution ===
+    statusEl.textContent = 'Running queries…';
+    appendAmaLog('Step 2/3.', 'Executing planned queries…', '');
+    var results = await executeAmaPlan(plan, scope);
+
+    // === Synthesis ===
+    statusEl.textContent = 'Synthesizing answer…';
+    appendAmaLog('Step 3/3.', 'Synthesizing the answer…', '');
+    var synthSys = buildAmaSynthesisSystem(plan.output_mode);
+    var synthUser = buildAmaSynthesisUser(question, plan, results);
+    var synthRaw;
+    try {
+      synthRaw = await amaCallClaude(synthSys, synthUser, plan.output_mode === 'narrative' ? 4000 : 6000);
+    } catch (err) {
+      throw new Error('Synthesis step: ' + err.message);
+    }
+    var synth;
+    try { synth = parseAmaSynthesis(synthRaw, plan.output_mode); }
+    catch (err) {
+      console.error('AMA synth parse — raw response:', synthRaw);
+      throw new Error('Could not parse synthesis from ' + aiName() + '. Raw output start: ' + synthRaw.slice(0, 600));
+    }
+    appendAmaLog('Done.', 'Total spent: ' + fmtCents(amaSessionCostCents), 'done');
+
+    // === Commit page ===
+    commitAmaResultPage(question, plan, synth, scope);
+    promptEl.value = '';
+
+  } catch (err) {
+    appendAmaLog('Error.', err.message, 'error');
+    if (!/cancelled at pre-flight/i.test(err.message)) {
+      alert('AMA failed: ' + err.message);
+    }
+  }
+
+  statusEl.classList.remove('active');
+  statusEl.textContent = '';
+  btn.disabled = false; btn.textContent = origLabel;
+  renderAll();
+}
+
+// Commit the AMA result as a new page on the stack.
+async function commitAmaResultPage(question, plan, synth, scope) {
+  var tip = stack[stack.length - 1];
+  var incoming = (tip.operation_type === 'init') ? [] : tip.outgoing_cl_ids.slice();
+  var incomingCount = (tip.operation_type === 'init') ? totalCaseCount : incoming.length;
+
+  var outgoing, outgoingCount, displayCases;
+
+  if ((plan.output_mode === 'list' || plan.output_mode === 'hybrid') && synth.cl_ids && synth.cl_ids.length > 0) {
+    // Narrowing path: outgoing is the subset returned by synthesis.
+    // For composability, intersect with incoming when scope was narrowed.
+    var allowed;
+    if (scope.cl_ids && scope.cl_ids.length > 0) {
+      var s = {}; scope.cl_ids.forEach(function(id) { s[id] = true; });
+      allowed = synth.cl_ids.filter(function(id) { return s[id]; });
+    } else {
+      allowed = synth.cl_ids.slice();
+    }
+    outgoing = allowed;
+    outgoingCount = allowed.length;
+    // Fetch display rows for these cl_ids (capped at 10K like other modes).
+    displayCases = await fetchCaseDisplayRowsByIds(outgoing.slice(0, 10000));
+  } else {
+    // Narrative-only path: pass through.
+    outgoing = incoming;
+    outgoingCount = incomingCount;
+    displayCases = (tip.cases || []).slice();
+  }
+
+  var shortLabel = question.length > 60 ? question.slice(0, 60) + '…' : question;
+  var modeLabel = plan.output_mode === 'list' ? 'list' : (plan.output_mode === 'hybrid' ? 'hybrid' : 'narrative');
+
+  var allCandor = (plan.candor_notes || []).concat(synth.candor_notes || []);
+  // De-dup
+  var seen = {}; allCandor = allCandor.filter(function(n) { if (seen[n]) return false; seen[n] = true; return true; });
+
+  var artifactMd = synth.answer_markdown;
+  if (allCandor.length) {
+    artifactMd += '\n\n---\n\n**Caveats**\n\n' + allCandor.map(function(n) { return '- ' + n; }).join('\n');
+  }
+
+  var newPage = {
+    page_id: stack.length,
+    operation_type: 'claude_ama',
+    operation_label: 'AMA (' + modeLabel + '): ' + shortLabel,
+    prompt: question,
+    generated_sql: null,
+    executed_sql: null,
+    filter_state: null,
+    incoming_cl_ids: incoming,
+    incoming_count: incomingCount,
+    outgoing_cl_ids: outgoing,
+    outgoing_count: outgoingCount,
+    cases: displayCases,
+    per_case_annotations: null,
+    artifact_markdown: artifactMd,
+    ama_output_mode: plan.output_mode,
+    ama_session_cost_cents: amaSessionCostCents,
+    created_at: new Date().toISOString()
+  };
+  stack.push(newPage);
+  viewingIdx = stack.length - 1;
+  currentPagePagination = 0;
+  selectedCaseId = null;
+  modeArmed = false;
+  hasTransitioned = true;
+  if (typeof analysisLayout !== 'undefined') analysisLayout = 'top'; // share the analysis-layout default
+  if (typeof closeDetail === 'function') closeDetail();
+}
+
+// Helper to fetch case display rows from cl_ids — used by AMA list/hybrid commit.
+async function fetchCaseDisplayRowsByIds(clIds) {
+  if (!clIds || clIds.length === 0) return [];
+  var arrLit = '{' + clIds.join(',') + '}';
+  var sql = 'SELECT cl_id, case_name, docket_number, court, date_filed, date_terminated, judge, nature_of_suit, plaintiff, defendant, entry_count ' +
+            'FROM cases WHERE cl_id = ANY(\'' + arrLit + '\'::bigint[]) ' +
+            'ORDER BY date_filed DESC NULLS LAST LIMIT 10000';
+  var rows = await sbRpc('run_query', { query_text: sql });
+  return rows;
 }
 
 // Layout toggle for analysis pages. Flips between 'top' (artifact above table)
@@ -3431,8 +4130,9 @@ function processInline(s) {
 // that's fine — the case-ref text is still readable).
 function downloadAnalysisPdf() {
   var page = stack[viewingIdx];
-  if (!page || page.operation_type !== 'claude_analysis' || !page.artifact_markdown) {
-    alert('No analysis content to download. Run an "AI analyzes" operation first.');
+  // v9.0.0 — also handles claude_ama pages, which use the same artifact_markdown field.
+  if (!page || (page.operation_type !== 'claude_analysis' && page.operation_type !== 'claude_ama') || !page.artifact_markdown) {
+    alert('No narrative content to download. Run an "AI analyzes" or "AMA" operation first.');
     return;
   }
 
@@ -3765,7 +4465,8 @@ function downloadCurrentPage() {
   // produced (rank, score, category, label), and embed the analysis markdown
   // in the header. For other page types, just emit the kept-only display rows.
   var isReadPage = (page.operation_type === 'claude_read');
-  var isAnalysisPage = (page.operation_type === 'claude_analysis');
+  // v9.0.0 — claude_ama pages also have artifact_markdown; treat as analysis-shaped for CSV export.
+  var isAnalysisPage = (page.operation_type === 'claude_analysis' || page.operation_type === 'claude_ama');
   var ann = page.per_case_annotations || {};
 
   // For analysis: add the markdown narrative to the header lines (one big
@@ -3886,7 +4587,7 @@ function renderSidebarForViewState() {
   Array.prototype.forEach.call(document.querySelectorAll('.mode-btn'), function(btn) {
     var mode = btn.dataset.mode;
     var disabled = !isTip;
-    if ((mode === 'claude_sql' || mode === 'claude_read' || mode === 'claude_analysis') && !claudeAccessUnlocked()) disabled = true; // requires unlock
+    if ((mode === 'claude_sql' || mode === 'claude_read' || mode === 'claude_analysis' || mode === 'claude_ama') && !claudeAccessUnlocked()) disabled = true; // requires unlock
     btn.disabled = disabled;
     if (mode === 'claude_sql') {
       btn.dataset.tip = claudeAccessUnlocked()
@@ -3903,6 +4604,11 @@ function renderSidebarForViewState() {
         ? 'AI analyzes the cases and produces narrative + annotations.'
         : 'Configure AI features above to use this mode.';
     }
+    if (mode === 'claude_ama') {
+      btn.dataset.tip = claudeAccessUnlocked()
+        ? 'Ask anything about the current case list — narrows, summarizes, or both.'
+        : 'Configure AI features above to use this mode.';
+    }
     if (modeArmed && isTip && mode === selectedMode) btn.classList.add('active');
     else btn.classList.remove('active');
   });
@@ -3916,21 +4622,30 @@ function renderSidebarForViewState() {
   var incomingForRead = (tipForRead && tipForRead.operation_type === 'init')
     ? totalCaseCount
     : (tipForRead ? tipForRead.outgoing_count : 0);
+  // v9.0.0 — buttons no longer disable on size; large-field warnings are
+  // surfaced inline (cost note) and via confirm() at run time. The cost-preview
+  // modal does the actual gating with the per-query cap as override-able ceiling.
   var readOverCap = incomingForRead > CLAUDE_READ_MAX;
   var btnRead = document.getElementById('btn-commit-read');
-  btnRead.disabled = !formLive || !claudeAccessUnlocked() || readOverCap;
+  btnRead.disabled = !formLive || !claudeAccessUnlocked();
   btnRead.title = readOverCap
-    ? 'Field is ' + fmtInt(incomingForRead) + ' cases. Read mode is capped at ' + fmtInt(CLAUDE_READ_MAX) + '. Narrow the field first.'
+    ? 'Large field (' + fmtInt(incomingForRead) + ' cases). You\'ll see a cost estimate before anything runs.'
     : '';
-  // Analyze button (claude_analysis): requires unlock AND scope ≤ CLAUDE_ANALYSIS_MAX,
-  //   and also requires having an actual list — disabled on init page since there's nothing to analyze yet.
+  // Analyze button (claude_analysis): requires unlock and a list — disabled on
+  // init page since there's nothing to analyze yet.
   var analysisOverCap = incomingForRead > CLAUDE_ANALYSIS_MAX;
   var analysisOnInit = (tipForRead && tipForRead.operation_type === 'init');
   var btnAnalysis = document.getElementById('btn-commit-analysis');
-  btnAnalysis.disabled = !formLive || !claudeAccessUnlocked() || analysisOverCap || analysisOnInit;
+  btnAnalysis.disabled = !formLive || !claudeAccessUnlocked() || analysisOnInit;
   if (analysisOnInit) btnAnalysis.title = 'Analysis requires a list. Apply at least one filter first.';
-  else if (analysisOverCap) btnAnalysis.title = 'Field is ' + fmtInt(incomingForRead) + ' cases. Analysis is capped at ' + fmtInt(CLAUDE_ANALYSIS_MAX) + '. Narrow the field first.';
+  else if (analysisOverCap) btnAnalysis.title = 'Large field (' + fmtInt(incomingForRead) + ' cases) — context window may not fit. You\'ll see a cost estimate before anything runs.';
   else btnAnalysis.title = '';
+  // v9.0.0 — AMA button (claude_ama): requires unlock; works on any list incl. all-cases.
+  var btnAma = document.getElementById('btn-commit-ama');
+  if (btnAma) {
+    btnAma.disabled = !formLive || !claudeAccessUnlocked();
+    btnAma.title = '';
+  }
 
   // Filter-form inputs (manual_filter): disabled when form is not live
   var formInputs = document.querySelectorAll('#form-manual_filter input, #form-manual_filter select');
@@ -3942,6 +4657,9 @@ function renderSidebarForViewState() {
   document.getElementById('read-prompt').disabled = !formLive;
   // Analysis prompt textarea (claude_analysis): disabled when form is not live
   document.getElementById('analysis-prompt').disabled = !formLive;
+  // v9.0.0 — AMA prompt textarea (claude_ama): disabled when form is not live
+  var amaPromptEl = document.getElementById('ama-prompt');
+  if (amaPromptEl) amaPromptEl.disabled = !formLive;
 
   // Court preset buttons: disabled when form is not live (they're <button>, not <input>)
   Array.prototype.forEach.call(document.querySelectorAll('.court-preset'), function(btn) {
@@ -3965,6 +4683,9 @@ function renderSidebarForViewState() {
       document.getElementById('read-prompt').value = page.prompt;
     } else if (page.operation_type === 'claude_analysis' && page.prompt) {
       document.getElementById('analysis-prompt').value = page.prompt;
+    } else if (page.operation_type === 'claude_ama' && page.prompt) {
+      var amaP = document.getElementById('ama-prompt');
+      if (amaP) amaP.value = page.prompt;
     }
   }
 
@@ -3975,6 +4696,7 @@ function renderSidebarForViewState() {
   var readCost = document.getElementById('read-cost-note');
   var analysisNote = document.getElementById('analysis-scope-note');
   var analysisCost = document.getElementById('analysis-cost-note');
+  var amaNote = document.getElementById('ama-scope-note');
   if (formLive && isTip) {
     var tip = stack[stack.length - 1];
     var scopeText, scopeCount;
@@ -3988,16 +4710,19 @@ function renderSidebarForViewState() {
     filterNote.textContent = scopeText;
     sqlNote.textContent = scopeText;
     readNote.textContent = scopeText;
+    if (amaNote) amaNote.textContent = scopeText;
     // Cost/time estimate for claude_read — heuristic, shown in advance.
+    // v9.0.0 — large fields no longer hard-block; shown with "review carefully" hint.
     var est = estimateClaudeReadCost(scopeCount);
     if (scopeCount > CLAUDE_READ_MAX) {
-      readCost.innerHTML = '<strong style="color:#a33;">Field exceeds ' + fmtInt(CLAUDE_READ_MAX) + '-case cap for read mode.</strong> Narrow further before running.';
+      readCost.innerHTML = 'Estimated cost: <strong>~$' + est.dollars.toFixed(2) + '</strong> · estimated time: <strong>~' + est.minutes + ' min</strong> · <span style="color:#a33;">large field — review carefully</span>';
     } else if (scopeCount > 0) {
       readCost.innerHTML = 'Estimated cost: <strong>~$' + est.dollars.toFixed(2) + '</strong> · estimated time: <strong>~' + est.minutes + ' min</strong>';
     } else {
       readCost.textContent = '';
     }
     // Scope/cost for claude_analysis — distinct from read because it's one-shot.
+    // v9.0.0 — large fields no longer hard-block; warning notes context-window risk.
     if (tip.operation_type === 'init') {
       analysisNote.textContent = 'Analysis requires a list. Apply at least one filter first.';
       analysisCost.textContent = '';
@@ -4005,7 +4730,7 @@ function renderSidebarForViewState() {
       analysisNote.textContent = scopeText;
       var aest = estimateClaudeAnalysisCost(scopeCount);
       if (scopeCount > CLAUDE_ANALYSIS_MAX) {
-        analysisCost.innerHTML = '<strong style="color:#a33;">Field exceeds ' + fmtInt(CLAUDE_ANALYSIS_MAX) + '-case cap for analysis.</strong> Narrow further before running.';
+        analysisCost.innerHTML = 'Estimated cost: <strong>~$' + aest.dollars.toFixed(2) + '</strong> · estimated time: <strong>~' + aest.seconds + ' sec</strong> · <span style="color:#a33;">large field — context window may not fit</span>';
       } else if (scopeCount > CLAUDE_ANALYSIS_SOFT_WARN) {
         analysisCost.innerHTML = 'Estimated cost: <strong>~$' + aest.dollars.toFixed(2) + '</strong> · estimated time: <strong>~' + aest.seconds + ' sec</strong> · <span style="color:#a33;">large field — review carefully</span>';
       } else if (scopeCount > 0) {
@@ -4021,6 +4746,7 @@ function renderSidebarForViewState() {
     readCost.textContent = '';
     analysisNote.textContent = '';
     analysisCost.textContent = '';
+    if (amaNote) amaNote.textContent = '';
   }
 }
 
@@ -4102,19 +4828,27 @@ function renderPageBand() {
   var isAnalysis = (page.operation_type === 'claude_analysis');
   var isClaudeSql = (page.operation_type === 'claude_sql');
   var isClaudeRead = (page.operation_type === 'claude_read');
+  var isAma = (page.operation_type === 'claude_ama');
+  // v9.0.0 — AMA pages with artifact_markdown render with the same narrative-pane behavior as analysis.
+  var hasNarrative = (isAnalysis || isAma) && page.artifact_markdown;
   var typeChip = '';
   if (isAnalysis) typeChip = '<span class="chip">Analysis</span>';
   else if (isClaudeSql) typeChip = '<span class="chip">Claude SQL</span>';
   else if (isClaudeRead) typeChip = '<span class="chip">Claude Read</span>';
+  else if (isAma) {
+    var modeChip = page.ama_output_mode ? (' (' + page.ama_output_mode + ')') : '';
+    typeChip = '<span class="chip">AMA' + modeChip + '</span>';
+  }
 
   // Back button moved to sidebar (alongside mode buttons) — page band keeps the
   // CSV download for every page type, plus a PDF button on analysis pages so
-  // the narrative is shareable without cut-and-paste (v8.0.2).
+  // the narrative is shareable without cut-and-paste (v8.0.2). v9.0.0 extends
+  // PDF download to AMA pages too.
   var actionsHtml;
-  if (isAnalysis && page.artifact_markdown) {
+  if (hasNarrative) {
     actionsHtml =
       '<button onclick="downloadCurrentPage()" title="Download CSV (operation metadata embedded as # comment lines at top)">Download CSV ↓</button>' +
-      '<button onclick="downloadAnalysisPdf()" title="Download analysis as PDF — opens print dialog; choose Save as PDF">Download PDF ↓</button>';
+      '<button onclick="downloadAnalysisPdf()" title="Download as PDF — opens print dialog; choose Save as PDF">Download PDF ↓</button>';
   } else {
     actionsHtml = '<button onclick="downloadCurrentPage()" title="Download CSV (operation metadata embedded as # comment lines at top)">Download ↓</button>';
   }
@@ -4196,6 +4930,14 @@ function renderPageBand() {
     claudeBlock =
       '<div class="claude-prompt-display"><strong>Analytical prompt:</strong> ' + esc(page.prompt) + '</div>' +
       dimsHtml;
+  } else if (isAma) {
+    // v9.0.0 — AMA pages: show the question and the output mode + cost. Artifact below.
+    var amaCostHtml = (typeof page.ama_session_cost_cents === 'number')
+      ? '<div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:4px;">Mode: ' + esc(page.ama_output_mode || 'narrative') + ' · session cost: ' + fmtCents(page.ama_session_cost_cents) + '</div>'
+      : '';
+    claudeBlock =
+      '<div class="claude-prompt-display"><strong>Question:</strong> ' + esc(page.prompt) + '</div>' +
+      amaCostHtml;
   }
 
   // Truncation warning — shown when the display row count is less than the
@@ -4212,7 +4954,7 @@ function renderPageBand() {
   }
 
   container.innerHTML =
-    '<div class="page-band' + (isAnalysis ? ' analysis' : '') + '">' +
+    '<div class="page-band' + (hasNarrative ? ' analysis' : '') + '">' +
       '<div class="page-band-top">' +
         '<div class="page-band-label">' + esc(page.operation_label) + typeChip + '</div>' +
         '<div class="page-band-actions">' + actionsHtml + '</div>' +
@@ -4307,14 +5049,18 @@ function renderPageContent() {
   });
   tableHtml += '</tbody></table>';
 
-  if (isAnalysisPage && page.artifact_markdown) {
+  // v9.0.0 — AMA pages with artifact_markdown also render through this path.
+  var isAmaPage = (page.operation_type === 'claude_ama');
+  var hasArtifactPane = (isAnalysisPage || isAmaPage) && page.artifact_markdown;
+  if (hasArtifactPane) {
     // Render artifact panel + table together. Layout depends on analysisLayout.
     var layoutClass = (analysisLayout === 'right') ? 'analysis-shell layout-right' : 'analysis-shell';
     var toggleLabel = (analysisLayout === 'top') ? 'Move to side →' : '↑ Move to top';
+    var paneTitle = isAmaPage ? 'Answer' : 'Analysis';
     var artifactHtml =
       '<div class="artifact-panel">' +
         '<div class="artifact-header">' +
-          '<div class="artifact-header-title">Analysis</div>' +
+          '<div class="artifact-header-title">' + paneTitle + '</div>' +
           '<div class="artifact-header-actions">' +
             '<button onclick="toggleAnalysisLayout()" title="Toggle layout">' + toggleLabel + '</button>' +
           '</div>' +
