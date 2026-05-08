@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v9.0.7 — synthesis JSON quote handling.
+     Synthesis call returns a JSON object whose answer_markdown field is a
+     string. The model sometimes writes literal double quotes inside that
+     string (e.g., 'matching "administrative record."') without escaping
+     them, which breaks JSON.parse. Two changes:
+     (1) Synthesis system prompt now explicitly tells the model to use curly
+         quotes (“ ”) or single quotes (' ') for nested quotation in
+         answer_markdown, and to escape any literal double quote as \\".
+     (2) Tolerant fallback: if JSON.parse fails, the parser repairs unescaped
+         quotes inside the answer_markdown field by locating the field's
+         opening and closing JSON quotes and escaping any unescaped " between
+         them. Best-effort; if the repair doesn't help, the caller still gets
+         a clear error with the raw response logged. -->
 <!-- v9.0.6 — alias-aware scope substitution.
      v9.0.5 substitution produced "FROM (subquery) AS scoped_docket_entries de"
      when the agent ignored the "no alias" instruction and wrote "FROM
@@ -1156,7 +1169,7 @@
 // v9.0.2 — bump on every visible release so the badge in the header reflects
 // what's actually deployed. Hard-refresh after pushing; the version on screen
 // should match the comment block at the top of this file.
-var APP_VERSION = "v9.0.6";
+var APP_VERSION = "v9.0.7";
 var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
 var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpa2RianBybmRna3NpYmJ2Y2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTE0MjksImV4cCI6MjA5MjA4NzQyOX0.FzzHOU7mcixedWZXd7wZkd3Jpy-05dMFB66q-yPSPL4";
 // v8.0: ACCESS_CODE removed — the access-code gate has been replaced by the
@@ -3765,11 +3778,12 @@ function buildAmaSynthesisSystem(outputMode) {
     '}',
     '',
     'Rules:',
-    '- LEAD with caveats when your confidence is materially lower than the user might assume. "Of a sample of 500..." is a different sentence from "All cases in the system show...".',
+    '- LEAD with caveats when your confidence is materially lower than the user might assume. “Of a sample of 500...” is a different sentence from “All cases in the system show...”',
     '- For list and hybrid output_modes, cl_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable cases, downgrade to narrative mode and explain.',
     '- When citing a case, use the form [case-ref:12345] inline in the markdown — the UI replaces it with a clickable link.',
     '- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.',
-    '- Output strict JSON only. No markdown outside answer_markdown. No code fences.'
+    '- Output strict JSON only. No markdown outside answer_markdown. No code fences.',
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes (“”) for direct quotation, or single quotes (‘’ or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
   ].join('\n');
 }
 
@@ -3801,17 +3815,68 @@ function buildAmaSynthesisUser(question, plan, results) {
   ].join('\n');
 }
 
+// v9.0.7 — repair unescaped double quotes inside the answer_markdown value.
+// The model sometimes writes natural quotation marks ("AR", "certified index")
+// inside the markdown without escaping, which breaks JSON.parse. We find the
+// answer_markdown field's body (between its opening and closing JSON quote)
+// and escape any internal double quote that isn't already preceded by a
+// backslash. Best-effort; if it doesn't help, the caller still gets a clear
+// error.
+function repairAmaJsonAnswerMarkdownQuotes(raw) {
+  var s = String(raw);
+  var startMatch = s.match(/"answer_markdown"\s*:\s*"/);
+  if (!startMatch) return s;
+  var startIdx = startMatch.index + startMatch[0].length;
+  // Find the closing quote of answer_markdown — it's the quote that's followed
+  // by a comma and the next field name, or by a closing brace.
+  var endPattern = /"(\s*,\s*"(?:cl_ids|candor_notes)"|\s*\})/;
+  var tail = s.slice(startIdx);
+  var endMatch = tail.search(endPattern);
+  // Iterate from the last plausible end backwards: the LAST `"` followed by
+  // `\s*[,}]` is likely the real string terminator.
+  var lastIdx = -1;
+  var probe = /"(\s*,\s*"(?:cl_ids|candor_notes)"|\s*\})/g;
+  var m;
+  while ((m = probe.exec(tail)) !== null) {
+    lastIdx = m.index;
+  }
+  if (lastIdx < 0) return s;
+  var content = tail.slice(0, lastIdx);
+  // Escape unescaped double quotes. Lookbehind: only match `"` not preceded by `\`.
+  // (Doesn't handle the rare `\\"` case where the backslash is itself escaped,
+  // but the model's natural output is the common case here.)
+  var repaired = content.replace(/(?<!\\)"/g, '\\"');
+  return s.slice(0, startIdx) + repaired + tail.slice(lastIdx);
+}
+
 function parseAmaSynthesis(raw, outputMode) {
   var cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   var v;
   try { v = JSON.parse(cleaned); }
   catch (pe) {
-    var firstObj = extractFirstJsonValue(cleaned, 'object');
-    if (firstObj) {
-      try { v = JSON.parse(firstObj); }
-      catch (pe2) { throw new Error('Synthesis parse failed — JSON.parse error: ' + pe2.message); }
-    } else {
-      throw new Error('Synthesis parse failed — could not find a JSON object.');
+    // First repair attempt: fix unescaped quotes inside answer_markdown.
+    try {
+      var repaired = repairAmaJsonAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) {
+        v = JSON.parse(repaired);
+      } else {
+        throw pe; // no change made; fall through to next strategy
+      }
+    } catch (pe2) {
+      var firstObj = extractFirstJsonValue(cleaned, 'object');
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          // Try the repair on the extracted object too.
+          try {
+            v = JSON.parse(repairAmaJsonAnswerMarkdownQuotes(firstObj));
+          } catch (pe4) {
+            throw new Error('Synthesis parse failed — JSON.parse error: ' + pe4.message);
+          }
+        }
+      } else {
+        throw new Error('Synthesis parse failed — could not find a JSON object.');
+      }
     }
   }
   if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('Synthesis parse failed — top-level value is not an object.');
