@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v9.0.8 — wrap agent's WITH-prefixed SQL to pass RPC validator.
+     Agent often writes "WITH ar_ids AS (...) SELECT ..." for FTS-first
+     patterns. Supabase's run_query RPC rejects anything not starting with
+     SELECT. v9.0.8 wraps non-SELECT-prefixed agent SQL in
+     "SELECT * FROM (agent_sql) AS ama_q" before submission. Verified
+     empirically that WITH-inside-subquery resolves correctly in this
+     Postgres (the v9.0.2 failure that scared us off this approach was a
+     different bug — possibly a transient parser issue with our specific
+     CTE-wrapping pattern). -->
 <!-- v9.0.7 — synthesis JSON quote handling.
      Synthesis call returns a JSON object whose answer_markdown field is a
      string. The model sometimes writes literal double quotes inside that
@@ -1169,7 +1178,7 @@
 // v9.0.2 — bump on every visible release so the badge in the header reflects
 // what's actually deployed. Hard-refresh after pushing; the version on screen
 // should match the comment block at the top of this file.
-var APP_VERSION = "v9.0.7";
+var APP_VERSION = "v9.0.8";
 var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
 var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpa2RianBybmRna3NpYmJ2Y2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTE0MjksImV4cCI6MjA5MjA4NzQyOX0.FzzHOU7mcixedWZXd7wZkd3Jpy-05dMFB66q-yPSPL4";
 // v8.0: ACCESS_CODE removed — the access-code gate has been replaced by the
@@ -3746,6 +3755,13 @@ async function executeAmaPlan(plan, scope) {
     if (scopedCasesBody) {
       execSql = substituteScoped(execSql, 'scoped_cases', scopedCasesBody);
       execSql = substituteScoped(execSql, 'scoped_docket_entries', scopedEntriesBody);
+    }
+    // v9.0.8 — Supabase's run_query RPC requires the query start with SELECT.
+    // If the agent wrote "WITH ... SELECT ...", wrap in an outer SELECT to
+    // pass the validator. Tested empirically that WITH inside a parenthesized
+    // subquery resolves correctly in this Postgres.
+    if (!/^\s*SELECT\b/i.test(execSql)) {
+      execSql = 'SELECT * FROM (' + execSql + ') AS ama_q';
     }
     appendAmaLog('Query ' + (i + 1) + '.', label, '');
     var rows;
