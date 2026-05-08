@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v9.0.5 — AMA scope perf + FTS-first guidance.
+     v9.0.4 substitution worked but Ben's first real test (joining scoped_cases
+     × scoped_docket_entries with an FTS predicate against a 428K-case scope)
+     hit Postgres statement timeout (57014). Two changes:
+     (1) Drop the redundant "SELECT cl_id FROM (executed_sql) src" wrap and
+         strip ORDER BY / LIMIT from executed_sql before using it as the
+         scope subquery — those forced wasted sorting on hundreds of
+         thousands of rows.
+     (2) Add an FTS-first guidance bullet to the planning prompt. Tell the
+         agent that for narrowed scopes (especially > 100K cases), it should
+         filter docket_entries by FTS first and then narrow to scope, not
+         join scoped_cases × scoped_docket_entries with an FTS predicate at
+         the join level — the latter reliably times out. -->
 <!-- v9.0.4 — AMA scope substitution instead of CTEs.
      v9.0.2 wrapped the agent's SQL in "SELECT * FROM (WITH scope_ids AS (...),
      scoped_cases AS (...) SELECT ... FROM scoped_cases ...) AS ama_scoped_q"
@@ -1134,7 +1147,7 @@
 // v9.0.2 — bump on every visible release so the badge in the header reflects
 // what's actually deployed. Hard-refresh after pushing; the version on screen
 // should match the comment block at the top of this file.
-var APP_VERSION = "v9.0.4";
+var APP_VERSION = "v9.0.5";
 var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
 var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpa2RianBybmRna3NpYmJ2Y2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MTE0MjksImV4cCI6MjA5MjA4NzQyOX0.FzzHOU7mcixedWZXd7wZkd3Jpy-05dMFB66q-yPSPL4";
 // v8.0: ACCESS_CODE removed — the access-code gate has been replaced by the
@@ -3590,6 +3603,7 @@ function buildAmaPlanningSystem() {
     '- For trend questions, prefer one query that groups by year (or month) over many narrow queries.',
     '- For "are X up or down" questions, compare two periods in one query.',
     '- Do NOT plan to read docket-entry text in v9; if a question really needs it, say so in candor_notes ("would benefit from reading entries — not done in v9; consider Read mode after narrowing"). FTS over docket_entries.description is fine for identifying cases by topic.',
+    '- PERFORMANCE for narrowed scopes (esp. > 100K cases): FTS-first patterns are dramatically faster. To find docket entries matching some text WITHIN a scope, write "SELECT cl_id FROM scoped_docket_entries WHERE fts @@ ..." rather than joining scoped_cases × scoped_docket_entries first. Postgres can use the FTS GIN index on docket_entries.fts directly; the scope filter then narrows the much smaller FTS result set. Avoid heavy joins of scoped_cases × scoped_docket_entries with an FTS predicate at the join level — those reliably hit the statement timeout on six-figure scopes.',
     '- WHEN THE CURRENT SCOPE IS NARROWED (cl_ids list provided): use the names "scoped_cases" instead of "cases" and "scoped_docket_entries" instead of "docket_entries". The runner substitutes these names with inline subqueries already filtered to the scope. CRITICAL: reference these names ONLY after FROM or JOIN keywords, and DO NOT alias them — write "FROM scoped_cases WHERE cause LIKE ..." (good), not "FROM scoped_cases sc WHERE sc.cause LIKE ..." (will break). To qualify a column, use the unaliased name: "scoped_cases.cl_id" works. WHEN SCOPE IS THE FULL DATABASE: use the regular table names "cases" and "docket_entries" (and you may alias them freely).',
     '- For sampling at top-of-stack, you can use "ORDER BY random()" but be aware that\'s expensive on huge tables; prefer "ORDER BY date_filed DESC" with a LIMIT if you want a recency-biased sample.',
     '- Output strict JSON only. No markdown. No code fences. No prose outside the object.'
@@ -3659,7 +3673,14 @@ async function executeAmaPlan(plan, scope) {
       var arrLit = '{' + scope.cl_ids.join(',') + '}';
       scopeIdsSubquery = "SELECT unnest('" + arrLit + "'::bigint[]) AS cl_id";
     } else if (tip && tip.executed_sql) {
-      scopeIdsSubquery = 'SELECT cl_id FROM (' + tip.executed_sql + ') src';
+      // v9.0.5 — strip ORDER BY / LIMIT from executed_sql (they're useless for an IN
+      // check and force wasted sorting on hundreds of thousands of rows). Also drop
+      // the outer "SELECT cl_id FROM (...)" wrap — executed_sql already projects
+      // cl_id, so we can use it directly.
+      scopeIdsSubquery = String(tip.executed_sql)
+        .replace(/\s+ORDER\s+BY[\s\S]*?(?=(?:\s+LIMIT|\s*$))/i, '')
+        .replace(/\s+LIMIT\s+\d+\s*$/i, '')
+        .trim();
       appendAmaLog('Scope.', 'Using page SQL filter (' + fmtInt(scope.cl_ids.length) + ' cases) — too many ids to inline.', '');
     } else {
       throw new Error('AMA: scope is ' + fmtInt(scope.cl_ids.length) + ' cases — too large to inject directly, and the source page has no executable SQL to reuse. This usually means the page was created before v9.0.1; rerun the original filter to refresh the page, or narrow further before running AMA.');
