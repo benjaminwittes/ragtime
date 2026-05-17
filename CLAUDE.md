@@ -14,11 +14,13 @@ The canonical project-state document (full architecture, secrets manifest, deplo
 
 ## Workspace split — where edits happen
 
-Two Claude environments currently work on this codebase, and they touch disjoint files to avoid merge conflicts:
+Two Claude environments currently work on this codebase, on two different physical Macs:
 
-- **Claude Cowork (Ben's primary computer)** owns iteration on **`index.html` only**, and only UI / copy / feature-tweak changes (visual, layout, text, small interaction tweaks). Cowork commits and pushes `index.html` directly to GitHub. Cowork does **not** edit billing, auth, quota logic, the Worker, or anything backend.
-- **Claude Code (Ben's secondary Mac)** owns **everything else in the repo**: Cloudflare Worker source (to be pulled in), infrastructure config (`wrangler.toml`, GitHub Actions, deploy scripts), tests, documentation, the eventual modular split of the frontend, and any productization-driven fixes that need to touch `index.html` (e.g., removing the now-stale "test mode" buy-up modal text).
+- **Claude Cowork** runs on Ben's primary computer. Owns iteration on **`index.html` only**, and only UI / copy / feature-tweak changes (visual, layout, text, small interaction tweaks). Cowork commits and pushes `index.html` directly to GitHub. Cowork does **not** edit billing, auth, quota logic, the Worker, the data-acquisition pipeline, or anything backend. Cowork also operates the editorial-side scheduled tasks (status checks, queue-depth monitoring) that read from Supabase but doesn't directly run the pipeline daemons.
+- **Claude Code** runs on the residential Mac that *also* hosts the running data-acquisition pipeline (referred to as "Mac2" in older notes). Owns **all source code in the repo**: Cloudflare Worker source (to be pulled in), the data-acquisition pipeline source (api-0 daemon, litigation-sync, backfill scripts, classify.py — being migrated into this repo), infrastructure config (`wrangler.toml`, install scripts, GitHub Actions, deploy pipelines), tests, documentation, the eventual modular split of the frontend, and any productization-driven fixes that need to touch `index.html`. Because it sits on the same machine as the running pipeline, Claude Code also drives launchd start/stop, log inspection, and install-script runs.
 - **If Claude Code edits `index.html`**, it is flagged to Ben so Cowork pulls before its next prototype-iteration session.
+
+**Monorepo decision (2026-05-17).** The data-acquisition pipeline is being consolidated into this repo. The pipeline must continue to *run* on a residential Mac (CourtListener throttles cloud IPs aggressively, breaking cloud-hosted execution), but its *source* lives here so that schema changes, classifier tweaks, and pipeline bug fixes flow through normal version control. Deploy pattern: `git pull && <install script>`. Migration from scattered Mac-local + iCloud copies is a planned focused-session task, not yet executed.
 
 This split will be revisited when frontend restructure into modules begins (productization priority #7). At that point `index.html` stops being the single source of truth and prototype iteration migrates into the Code workflow.
 
