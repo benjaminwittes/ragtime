@@ -2167,6 +2167,28 @@ function sanitizeForAnthropic(s) {
   );
 }
 
+// Surrogate-pair-aware truncation. JS string indices are UTF-16 code
+// units, so a non-BMP character (emoji, supplementary CJK, etc.) takes
+// two units. A naive s.slice(0, N) can cut between the high and low
+// halves of such a pair, leaving a lone surrogate at the tail. That
+// lone surrogate later becomes a \uD8XX escape in JSON.stringify output
+// and a "no low surrogate in string" rejection from Anthropic's parser.
+//
+// safeSlice keeps the cut on a code-point boundary: if the candidate
+// final code unit is a high surrogate, we back up one position. The
+// pair is dropped rather than half-included, but the resulting string
+// is always well-formed Unicode and safe to JSON-serialize for any
+// strict parser. sanitizeForAnthropic remains the safety net for any
+// other source of stray surrogates.
+function safeSlice(s, n) {
+  if (typeof s !== 'string' || s.length <= n) return s;
+  var code = s.charCodeAt(n - 1);
+  if (code >= 0xD800 && code <= 0xDBFF) {
+    return s.slice(0, n - 1);
+  }
+  return s.slice(0, n);
+}
+
 // === LLM API CALL ===
 //
 // Posts to the Cloudflare Worker proxy. The worker routes to the appropriate
@@ -2984,7 +3006,7 @@ function buildReadCaseBlock(caseRow, entries) {
   var entryLines = entries.map(function(e) {
     var desc = String(e.description || '').replace(/\s+/g, ' ').trim();
     if (desc.length > CLAUDE_READ_MAX_ENTRY_CHARS) {
-      desc = desc.slice(0, CLAUDE_READ_MAX_ENTRY_CHARS) + '…';
+      desc = safeSlice(desc, CLAUDE_READ_MAX_ENTRY_CHARS) + '…';
     }
     return '#' + (e.entry_number != null ? e.entry_number : '?') +
            ' (' + (e.entry_date || '?') + '): ' + desc;
@@ -3275,7 +3297,7 @@ function buildAnalysisCaseBlock(caseRow, entries) {
   var entryLines = entries.map(function(e) {
     var desc = String(e.description || '').replace(/\s+/g, ' ').trim();
     if (desc.length > CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) {
-      desc = desc.slice(0, CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) + '…';
+      desc = safeSlice(desc, CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) + '…';
     }
     return '#' + (e.entry_number != null ? e.entry_number : '?') +
            ' (' + (e.entry_date || '?') + '): ' + desc;
