@@ -2139,6 +2139,34 @@ function renderLLMAccessUI() {
 // Compatibility shim: any older code paths that called the old name still work.
 function renderClaudeAccessUI() { return renderLLMAccessUI(); }
 
+// === Unicode sanitization for outgoing LLM requests ===
+//
+// Anthropic's JSON parser (and other strict JSON parsers) reject strings
+// containing lone UTF-16 surrogates — a high surrogate (U+D800–U+DBFF)
+// without a matching low surrogate (U+DC00–U+DFFF), or vice versa.
+// JavaScript strings can hold lone surrogates, and JSON.stringify happily
+// encodes them as \uD8XX escapes, which strict downstream parsers then
+// reject with errors like "no low surrogate in string".
+//
+// Source of bad bytes in our case: PDF-extracted / scraped text in
+// docket_entries.description (and similar) that survived ingest with
+// mangled Unicode. Until we clean the source data, we replace each lone
+// surrogate with U+FFFD (REPLACEMENT CHARACTER) on the way out so the
+// surrounding text still reaches Claude and the request body is valid
+// JSON for any parser.
+//
+// Regex strategy: match a high surrogate optionally followed by a low
+// surrogate, OR a stand-alone low surrogate. Two-char matches are valid
+// pairs (kept); one-char matches are lone surrogates (replaced). No
+// lookbehind / lookahead, so it works on every browser.
+function sanitizeForAnthropic(s) {
+  if (typeof s !== 'string') return s;
+  return s.replace(
+    /[\uD800-\uDBFF][\uDC00-\uDFFF]?|[\uDC00-\uDFFF]/g,
+    function (m) { return m.length === 2 ? m : '\uFFFD'; }
+  );
+}
+
 // === LLM API CALL ===
 //
 // Posts to the Cloudflare Worker proxy. The worker routes to the appropriate
@@ -2174,6 +2202,12 @@ async function callClaude(systemPrompt, userContent, maxTok, opts) {
     var ok = await showCostPreviewModal(systemPrompt, userContent, maxTok || 4000);
     if (!ok) throw new Error('Query cancelled.');
   }
+
+  // Strip any lone UTF-16 surrogates inherited from corpus text so the
+  // outgoing JSON is parseable by Anthropic's strict parser. See the
+  // sanitizeForAnthropic block above for the full rationale.
+  systemPrompt = sanitizeForAnthropic(systemPrompt);
+  userContent  = sanitizeForAnthropic(userContent);
 
   var body = {
     provider:   llmAccess.provider,
