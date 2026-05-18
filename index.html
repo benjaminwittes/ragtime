@@ -1231,7 +1231,7 @@ var CLAUDE_ANALYSIS_MAX = 1000;                 // soft hint — large-field war
 var CLAUDE_ANALYSIS_SOFT_WARN = 100;            // inline "review carefully" hint above this
 var CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE = 15;  // most recent entries to send per case
 var CLAUDE_ANALYSIS_MAX_ENTRY_CHARS = 400;      // per-entry char cap
-var CLAUDE_ANALYSIS_MAX_OUTPUT_TOKENS = 8000;   // analysis can be a long markdown doc
+var CLAUDE_ANALYSIS_MAX_OUTPUT_TOKENS = 32000;  // analysis can be a long markdown doc (raised 2026-05-18 from 8000 after a "rank all federal cases" query hit the cap mid-JSON, even with v3.2 streaming; Sonnet 4.6 supports up to 64K output)
 // Cost heuristic: per-case ~900 input tokens + amortized ~30 output tokens.
 //   Input: 900 × $3/Mtok = $0.0027/case; output amortized ~$0.0005/case ⇒ ~$0.003/case.
 var CLAUDE_ANALYSIS_COST_PER_CASE = 0.003;
