@@ -4,6 +4,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAGtime — A Federal Litigation Research Tool from Lawfare</title>
+<!-- v9.0.10 — punchlist: Updated-date fix + chooser always shows on reload.
+     Three changes:
+     (1) Header "Updated" stat now reads MAX(last_synced_at)::date instead
+         of MAX(date_filed). The prior value was being poisoned by occasional
+         malformed future filing dates ingested from CourtListener (most
+         visibly "Updated 2030-01-28"). last_synced_at is the actual data-
+         freshness signal written by the api-0 daemon on every successful
+         docket fetch.
+     (2) bootApp() now always routes to the three-option chooser on reload,
+         even when a Supabase session is alive. The session is still set on
+         paidAccess so picking "Sign in with Lawfare" enters the app
+         immediately without a second magic-link round trip. Two exceptions
+         still go straight into the app: Stripe checkout return
+         (?checkout=success|cancel) and fresh magic-link return (handled
+         downstream by the SIGNED_IN onAuthStateChange listener).
+     (3) pickLawfare() short-circuits to enterApp({paid:true}) when
+         paidAccess.signedIn is already true, so the chooser pick works
+         correctly for returning sessions.
+     Per-doc_type counts (complaints / opinions / indictments / informations
+     / appellate openings) were ALSO requested for the header but are NOT
+     in this version: live COUNT(*) on docket_entries.doc_type reliably
+     exceeds the 60s run_query timeout under normal pipeline write load.
+     Adding those counts requires a pre-aggregated stats source (matview or
+     trigger-maintained row) and is filed as a Claude Code follow-up. -->
 <!-- v9.0.9 — bump planning max_tokens + truncation hint.
      Complex hybrid plans (e.g., win/loss analyses with 7+ queries plus full
      candor notes) routinely exceeded the 1500-token max set in v9.0.0 and
@@ -1184,7 +1208,7 @@
 // v9.0.2 — bump on every visible release so the badge in the header reflects
 // what's actually deployed. Hard-refresh after pushing; the version on screen
 // should match the comment block at the top of this file.
-var APP_VERSION = "v9.0.9";
+var APP_VERSION = "v9.0.10";
 var SB_URL = "https://aikdbjprndgksibbvcfs.supabase.co";
 var SB_KEY = "sb_publishable_I8b_IXrRGR-bu3wOMEox5g_X9NllzgB";
 // v8.0: ACCESS_CODE removed — the access-code gate has been replaced by the
@@ -1611,6 +1635,14 @@ function pickBYOK() {
 }
 
 function pickLawfare() {
+  // v9.0.10 — short-circuit if a Supabase session is already alive. Boot now
+  // lands returning paid users on the chooser regardless of session state, so
+  // the "Sign in with Lawfare" pick has to detect that and enter the app
+  // directly instead of asking for another magic-link request.
+  if (paidAccess && paidAccess.signedIn) {
+    enterApp({ paid: true });
+    return;
+  }
   showMagicForm();
 }
 
@@ -1773,17 +1805,32 @@ async function bootApp() {
   }
 
   // 4. Route.
+  // v9.0.10 — Always land on the three-option chooser on (re)load, even when a
+  // Supabase session is alive. The session itself is preserved (paidAccess is
+  // still populated above), so clicking "Sign in with Lawfare" from the chooser
+  // shortcuts straight into the app via enterApp({paid:true}) — no second
+  // magic-link round trip. Two exceptions return the user directly to the app
+  // instead of forcing a re-pick:
+  //   (a) Stripe checkout return (?checkout=success|cancel) — the user just
+  //       came back from paying; dropping them on the chooser would feel like
+  //       the payment didn't take.
+  //   (b) Magic-link return — bootApp runs synchronously on DOMContentLoaded;
+  //       getSession() already resolved with the magic-link session, but the
+  //       SIGNED_IN event in onAuthStateChange (registered below) is what
+  //       normally enters the app post-magic-link. We rely on that handler
+  //       firing for fresh magic-link returns, which it does.
   if (session) {
     paidAccess.signedIn = true;
     paidAccess.session  = session;
     paidAccess.email    = (session.user && session.user.email) || null;
-    await enterApp({ paid: true });
-    if (checkoutResult === 'success') {
-      // Show processing modal and poll balance until it reflects the new credit.
-      showCheckoutProcessing();
-      pollBalanceAfterCheckout();
-    } else if (checkoutResult === 'cancel') {
-      // No-op — user cancelled at Stripe. They can retry via Top up.
+    if (checkoutResult === 'success' || checkoutResult === 'cancel') {
+      await enterApp({ paid: true });
+      if (checkoutResult === 'success') {
+        showCheckoutProcessing();
+        pollBalanceAfterCheckout();
+      }
+    } else {
+      showChooser();
     }
   } else {
     showChooser();
@@ -1863,16 +1910,29 @@ async function sbRpc(fnName, params) {
 async function initApp() {
   initStack();
   try {
+    // v9.0.10 — Updated-date fix.
+    //  "Updated" now reads MAX(last_synced_at)::date, which is the actual
+    //  data-freshness signal written by the api-0 daemon on every successful
+    //  docket fetch. The prior value, MAX(date_filed), was poisoned by
+    //  occasional malformed future filing dates from CourtListener (most
+    //  visibly "Updated 2030-01-28" before this fix).
+    //
+    //  Per-doc_type counts (complaint / opinion / indictment / informations /
+    //  appellate_open) intentionally NOT added here: live COUNT(*) on
+    //  docket_entries reliably exceeds the run_query RPC's 60s timeout under
+    //  normal pipeline write load. CLAUDE.md anticipates this and prescribes a
+    //  pre-aggregated stats view (matview or trigger-maintained row); once
+    //  that exists the frontend can read all five counts in O(1).
     var counts = await sbRpc("run_query", {
       query_text: "SELECT (SELECT COUNT(*) FROM cases) as case_count, " +
                   "(SELECT COUNT(*) FROM docket_entries) as entry_count, " +
                   "(SELECT COUNT(DISTINCT court) FROM cases) as court_count, " +
-                  "(SELECT MAX(date_filed)::text FROM cases) as max_filed"
+                  "(SELECT MAX(last_synced_at)::date::text FROM cases) as last_synced"
     });
     var c = counts[0];
     totalCaseCount = Number(c.case_count);
     var statsActive = fmtInt(c.case_count) + ' cases · ' + fmtInt(c.entry_count) + ' entries · ' + c.court_count + ' courts';
-    var statsWelcome = statsActive + (c.max_filed ? ' · Updated ' + c.max_filed : '');
+    var statsWelcome = statsActive + (c.last_synced ? ' · Updated ' + c.last_synced : '');
     document.getElementById('hstats').textContent = statsActive;
     document.getElementById('hstats-welcome').textContent = statsWelcome;
 
