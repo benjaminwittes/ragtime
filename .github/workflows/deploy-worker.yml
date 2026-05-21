@@ -1,0 +1,72 @@
+name: Deploy Worker
+
+# Deploys the Cloudflare Worker (`ragtimeproxy`) from worker/ using wrangler.
+#
+# Trigger behavior:
+#   - pull_request touching worker/**  → `wrangler deploy --dry-run`
+#         (validates the bundle + config in CI; never touches the live Worker)
+#   - push to main touching worker/**  → `wrangler deploy`
+#         (the real deploy; this is what makes repo == live)
+#   - manual run (workflow_dispatch)   → dry-run or real, per the `dry_run` input
+#
+# Note the paths filter is worker/** only. Changing THIS workflow file does
+# not trigger a deploy, so merging the PR that introduces this file is a
+# no-op. The intended first-run sequence after merge:
+#   1. Actions tab → "Deploy Worker" → Run workflow → dry_run = true.
+#      Inspect the output: it should show the worker/index.js bundle and the
+#      bindings from wrangler.toml, with no errors.
+#   2. Run workflow again → dry_run = false. This is the first real deploy.
+#      Because worker/index.js is byte-identical to what's already live and
+#      the bindings were verified against the dashboard, it reproduces the
+#      current live state rather than changing behavior.
+#   3. From then on, any push to main that touches worker/** auto-deploys.
+#
+# Auth: apiToken is the account-scoped `Workers Scripts: Edit` token stored
+# as the CLOUDFLARE_API_TOKEN repo secret. accountId is the (non-secret)
+# CLOUDFLARE_ACCOUNT_ID repo variable. Secrets bound on the Worker
+# (ANTHROPIC_API_KEY, STRIPE_*, SUPABASE_SERVICE_ROLE_KEY) are NOT managed
+# here — wrangler deploy does not touch existing secret bindings.
+
+on:
+  pull_request:
+    paths:
+      - 'worker/**'
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (build & validate only; do not deploy)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Never let two deploys race each other.
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Deploy (or dry-run) Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          # pull_request → always dry-run; manual run → per input; push → real deploy.
+          command: ${{ (github.event_name == 'pull_request' || inputs.dry_run == true) && 'deploy --dry-run' || 'deploy' }}
