@@ -1,187 +1,69 @@
 # Deploying RAGtime
 
-This document walks through standing the tool up from scratch on a new Supabase project. The current production instance (project `aikdbjprndgksibbvcfs`, `lawfare-litigation`) already has everything below applied — this is for reproducibility.
+RAGtime has two independently deployed pieces: the **frontend** (static HTML on GitHub Pages) and the **Worker** (Cloudflare). The database, auth, and payments live in managed services (Supabase, Stripe) configured out-of-band.
 
-## Prerequisites
+> The canonical operational reference — full architecture, the Worker environment manifest, Stripe/Supabase configuration, and operational gotchas — is the project handoff document held outside this repo. This file covers the mechanics a contributor needs to ship a change.
 
-- A Supabase project with these tables already loaded: `cases`, `docket_entries`, `documents`. (These are populated by the separate ingestion pipeline that scrapes CourtListener.)
-- An Anthropic API key.
-- The Supabase anon key and project URL handy.
+## Frontend (GitHub Pages)
 
-## 1. Create the quota infrastructure
+The frontend is the single file `index.html`, served from `main` via GitHub Pages. Deploy = commit to `main`; Pages republishes within ~30 seconds. Cache-busting is via the `APP_VERSION` constant in the source (shown in the UI, so a hard refresh confirms the deploy landed).
 
-Run this migration in the Supabase SQL editor (or via `execute_sql`):
+## Worker (Cloudflare, via wrangler)
 
-```sql
--- Per-password daily quota + per-IP per-minute rate-limit counters.
-CREATE TABLE IF NOT EXISTS public.ragtime_quota (
-  key         TEXT        PRIMARY KEY,
-  count       INTEGER     NOT NULL DEFAULT 0,
-  expires_at  TIMESTAMPTZ NOT NULL
-);
+The Worker (`ragtimeproxy`) deploys from `worker/` using `wrangler`, driven by `.github/workflows/deploy-worker.yml`:
 
-CREATE INDEX IF NOT EXISTS idx_ragtime_quota_expires
-  ON public.ragtime_quota (expires_at);
+| Trigger | Result |
+|---|---|
+| PR touching `worker/**` | `wrangler deploy --dry-run` — CI validation only; never touches live |
+| Push to `main` touching `worker/**` | `wrangler deploy` — the real deploy |
+| Manual run (Actions tab → "Deploy Worker") | dry-run or real, per the `dry_run` input |
 
-ALTER TABLE public.ragtime_quota ENABLE ROW LEVEL SECURITY;
+After a push to `main` that changes the Worker, the live Worker matches `main`. Rollback = `git revert` + push.
 
--- Atomic counter increment. Returns the post-increment count.
-CREATE OR REPLACE FUNCTION public.ragtime_quota_incr(
-  p_key TEXT,
-  p_expires TIMESTAMPTZ
-)
-RETURNS INTEGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE new_count INTEGER;
-BEGIN
-  INSERT INTO public.ragtime_quota (key, count, expires_at)
-  VALUES (p_key, 1, p_expires)
-  ON CONFLICT (key) DO UPDATE
-    SET count = public.ragtime_quota.count + 1
-  RETURNING count INTO new_count;
-  RETURN new_count;
-END;
-$$;
+### Required CI credentials
 
-CREATE OR REPLACE FUNCTION public.ragtime_quota_cleanup()
-RETURNS INTEGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE deleted_rows INTEGER;
-BEGIN
-  DELETE FROM public.ragtime_quota WHERE expires_at < NOW();
-  GET DIAGNOSTICS deleted_rows = ROW_COUNT;
-  RETURN deleted_rows;
-END;
-$$;
+- **`CLOUDFLARE_API_TOKEN`** (repo *secret*) — an account-scoped Cloudflare API token with **Workers Scripts: Edit** *and* **Workers KV Storage: Edit**. The KV write permission is required because the Worker binds a KV namespace; without it, deploys fail with `code: 10023 — kv bindings require kv write perms`.
+- **`CLOUDFLARE_ACCOUNT_ID`** (repo *variable*) — the Cloudflare account ID. Not a secret, so it's a variable (visible in workflow logs for debugging).
 
-REVOKE EXECUTE ON FUNCTION public.ragtime_quota_incr(TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.ragtime_quota_incr(TEXT, TIMESTAMPTZ) TO service_role;
+### Configuration (non-secret bindings)
 
-REVOKE EXECUTE ON FUNCTION public.ragtime_quota_cleanup() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.ragtime_quota_cleanup() TO service_role;
-```
+Non-secret bindings live in `worker/wrangler.toml`: the `QUOTA` KV namespace, the public Supabase URL, the app base URL, and the three Stripe price IDs. Edit them there and merge to `main` to redeploy. When the frontend moves to a Lawfare-branded domain, update `APP_BASE_URL` there.
 
-## 2. Store the Anthropic API key in Vault
+### Secrets
 
-Run once, replacing the key with yours:
+Secrets are **not** in `wrangler.toml` or anywhere in this repo, and `wrangler deploy` does **not** touch existing secret bindings. The Worker requires these secret bindings:
 
-```sql
-SELECT vault.create_secret(
-  'sk-ant-api03-YOUR-KEY-HERE',
-  'ragtime_anthropic_api_key',
-  'Anthropic API key for RAGtime demo proxy'
-);
-```
+- `ANTHROPIC_API_KEY` — Lawfare-org Anthropic key
+- `STRIPE_SECRET_KEY` — Stripe live-mode secret
+- `STRIPE_WEBHOOK_SECRET` — Stripe live-mode webhook signing secret
+- `SUPABASE_SERVICE_ROLE_KEY` — Supabase Secret API Key (admin scope)
 
-Then add an RPC wrapper so the edge function can read it cleanly:
-
-```sql
-CREATE OR REPLACE FUNCTION public.ragtime_get_anthropic_key()
-RETURNS TEXT
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, vault, pg_temp
-AS $$
-DECLARE k TEXT;
-BEGIN
-  SELECT decrypted_secret INTO k
-  FROM vault.decrypted_secrets
-  WHERE name = 'ragtime_anthropic_api_key'
-  LIMIT 1;
-  RETURN k;
-END;
-$$;
-
-REVOKE EXECUTE ON FUNCTION public.ragtime_get_anthropic_key() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.ragtime_get_anthropic_key() TO service_role;
-```
-
-To rotate the key later, run:
-
-```sql
-SELECT vault.update_secret(
-  (SELECT id FROM vault.secrets WHERE name = 'ragtime_anthropic_api_key'),
-  'sk-ant-api03-NEW-KEY-HERE'
-);
-```
-
-## 3. Deploy the edge function
-
-Upload `supabase/functions/ragtime-proxy/index.ts` with `verify_jwt` disabled. The function implements its own authentication (demo password or BYO key) plus rate limiting, so JWT verification is not needed — and in fact would prevent the static HTML from calling the function at all.
-
-Via the Supabase CLI:
+To set or rotate one:
 
 ```bash
-supabase functions deploy ragtime-proxy --project-ref YOUR_PROJECT_REF --no-verify-jwt
+cd worker
+wrangler secret put ANTHROPIC_API_KEY   # prompts for the value, hidden
 ```
 
-Or via the Supabase dashboard or MCP tooling — pass `verify_jwt: false` in either case.
+(or use the Cloudflare dashboard → the `ragtimeproxy` Worker → Settings → Variables and Secrets). After rotating an upstream credential at Stripe / Supabase / Anthropic, update the matching Worker secret the same way.
 
-The deployed URL will be:
+Optional bindings the code respects (defaults apply if unset): `DEMO_PASSWORD`, `BALANCE_FLOOR_CENTS` (default 5), `MARKUP` (default 1.35), `SUPABASE_JWT_SECRET` (legacy HS256 fallback; unused).
 
-```
-https://YOUR_PROJECT_REF.supabase.co/functions/v1/ragtime-proxy
-```
+## Database, Auth, Payments (managed services)
 
-## 4. Configure the frontend
+- **Supabase (PostgreSQL 17)** hosts the litigation corpus and the RAGtime billing tables (`accounts`, `ledger`, `processed_stripe_events`). The `apply_balance_change` RPC is the single write path for balance changes (atomic ledger insert + balance update). Sign-in is Supabase Auth magic-link; the Worker verifies user JWTs via Supabase's JWKS endpoint (ES256).
+- **Stripe (live mode)** handles prepaid checkout. The Worker's `/api/stripe/webhook` endpoint receives `checkout.session.completed` (credit) and `charge.refunded` (debit); idempotency is enforced via the `processed_stripe_events` table.
 
-In `index.html`, update these constants near the top of the `<script>` block:
+Detailed schema, key management, and Stripe webhook setup are in the handoff document.
 
-```javascript
-var SB_URL = "https://YOUR_PROJECT_REF.supabase.co";
-var SB_KEY = "YOUR_SUPABASE_ANON_KEY";
-var ACCESS_CODE = "your-gate-password";
-var WORKER_URL = "https://YOUR_PROJECT_REF.supabase.co/functions/v1/ragtime-proxy";
-var DEMO_PASSWORD = "your-demo-password";
-```
+## Smoke-testing a Worker deploy
 
-The demo password is ONLY used client-side to light up the "demo access unlocked" indicator. The actual check happens server-side in the edge function with a constant-time comparison. If you want to override the default `"Lawfareskunkworks"` on the server, set an env var on the edge function:
+No-cost checks that the deployed code is live (no LLM calls, no billing):
 
 ```bash
-supabase secrets set RAGTIME_DEMO_PASSWORD=your-new-password --project-ref YOUR_PROJECT_REF
+# CORS preflight → 204
+curl -s -o /dev/null -w "%{http_code}\n" -X OPTIONS https://<worker-url>/ask
+
+# unknown route → 404 {"error":{"message":"Not found"}}
+curl -s https://<worker-url>/nonexistent
 ```
-
-Redeploy the function to pick it up.
-
-## 5. Test
-
-Open `index.html` locally, unlock the gate, enter the demo password — you should see "✓ Demo access unlocked." Ask Claude a trivial question. If Pass 1 → Pass 2 → response round-trip succeeds, you're live.
-
-## 6. Host it
-
-Simplest: GitHub Pages. In your repo settings, set Pages source to main branch, root directory. The URL will be `https://YOUR-USER.github.io/YOUR-REPO/`. Add that URL as an allowed origin if your edge function ever enforces stricter CORS (currently it allows `*`).
-
-## Monitoring
-
-Edge function logs: Supabase dashboard → Edge Functions → `ragtime-proxy` → Logs. Look for `console.error` output on failures.
-
-Quota snapshots:
-
-```sql
--- Current daily demo usage
-SELECT * FROM ragtime_quota WHERE key LIKE 'demo:%' ORDER BY expires_at DESC;
-
--- Active per-IP rate-limit windows
-SELECT * FROM ragtime_quota WHERE key LIKE 'ip:%' ORDER BY expires_at DESC LIMIT 20;
-
--- Manual cleanup (runs opportunistically inside the function, but you can force it)
-SELECT ragtime_quota_cleanup();
-```
-
-## Rotating the demo password
-
-1. Update `DEMO_PASSWORD` constant in `index.html` and redeploy the frontend.
-2. Either:
-   - Set `RAGTIME_DEMO_PASSWORD` env var on the edge function (takes effect on next cold start), OR
-   - Redeploy the edge function with a new default hardcoded.
-3. Give users the new password.
-
-## Cloudflare Workers alternative
-
-`cloudflare-alt/` contains a Cloudflare Workers version of the proxy with matching behavior (constant-time password check, KV-based rate limiting, forwarding to Anthropic). Not currently deployed. Use it as a fallback if Supabase Edge Functions ever become insufficient or if you want to isolate the proxy's failure domain from the database.
