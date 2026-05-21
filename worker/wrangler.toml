@@ -1,0 +1,51 @@
+name = "ragtimeproxy"
+main = "index.js"
+compatibility_date = "2026-05-21"
+
+# Workers Observability — Cloudflare's "Logs" feature. Enabled on the
+# live Worker since 2026-05-04; preserved here so a future deploy does
+# not silently disable it.
+[observability]
+enabled = true
+
+# Plain-text variables. Stripe live-mode price IDs, the public Supabase
+# project URL, and the frontend app base URL. None of these are sensitive
+# — the price IDs are product identifiers, the URLs are public endpoints.
+# When the frontend moves off `benjaminwittes.github.io/ragtime` to a
+# Lawfare-branded domain, update APP_BASE_URL here.
+[vars]
+APP_BASE_URL = "https://benjaminwittes.github.io/ragtime"
+SUPABASE_URL = "https://aikdbjprndgksibbvcfs.supabase.co"
+STRIPE_PRICE_5_USD = "price_1TXoNIJS8oJAjJ8ojuPOv1la"
+STRIPE_PRICE_20_USD = "price_1TXoOxJS8oJAjJ8oqgWWK8B5"
+STRIPE_PRICE_50_USD = "price_1TXoQUJS8oJAjJ8ovHVaaMG1"
+
+# KV namespace for per-IP rate-limit counters and the daily demo quota
+# counter. TTL'd entries; see askHandler in index.js for the keys used.
+[[kv_namespaces]]
+binding = "QUOTA"
+id = "06040b3266fb4555a70204af4907b455"
+
+# Secrets are NOT defined here. They are managed out-of-band, either via
+#   wrangler secret put <NAME>      (prompts for the value)
+# or via the Cloudflare dashboard's "Variables and Secrets" page.
+#
+# Current secret bindings on the deployed Worker (all required):
+#   ANTHROPIC_API_KEY         — Lawfare-org Anthropic API key
+#   STRIPE_SECRET_KEY         — Stripe live-mode secret (sk_live_...)
+#   STRIPE_WEBHOOK_SECRET     — Stripe live-mode webhook signing secret
+#   SUPABASE_SERVICE_ROLE_KEY — Supabase Secret API Key (sb_secret_...)
+#
+# Optional bindings the code respects (defaults apply if unset):
+#   DEMO_PASSWORD             — overrides built-in default
+#   BALANCE_FLOOR_CENTS       — default 5
+#   MARKUP                    — default 1.35
+#   SUPABASE_JWT_SECRET       — legacy HS256 verification fallback;
+#                               unused since 2026-05-16 when legacy
+#                               Supabase JWT-based API keys were
+#                               disabled. Safe to leave unset.
+#
+# Account ID is NOT hardcoded here. In CI, the deploy Action reads it
+# from the `CLOUDFLARE_ACCOUNT_ID` GitHub Actions variable. For local
+# wrangler use, either export `CLOUDFLARE_ACCOUNT_ID` in your shell or
+# run `wrangler login` first.
