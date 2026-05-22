@@ -904,6 +904,9 @@
           <div class="fg"><label>Case Type</label>
             <select id="f-type"><option value="">All</option><option value="cv">Civil</option><option value="cr">Criminal</option><option value="mj">Magistrate</option><option value="mc">Misc</option></select>
           </div>
+          <div class="fg"><label>Collection</label>
+            <select id="f-collection" onchange="onCollectionPicked()"><option value="">All collections</option></select>
+          </div>
           <div class="fg span-2"><label>Cause / NOS</label><input type="text" id="f-cause" placeholder="e.g. APA, 551, 1983..."></div>
           <div class="fg span-2"><label>Date Range</label>
             <div class="date-row"><input type="date" id="f-from" value="2025-01-20"><input type="date" id="f-to"></div>
@@ -1950,6 +1953,14 @@ async function initApp() {
     judges.forEach(function(r) {
       var o = document.createElement('option'); o.value = r.judge; o.textContent = r.judge;
       js.appendChild(o);
+    });
+
+    // Populate collections dropdown (issue-specific breakouts, e.g. AI Liability)
+    var collections = await sbRpc("run_query", { query_text: "SELECT slug, name FROM collections ORDER BY name" }) || [];
+    var cs = document.getElementById('f-collection');
+    collections.forEach(function(r) {
+      var o = document.createElement('option'); o.value = r.slug; o.textContent = r.name;
+      cs.appendChild(o);
     });
 
     renderLLMAccessUI();
@@ -4558,7 +4569,8 @@ async function applyManualFilter() {
     caseType: document.getElementById('f-type').value,
     cause:    document.getElementById('f-cause').value.trim(),
     from:     document.getElementById('f-from').value,
-    to:       document.getElementById('f-to').value
+    to:       document.getElementById('f-to').value,
+    collection: document.getElementById('f-collection').value
   };
 
   var parts = [];
@@ -4568,6 +4580,10 @@ async function applyManualFilter() {
   if (fields.search) {
     // Use FTS tsvector index on docket_entries.fts for performance.
     parts.push("cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', '" + escSql(fields.search) + "'))");
+  }
+  if (fields.collection) {
+    // Scope to an issue-specific breakout collection (e.g. AI Liability).
+    parts.push("cl_id IN (SELECT cc.cl_id FROM collection_cases cc JOIN collections c ON c.id = cc.collection_id WHERE c.slug = '" + escSql(fields.collection) + "')");
   }
   if (fields.name) parts.push("case_name ILIKE '%" + escSql(fields.name) + "%'");
   // Courts: if all checked, no constraint. If none checked, force empty result.
@@ -4652,6 +4668,7 @@ function describeManualFilter(fields) {
   var parts = [];
   if (fields.search)   parts.push('text~"' + shorten(fields.search, 22) + '"');
   if (fields.name)     parts.push('name~"' + shorten(fields.name, 22) + '"');
+  if (fields.collection) parts.push('collection=' + fields.collection);
   // Courts label: 'all' is omitted; preset names if matching; otherwise codes or count.
   if (fields.courts && fields.courts.length !== undefined) {
     var preset = detectActivePreset(fields.courts);
@@ -4672,11 +4689,22 @@ function describeManualFilter(fields) {
 }
 function shorten(s, n) { return s.length > n ? s.substring(0, n-1) + '…' : s; }
 
+function onCollectionPicked() {
+  // Collections (e.g. AI Liability) include cases that predate the corpus's
+  // default 2025-01-20 date floor. Clear the date range when one is picked so
+  // the default floor doesn't silently hide most of the collection.
+  if (document.getElementById('f-collection').value) {
+    document.getElementById('f-from').value = '';
+    document.getElementById('f-to').value = '';
+  }
+}
+
 function clearFilters() {
   ['f-search','f-name','f-cause'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('f-judge').value='';
   document.getElementById('f-type').value=''; document.getElementById('f-from').value='2025-01-20';
   document.getElementById('f-to').value='';
+  document.getElementById('f-collection').value='';
   applyCourtPreset('all'); // reset courts to default
 }
 
@@ -4690,6 +4718,7 @@ function loadFilterStateIntoForm(fs) {
   document.getElementById('f-cause').value = fs.cause || '';
   document.getElementById('f-from').value = fs.from || '';
   document.getElementById('f-to').value = fs.to || '';
+  document.getElementById('f-collection').value = fs.collection || '';
   // Courts: restore from snapshot. Older snapshots may have had `court` (singular) — handle both.
   var courtList;
   if (fs.courts && fs.courts.length !== undefined) {
