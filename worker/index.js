@@ -345,6 +345,23 @@ async function checkoutHandler(request, env) {
   return json({ checkout_url: session.url, session_id: session.id });
 }
 
+// Best-effort ops alert to Slack (incoming-webhook URL in SLACK_ALERT_WEBHOOK_URL).
+// Never throws and no-ops when the secret is unset, so it can't affect request
+// handling or break before the secret is configured.
+async function notify(env, text) {
+  const url = env.SLACK_ALERT_WEBHOOK_URL;
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: `:rotating_light: RAGtime alert — ${text}` })
+    });
+  } catch (e) {
+    console.error("notify (Slack) failed:", e && e.message);
+  }
+}
+
 async function webhookHandler(request, env) {
   const sig = request.headers.get("Stripe-Signature") || "";
   const rawBody = await request.text();
@@ -408,6 +425,10 @@ async function webhookHandler(request, env) {
           `amount_cents=${amount} reason=${dispute.reason} status=${dispute.status} ` +
           `— balance debited; re-credit manually if won`
         );
+        await notify(env,
+          `chargeback: user=${userId} amount=$${(amount / 100).toFixed(2)} ` +
+          `reason=${dispute.reason} — balance debited; re-credit manually if you win the dispute`
+        );
       } else {
         // Couldn't tie the dispute to a user (e.g., charge predates the ledger).
         // Don't fail the webhook — log loudly for manual handling.
@@ -415,12 +436,17 @@ async function webhookHandler(request, env) {
           `ALERT chargeback: dispute=${dispute.id} payment_intent=${paymentIntent} ` +
           `amount_cents=${amount} — NO matching user found; manual review needed`
         );
+        await notify(env,
+          `chargeback with NO matching user: dispute=${dispute.id} amount=$${(amount / 100).toFixed(2)} ` +
+          `— needs manual review`
+        );
       }
     }
     await supabaseRecordProcessedEvent(env, event.id, event.type);
     return new Response("OK", { status: 200 });
   } catch (err) {
     console.error("Webhook handler error:", err);
+    await notify(env, `webhook handler error: ${err && err.message} — payment event not recorded (Stripe will retry)`);
     return new Response("Handler error: " + err.message, { status: 500 });
   }
 }
@@ -798,7 +824,13 @@ async function supabaseDebitBalance(env, userId, amountCents, metadata) {
     })
   });
   if (!r.ok) {
-    console.error("debitBalance failed:", r.status, await r.text());
+    const detail = await r.text();
+    console.error("debitBalance failed:", r.status, detail);
+    await notify(env,
+      `apply_balance_change (query debit) FAILED for user=${userId} ` +
+      `amount_cents=${amountCents} status=${r.status} — query ran but wasn't charged: ` +
+      String(detail).slice(0, 200)
+    );
   }
 }
 
