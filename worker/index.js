@@ -98,6 +98,11 @@ export default {
     } catch (err) {
       return json({ error: { message: "Internal error: " + (err.message || String(err)) } }, 500);
     }
+  },
+
+  // Cron trigger (see wrangler.toml [triggers]): weekly billing reconciliation.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runReconciliation(env));
   }
 };
 
@@ -359,6 +364,36 @@ async function notify(env, text) {
     });
   } catch (e) {
     console.error("notify (Slack) failed:", e && e.message);
+  }
+}
+
+// Weekly billing reconciliation (Cron Trigger → scheduled()). Calls the
+// reconcile_balances() RPC; if any account's balance_cents disagrees with the
+// sum of its ledger rows, Slack-alerts with the drift. Also alerts on run
+// errors. No "all clear" heartbeat (keeps noise down — Cloudflare's cron logs
+// confirm it executed); add one here if you want a weekly positive confirmation.
+async function runReconciliation(env) {
+  try {
+    const r = await supabaseFetch(env, `/rest/v1/rpc/reconcile_balances`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    if (!r.ok) {
+      await notify(env, `reconciliation cron FAILED to run: ${r.status} ${String(await r.text()).slice(0, 200)}`);
+      return;
+    }
+    const drift = await r.json();
+    if (Array.isArray(drift) && drift.length > 0) {
+      const lines = drift.slice(0, 20).map(
+        (d) => `• user=${d.user_id} balance=${d.balance_cents}c ledger=${d.ledger_sum}c diff=${d.diff}c`
+      ).join("\n");
+      const more = drift.length > 20 ? `\n…and ${drift.length - 20} more` : "";
+      await notify(env,
+        `balance reconciliation DRIFT — ${drift.length} account(s) where balance != sum(ledger):\n${lines}${more}`
+      );
+    }
+  } catch (e) {
+    await notify(env, `reconciliation cron error: ${e && e.message}`);
   }
 }
 
