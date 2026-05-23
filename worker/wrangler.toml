@@ -8,6 +8,12 @@ compatibility_date = "2026-05-21"
 [observability]
 enabled = true
 
+# Scheduled cron triggers. Weekly billing reconciliation, Mondays 13:00 UTC
+# (~9am ET): the scheduled() handler in index.js compares each account's
+# balance_cents to the sum of its ledger rows and Slack-alerts on any drift.
+[triggers]
+crons = ["0 13 * * 1"]
+
 # Plain-text variables. Stripe live-mode price IDs, the public Supabase
 # project URL, and the frontend app base URL. None of these are sensitive
 # — the price IDs are product identifiers, the URLs are public endpoints.
