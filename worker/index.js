@@ -386,6 +386,36 @@ async function webhookHandler(request, env) {
           payment_intent_id: charge.payment_intent
         });
       }
+    } else if (event.type === "charge.dispute.created") {
+      // Chargeback: the cardholder disputed a charge. Per the payment spec,
+      // debit the disputed amount immediately and alert Ben. This is the
+      // conservative choice (remove credit while the dispute is open); if the
+      // dispute is later WON, Ben re-credits manually (he's alerted). A future
+      // refinement could auto-handle charge.dispute.closed (re-credit on won).
+      const dispute = event.data.object;
+      const amount = dispute.amount; // disputed amount, cents
+      const paymentIntent = dispute.payment_intent;
+      const userId = await supabaseFindUserByPaymentIntent(env, paymentIntent);
+      if (userId) {
+        await supabaseChargebackDebit(env, userId, amount, {
+          stripe_dispute_id: dispute.id,
+          stripe_charge_id: dispute.charge,
+          payment_intent_id: paymentIntent,
+          reason: dispute.reason
+        });
+        console.error(
+          `ALERT chargeback: dispute=${dispute.id} user=${userId} ` +
+          `amount_cents=${amount} reason=${dispute.reason} status=${dispute.status} ` +
+          `— balance debited; re-credit manually if won`
+        );
+      } else {
+        // Couldn't tie the dispute to a user (e.g., charge predates the ledger).
+        // Don't fail the webhook — log loudly for manual handling.
+        console.error(
+          `ALERT chargeback: dispute=${dispute.id} payment_intent=${paymentIntent} ` +
+          `amount_cents=${amount} — NO matching user found; manual review needed`
+        );
+      }
     }
     await supabaseRecordProcessedEvent(env, event.id, event.type);
     return new Response("OK", { status: 200 });
@@ -740,6 +770,21 @@ async function supabaseRefundBalance(env, userId, amountCents, metadata) {
     })
   });
   if (!r.ok) throw new Error(`refundBalance failed: ${r.status} ${await r.text()}`);
+}
+
+// Chargeback debit. Recorded as kind 'adjustment' (distinct from a voluntary
+// 'refund') with a chargeback marker, so the ledger keeps a clean audit trail.
+async function supabaseChargebackDebit(env, userId, amountCents, metadata) {
+  const r = await supabaseFetch(env, `/rest/v1/rpc/apply_balance_change`, {
+    method: "POST",
+    body: JSON.stringify({
+      p_user_id: userId,
+      p_amount_cents: -Math.abs(amountCents),
+      p_kind: "adjustment",
+      p_metadata: { ...metadata, kind_detail: "chargeback" }
+    })
+  });
+  if (!r.ok) throw new Error(`chargebackDebit failed: ${r.status} ${await r.text()}`);
 }
 
 async function supabaseDebitBalance(env, userId, amountCents, metadata) {
