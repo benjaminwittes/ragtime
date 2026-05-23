@@ -149,6 +149,9 @@ async function askHandler(request, env, ctx) {
       return json({ error: { message: "Invalid or expired session token. Please sign in again." } }, 401);
     }
     userId = claims.sub;
+    // Soft-launch gate: paid tier is limited to allowed users during beta.
+    const betaBlocked = await betaGate(env, claims);
+    if (betaBlocked) return betaBlocked;
     if (provider !== "anthropic") {
       return json({ error: {
         message: 'Paid tier currently supports Anthropic only. To use OpenAI or Google, switch to "My API key".'
@@ -290,6 +293,9 @@ async function askHandler(request, env, ctx) {
 async function checkoutHandler(request, env) {
   const userId = await requireAuth(request, env);
   if (userId instanceof Response) return userId;
+  // Soft-launch gate: only allowed users can buy credit during beta.
+  const betaBlocked = await betaGate(env, userId);
+  if (betaBlocked) return betaBlocked;
   let body;
   try {
     body = await request.json();
@@ -630,6 +636,66 @@ async function supabaseGetUserEmail(env, userId) {
   if (!r.ok) return null;
   const u = await r.json();
   return u.email || null;
+}
+
+// ---------------- Beta access gate (soft launch) ----------------
+// During the limited beta, the PAID tier is restricted: a user is allowed if
+// their email is on an allowed domain (BETA_ALLOW_DOMAINS, default
+// "lawfaremedia.org") OR listed in public.beta_allowlist (which Ben edits via
+// the Supabase dashboard Table Editor). The free demo-password and BYO-key
+// paths are NOT gated. Enforced in askHandler (paid branch) and checkoutHandler.
+
+async function resolveUserEmail(env, claims) {
+  // Prefer the email claim (no extra request); fall back to the admin API.
+  if (claims && claims.email) return String(claims.email).toLowerCase();
+  if (claims && claims.sub) {
+    const e = await supabaseGetUserEmail(env, claims.sub);
+    return e ? e.toLowerCase() : null;
+  }
+  return null;
+}
+
+function emailDomainAllowed(env, email) {
+  const at = email.lastIndexOf("@");
+  if (at < 0) return false;
+  const domain = email.slice(at + 1);
+  const allowed = (env.BETA_ALLOW_DOMAINS || "lawfaremedia.org")
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+  return allowed.includes(domain);
+}
+
+async function emailInAllowlist(env, email) {
+  const r = await supabaseFetch(
+    env,
+    `/rest/v1/beta_allowlist?email=eq.${encodeURIComponent(email)}&select=email&limit=1`
+  );
+  if (!r.ok) return false;
+  const rows = await r.json();
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+// Returns null when the user is allowed, or a 403 Response when not.
+// Accepts either the verified JWT claims (preferred — carries `email`) or a
+// bare userId string (falls back to an admin email lookup).
+async function betaGate(env, claimsOrUserId) {
+  const claims =
+    typeof claimsOrUserId === "string" ? { sub: claimsOrUserId } : claimsOrUserId;
+  const email = await resolveUserEmail(env, claims);
+  if (email && (emailDomainAllowed(env, email) || (await emailInAllowlist(env, email)))) {
+    return null;
+  }
+  return json(
+    {
+      error: {
+        message:
+          "RAGtime is in limited beta and your account isn't on the access list yet. If you think this is a mistake, contact the Lawfare team.",
+        code: "not_in_beta"
+      }
+    },
+    403
+  );
 }
 
 async function supabaseUpdateAccount(env, userId, patch) {
