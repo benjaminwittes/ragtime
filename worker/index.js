@@ -97,6 +97,9 @@ export default {
       if (path === "/corpus/read-batch" && request.method === "POST") {
         return await corpusReadBatchHandler(request, env, ctx);
       }
+      if (path === "/corpus/analyze" && request.method === "POST") {
+        return await corpusAnalyzeHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -1266,6 +1269,155 @@ async function corpusReadBatchHandler(request, env, ctx) {
     verdicts: clIds.map((id) => ({ cl_id: id, keep: verdicts[id].keep, reason: verdicts[id].reason })),
     _cost_cents: cost,
     _balance_cents: bal
+  }, 200);
+}
+
+// ── Slice 4: Analyze ("Analyze" button) ─────────────────────────────────────
+// One-shot analysis over the whole field (≤ a sane cap): read all cases in one
+// LLM call and produce a markdown narrative + optional per-case annotations
+// (rank/score/category/label). Fully server-side — it's a single call, so there's
+// no client orchestration. corpusModelCall streams Worker→Anthropic (same 524
+// avoidance /ask uses for the long 32k-token output). Does NOT narrow the field.
+var CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE = 15;
+var CLAUDE_ANALYSIS_MAX_ENTRY_CHARS = 400;
+var CLAUDE_ANALYSIS_OUTPUT_TOKENS = 32000;
+var CLAUDE_ANALYSIS_HARD_CAP = 2000; // server guard; beyond this the context won't fit anyway
+
+function buildAnalysisBlock(caseRow, entries) {
+  const meta = [
+    'cl_id: ' + caseRow.cl_id,
+    'case_name: ' + (caseRow.case_name || ''),
+    'docket: ' + (caseRow.docket_number || '') + ' · court: ' + (caseRow.court || '') +
+      ' · judge: ' + (caseRow.judge || '—') + ' · cause: ' + (caseRow.cause || '—') +
+      ' · NOS: ' + (caseRow.nature_of_suit || '—') + ' · filed: ' + (caseRow.date_filed || '—')
+  ].join('\n');
+  const entryLines = entries.map((e) => {
+    let desc = String(e.description || '').replace(/\s+/g, ' ').trim();
+    if (desc.length > CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) desc = desc.slice(0, CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) + '…';
+    return '#' + (e.entry_number != null ? e.entry_number : '?') + ' (' + (e.entry_date || '?') + '): ' + desc;
+  });
+  const entriesBlock = entryLines.length > 0
+    ? 'DOCKET ENTRIES (' + entryLines.length + '):\n' + entryLines.join('\n')
+    : 'DOCKET ENTRIES: (none available)';
+  return meta + '\n' + entriesBlock;
+}
+
+function buildAnalysisSystem() {
+  return "You are an analyst reviewing a set of federal court cases. The user has a question or analytical task. Read the cases and produce:\n" +
+    "1. A markdown document presenting your analysis.\n" +
+    "2. Optional per-case annotations as a JSON array.\n\n" +
+    "OUTPUT FORMAT — JSON OBJECT ONLY. No markdown fences, no prose outside the JSON.\n" +
+    '{\n' +
+    '  "markdown": "<your analysis as a markdown document>",\n' +
+    '  "annotations": [ { "cl_id": <int>, "rank"?: <int>, "score"?: <number>, "category"?: <string>, "label"?: <string> }, ... ]\n' +
+    '}\n\n' +
+    "MARKDOWN AUTHORING RULES:\n" +
+    "- Reference cases using the exact syntax: [Case Name (docket)](#case-<cl_id>).\n" +
+    "  Example: [Doe v. Garland (1:25-cv-12345)](#case-67890123). The link target MUST be #case- followed by the cl_id.\n" +
+    "- Use ## for major section headers, ### for subsections.\n" +
+    "- Be concrete. Cite specific cases when making points; abstract generalities without case references are weak.\n" +
+    "- Don't list every case — that's what the table below your analysis already does. Use case references to highlight examples.\n" +
+    "- Write in plain analytical prose. No throat-clearing, no \"in this analysis I will…\" — start with the substance.\n\n" +
+    "ANNOTATIONS RULES:\n" +
+    "- Include annotations only if the user's prompt calls for ranking, scoring, classifying, or labeling individual cases.\n" +
+    "- 'rank' is 1-indexed; 1 = highest/most. If you rank, every case gets a unique rank.\n" +
+    "- 'score' is a numeric value (any range; the user defines its meaning).\n" +
+    "- 'category' is a short label (≤80 chars). 'label' is a one-line characterization (≤120 chars).\n" +
+    "- Include annotations only for cases you actually rank/categorize. Don't pad.\n" +
+    "- If the user's prompt is purely descriptive ('what patterns do you see'), you may omit annotations entirely (annotations: []).";
+}
+
+function buildAnalysisUser(prompt, blocks) {
+  const parts = ['ANALYTICAL PROMPT:\n' + prompt + '\n\nCASES (n=' + blocks.length + '):\n'];
+  blocks.forEach((item, i) => parts.push('--- CASE ' + (i + 1) + ' ---\n' + item.block));
+  parts.push('\nReturn the JSON object now.');
+  return parts.join('\n\n');
+}
+
+function parseAnalysis(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  let parsed;
+  try { parsed = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) parsed = JSON.parse(firstObj);
+    else throw new Error('did not return valid JSON (may be truncated).');
+  }
+  if (typeof parsed !== 'object' || parsed === null) throw new Error('response was not an object.');
+  const markdown = String(parsed.markdown || '').trim();
+  const annotationsArr = Array.isArray(parsed.annotations) ? parsed.annotations : [];
+  const annotations = {};
+  annotationsArr.forEach((a) => {
+    if (a && a.cl_id != null) {
+      const entry = {};
+      if (a.rank != null) entry.rank = Number(a.rank);
+      if (a.score != null) entry.score = Number(a.score);
+      if (a.category != null) entry.category = String(a.category).slice(0, 80);
+      if (a.label != null) entry.label = String(a.label).slice(0, 120);
+      annotations[a.cl_id] = entry;
+    }
+  });
+  return { markdown, annotations };
+}
+
+async function corpusAnalyzeHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const prompt = String((body && body.prompt) || "").trim();
+  if (!prompt) return json({ error: { message: "Missing prompt" } }, 400);
+  const clIds = Array.isArray(body && body.cl_ids) ? body.cl_ids.map(Number).filter(Number.isFinite) : [];
+  if (clIds.length === 0) return json({ error: { message: "No cases in scope" } }, 400);
+  if (clIds.length > CLAUDE_ANALYSIS_HARD_CAP) {
+    return json({ error: { message: "Too many cases for one-shot analysis (" + clIds.length.toLocaleString("en-US") + "; cap " + CLAUDE_ANALYSIS_HARD_CAP.toLocaleString("en-US") + "). Narrow the field first.", code: "too_many_cases" } }, 400);
+  }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  // Fetch display rows (also used for the context) + top-N entries per case.
+  let caseRows, entryRows;
+  try {
+    caseRows = await corpusRunQuery(env, "SELECT " + SQL_DISPLAY_COLS + " FROM cases WHERE cl_id IN (" + clIds.join(",") + ") ORDER BY date_filed DESC NULLS LAST");
+    entryRows = await corpusRunQuery(env,
+      "SELECT cl_id, entry_number, entry_date, description FROM (" +
+      "  SELECT cl_id, entry_number, entry_date, description, ROW_NUMBER() OVER (PARTITION BY cl_id ORDER BY entry_number DESC) AS rn" +
+      "  FROM docket_entries WHERE cl_id IN (" + clIds.join(",") + ")" +
+      ") sub WHERE rn <= " + CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE);
+  } catch (e) {
+    return json({ error: { message: "Fetching case data failed: " + e.message } }, 502);
+  }
+  const entriesById = {};
+  entryRows.forEach((r) => { (entriesById[r.cl_id] = entriesById[r.cl_id] || []).push(r); });
+  Object.keys(entriesById).forEach((k) => entriesById[k].sort((a, b) => (b.entry_number || 0) - (a.entry_number || 0)));
+
+  const blocks = caseRows.map((r) => ({ block: buildAnalysisBlock(r, entriesById[r.cl_id] || []) }));
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildAnalysisSystem(),
+      messages: [{ role: "user", content: buildAnalysisUser(prompt, blocks) }],
+      max_tokens: CLAUDE_ANALYSIS_OUTPUT_TOKENS
+    });
+  } catch (e) {
+    return json({ error: { message: "Analysis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parseAnalysis(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse analysis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+  if (!parsed.markdown) return json({ error: { message: "The model returned no narrative analysis." } }, 502);
+
+  return json({
+    markdown: parsed.markdown,
+    annotations: parsed.annotations,
+    cases: caseRows,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
   }, 200);
 }
 
