@@ -3031,101 +3031,17 @@ function estimateClaudeAnalysisCost(caseCount) {
   return { dollars: dollars, seconds: seconds };
 }
 
-// Build the per-case context block for analysis. Lighter than the read-mode block:
-// fewer entries, shorter truncation, since Claude is comparing across cases.
-function buildAnalysisCaseBlock(caseRow, entries) {
-  var meta = [
-    'cl_id: ' + caseRow.cl_id,
-    'case_name: ' + (caseRow.case_name || ''),
-    'docket: ' + (caseRow.docket_number || '') +
-      ' · court: ' + (caseRow.court || '') +
-      ' · judge: ' + (caseRow.judge || '—') +
-      ' · cause: ' + (caseRow.cause || '—') +
-      ' · NOS: ' + (caseRow.nature_of_suit || '—') +
-      ' · filed: ' + (caseRow.date_filed || '—')
-  ].join('\n');
-  var entryLines = entries.map(function(e) {
-    var desc = String(e.description || '').replace(/\s+/g, ' ').trim();
-    if (desc.length > CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) {
-      desc = safeSlice(desc, CLAUDE_ANALYSIS_MAX_ENTRY_CHARS) + '…';
-    }
-    return '#' + (e.entry_number != null ? e.entry_number : '?') +
-           ' (' + (e.entry_date || '?') + '): ' + desc;
-  });
-  var entriesBlock = entryLines.length > 0
-    ? 'DOCKET ENTRIES (' + entryLines.length + '):\n' + entryLines.join('\n')
-    : 'DOCKET ENTRIES: (none available)';
-  return meta + '\n' + entriesBlock;
-}
-
-// Fetch top-N most-recent entries per case, scoped to CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE.
-async function fetchEntriesForAnalysis(clIds) {
-  var byClId = {};
-  if (clIds.length === 0) return byClId;
-  var CHUNK = 500;
-  for (var i = 0; i < clIds.length; i += CHUNK) {
-    var chunk = clIds.slice(i, i + CHUNK);
-    var sql =
-      "SELECT cl_id, entry_number, entry_date, description FROM (" +
-      "  SELECT cl_id, entry_number, entry_date, description, " +
-      "         ROW_NUMBER() OVER (PARTITION BY cl_id ORDER BY entry_number DESC) AS rn " +
-      "  FROM docket_entries WHERE cl_id IN (" + chunk.join(',') + ")" +
-      ") sub WHERE rn <= " + CLAUDE_ANALYSIS_MAX_ENTRIES_PER_CASE;
-    var rows = await sbRpc('run_query', { query_text: sql }) || [];
-    rows.forEach(function(r) {
-      if (!byClId[r.cl_id]) byClId[r.cl_id] = [];
-      byClId[r.cl_id].push(r);
-    });
-  }
-  Object.keys(byClId).forEach(function(k) {
-    byClId[k].sort(function(a, b) { return (b.entry_number || 0) - (a.entry_number || 0); });
-  });
-  return byClId;
-}
-
-// Parse Claude's analysis response. Expected JSON shape:
-//   { "markdown": "...", "annotations": [ { "cl_id": int, "rank"?: int, "score"?: number, "category"?: string, "label"?: string } ] }
-// Tolerates code fences, surrounding chatter, and postambles containing
-// stray braces (see extractFirstJsonValue, v8.0.1).
-function parseAnalysisResponse(raw) {
-  var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-  var parsed;
-  try { parsed = JSON.parse(cleaned); }
-  catch (pe) {
-    var firstObj = extractFirstJsonValue(cleaned, 'object');
-    if (firstObj) parsed = JSON.parse(firstObj);
-    else {
-      console.error('[' + aiName() + ' Analysis] Full raw response:', raw);
-      var hint = (cleaned.indexOf('{') >= 0)
-        ? ' (response may have been truncated — try a narrower scope)'
-        : '';
-      throw new Error(aiName() + ' did not return valid JSON' + hint + '. Raw: ' + raw.slice(0, 1500));
-    }
-  }
-  if (typeof parsed !== 'object' || parsed === null) throw new Error('Analysis response was not an object.');
-  var markdown = String(parsed.markdown || '').trim();
-  var annotationsArr = Array.isArray(parsed.annotations) ? parsed.annotations : [];
-  var annotations = {};
-  annotationsArr.forEach(function(a) {
-    if (a && a.cl_id != null) {
-      var entry = {};
-      if (a.rank != null) entry.rank = Number(a.rank);
-      if (a.score != null) entry.score = Number(a.score);
-      if (a.category != null) entry.category = String(a.category).slice(0, 80);
-      if (a.label != null) entry.label = String(a.label).slice(0, 120);
-      annotations[a.cl_id] = entry;
-    }
-  });
-  return { markdown: markdown, annotations: annotations };
-}
-
+// === ANALYZE MODE (server-side one-shot) ===
+//
+// One analytical prompt over the whole field; the Worker (/corpus/analyze)
+// fetches the cases + entries, runs one LLM call, and returns a markdown
+// narrative + optional per-case annotations. Does NOT narrow the field.
 async function applyClaudeAnalysis() {
   if (!isOnTip()) return;
   if (!claudeAccessUnlocked()) {
-    alert('Click "Unlock" in the Claude features panel to use this mode.');
+    alert('Click "Unlock" in the AI features panel to use this mode.');
     return;
   }
-
   var prompt = document.getElementById('analysis-prompt').value.trim();
   if (!prompt) { alert('Describe the analysis you want first.'); return; }
 
@@ -3137,26 +3053,16 @@ async function applyClaudeAnalysis() {
   var incoming = tip.outgoing_cl_ids.slice();
   var incomingCount = incoming.length;
   if (incomingCount === 0) { alert('No cases in scope.'); return; }
-  // v9.0.0 — hard cap removed; cost-preview modal is the gate. Above the soft
-  // hint, give a heads-up about context-window risk; above ANALYSIS_SOFT_WARN,
-  // existing warning about attention degradation still fires below.
   if (incomingCount > CLAUDE_ANALYSIS_MAX) {
-    var goAnalysis = confirm('Field is ' + fmtInt(incomingCount) + ' cases — unusually large for one-shot Analysis. ' +
+    if (!confirm('Field is ' + fmtInt(incomingCount) + ' cases — unusually large for one-shot Analysis. ' +
       'Beyond ~1,000 cases the model\'s context window may not fit them all and the call could fail. ' +
-      'You\'ll be shown a cost estimate before anything runs. Continue?');
-    if (!goAnalysis) return;
+      'You\'ll be shown a cost estimate before anything runs. Continue?')) return;
   }
-
-  // Soft-warn confirm above the comfort threshold.
   if (incomingCount > CLAUDE_ANALYSIS_SOFT_WARN) {
     var aest = estimateClaudeAnalysisCost(incomingCount);
-    var ok = confirm(
-      'This will analyze ' + fmtInt(incomingCount) + ' cases in one shot.\n\n' +
-      'Estimated cost: ~$' + aest.dollars.toFixed(2) + '\n' +
-      'Estimated time: ~' + aest.seconds + ' sec\n\n' +
-      'Above ' + fmtInt(CLAUDE_ANALYSIS_SOFT_WARN) + ' cases the analysis quality may degrade — Claude has less attention per case. Continue?'
-    );
-    if (!ok) return;
+    if (!confirm('This will analyze ' + fmtInt(incomingCount) + ' cases in one shot.\n\n' +
+      'Estimated cost: ~$' + aest.dollars.toFixed(2) + '\nEstimated time: ~' + aest.seconds + ' sec\n\n' +
+      'Above ' + fmtInt(CLAUDE_ANALYSIS_SOFT_WARN) + ' cases the analysis quality may degrade — Claude has less attention per case. Continue?')) return;
   }
 
   transitionToActive();
@@ -3169,75 +3075,23 @@ async function applyClaudeAnalysis() {
   statusEl.classList.add('active');
 
   try {
-    statusEl.textContent = 'Fetching case metadata...';
-    var caseFetchSql =
-      "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases " +
-      "WHERE cl_id IN (" + incoming.join(',') + ") ORDER BY date_filed DESC";
-    var caseRows = await sbRpc('run_query', { query_text: caseFetchSql }) || [];
-    var caseById = {};
-    caseRows.forEach(function(r) { caseById[r.cl_id] = r; });
-
-    statusEl.textContent = 'Fetching docket entries...';
-    var entriesById = await fetchEntriesForAnalysis(incoming);
-
-    statusEl.textContent = 'Building context...';
-    // Build the case blocks in stable order (date_filed DESC, matching caseRows).
-    var caseBlocks = [];
-    caseRows.forEach(function(r) {
-      var entries = entriesById[r.cl_id] || [];
-      caseBlocks.push({ caseRow: r, block: buildAnalysisCaseBlock(r, entries) });
+    statusEl.textContent = 'Analyzing ' + fmtInt(incomingCount) + ' cases...';
+    var provider = (llmAccess.mode === 'paid') ? 'anthropic' : llmAccess.provider;
+    var resp = await corpusApiCall('/corpus/analyze', {
+      prompt: prompt, cl_ids: incoming, provider: provider, model: llmAccess.model
     });
+    if (!resp.markdown) throw new Error(aiName() + ' returned no narrative analysis.');
 
-    var systemPrompt =
-      "You are an analyst reviewing a set of federal court cases. The user has a question or analytical task. Read the cases and produce:\n" +
-      "1. A markdown document presenting your analysis.\n" +
-      "2. Optional per-case annotations as a JSON array.\n\n" +
-      "OUTPUT FORMAT — JSON OBJECT ONLY. No markdown fences, no prose outside the JSON.\n" +
-      '{\n' +
-      '  "markdown": "<your analysis as a markdown document>",\n' +
-      '  "annotations": [ { "cl_id": <int>, "rank"?: <int>, "score"?: <number>, "category"?: <string>, "label"?: <string> }, ... ]\n' +
-      '}\n\n' +
-      "MARKDOWN AUTHORING RULES:\n" +
-      "- Reference cases using the exact syntax: [Case Name (docket)](#case-<cl_id>).\n" +
-      "  Example: [Doe v. Garland (1:25-cv-12345)](#case-67890123). The link target MUST be #case- followed by the cl_id.\n" +
-      "- Use ## for major section headers, ### for subsections.\n" +
-      "- Be concrete. Cite specific cases when making points; abstract generalities without case references are weak.\n" +
-      "- Don't list every case — that's what the table below your analysis already does. Use case references to highlight examples.\n" +
-      "- Write in plain analytical prose. No throat-clearing, no \"in this analysis I will…\" — start with the substance.\n\n" +
-      "ANNOTATIONS RULES:\n" +
-      "- Include annotations only if the user's prompt calls for ranking, scoring, classifying, or labeling individual cases.\n" +
-      "- 'rank' is 1-indexed; 1 = highest/most. If you rank, every case gets a unique rank.\n" +
-      "- 'score' is a numeric value (any range; the user defines its meaning).\n" +
-      "- 'category' is a short label (≤80 chars). 'label' is a one-line characterization (≤120 chars).\n" +
-      "- Include annotations only for cases you actually rank/categorize. Don't pad.\n" +
-      "- If the user's prompt is purely descriptive ('what patterns do you see'), you may omit annotations entirely (annotations: []).";
+    var annotations = resp.annotations || {};
+    var caseRows = resp.cases || [];
 
-    var userParts = ['ANALYTICAL PROMPT:\n' + prompt + '\n\nCASES (n=' + caseBlocks.length + '):\n'];
-    caseBlocks.forEach(function(item, i) {
-      userParts.push('--- CASE ' + (i + 1) + ' ---\n' + item.block);
-    });
-    userParts.push('\nReturn the JSON object now.');
-    var userMessage = userParts.join('\n\n');
-
-    statusEl.textContent = 'Analyzing ' + fmtInt(caseBlocks.length) + ' cases...';
-    var raw = await callClaude(systemPrompt, userMessage, CLAUDE_ANALYSIS_MAX_OUTPUT_TOKENS);
-
-    statusEl.textContent = 'Rendering...';
-    var parsed = parseAnalysisResponse(raw);
-    if (!parsed.markdown) throw new Error(aiName() + ' returned no narrative analysis.');
-
-    // Build display rows. If any annotations include rank, sort by rank ascending;
-    // otherwise preserve original (date_filed DESC) order.
-    var hasRank = false;
-    Object.keys(parsed.annotations).forEach(function(k) {
-      if (parsed.annotations[k].rank != null) hasRank = true;
-    });
+    // Sort display by rank if the model ranked; else keep date_filed DESC order.
+    var hasRank = Object.keys(annotations).some(function(k) { return annotations[k].rank != null; });
     var displayCases = caseRows.slice();
     if (hasRank) {
       displayCases.sort(function(a, b) {
-        var ra = parsed.annotations[a.cl_id] && parsed.annotations[a.cl_id].rank;
-        var rb = parsed.annotations[b.cl_id] && parsed.annotations[b.cl_id].rank;
-        // Cases with no rank go to the bottom, in original order.
+        var ra = annotations[a.cl_id] && annotations[a.cl_id].rank;
+        var rb = annotations[b.cl_id] && annotations[b.cl_id].rank;
         if (ra == null && rb == null) return 0;
         if (ra == null) return 1;
         if (rb == null) return -1;
@@ -3246,7 +3100,6 @@ async function applyClaudeAnalysis() {
     }
 
     var shortLabel = prompt.length > 60 ? prompt.slice(0, 60) + '…' : prompt;
-
     var newPage = {
       page_id: stack.length,
       operation_type: 'claude_analysis',
@@ -3260,8 +3113,8 @@ async function applyClaudeAnalysis() {
       outgoing_cl_ids: incoming.slice(),  // analysis does NOT narrow
       outgoing_count: incomingCount,
       cases: displayCases,
-      per_case_annotations: parsed.annotations,
-      artifact_markdown: parsed.markdown,
+      per_case_annotations: annotations,
+      artifact_markdown: resp.markdown,
       created_at: new Date().toISOString()
     };
     stack.push(newPage);
@@ -3269,10 +3122,9 @@ async function applyClaudeAnalysis() {
     currentPagePagination = 0;
     selectedCaseId = null;
     modeArmed = false;
-    analysisLayout = 'top';   // reset to default whenever a new analysis page is created
+    analysisLayout = 'top';
     closeDetail();
     document.getElementById('analysis-prompt').value = '';
-
   } catch (err) {
     alert(aiName() + ' Analysis failed: ' + err.message);
   }
