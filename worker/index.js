@@ -82,6 +82,12 @@ export default {
       if (path === "/ask" && request.method === "POST") {
         return await askHandler(request, env, ctx);
       }
+      if (path === "/corpus/plan" && request.method === "POST") {
+        return await corpusPlanHandler(request, env, ctx);
+      }
+      if (path === "/corpus/execute" && request.method === "POST") {
+        return await corpusExecuteHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -293,6 +299,575 @@ async function askHandler(request, env, ctx) {
     normalized._balance_cents = account.balance_cents - costCents;
   }
   return json(normalized, 200);
+}
+
+// ================= Corpus AMA (server-side port of the client "Ask" loop) ====
+//
+// The "Ask" (AMA) flow used to run entirely in index.html: the browser had the
+// LLM write SQL, ran it against Supabase via the run_query RPC, and synthesized
+// an answer — i.e. an arbitrary-SQL surface lived in the client. These endpoints
+// move that loop server-side so the public never authors/sends SQL. The flow is
+// two-phase to preserve the paid-mode cost preflight:
+//
+//   POST /corpus/plan     question + scope  -> planning LLM call (charged) ->
+//                         { token, plan-for-display, estimated_cost }. The full
+//                         plan (incl. SQL) is stored in KV under `token`; the
+//                         client only gets an opaque token + a display copy.
+//   POST /corpus/execute  token (+ auth)    -> run the STORED plan's SQL against
+//                         the corpus + synthesis LLM call (charged) -> answer.
+//
+// Executing the SERVER-STORED plan (not client-returned SQL) is what keeps the
+// surface closed: a tampered client SQL payload is ignored. run_query is itself
+// SELECT-only + statement-timed-out, against the PII-free corpus project.
+//
+// Litigation-only for now (the v1 faithful port). Multi-corpus (FRUS/OLC schema
+// docs + a corpus selector, driven by public.corpora) is an additive follow-up.
+
+async function corpusFetch(env, path, init = {}) {
+  if (!env.CORPUS_SUPABASE_URL || !env.CORPUS_SUPABASE_KEY) {
+    throw new Error("Corpus Supabase env not configured");
+  }
+  const url = `${env.CORPUS_SUPABASE_URL.replace(/\/$/, "")}${path}`;
+  const headers = {
+    apikey: env.CORPUS_SUPABASE_KEY,
+    Authorization: `Bearer ${env.CORPUS_SUPABASE_KEY}`,
+    "Content-Type": "application/json",
+    ...(init.headers || {})
+  };
+  return fetch(url, { ...init, headers });
+}
+
+async function corpusRunQuery(env, sql) {
+  const r = await corpusFetch(env, `/rest/v1/rpc/run_query`, {
+    method: "POST",
+    body: JSON.stringify({ query_text: sql })
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`run_query ${r.status}: ${String(t).slice(0, 300)}`);
+  }
+  return await r.json();
+}
+
+// Resolve auth for a corpus request that will make >=1 billed model call.
+// Mirrors askHandler's auth (IP rate-limit + paid/demo/byok), reusing the same
+// standalone helpers. Returns {authMode, apiKey, userId, account} or a Response.
+async function resolveCorpusAuth(request, env, ctx, provider, body) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const now = new Date();
+  const ipKey = `ip:${ip}:${yyyymmddhhmm(now)}`;
+  const ipCount = parseInt((await env.QUOTA.get(ipKey)) || "0", 10);
+  if (ipCount >= PER_IP_PER_MIN) {
+    return json({ error: { message: "Rate limit exceeded (10 req/min per IP)" } }, 429);
+  }
+  ctx.waitUntil(env.QUOTA.put(ipKey, String(ipCount + 1), { expirationTtl: 120 }));
+
+  const authHeader = request.headers.get("Authorization") || "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch) {
+    const claims = await verifyJwt(bearerMatch[1], env);
+    if (!claims) return json({ error: { message: "Invalid or expired session token. Please sign in again." } }, 401);
+    const betaBlocked = await betaGate(env, claims);
+    if (betaBlocked) return betaBlocked;
+    if (provider !== "anthropic") {
+      return json({ error: { message: 'Paid tier currently supports Anthropic only. To use OpenAI or Google, switch to "My API key".' } }, 400);
+    }
+    const account = await supabaseGetAccount(env, claims.sub);
+    if (!account) return json({ error: { message: "Account not found. This is a server-side issue; please contact support." } }, 500);
+    if (!env.ANTHROPIC_API_KEY) return json({ error: { message: "Worker not configured — ANTHROPIC_API_KEY missing" } }, 500);
+    return { authMode: "paid", apiKey: env.ANTHROPIC_API_KEY, userId: claims.sub, account };
+  }
+  const password = body && body.password;
+  const userApiKey = body && body.user_api_key;
+  if (password) {
+    if (provider !== "anthropic") {
+      return json({ error: { message: 'The demo password only works with Anthropic. To use OpenAI or Google, switch to "My API key".' } }, 400);
+    }
+    const demoPw = env.DEMO_PASSWORD || DEFAULT_DEMO_PASSWORD;
+    if (!constantTimeEqual(password, demoPw)) return json({ error: { message: "Invalid demo password" } }, 401);
+    if (!env.ANTHROPIC_API_KEY) return json({ error: { message: "Worker not configured — ANTHROPIC_API_KEY missing" } }, 500);
+    return { authMode: "demo", apiKey: env.ANTHROPIC_API_KEY, userId: null, account: null };
+  }
+  if (userApiKey) {
+    return { authMode: "byok", apiKey: userApiKey, userId: null, account: null };
+  }
+  return json({ error: { message: "No credentials provided (need Authorization header, password, or user_api_key)" } }, 401);
+}
+
+// One billed model call. Reuses the same per-call checks + debit askHandler does
+// (demo daily quota, paid estMaxCents pre-check + balance debit). Throws an Error
+// with .status / .code on failure; returns { text, costCents, balanceCents }.
+async function corpusModelCall(env, ctx, auth, params) {
+  const { provider, model, system, messages, max_tokens } = params;
+  const fail = (msg, status, code) => { const e = new Error(msg); e.status = status; if (code) e.code = code; return e; };
+
+  if (auth.authMode === "demo") {
+    const dayKey = `quota:demo:${yyyymmdd(new Date())}`;
+    const dayCount = parseInt((await env.QUOTA.get(dayKey)) || "0", 10);
+    if (dayCount >= DAILY_QUOTA) throw fail("Daily demo quota exhausted (500 requests). Try again tomorrow, or supply your own API key.", 429);
+    ctx.waitUntil(env.QUOTA.put(dayKey, String(dayCount + 1), { expirationTtl: 172800 }));
+  }
+  let rates = null;
+  if (auth.authMode === "paid") {
+    rates = lookupAnthropicRates(model);
+    if (!rates) throw fail('No price configured for model "' + model + '". Contact support.', 400);
+    const floor = parseInt(env.BALANCE_FLOOR_CENTS || DEFAULT_BALANCE_FLOOR_CENTS, 10);
+    if (auth.account.balance_cents < floor) throw fail("Your balance is empty. Top up to continue.", 402, "empty_balance");
+    const estMaxCents = computeCostCents({
+      inputTokens: estimateInputTokens(system, messages),
+      outputTokens: max_tokens || 4000,
+      rates,
+      markup: parseFloat(env.MARKUP || DEFAULT_MARKUP)
+    });
+    if (estMaxCents > auth.account.balance_cents * MAX_SPEND_RATIO) {
+      throw fail(`This step could cost up to $${(estMaxCents / 100).toFixed(2)}; your balance is $${(auth.account.balance_cents / 100).toFixed(2)}. Top up or refine the question.`, 402, "insufficient_for_estimate");
+    }
+  }
+  // Strip lone UTF-16 surrogates before sending to the provider. The client used
+  // to do this (sanitizeForAnthropic) before /ask; now corpus row text reaches
+  // the model inside the Worker (synthesis), so the Worker must sanitize.
+  const cleanSystem = stripLoneSurrogates(system);
+  const cleanMessages = messages.map((m) => ({ role: m.role, content: stripLoneSurrogates(m.content) }));
+  const built = PROVIDERS[provider].buildRequest({ apiKey: auth.apiKey, model, system: cleanSystem, messages: cleanMessages, max_tokens: max_tokens || 4000 });
+  let upstream;
+  try { upstream = await fetch(built.url, built.init); }
+  catch (err) { throw fail("Upstream fetch failed: " + err.message, 502); }
+  let data;
+  if (provider === "anthropic" && upstream.ok) {
+    data = await assembleAnthropicStream(upstream);
+  } else {
+    const raw = await upstream.text();
+    try { data = JSON.parse(raw); }
+    catch { throw fail("Provider returned non-JSON (HTTP " + upstream.status + "): " + raw.slice(0, 300), 502); }
+  }
+  if (!upstream.ok) throw fail(extractErrorMessage(provider, data) || `Provider error ${upstream.status}`, upstream.status);
+  const normalized = PROVIDERS[provider].parseResponse(data, model);
+  let costCents = 0;
+  if (auth.authMode === "paid") {
+    const inputTokens = (normalized.usage && normalized.usage.input_tokens) || 0;
+    const outputTokens = (normalized.usage && normalized.usage.output_tokens) || 0;
+    const markup = parseFloat(env.MARKUP || DEFAULT_MARKUP);
+    costCents = computeCostCents({ inputTokens, outputTokens, rates, markup });
+    ctx.waitUntil(supabaseDebitBalance(env, auth.userId, costCents, {
+      model, input_tokens: inputTokens, output_tokens: outputTokens, markup, provider, feature: "corpus_ama"
+    }));
+    auth.account.balance_cents -= costCents;
+  }
+  const text = (normalized.content && normalized.content[0] && normalized.content[0].text) || "";
+  return { text, costCents, balanceCents: auth.authMode === "paid" ? auth.account.balance_cents : null };
+}
+
+function fmtIntJs(n) { return Number(n || 0).toLocaleString("en-US"); }
+
+function stripLoneSurrogates(s) {
+  return String(s == null ? "" : s)
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")     // high surrogate w/o following low
+    .replace(/(^|[^\uD800-\uDBFF])([\uDC00-\uDFFF])/g, "$1"); // low surrogate w/o preceding high
+}
+
+function normalizeScope(s) {
+  s = s || {};
+  let clIds = Array.isArray(s.cl_ids) ? s.cl_ids.map(Number).filter(Number.isFinite) : null;
+  if (clIds && clIds.length === 0) clIds = null;
+  const scopeSql = (typeof s.scope_sql === "string" && s.scope_sql.trim()) ? s.scope_sql.trim() : null;
+  return {
+    cl_ids: clIds,
+    scope_sql: scopeSql,
+    is_full_db: !clIds && !scopeSql,
+    count: Number(s.count) || (clIds ? clIds.length : 0),
+    description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : ""
+  };
+}
+
+// ── Ported AMA pure functions (faithful from index.html v9.x) ────────────────
+var AMA_SCHEMA_DOC = [
+  'TABLE: cases — one row per federal court case.',
+  '  cl_id (bigint, PK)            — CourtListener case id; use this to identify a case in your output.',
+  '  case_name (text)              — e.g. "United States v. Smith"; FTS-indexed in column "fts" via to_tsvector.',
+  '  docket_number (text)          — e.g. "1:25-cv-00123".',
+  '  court (text)                  — court code, e.g. dcd, nyed, txsd, ca9.',
+  '  date_filed (date)             — case filing date.',
+  '  date_terminated (date)        — null if open.',
+  '  judge (text)                  — judge name; may be empty.',
+  '  cause (text)                  — statutory cause / FRCP basis.',
+  '  nature_of_suit (text)         — federal NOS code/label, e.g. "440 Civil Rights".',
+  '  jurisdiction_type (text)      — e.g. "Federal Question".',
+  '  plaintiff (text)              — plaintiff name(s).',
+  '  defendant (text)              — defendant name(s).',
+  '  fts (tsvector, generated)     — to_tsvector("english", case_name) — use for case-name FTS.',
+  '',
+  'TABLE: docket_entries — many rows per case.',
+  '  cl_id (bigint, FK→cases.cl_id)',
+  '  entry_number (bigint)         — sequential within a case.',
+  '  entry_date (text)             — ISO date string.',
+  '  description (text)            — entry text.',
+  '  court (text)',
+  '  fts (tsvector, generated)     — to_tsvector("english", description).',
+  '',
+  'NOTES:',
+  '- Case-level FTS: WHERE cases.fts @@ websearch_to_tsquery(\'english\', \'your search\').',
+  '- Entry-level FTS: WHERE docket_entries.fts @@ websearch_to_tsquery(\'english\', \'your search\').',
+  '- Use websearch_to_tsquery for natural-language input; supports quotes and OR.',
+  '- "Trump II" / current administration: filter by date_filed >= \'2025-01-20\'.',
+  '- "Federal agency defendant": defendant ILIKE \'%United States%\' OR defendant ILIKE \'%Department of%\' OR defendant ILIKE \'%Agency%\' (varies — sample first if uncertain).',
+  '- Read-only: only SELECT statements are accepted; LIMIT yourself to ≤ 10000 rows per query.'
+].join('\n');
+
+function buildPlanningSystem() {
+  return [
+    'You are the planner for an agentic "ask me anything" tool over a federal litigation database. Your job is to look at a user question and the current scope, then return a JSON plan describing how you would answer it.',
+    '',
+    'You have access to a Postgres database (read-only) via SELECT queries. Schema:',
+    '',
+    AMA_SCHEMA_DOC,
+    '',
+    'Output a single JSON object with these keys (no prose, no code fences):',
+    '{',
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    '       // list = the question wants a refined set of cases (the field will be narrowed).',
+    '       // narrative = the question wants an analytical answer; the field is unchanged.',
+    '       // hybrid = both — narrative summary plus a refined list (most aggregate-with-examples questions).',
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats the user should see — e.g. fuzzy semantic categories you defined, sampling, fields you wished existed but don\'t"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ...; -- read-only, LIMIT ≤ 10000"},',
+    '    ...',
+    '  ],',
+    '  "estimated_cost_cents": <integer>,',
+    '       // your estimate of the synthesis call cost in cents (the planning call is already paid).',
+    '       // Synthesis input ≈ all query results in JSON (be honest about size); output ≈ 800-2000 tokens.',
+    '       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.',
+    '  "wants_synthesis": true',
+    '}',
+    '',
+    'Rules:',
+    '- Be ruthlessly economical with queries. Aggregate where possible (COUNT, AVG, group-by) rather than pulling raw rows. Only pull case rows when the user wants a list, and cap to 500 rows in that query unless the user explicitly asked for more.',
+    '- For trend questions, prefer one query that groups by year (or month) over many narrow queries.',
+    '- For "are X up or down" questions, compare two periods in one query.',
+    '- Do NOT plan to read docket-entry text in v9; if a question really needs it, say so in candor_notes ("would benefit from reading entries — not done in v9; consider Read mode after narrowing"). FTS over docket_entries.description is fine for identifying cases by topic.',
+    '- PERFORMANCE for narrowed scopes (esp. > 100K cases): FTS-first patterns are dramatically faster. To find docket entries matching some text WITHIN a scope, write "SELECT cl_id FROM scoped_docket_entries WHERE fts @@ ..." rather than joining scoped_cases × scoped_docket_entries first. Postgres can use the FTS GIN index on docket_entries.fts directly; the scope filter then narrows the much smaller FTS result set. Avoid heavy joins of scoped_cases × scoped_docket_entries with an FTS predicate at the join level — those reliably hit the statement timeout on six-figure scopes.',
+    '- WHEN THE CURRENT SCOPE IS NARROWED (cl_ids list provided): use the names "scoped_cases" instead of "cases" and "scoped_docket_entries" instead of "docket_entries". The runner substitutes these names with inline subqueries already filtered to the scope. CRITICAL: reference these names ONLY after FROM or JOIN keywords, and DO NOT alias them — write "FROM scoped_cases WHERE cause LIKE ..." (good), not "FROM scoped_cases sc WHERE sc.cause LIKE ..." (will break). To qualify a column, use the unaliased name: "scoped_cases.cl_id" works. WHEN SCOPE IS THE FULL DATABASE: use the regular table names "cases" and "docket_entries" (and you may alias them freely).',
+    '- For sampling at top-of-stack, you can use "ORDER BY random()" but be aware that\'s expensive on huge tables; prefer "ORDER BY date_filed DESC" with a LIMIT if you want a recency-biased sample.',
+    '- Output strict JSON only. No markdown. No code fences. No prose outside the object.'
+  ].join('\n');
+}
+
+function buildPlanningUser(question, scope) {
+  return [
+    'USER QUESTION:',
+    question,
+    '',
+    'CURRENT SCOPE:',
+    scope.description || (scope.is_full_db
+      ? 'The full database — all federal court cases.'
+      : fmtIntJs(scope.count) + ' cases (narrowed).'),
+    scope.is_full_db
+      ? '(no cl_id constraint — your queries run against the full database; use table names "cases" and "docket_entries")'
+      : '(narrowed to ' + fmtIntJs(scope.count) + ' cl_ids; the runner will pre-define CTEs named scoped_cases and scoped_docket_entries — use THOSE names in your queries)',
+    '',
+    'Return the JSON plan now.'
+  ].join('\n');
+}
+
+function extractFirstJsonObject(s) {
+  const start = s.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) return s.slice(start, i + 1); }
+  }
+  return null;
+}
+
+function parsePlan(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error('JSON.parse error: ' + pe2.message); }
+    } else {
+      throw new Error('could not find a JSON object in the response.');
+    }
+  }
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('top-level value is not an object.');
+  if (['list', 'narrative', 'hybrid'].indexOf(v.output_mode) < 0) throw new Error('output_mode must be list, narrative, or hybrid.');
+  if (!Array.isArray(v.queries)) throw new Error('queries must be an array.');
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || '').trim();
+  return v;
+}
+
+var SQL_FOLLOW_KEYWORDS = 'WHERE|ON|USING|JOIN|LEFT|RIGHT|FULL|INNER|CROSS|OUTER|NATURAL|LATERAL|ORDER|GROUP|HAVING|LIMIT|OFFSET|FETCH|FOR|UNION|INTERSECT|EXCEPT|AND|OR|WINDOW|RETURNING';
+function substituteScoped(sqlIn, name, body) {
+  const pattern = new RegExp(
+    '(\\b(?:FROM|JOIN)\\s+)' + name + '\\b' +
+      '(?:\\s+AS\\s+(\\w+)|\\s+(?!(?:' + SQL_FOLLOW_KEYWORDS + ')\\b)(\\w+))?',
+    'gi'
+  );
+  return sqlIn.replace(pattern, function (match, fromOrJoin, asAlias, bareAlias) {
+    const alias = asAlias || bareAlias || name;
+    return fromOrJoin + body + ' AS ' + alias;
+  });
+}
+
+// Run the stored plan's SQL against the corpus, substituting scoped_* table
+// names with inline scope-filtered subqueries. Faithful port of executeAmaPlan.
+async function executeCorpusPlan(env, plan, scope) {
+  const SCOPE_LITERAL_LIMIT = 25000;
+  let scopeIdsSubquery = '';
+  if (scope.cl_ids && scope.cl_ids.length > 0 && scope.cl_ids.length <= SCOPE_LITERAL_LIMIT) {
+    // Small narrowed scope: inline the cl_id list as an array literal.
+    scopeIdsSubquery = "SELECT unnest('{" + scope.cl_ids.join(',') + "}'::bigint[]) AS cl_id";
+  } else if (scope.scope_sql) {
+    // Large narrowed scope: the client sends the source page's SQL instead of
+    // tens of thousands of ids. Strip ORDER BY / LIMIT (useless for an IN check).
+    scopeIdsSubquery = String(scope.scope_sql)
+      .replace(/\s+ORDER\s+BY[\s\S]*?(?=(?:\s+LIMIT|\s*$))/i, '')
+      .replace(/\s+LIMIT\s+\d+\s*$/i, '')
+      .trim();
+  } else if (scope.cl_ids && scope.cl_ids.length > SCOPE_LITERAL_LIMIT) {
+    throw new Error('Scope is ' + fmtIntJs(scope.cl_ids.length) + ' cases — too large to inline and no scope_sql provided. Narrow further or rerun the source filter.');
+  }
+  // else: full database — no scoping applied.
+  const scopedCasesBody = scopeIdsSubquery
+    ? '(SELECT c.* FROM cases c WHERE c.cl_id IN (' + scopeIdsSubquery + '))'
+    : null;
+  const scopedEntriesBody = scopeIdsSubquery
+    ? '(SELECT d.* FROM docket_entries d WHERE d.cl_id IN (' + scopeIdsSubquery + '))'
+    : null;
+
+  const results = [];
+  for (let i = 0; i < plan.queries.length; i++) {
+    const q = plan.queries[i];
+    let sql = String(q.sql || '').trim().replace(/;\s*$/, '').trim();
+    if (!sql) continue;
+    let execSql = sql;
+    if (scopedCasesBody) {
+      execSql = substituteScoped(execSql, 'scoped_cases', scopedCasesBody);
+      execSql = substituteScoped(execSql, 'scoped_docket_entries', scopedEntriesBody);
+    }
+    if (!/^\s*SELECT\b/i.test(execSql)) execSql = 'SELECT * FROM (' + execSql + ') AS ama_q';
+    let rows;
+    try { rows = await corpusRunQuery(env, execSql); }
+    catch (err) { throw new Error('Query "' + (q.label || ('query ' + (i + 1))) + '" failed: ' + err.message); }
+    const truncated = (rows.length > 500) ? rows.slice(0, 500) : rows;
+    results.push({ label: q.label || ('query ' + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 500 });
+  }
+  return results;
+}
+
+function buildSynthesisSystem(outputMode) {
+  const listClause = (outputMode === 'list' || outputMode === 'hybrid')
+    ? '"cl_ids": [<bigint>, ...]   // the cl_ids the user should see; pulled from your query results.'
+    : '"cl_ids": null';
+  return [
+    'You are the synthesis step for an agentic AMA over a federal litigation database. The planner has already run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.',
+    '',
+    'Output a single JSON object (no prose, no code fences) with these keys:',
+    '{',
+    '  "answer_markdown": "...",  // markdown narrative; embed [case-ref:CL_ID] tokens to cite specific cases.',
+    '  ' + listClause + ',',
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    '}',
+    '',
+    'Rules:',
+    '- LEAD with caveats when your confidence is materially lower than the user might assume. “Of a sample of 500...” is a different sentence from “All cases in the system show...”',
+    '- For list and hybrid output_modes, cl_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable cases, downgrade to narrative mode and explain.',
+    '- When citing a case, use the form [case-ref:12345] inline in the markdown — the UI replaces it with a clickable link.',
+    '- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.',
+    '- Output strict JSON only. No markdown outside answer_markdown. No code fences.',
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes (“”) for direct quotation, or single quotes (‘’ or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
+  ].join('\n');
+}
+
+function buildSynthesisUser(question, plan, results) {
+  const resultsForModel = results.map(function (r) {
+    return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated, rows: r.rows };
+  });
+  return [
+    'USER QUESTION:',
+    question,
+    '',
+    'YOUR PLAN (from the planning step):',
+    plan.approach_summary,
+    '',
+    'PLANNED OUTPUT MODE: ' + plan.output_mode,
+    '',
+    'CANDOR NOTES FROM PLANNING:',
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function (n) { return '- ' + n; }).join('\n') : '(none)',
+    '',
+    'QUERY RESULTS (JSON):',
+    JSON.stringify(resultsForModel, null, 2),
+    '',
+    'Return the synthesis JSON now.'
+  ].join('\n');
+}
+
+function repairAnswerMarkdownQuotes(raw) {
+  const s = String(raw);
+  const startMatch = s.match(/"answer_markdown"\s*:\s*"/);
+  if (!startMatch) return s;
+  const startIdx = startMatch.index + startMatch[0].length;
+  const tail = s.slice(startIdx);
+  let lastIdx = -1;
+  const probe = /"(\s*,\s*"(?:cl_ids|candor_notes)"|\s*\})/g;
+  let m;
+  while ((m = probe.exec(tail)) !== null) lastIdx = m.index;
+  if (lastIdx < 0) return s;
+  const content = tail.slice(0, lastIdx);
+  const repaired = content.replace(/(?<!\\)"/g, '\\"');
+  return s.slice(0, startIdx) + repaired + tail.slice(lastIdx);
+}
+
+function parseSynthesis(raw, outputMode) {
+  const cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = repairAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
+          catch (pe4) { throw new Error('JSON.parse error: ' + pe4.message); }
+        }
+      } else {
+        throw new Error('could not find a JSON object.');
+      }
+    }
+  }
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('top-level value is not an object.');
+  if (typeof v.answer_markdown !== 'string' || !v.answer_markdown.trim()) throw new Error('answer_markdown is empty.');
+  if (outputMode === 'list' || outputMode === 'hybrid') {
+    if (!Array.isArray(v.cl_ids) || v.cl_ids.length === 0) {
+      v.cl_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(['Output mode requested a case list but synthesis returned none — showing narrative only.']);
+    } else {
+      v.cl_ids = v.cl_ids.map(function (x) { return Number(x); }).filter(function (x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.cl_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+// Phase 1: plan. Charges one model call; stores the full plan in KV under an
+// opaque token; returns a display copy + the cost estimate for the preflight.
+async function corpusPlanHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const question = String((body && body.question) || "").trim();
+  if (!question) return json({ error: { message: "Missing question" } }, 400);
+  const scope = normalizeScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildPlanningSystem(),
+      messages: [{ role: "user", content: buildPlanningUser(question, scope) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Planning step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let plan;
+  try { plan = parsePlan(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse plan: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("plan:" + token, JSON.stringify({
+    plan, scope, question, provider, model, userId: auth.userId, authMode: auth.authMode
+  }), { expirationTtl: 900 });
+
+  return json({
+    token,
+    output_mode: plan.output_mode,
+    approach_summary: plan.approach_summary,
+    candor_notes: plan.candor_notes,
+    // Display copy only — /corpus/execute runs the SERVER-STORED plan, so a
+    // tampered client SQL payload has no effect.
+    queries: plan.queries.map(function (q) { return { label: q.label, sql: q.sql }; }),
+    estimated_cost_cents: plan.estimated_cost_cents,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// Phase 2: execute. Loads the stored plan, runs its SQL against the corpus, and
+// charges one synthesis call. One-shot: the token is consumed (delete) to
+// prevent replay/double-charge.
+async function corpusExecuteHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const token = body && body.token;
+  if (!token || typeof token !== "string") return json({ error: { message: "Missing plan token" } }, 400);
+  const stored = await env.QUOTA.get("plan:" + token);
+  if (!stored) return json({ error: { message: "Plan expired or not found — re-run the question.", code: "plan_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored plan is corrupt — re-run the question." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider, body);
+  if (auth instanceof Response) return auth;
+  // A paid plan may only be executed by the same account that planned it.
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This plan belongs to a different session. Re-run the question." } }, 403);
+  }
+  // Consume the token now (one-shot) to prevent replay / double-charge.
+  ctx.waitUntil(env.QUOTA.delete("plan:" + token));
+
+  let results;
+  try { results = await executeCorpusPlan(env, blob.plan, blob.scope); }
+  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider: blob.provider, model: blob.model,
+      system: buildSynthesisSystem(blob.plan.output_mode),
+      messages: [{ role: "user", content: buildSynthesisUser(blob.question, blob.plan, results) }],
+      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+    });
+  } catch (e) {
+    return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let synth;
+  try { synth = parseSynthesis(res.text, blob.plan.output_mode); }
+  catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    answer_markdown: synth.answer_markdown,
+    cl_ids: synth.cl_ids,
+    candor_notes: synth.candor_notes,
+    output_mode: blob.plan.output_mode,
+    query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
 }
 
 async function checkoutHandler(request, env) {
