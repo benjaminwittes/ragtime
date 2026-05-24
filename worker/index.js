@@ -100,6 +100,9 @@ export default {
       if (path === "/corpus/analyze" && request.method === "POST") {
         return await corpusAnalyzeHandler(request, env, ctx);
       }
+      if (path === "/corpus/filter" && request.method === "POST") {
+        return await corpusFilterHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -1418,6 +1421,80 @@ async function corpusAnalyzeHandler(request, env, ctx) {
     cases: caseRows,
     _cost_cents: res.costCents,
     _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── #12: manual filter ("Filter manually" button) ──────────────────────────
+// The browser used to build this SQL and run it via run_query against the frozen
+// app project — and a broad filter (e.g. Civil ≈ 485k rows) blew the 60s
+// statement_timeout. Now the browser sends structured filter FIELDS; the Worker
+// builds the WHERE (escaped/validated, using the indexed case-type expression)
+// and queries the corpus. Public (free local search uses this) → IP-rate-limited.
+// Returns count + cl_ids + a display page + the executed SQL (the latter is the
+// scope source the LLM flows already use for >25k scopes). Option A: still
+// materializes the id set (corpus + index keeps the worst case under 60s); the
+// scope-as-SQL page-model rework is a separate, larger follow-on.
+function escSqlLit(s) { return String(s == null ? "" : s).replace(/'/g, "''"); }
+
+function buildFilterWhere(fields, scope) {
+  const parts = [];
+  if (scope) {
+    if (scope.cl_ids && scope.cl_ids.length > 0) {
+      parts.push("cl_id IN (SELECT unnest('{" + scope.cl_ids.join(",") + "}'::bigint[]))");
+    } else if (scope.scope_sql) {
+      parts.push("cl_id IN (" + stripOrderLimit(scope.scope_sql) + ")");
+    }
+  }
+  if (fields.search) {
+    parts.push("cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', '" + escSqlLit(fields.search) + "'))");
+  }
+  if (fields.collection) {
+    parts.push("cl_id IN (SELECT cc.cl_id FROM collection_cases cc JOIN collections c ON c.id = cc.collection_id WHERE c.slug = '" + escSqlLit(fields.collection) + "')");
+  }
+  if (fields.name) parts.push("case_name ILIKE '%" + escSqlLit(fields.name) + "%'");
+  if (!fields.allCourts) {
+    const courts = Array.isArray(fields.courts) ? fields.courts : [];
+    if (courts.length === 0) parts.push("1=0");
+    else parts.push("court IN (" + courts.map((c) => "'" + escSqlLit(c) + "'").join(",") + ")");
+  }
+  if (fields.judge) parts.push("judge = '" + escSqlLit(fields.judge) + "'");
+  if (fields.caseType && ["cv", "cr", "mj", "mc"].includes(String(fields.caseType))) {
+    // Indexed expression (idx_cases_casetype_date) — replaces the old
+    // leading-wildcard LIKE that forced a full scan.
+    parts.push("substring(docket_number from '-(cv|cr|mj|mc)-') = '" + String(fields.caseType) + "'");
+  }
+  if (fields.cause) parts.push("(cause ILIKE '%" + escSqlLit(fields.cause) + "%' OR nature_of_suit ILIKE '%" + escSqlLit(fields.cause) + "%')");
+  if (fields.from && /^\d{4}-\d{2}-\d{2}$/.test(fields.from)) parts.push("date_filed >= '" + fields.from + "'");
+  if (fields.to && /^\d{4}-\d{2}-\d{2}$/.test(fields.to)) parts.push("date_filed <= '" + fields.to + "'");
+  return parts.length > 0 ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const scope = normalizeScope(body && body.scope);
+  const where = buildFilterWhere(fields, scope.is_full_db ? null : scope);
+  // No ORDER BY on the id-set query — ordering a set is pointless and forces a
+  // sort of the whole match set. The display query keeps it (for the paged view).
+  const idsSql = "SELECT cl_id FROM cases" + where;
+  const rowsSql = "SELECT " + SQL_DISPLAY_COLS + " FROM cases" + where + " ORDER BY date_filed DESC NULLS LAST LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "Filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const clIds = idRows.map((r) => r.cl_id).filter((x) => x != null);
+  return json({
+    cl_ids: clIds,
+    display_rows: rows,
+    count: clIds.length,
+    generated_sql: rowsSql,
+    executed_sql: idsSql
   }, 200);
 }
 

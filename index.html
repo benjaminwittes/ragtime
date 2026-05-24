@@ -3715,98 +3715,71 @@ function downloadAnalysisPdf() {
   setTimeout(doPrint, 800);
 }
 
+// Plain POST to a public /corpus/* fetch endpoint. No LLM auth — these serve
+// public corpus data and must work in free local-search mode.
+async function corpusGet(path, payload) {
+  var resp = await fetch(WORKER_BASE + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  var data;
+  try { data = await resp.json(); }
+  catch (e) { throw new Error('Server returned non-JSON (HTTP ' + resp.status + ')'); }
+  if (!resp.ok || (data && data.error)) {
+    throw new Error((data && data.error && data.error.message) || ('Server error ' + resp.status));
+  }
+  return data;
+}
 
+// === MANUAL FILTER (server-side) ===
+// The browser sends structured filter fields + the incoming scope; the Worker
+// (/corpus/filter) builds the WHERE and queries the corpus (covering case-type
+// index). No client SQL, and it no longer hits the 60s statement_timeout.
 async function applyManualFilter() {
   if (!isOnTip()) return;
-
   transitionToActive();
 
   var tip = stack[stack.length - 1];
   var incoming = tip.operation_type === 'init' ? [] : tip.outgoing_cl_ids;
-
+  var courts = getSelectedCourts();
   var fields = {
-    search:   document.getElementById('f-search').value.trim(),
-    name:     document.getElementById('f-name').value.trim(),
-    courts:   getSelectedCourts(),  // array of court codes
-    judge:    document.getElementById('f-judge').value,
-    caseType: document.getElementById('f-type').value,
-    cause:    document.getElementById('f-cause').value.trim(),
-    from:     document.getElementById('f-from').value,
-    to:       document.getElementById('f-to').value,
+    search:     document.getElementById('f-search').value.trim(),
+    name:       document.getElementById('f-name').value.trim(),
+    courts:     courts,
+    allCourts:  (courts.length === allCourtCodes.length),
+    judge:      document.getElementById('f-judge').value,
+    caseType:   document.getElementById('f-type').value,
+    cause:      document.getElementById('f-cause').value.trim(),
+    from:       document.getElementById('f-from').value,
+    to:         document.getElementById('f-to').value,
     collection: document.getElementById('f-collection').value
   };
+  var scope = buildAmaScopeSummary();  // incoming scope payload (cl_ids or scope_sql)
 
-  var parts = [];
-  if (incoming.length > 0) {
-    parts.push("cl_id IN (" + incoming.join(",") + ")");
-  }
-  if (fields.search) {
-    // Use FTS tsvector index on docket_entries.fts for performance.
-    parts.push("cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', '" + escSql(fields.search) + "'))");
-  }
-  if (fields.collection) {
-    // Scope to an issue-specific breakout collection (e.g. AI Liability).
-    parts.push("cl_id IN (SELECT cc.cl_id FROM collection_cases cc JOIN collections c ON c.id = cc.collection_id WHERE c.slug = '" + escSql(fields.collection) + "')");
-  }
-  if (fields.name) parts.push("case_name ILIKE '%" + escSql(fields.name) + "%'");
-  // Courts: if all checked, no constraint. If none checked, force empty result.
-  // Otherwise, IN-list of selected codes.
-  if (fields.courts.length === 0) {
-    parts.push("1=0");
-  } else if (fields.courts.length < allCourtCodes.length) {
-    parts.push("court IN (" + fields.courts.map(function(c) { return "'" + escSql(c) + "'"; }).join(",") + ")");
-  }
-  if (fields.judge) parts.push("judge = '" + escSql(fields.judge) + "'");
-  if (fields.caseType) parts.push("docket_number LIKE '%-" + escSql(fields.caseType) + "-%'");
-  if (fields.cause) parts.push("(cause ILIKE '%" + escSql(fields.cause) + "%' OR nature_of_suit ILIKE '%" + escSql(fields.cause) + "%')");
-  if (fields.from) parts.push("date_filed >= '" + fields.from + "'");
-  if (fields.to) parts.push("date_filed <= '" + fields.to + "'");
-
-  var where = parts.length > 0 ? " WHERE " + parts.join(" AND ") : "";
-
-  // FIX (v6.4.3): The previous version did a single query with LIMIT 10000.
-  // That silently truncated outgoing_cl_ids whenever a query matched > 10K rows
-  // (e.g. "habeas" matches ~25K), which corrupted ALL downstream operations:
-  // they would operate on only the first 10K cl_ids without any signal.
-  //
-  // New approach: two queries. First gets ALL matching cl_ids (just integers,
-  // fast and small). Second fetches detailed row data only for the first 10K
-  // for display. outgoing_cl_ids gets the full set; downstream operations
-  // see the true field. cases (for display) is capped at 10K with a banner
-  // warning when truncated.
-  var idsSql = "SELECT cl_id FROM cases" + where + " ORDER BY date_filed DESC";
-  var rowsSql = "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases" + where + " ORDER BY date_filed DESC LIMIT 10000";
-
-  // Disable the commit button, show spinner in place
   var btn = document.getElementById('btn-commit-filter');
   btn.disabled = true;
   var originalLabel = btn.textContent;
   btn.innerHTML = '<span class="sp"></span> Applying...';
 
   try {
-    // Query 1: get all matching cl_ids (no limit)
-    var idRows = await sbRpc("run_query", { query_text: idsSql }) || [];
-    var allClIds = idRows.map(function(r) { return r.cl_id; });
-
-    // Query 2: get display rows for first 10K
-    var rows = await sbRpc("run_query", { query_text: rowsSql }) || [];
-
+    var resp = await corpusGet('/corpus/filter', { fields: fields, scope: scope });
+    var allClIds = resp.cl_ids || [];
+    var rows = resp.display_rows || [];
     var label = describeManualFilter(fields);
     var newPage = {
       page_id: stack.length,
       operation_type: 'manual_filter',
       operation_label: label,
       prompt: null,
-      generated_sql: rowsSql,
-      // v9.0.1 — save the cl_id-producing query. AMA needs this to define a
-      // scope CTE without inlining the cl_id list when the field is large.
-      executed_sql: idsSql,
+      generated_sql: resp.generated_sql || null,
+      executed_sql: resp.executed_sql || null,   // scope source for downstream large-field ops
       filter_state: fields,
       incoming_cl_ids: incoming.slice(),
       incoming_count: (tip.operation_type === 'init' ? totalCaseCount : incoming.length),
-      outgoing_cl_ids: allClIds,        // FIX: was capped at 10K; now the true full set
-      outgoing_count: allClIds.length,  // FIX: was display count; now the true count
-      cases: rows,                       // display rows (capped at 10K — the ONLY place truncation lives)
+      outgoing_cl_ids: allClIds,
+      outgoing_count: (typeof resp.count === 'number') ? resp.count : allClIds.length,
+      cases: rows,
       per_case_annotations: null,
       artifact_markdown: null,
       created_at: new Date().toISOString()
@@ -3815,9 +3788,9 @@ async function applyManualFilter() {
     viewingIdx = stack.length - 1;
     currentPagePagination = 0;
     selectedCaseId = null;
-    modeArmed = false; // new tip arrives locked; user must re-arm to narrow further
+    modeArmed = false;
     closeDetail();
-  } catch(err) {
+  } catch (err) {
     alert('Filter failed: ' + err.message);
   }
 
