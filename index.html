@@ -1868,47 +1868,6 @@ async function bootApp() {
   }
 }
 
-// === SUPABASE HELPERS ===
-// Wraps Supabase RPC calls with a single retry on fetch-layer failures.
-// Mirrors callClaude's retry logic: Safari "Load failed" / TLS handshake /
-// transient network errors get one retry after a brief delay; Supabase-returned
-// HTTP errors (4xx/5xx with body) propagate immediately since those are
-// deterministic and a retry won't help.
-async function sbRpc(fnName, params) {
-  var url = SB_URL + "/rest/v1/rpc/" + fnName;
-  var opts = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": SB_KEY,
-      "Authorization": "Bearer " + SB_KEY
-    },
-    body: JSON.stringify(params)
-  };
-  var attempt = 0;
-  var lastNetErr = null;
-  while (attempt < 2) {
-    attempt++;
-    var resp;
-    try {
-      resp = await fetch(url, opts);
-    } catch (netErr) {
-      lastNetErr = netErr;
-      if (attempt < 2) {
-        await new Promise(function(r) { setTimeout(r, 1500); });
-        continue;
-      }
-      throw new Error("Database fetch failed: " + netErr.message + " (retried once)");
-    }
-    if (!resp.ok) {
-      var errText = await resp.text();
-      throw new Error("RPC error " + resp.status + ": " + errText.substring(0, 200));
-    }
-    return resp.json();
-  }
-  throw new Error("Database fetch failed: " + (lastNetErr ? lastNetErr.message : 'unknown'));
-}
-
 // === INIT ===
 async function initApp() {
   initStack();
@@ -1926,39 +1885,32 @@ async function initApp() {
     //  normal pipeline write load. CLAUDE.md anticipates this and prescribes a
     //  pre-aggregated stats view (matview or trigger-maintained row); once
     //  that exists the frontend can read all five counts in O(1).
-    var counts = await sbRpc("run_query", {
-      query_text: "SELECT (SELECT COUNT(*) FROM cases) as case_count, " +
-                  "(SELECT COUNT(*) FROM docket_entries) as entry_count, " +
-                  "(SELECT COUNT(DISTINCT court) FROM cases) as court_count, " +
-                  "(SELECT MAX(last_synced_at)::date::text FROM cases) as last_synced"
-    });
-    var c = counts[0];
-    totalCaseCount = Number(c.case_count);
-    var statsActive = fmtInt(c.case_count) + ' cases · ' + fmtInt(c.entry_count) + ' entries · ' + c.court_count + ' courts';
-    var statsWelcome = statsActive + (c.last_synced ? ' · Updated ' + c.last_synced : '');
+    // Page-load facets from the Worker: counts (reltuples — instant) + the
+    // court/judge/collection dropdowns (loose index scan — fast), one round-trip.
+    var facets = await corpusGet('/corpus/facets', {});
+    totalCaseCount = Number(facets.case_count);
+    var statsActive = fmtInt(facets.case_count) + ' cases · ' + fmtInt(facets.entry_count) + ' entries · ' + facets.court_count + ' courts';
+    var statsWelcome = statsActive + (facets.last_synced ? ' · Updated ' + facets.last_synced : '');
     document.getElementById('hstats').textContent = statsActive;
     document.getElementById('hstats-welcome').textContent = statsWelcome;
 
-    // Populate court taxonomy & checkbox list
-    var courts = await sbRpc("run_query", { query_text: "SELECT DISTINCT court FROM cases ORDER BY court" });
-    allCourtCodes = courts.map(function(r) { return String(r.court || '').toLowerCase(); }).filter(Boolean);
+    // Court taxonomy & checkbox list
+    allCourtCodes = (facets.courts || []).map(function(s) { return String(s || '').toLowerCase(); }).filter(Boolean);
     districtCodes = allCourtCodes.filter(function(c) { return !isCircuit(c); });
     circuitCodes = allCourtCodes.filter(function(c) { return isCircuit(c); });
     populateCourtsList();
     applyCourtPreset('all'); // start with "All" preset selected
 
-    // Populate judges dropdown
-    var judges = await sbRpc("run_query", { query_text: "SELECT DISTINCT judge FROM cases WHERE judge != '' AND judge IS NOT NULL ORDER BY judge" });
+    // Judges dropdown
     var js = document.getElementById('f-judge');
-    judges.forEach(function(r) {
-      var o = document.createElement('option'); o.value = r.judge; o.textContent = r.judge;
+    (facets.judges || []).forEach(function(j) {
+      var o = document.createElement('option'); o.value = j; o.textContent = j;
       js.appendChild(o);
     });
 
-    // Populate collections dropdown (issue-specific breakouts, e.g. AI Liability)
-    var collections = await sbRpc("run_query", { query_text: "SELECT slug, name FROM collections ORDER BY name" }) || [];
+    // Collections dropdown (issue-specific breakouts, e.g. AI Liability)
     var cs = document.getElementById('f-collection');
-    collections.forEach(function(r) {
+    (facets.collections || []).forEach(function(r) {
       var o = document.createElement('option'); o.value = r.slug; o.textContent = r.name;
       cs.appendChild(o);
     });
@@ -3455,12 +3407,8 @@ async function commitAmaResultPage(question, plan, synth, scope) {
 // Helper to fetch case display rows from cl_ids — used by AMA list/hybrid commit.
 async function fetchCaseDisplayRowsByIds(clIds) {
   if (!clIds || clIds.length === 0) return [];
-  var arrLit = '{' + clIds.join(',') + '}';
-  var sql = 'SELECT cl_id, case_name, docket_number, court, date_filed, date_terminated, judge, nature_of_suit, plaintiff, defendant, entry_count ' +
-            'FROM cases WHERE cl_id = ANY(\'' + arrLit + '\'::bigint[]) ' +
-            'ORDER BY date_filed DESC NULLS LAST LIMIT 10000';
-  var rows = await sbRpc('run_query', { query_text: sql });
-  return rows;
+  var resp = await corpusGet('/corpus/cases', { ids: clIds });
+  return (resp && resp.rows) || [];
 }
 
 // Layout toggle for analysis pages. Flips between 'top' (artifact above table)
@@ -4614,9 +4562,8 @@ async function showDetail(clId) {
     (c.cl_url ? '<a href="' + esc(c.cl_url) + '" target="_blank" style="color:var(--accent)">CL →</a>' : '');
 
   try {
-    var entries = await sbRpc("run_query", {
-      query_text: "SELECT entry_number, entry_date, description FROM docket_entries WHERE cl_id = " + clId + " ORDER BY entry_number"
-    });
+    var er = await corpusGet('/corpus/entries', { cl_id: clId });
+    var entries = (er && er.entries) || [];
     var el = document.getElementById('d-entries'); el.innerHTML = '';
     (entries || []).forEach(function(e) {
       var div = document.createElement('div'); div.className = 'ei';

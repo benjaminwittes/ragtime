@@ -103,6 +103,12 @@ export default {
       if (path === "/corpus/filter" && request.method === "POST") {
         return await corpusFilterHandler(request, env, ctx);
       }
+      if (path === "/corpus/facets" && request.method === "POST") {
+        return await corpusFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/entries" && request.method === "POST") {
+        return await corpusEntriesHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -900,7 +906,7 @@ async function corpusExecuteHandler(request, env, ctx) {
 // applyClaudeSql; scope is now applied in SQL (server-side) rather than via a
 // client-side JS intersection. CLAUDE_MAX_RAW_ROWS cap preserved.
 var CLAUDE_MAX_RAW_ROWS = 200000;
-var SQL_DISPLAY_COLS = "cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court";
+var SQL_DISPLAY_COLS = "cl_id, docket_number, case_name, date_filed, date_terminated, judge, cause, nature_of_suit, plaintiff, defendant, entry_count, cl_url, court";
 
 function stripOrderLimit(sql) {
   return String(sql)
@@ -1496,6 +1502,68 @@ async function corpusFilterHandler(request, env, ctx) {
     generated_sql: rowsSql,
     executed_sql: idsSql
   }, 200);
+}
+
+// ── #13 fetch-cleanup: the last fixed-shape corpus reads, off the client ─────
+// These move the remaining client run_query calls (page-load facets, the
+// case-detail entries view) onto the corpus via the Worker. Public, IP-rate-
+// limited. With these + /corpus/cases, index.html no longer issues any
+// run_query (the corpus sbClient drops to auth-only).
+
+// Page-load facets: counts + the court/judge/collection dropdowns, in one call.
+// Counts use pg_class.reltuples (instant) instead of COUNT(*) — the live COUNT(*)
+// over ~6.7M docket_entries was the worst page-load timeout offender.
+// Loose index scan (recursive CTE) for DISTINCT <col> over cases — jumps between
+// distinct values via the btree index instead of a full-table scan (a plain
+// DISTINCT cold-reads all ~1M rows: ~11s; this is ~30ms). Wrapped in
+// SELECT * FROM (...) so run_query's SELECT-only guard accepts the WITH RECURSIVE.
+function distinctViaIndex(col) {
+  return "SELECT v FROM (WITH RECURSIVE t AS (" +
+    "(SELECT " + col + " AS v FROM cases WHERE " + col + " IS NOT NULL AND " + col + " <> '' ORDER BY " + col + " LIMIT 1) " +
+    "UNION ALL SELECT (SELECT " + col + " FROM cases WHERE " + col + " > t.v AND " + col + " IS NOT NULL AND " + col + " <> '' ORDER BY " + col + " LIMIT 1) " +
+    "FROM t WHERE t.v IS NOT NULL) SELECT v FROM t WHERE v IS NOT NULL) z ORDER BY v";
+}
+
+async function corpusFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    const stats = await corpusRunQuery(env,
+      "SELECT (SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.cases'::regclass) AS case_count, " +
+      "(SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.docket_entries'::regclass) AS entry_count, " +
+      "(SELECT MAX(last_synced_at)::date::text FROM cases) AS last_synced");
+    const courts = await corpusRunQuery(env, distinctViaIndex("court"));
+    const judges = await corpusRunQuery(env, distinctViaIndex("judge"));
+    const collections = await corpusRunQuery(env, "SELECT slug, name FROM collections ORDER BY name");
+    const s = stats[0] || {};
+    return json({
+      case_count: s.case_count, entry_count: s.entry_count,
+      court_count: courts.length, last_synced: s.last_synced,
+      courts: courts.map((r) => r.v),
+      judges: judges.map((r) => r.v),
+      collections: collections.map((r) => ({ slug: r.slug, name: r.name }))
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "Facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+// Docket entries for one case (the case-detail view).
+async function corpusEntriesHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const clId = Number(body && body.cl_id);
+  if (!Number.isFinite(clId)) return json({ error: { message: "Missing or invalid cl_id" } }, 400);
+  try {
+    const rows = await corpusRunQuery(env,
+      "SELECT entry_number, entry_date, description FROM docket_entries WHERE cl_id = " + clId +
+      " ORDER BY entry_number LIMIT 10000");
+    return json({ entries: rows }, 200);
+  } catch (e) {
+    return json({ error: { message: "Entries fetch failed: " + e.message } }, 502);
+  }
 }
 
 async function checkoutHandler(request, env) {
