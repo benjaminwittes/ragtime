@@ -2456,11 +2456,7 @@ async function corpusApiCall(path, payload) {
 
     if (llmAccess.mode === 'paid') {
       if (typeof data._balance_cents === 'number') { paidAccess.balanceCents = data._balance_cents; renderBalanceWidget(); }
-      if (typeof data._cost_cents === 'number') {
-        amaSessionCostCents += data._cost_cents;
-        renderAmaCostLine();
-        showQueryCostRibbon(data._cost_cents, paidAccess.balanceCents);
-      }
+      if (typeof data._cost_cents === 'number') showQueryCostRibbon(data._cost_cents, paidAccess.balanceCents);
     }
     return data;
   }
@@ -2763,22 +2759,18 @@ function closeEmptyBalance() {
   document.getElementById('modal-empty-balance').classList.remove('active');
 }
 
-// === CLAUDE SQL MODE ===
+// === AI WRITES SQL MODE (server-side) ===
 //
-// User describes a filter in natural language; Claude generates a single SQL
-// query against the cases/docket_entries/documents schema; we run it, intersect
-// with the incoming cl_ids set, and push a new stack page.
-//
-// Narrowing is enforced in our own code: we never modify Claude's SQL; we
-// fetch the cl_ids it returns and intersect with the incoming set. This
-// guarantees the outgoing set is always a subset of the incoming set.
+// User describes a filter in natural language; the Worker (/corpus/sql) has the
+// model generate ONE SELECT, runs it against the corpus with the current scope
+// applied, and returns the matched cl_ids + a display page. The browser never
+// sees or runs SQL.
 async function applyClaudeSql() {
   if (!isOnTip()) return;
   if (!claudeAccessUnlocked()) {
-    alert('Click "Unlock" in the Claude features panel to use this mode.');
+    alert('Click "Unlock" in the AI features panel to use this mode.');
     return;
   }
-
   var prompt = document.getElementById('sql-prompt').value.trim();
   if (!prompt) { alert('Describe what you want to find first.'); return; }
 
@@ -2786,12 +2778,7 @@ async function applyClaudeSql() {
 
   var tip = stack[stack.length - 1];
   var incoming = tip.operation_type === 'init' ? [] : tip.outgoing_cl_ids;
-  // Build a hash for fast intersection in JS (replaces the v6.4.1 SQL wrapper).
-  var incomingSet = null;
-  if (incoming.length > 0) {
-    incomingSet = {};
-    incoming.forEach(function(id) { incomingSet[id] = true; });
-  }
+  var incomingCount = (tip.operation_type === 'init') ? totalCaseCount : incoming.length;
 
   var btn = document.getElementById('btn-commit-sql');
   var statusEl = document.getElementById('claude-sql-status');
@@ -2800,238 +2787,28 @@ async function applyClaudeSql() {
   btn.innerHTML = '<span class="sp"></span> Working...';
   statusEl.classList.add('active');
 
-  // Scope description for system prompt — Claude needs to know how big the
-  // current field is so it can calibrate its query (e.g. don't write a query
-  // so narrow that it returns nothing within the field).
-  var scopeDesc;
-  if (tip.operation_type === 'init') {
-    scopeDesc = 'ALL ' + fmtInt(totalCaseCount) + ' cases in the database (no pre-filter applied).';
-  } else {
-    scopeDesc = 'a pre-filtered set of ' + fmtInt(incoming.length) + ' cases (from page ' + tip.page_id + ': ' + tip.operation_label + '). Your query runs WITHIN this scope — the application restricts cl_id to this set automatically before executing your SQL. Write your query as if it ran across the full database; the scope filter is applied for you.';
-  }
-
-  var schema = [
-    "DATABASE: PostgreSQL on Supabase. Queries run via run_query(query_text) RPC.",
-    "USE PostgreSQL syntax: ILIKE for case-insensitive matching, || for concat.",
-    "",
-    "CURRENT SCOPE: " + scopeDesc,
-    "",
-    "TABLE cases (",
-    "  cl_id BIGINT PRIMARY KEY,",
-    "  docket_number TEXT,         -- e.g. '1:25-cv-12345'; civil=-cv-, criminal=-cr-, magistrate=-mj-, misc=-mc-",
-    "  case_name TEXT,             -- short caption like 'Smith v. Garland'; usually NOT a good place to search for topics",
-    "  date_filed DATE,",
-    "  court TEXT,                 -- lowercase codes like 'dcd' (DC District), 'ca9' (9th Circuit), 'cadc' (DC Circuit)",
-    "  judge TEXT,",
-    "  cause TEXT,                 -- statutory cause of action, e.g. '5 U.S.C. § 702 Administrative Procedure Act', '28:2241 Habeas Corpus'",
-    "  nature_of_suit TEXT,        -- NOS code/description, e.g. '530 Habeas Corpus (General)', '463 Habeas Corpus - Alien Detainee'",
-    "  -- NOTE: plaintiff and defendant exist on this table but are NULL for ~99.5% of cases.",
-    "  -- DO NOT write SQL against them. Use case_name (caption) for party-name searches and",
-    "  -- the FTS index on docket_entries.fts for agency/official queries.",
-    "  entry_count INT,",
-    "  cl_url TEXT",
-    ")",
-    "",
-    "TABLE docket_entries (",
-    "  id BIGSERIAL PRIMARY KEY,",
-    "  cl_id BIGINT REFERENCES cases,",
-    "  entry_number INT,",
-    "  entry_date TEXT,",
-    "  description TEXT,           -- text of motions, orders, opinions, complaints — the substantive content",
-    "  court TEXT,",
-    "  fts TSVECTOR                -- precomputed full-text index on description (use this for topical search)",
-    ")",
-    "",
-    "TABLE documents (",
-    "  id BIGSERIAL PRIMARY KEY,",
-    "  cl_id BIGINT REFERENCES cases,",
-    "  entry_number INT,",
-    "  doc_number INT,",
-    "  text_content TEXT,          -- extracted document text (large; use sparingly)",
-    "  text_length INT",
-    ")"
-  ].join("\n");
-
-  var systemPrompt =
-    "You are a SQL query generator for a federal litigation research tool. Given a natural-language description of cases the user wants to find, produce ONE PostgreSQL query that returns the cl_id values of matching cases.\n\n" +
-    "CRITICAL OUTPUT RULES:\n" +
-    "- Return JSON only: {\"sql\": \"...\", \"label\": \"a short 5-10 word description of what this query finds\"}\n" +
-    "- No markdown, no code fences, no explanation outside the JSON.\n" +
-    "- The query MUST be a single SELECT.\n" +
-    "- The query MUST return cl_id (other columns are fine, but cl_id is required).\n" +
-    "- Do NOT include LIMIT or OFFSET — the application handles pagination.\n" +
-    "- Do NOT add a scope constraint (e.g. cl_id IN (...)) — scope is applied automatically.\n\n" +
-    "FUNDAMENTAL RULES (read these FIRST — most failures come from violating them):\n" +
-    "1. RECALL OVER PRECISION. The user can always narrow further with a follow-up operation; they cannot un-miss a case the query excluded. When in doubt, return more, not less.\n" +
-    "2. NEVER 'AND' a metadata filter with an FTS filter. Combine them with OR. Example of the failure:\n" +
-    "     BAD:  WHERE (case_name ILIKE '%immigration%') AND (cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ ...))\n" +
-    "     GOOD: WHERE (case_name ILIKE '%immigration%') OR (cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ ...))\n" +
-    "   Reason: case_name is a short caption like 'Doe v. Garland'; topical words rarely appear there. ANDing kills recall.\n" +
-    "3. FOR ANY TOPICAL OR CONCEPTUAL QUERY, FTS IS REQUIRED. If the user asks about a topic, agency, concept, or substance ('immigration detention', 'TROs', 'DHS challenges', 'APA suits'), your query MUST contain at least one FTS branch on docket_entries. Metadata-only queries on case_name/cause/NOS will under-match by an order of magnitude.\n" +
-    "4. AVOID SHORT-ACRONYM ILIKE PATTERNS. '%ICE%' matches notice/service/voice/evidence/police/officer/justice. '%DHS%' is safer but still risky. Use FTS for acronyms — it does whole-token matching.\n" +
-    "5. Reserve ILIKE for unambiguous full phrases ('%Department of Homeland Security%') or proper names ('%Mayorkas%', '%Noem%').\n" +
-    "6. case_name is rarely informative for topical queries. It's a caption like 'Doe v. Garland', not a description of what the case is about. Don't lean on it.\n" +
-    "7. cause and nature_of_suit are coded fields. A habeas immigration case has cause '28:2241 Habeas Corpus' and NOS '530 Habeas Corpus' or '463 Habeas - Alien Detainee' — NOT 'immigration'. Don't filter on metadata words that won't be there.\n" +
-    "8. AGENCY AND OFFICIAL QUERIES GO THROUGH FTS, NOT METADATA. The plaintiff and defendant columns are NULL for ~99.5% of cases — do not use them. For agency/official queries, use FTS on docket_entries (which catches both agency-as-defendant cases and cases where the agency or official is mentioned in motion text), and optionally OR with case_name ILIKE for proper-name captions like 'Mayorkas' or 'Noem'.\n" +
-    "9. SCOPE-AWARE ENRICHMENT — CHECK BEFORE OR-ING METADATA. Look at the CURRENT SCOPE description above. Before adding any `OR <metadata-condition>` branch, ask: would this condition match every case in the current scope? If yes, DO NOT add it. An OR branch that's true for the whole scope is a tautology — it makes your FTS branch irrelevant and your query returns the entire scope. Common traps:\n" +
-    "   - Scope is 'habeas cases', and you add `OR nature_of_suit ILIKE '%habeas%'` → returns ALL habeas cases (the whole scope).\n" +
-    "   - Scope is 'immigration cases', and you add `OR cause ILIKE '%immigration%'` → returns the whole immigration scope.\n" +
-    "   - Scope is 'cases in DCD', and you add `OR court = 'dcd'` → returns the whole DCD scope.\n" +
-    "   When the scope already constrains a field, that field cannot be used for enrichment. Use FTS only, OR enrich via fields the scope hasn't constrained.\n\n" +
-    "QUERY-DESIGN PATTERNS:\n" +
-    "- FTS syntax: cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'TERMS'))\n" +
-    "  websearch_to_tsquery supports 'OR', quoted phrases, and 'and'. Example: 'detention OR removal OR \"final order of removal\"'.\n" +
-    "- For agency/official queries, OR-combine: (case_name ILIKE proper-names) OR (FTS for acronyms and concepts on docket_entries).\n" +
-    "- For topical queries, FTS is the workhorse; metadata filters are optional ENRICHMENT (added with OR), never RESTRICTION (added with AND).\n" +
-    "- Use websearch_to_tsquery's 'OR' operator generously. 'detention OR custody OR confined OR removal OR deportation' will catch many phrasings of the same idea.\n\n" +
-    "WORKED EXAMPLE 1 — agency/official query:\n" +
-    "User: 'cases challenging DHS or ICE actions'\n" +
-    "Good SQL:\n" +
-    "  SELECT cl_id FROM cases WHERE\n" +
-    "      case_name ILIKE '%Mayorkas%'\n" +
-    "      OR case_name ILIKE '%Noem%'\n" +
-    "      OR cl_id IN (SELECT DISTINCT cl_id FROM docket_entries\n" +
-    "                   WHERE fts @@ websearch_to_tsquery('english',\n" +
-    "                       'DHS OR ICE OR \"Department of Homeland Security\" OR \"Immigration and Customs Enforcement\" OR \"Homeland Security\" OR Mayorkas OR Noem'))\n" +
-    "Why it works: FTS on docket_entries is the workhorse — it catches the agency name, acronyms, and official names wherever they appear in motion or order text. The case_name OR-branches add proper-name captions on top. Note: we do NOT touch plaintiff/defendant — they're empty for ~99.5% of cases.\n\n" +
-    "WORKED EXAMPLE 2 — topical/conceptual query:\n" +
-    "User: 'cases involving immigration detention'\n" +
-    "Good SQL:\n" +
-    "  SELECT cl_id FROM cases WHERE\n" +
-    "      cl_id IN (SELECT DISTINCT cl_id FROM docket_entries\n" +
-    "                WHERE fts @@ websearch_to_tsquery('english',\n" +
-    "                    '\"immigration detention\" OR \"removal proceedings\" OR \"final order of removal\" OR \"ICE custody\" OR \"asylum\" OR \"deportation\"'))\n" +
-    "      OR nature_of_suit ILIKE '%alien detainee%'\n" +
-    "Why it works: Leads with FTS (the workhorse for topical queries). Metadata branch is OR'd, not AND'd — it ENRICHES rather than RESTRICTS. Note: NOT filtering on 'immigration' in case_name, cause, or generic NOS — those columns won't have the word.\n\n" +
-    "ANTI-EXAMPLE (DO NOT DO THIS):\n" +
-    "User: 'immigration detention cases'\n" +
-    "BAD SQL:\n" +
-    "  SELECT cl_id FROM cases WHERE\n" +
-    "      (case_name ILIKE '%immigration%' OR cause ILIKE '%immigration%' OR nature_of_suit ILIKE '%immigration%')\n" +
-    "      AND cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'immigration detention'))\n" +
-    "Why it fails: ANDing a fragile metadata filter (those words won't be in case_name/cause/NOS for habeas cases) with FTS wipes out the FTS recall. Returns near-zero rows.\n\n" +
-    "WORKED EXAMPLE 3 — scope-aware enrichment:\n" +
-    "Scope: 'a pre-filtered set of 32,143 cases (from page 2: Filter: cause~Habeas, from=2025-01-20)'\n" +
-    "User: 'cases where the government may not have complied with court orders'\n" +
-    "BAD SQL (tautology — returns the entire scope):\n" +
-    "  SELECT cl_id FROM cases WHERE\n" +
-    "      cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'noncompliance OR contempt OR \"failed to produce\" OR ...'))\n" +
-    "      OR nature_of_suit ILIKE '%habeas%'\n" +
-    "Why it fails: The scope is already 'habeas cases', so `nature_of_suit ILIKE '%habeas%'` matches every case in scope. The OR makes the FTS irrelevant — query returns ~32,143.\n" +
-    "GOOD SQL (FTS only, no tautological enrichment):\n" +
-    "  SELECT DISTINCT cl_id FROM docket_entries\n" +
-    "  WHERE fts @@ websearch_to_tsquery('english',\n" +
-    "      '\"failed to produce\" OR \"failed to comply\" OR contempt OR \"violation of court order\"\n" +
-    "       OR \"deported despite\" OR \"removed despite\" OR \"violated stay\" OR \"writ not honored\"\n" +
-    "       OR \"refused to comply\" OR \"failed to release\" OR \"show cause\" OR sanctions')\n" +
-    "Why it works: Recognizes that within a habeas-only scope, no habeas-related metadata field can usefully enrich the result. FTS does the actual selection. Returns a small, real subset.\n\n" + schema;
-
-  var userMessage = "USER REQUEST:\n" + prompt + "\n\nReturn ONLY the JSON object.";
-
   try {
     statusEl.textContent = 'Designing query...';
-    var raw = await callClaude(systemPrompt, userMessage, 4000);
+    var scope = buildAmaScopeSummary();
+    var provider = (llmAccess.mode === 'paid') ? 'anthropic' : llmAccess.provider;
+    var resp = await corpusApiCall('/corpus/sql', {
+      prompt: prompt, scope: scope, provider: provider, model: llmAccess.model
+    });
 
-    // Parse — tolerate accidental code fences, surrounding text, and
-    // postambles that contain stray braces. See extractFirstJsonValue
-    // (v8.0.1) for why the prior greedy-regex fallback was insufficient.
-    var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    var parsed;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (pe) {
-      var firstObj = extractFirstJsonValue(cleaned, 'object');
-      if (firstObj) parsed = JSON.parse(firstObj);
-      else {
-        // extractFirstJsonValue returning null usually means the response
-        // was truncated mid-JSON (output tokens exhausted) — tell the user.
-        console.error('[' + aiName() + ' SQL] Full raw response:', raw);
-        var hint = (firstObj === null && cleaned.indexOf('{') >= 0)
-          ? ' (response may have been truncated — try a simpler prompt)'
-          : '';
-        throw new Error(aiName() + ' did not return valid JSON' + hint + '. Raw output: ' + raw.slice(0, 1500));
-      }
-    }
-
-    var generatedSql = (parsed.sql || '').trim();
-    var generatedLabel = (parsed.label || prompt.slice(0, 50)).trim();
-    if (!generatedSql) throw new Error(aiName() + ' did not return a SQL query.');
-
-    // Strip any LIMIT/OFFSET Claude included despite instructions, and any
-    // trailing semicolon. Defensive — Claude is told not to include these,
-    // but we strip them so our own constraints can apply cleanly.
-    var sanitized = generatedSql
-      .replace(/;\s*$/g, '')
-      .replace(/\bLIMIT\s+\d+\b/gi, '')
-      .replace(/\bOFFSET\s+\d+\b/gi, '')
-      .trim();
-
-    // ARCHITECTURE NOTE (v6.4.4):
-    // Earlier versions wrapped Claude's SQL with `WHERE sub.cl_id IN (incoming)
-    // LIMIT 10000` to apply scope during execution. That had two failure modes:
-    //   (1) The outer LIMIT 10000 silently capped outgoing_cl_ids — same family
-    //       of bug as the manual_filter truncation we fixed in v6.4.3.
-    //   (2) For large incoming sets (e.g. 39K cl_ids after filtering to "habeas"),
-    //       the IN-clause grew to ~350KB, slow to plan, hit Safari's request
-    //       timeout on cold path → "Load failed."
-    //
-    // New approach: run Claude's sanitized SQL UNWRAPPED with no LIMIT, get back
-    // every cl_id Claude's query matches, then intersect with the incoming set
-    // in JavaScript. The v6.4.2 system prompt makes Claude scope-aware (it sees
-    // a description of the current scope), so its queries are typically focused
-    // and the unscoped result is manageable in size.
-    //
-    // Safety cap: if Claude's query returns more than CLAUDE_MAX_RAW_ROWS rows,
-    // bail out with an error rather than load-fail silently. This protects
-    // against runaway queries (e.g. Claude writes "SELECT cl_id FROM cases"
-    // matching the entire database).
-    var unscopedSql = "SELECT DISTINCT sub.cl_id FROM (" + sanitized + ") AS sub";
-
-    statusEl.textContent = 'Running query...';
-    var rows = await sbRpc('run_query', { query_text: unscopedSql }) || [];
-    if (!Array.isArray(rows)) throw new Error('Query result was not a list of rows.');
-
-    if (rows.length > CLAUDE_MAX_RAW_ROWS) {
-      throw new Error(aiName() + '\'s query matched ' + fmtInt(rows.length) + ' cases (cap is ' + fmtInt(CLAUDE_MAX_RAW_ROWS) + '). Try a more specific prompt.');
-    }
-
-    // Extract cl_ids and intersect with the incoming scope (if any).
-    var matchedIds = [];
-    if (incomingSet) {
-      rows.forEach(function(r) {
-        if (r.cl_id != null && incomingSet[r.cl_id]) matchedIds.push(r.cl_id);
-      });
-    } else {
-      // No incoming scope (init page) — keep all matches.
-      rows.forEach(function(r) { if (r.cl_id != null) matchedIds.push(r.cl_id); });
-    }
-
-    statusEl.textContent = 'Fetching ' + fmtInt(matchedIds.length) + ' cases...';
-    // Display rows are still capped at 10K — that's the only place truncation
-    // lives. matchedIds (which becomes outgoing_cl_ids) holds the true full set
-    // for downstream operations.
-    var caseRows = [];
-    if (matchedIds.length > 0) {
-      // For very large matchedIds sets, only fetch display rows for the first 10K
-      // (database-side ordering by date_filed DESC). The IN clause uses ALL ids
-      // because we want display ordered across the full set, not arbitrary first 10K.
-      var fetchSql = "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases WHERE cl_id IN (" + matchedIds.join(',') + ") ORDER BY date_filed DESC LIMIT 10000";
-      caseRows = await sbRpc('run_query', { query_text: fetchSql }) || [];
-    }
-
+    var matchedIds = resp.cl_ids || [];
     var newPage = {
       page_id: stack.length,
       operation_type: 'claude_sql',
-      operation_label: 'Claude SQL: ' + generatedLabel,
+      operation_label: 'Claude SQL: ' + (resp.label || prompt.slice(0, 50)),
       prompt: prompt,
-      generated_sql: generatedSql,    // what Claude actually wrote (shown in page band)
-      executed_sql: unscopedSql,       // what actually ran (sanitized; intersection done in JS)
+      generated_sql: resp.generated_sql || null,  // shown in the page band
+      executed_sql: null,
       filter_state: null,
       incoming_cl_ids: incoming.slice(),
-      incoming_count: (tip.operation_type === 'init' ? totalCaseCount : incoming.length),
-      outgoing_cl_ids: matchedIds,         // FIX: was caseRows.map(...) which was capped at 10K
-      outgoing_count: matchedIds.length,   // FIX: was caseRows.length which was capped at 10K
-      cases: caseRows,                     // display rows (capped at 10K)
+      incoming_count: incomingCount,
+      outgoing_cl_ids: matchedIds,
+      outgoing_count: (typeof resp.count === 'number') ? resp.count : matchedIds.length,
+      cases: resp.display_rows || [],
       per_case_annotations: null,
       artifact_markdown: null,
       created_at: new Date().toISOString()
@@ -3042,7 +2819,6 @@ async function applyClaudeSql() {
     selectedCaseId = null;
     modeArmed = false;
     closeDetail();
-
     document.getElementById('sql-prompt').value = '';
   } catch (err) {
     alert(aiName() + ' SQL failed: ' + err.message);
@@ -3854,6 +3630,7 @@ async function applyClaudeAma() {
     } catch (err) {
       throw new Error('Planning step: ' + err.message);
     }
+    if (typeof planResp._cost_cents === 'number') { amaSessionCostCents += planResp._cost_cents; renderAmaCostLine(); }
     var plan = {
       token: planResp.token,
       output_mode: planResp.output_mode,
@@ -3892,6 +3669,7 @@ async function applyClaudeAma() {
     } catch (err) {
       throw new Error('Execution step: ' + err.message);
     }
+    if (typeof execResp._cost_cents === 'number') { amaSessionCostCents += execResp._cost_cents; renderAmaCostLine(); }
     appendAmaLog('Step 3/3.', 'Synthesized the answer.', 'done');
     var synth = {
       answer_markdown: execResp.answer_markdown,

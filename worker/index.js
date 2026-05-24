@@ -88,6 +88,9 @@ export default {
       if (path === "/corpus/execute" && request.method === "POST") {
         return await corpusExecuteHandler(request, env, ctx);
       }
+      if (path === "/corpus/sql" && request.method === "POST") {
+        return await corpusSqlHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -865,6 +868,216 @@ async function corpusExecuteHandler(request, env, ctx) {
     candor_notes: synth.candor_notes,
     output_mode: blob.plan.output_mode,
     query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── Slice 2: AI-writes-SQL ("AI writes SQL" button) ─────────────────────────
+// Single LLM call that turns a natural-language request into ONE SELECT
+// returning cl_ids; the Worker runs it against the corpus, applies the scope,
+// and returns the matched ids + a display page. Faithful port of the client
+// applyClaudeSql; scope is now applied in SQL (server-side) rather than via a
+// client-side JS intersection. CLAUDE_MAX_RAW_ROWS cap preserved.
+var CLAUDE_MAX_RAW_ROWS = 200000;
+var SQL_DISPLAY_COLS = "cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court";
+
+function stripOrderLimit(sql) {
+  return String(sql)
+    .replace(/\s+ORDER\s+BY[\s\S]*?(?=(?:\s+LIMIT|\s*$))/i, '')
+    .replace(/\s+LIMIT\s+\d+\s*$/i, '')
+    .trim();
+}
+
+function buildSqlGenSystem(scope) {
+  var scopeDesc = scope.is_full_db
+    ? 'ALL ' + fmtIntJs(scope.count) + ' cases in the database (no pre-filter applied).'
+    : 'a pre-filtered set of ' + fmtIntJs(scope.count) + ' cases'
+      + (scope.description ? ' (' + scope.description + ')' : '')
+      + '. Your query runs WITHIN this scope — the application restricts cl_id to this set '
+      + 'automatically before executing your SQL. Write your query as if it ran across the '
+      + 'full database; the scope filter is applied for you.';
+
+  var schema = [
+    "DATABASE: PostgreSQL. Queries run read-only.",
+    "USE PostgreSQL syntax: ILIKE for case-insensitive matching, || for concat.",
+    "",
+    "CURRENT SCOPE: " + scopeDesc,
+    "",
+    "TABLE cases (",
+    "  cl_id BIGINT PRIMARY KEY,",
+    "  docket_number TEXT,         -- e.g. '1:25-cv-12345'; civil=-cv-, criminal=-cr-, magistrate=-mj-, misc=-mc-",
+    "  case_name TEXT,             -- short caption like 'Smith v. Garland'; usually NOT a good place to search for topics",
+    "  date_filed DATE,",
+    "  court TEXT,                 -- lowercase codes like 'dcd' (DC District), 'ca9' (9th Circuit), 'cadc' (DC Circuit)",
+    "  judge TEXT,",
+    "  cause TEXT,                 -- statutory cause of action, e.g. '5 U.S.C. § 702 Administrative Procedure Act', '28:2241 Habeas Corpus'",
+    "  nature_of_suit TEXT,        -- NOS code/description, e.g. '530 Habeas Corpus (General)', '463 Habeas Corpus - Alien Detainee'",
+    "  -- NOTE: plaintiff and defendant exist on this table but are NULL for ~99.5% of cases.",
+    "  -- DO NOT write SQL against them. Use case_name (caption) for party-name searches and",
+    "  -- the FTS index on docket_entries.fts for agency/official queries.",
+    "  entry_count INT,",
+    "  cl_url TEXT",
+    ")",
+    "",
+    "TABLE docket_entries (",
+    "  id BIGSERIAL PRIMARY KEY,",
+    "  cl_id BIGINT REFERENCES cases,",
+    "  entry_number INT,",
+    "  entry_date TEXT,",
+    "  description TEXT,           -- text of motions, orders, opinions, complaints — the substantive content",
+    "  court TEXT,",
+    "  fts TSVECTOR                -- precomputed full-text index on description (use this for topical search)",
+    ")",
+    "",
+    "TABLE documents (",
+    "  id BIGSERIAL PRIMARY KEY,",
+    "  cl_id BIGINT REFERENCES cases,",
+    "  entry_number INT,",
+    "  doc_number INT,",
+    "  text_content TEXT,          -- extracted document text (large; use sparingly)",
+    "  text_length INT",
+    ")"
+  ].join("\n");
+
+  return "You are a SQL query generator for a federal litigation research tool. Given a natural-language description of cases the user wants to find, produce ONE PostgreSQL query that returns the cl_id values of matching cases.\n\n" +
+    "CRITICAL OUTPUT RULES:\n" +
+    "- Return JSON only: {\"sql\": \"...\", \"label\": \"a short 5-10 word description of what this query finds\"}\n" +
+    "- No markdown, no code fences, no explanation outside the JSON.\n" +
+    "- The query MUST be a single SELECT.\n" +
+    "- The query MUST return cl_id (other columns are fine, but cl_id is required).\n" +
+    "- Do NOT include LIMIT or OFFSET — the application handles pagination.\n" +
+    "- Do NOT add a scope constraint (e.g. cl_id IN (...)) — scope is applied automatically.\n\n" +
+    "FUNDAMENTAL RULES (read these FIRST — most failures come from violating them):\n" +
+    "1. RECALL OVER PRECISION. The user can always narrow further with a follow-up operation; they cannot un-miss a case the query excluded. When in doubt, return more, not less.\n" +
+    "2. NEVER 'AND' a metadata filter with an FTS filter. Combine them with OR. Example of the failure:\n" +
+    "     BAD:  WHERE (case_name ILIKE '%immigration%') AND (cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ ...))\n" +
+    "     GOOD: WHERE (case_name ILIKE '%immigration%') OR (cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ ...))\n" +
+    "   Reason: case_name is a short caption like 'Doe v. Garland'; topical words rarely appear there. ANDing kills recall.\n" +
+    "3. FOR ANY TOPICAL OR CONCEPTUAL QUERY, FTS IS REQUIRED. If the user asks about a topic, agency, concept, or substance ('immigration detention', 'TROs', 'DHS challenges', 'APA suits'), your query MUST contain at least one FTS branch on docket_entries. Metadata-only queries on case_name/cause/NOS will under-match by an order of magnitude.\n" +
+    "4. AVOID SHORT-ACRONYM ILIKE PATTERNS. '%ICE%' matches notice/service/voice/evidence/police/officer/justice. '%DHS%' is safer but still risky. Use FTS for acronyms — it does whole-token matching.\n" +
+    "5. Reserve ILIKE for unambiguous full phrases ('%Department of Homeland Security%') or proper names ('%Mayorkas%', '%Noem%').\n" +
+    "6. case_name is rarely informative for topical queries. It's a caption like 'Doe v. Garland', not a description of what the case is about. Don't lean on it.\n" +
+    "7. cause and nature_of_suit are coded fields. A habeas immigration case has cause '28:2241 Habeas Corpus' and NOS '530 Habeas Corpus' or '463 Habeas - Alien Detainee' — NOT 'immigration'. Don't filter on metadata words that won't be there.\n" +
+    "8. AGENCY AND OFFICIAL QUERIES GO THROUGH FTS, NOT METADATA. The plaintiff and defendant columns are NULL for ~99.5% of cases — do not use them. For agency/official queries, use FTS on docket_entries (which catches both agency-as-defendant cases and cases where the agency or official is mentioned in motion text), and optionally OR with case_name ILIKE for proper-name captions like 'Mayorkas' or 'Noem'.\n" +
+    "9. SCOPE-AWARE ENRICHMENT — CHECK BEFORE OR-ING METADATA. Look at the CURRENT SCOPE description above. Before adding any `OR <metadata-condition>` branch, ask: would this condition match every case in the current scope? If yes, DO NOT add it. An OR branch that's true for the whole scope is a tautology — it makes your FTS branch irrelevant and your query returns the entire scope. Common traps:\n" +
+    "   - Scope is 'habeas cases', and you add `OR nature_of_suit ILIKE '%habeas%'` → returns ALL habeas cases (the whole scope).\n" +
+    "   - Scope is 'immigration cases', and you add `OR cause ILIKE '%immigration%'` → returns the whole immigration scope.\n" +
+    "   - Scope is 'cases in DCD', and you add `OR court = 'dcd'` → returns the whole DCD scope.\n" +
+    "   When the scope already constrains a field, that field cannot be used for enrichment. Use FTS only, OR enrich via fields the scope hasn't constrained.\n\n" +
+    "QUERY-DESIGN PATTERNS:\n" +
+    "- FTS syntax: cl_id IN (SELECT DISTINCT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'TERMS'))\n" +
+    "  websearch_to_tsquery supports 'OR', quoted phrases, and 'and'. Example: 'detention OR removal OR \"final order of removal\"'.\n" +
+    "- For agency/official queries, OR-combine: (case_name ILIKE proper-names) OR (FTS for acronyms and concepts on docket_entries).\n" +
+    "- For topical queries, FTS is the workhorse; metadata filters are optional ENRICHMENT (added with OR), never RESTRICTION (added with AND).\n" +
+    "- Use websearch_to_tsquery's 'OR' operator generously. 'detention OR custody OR confined OR removal OR deportation' will catch many phrasings of the same idea.\n\n" +
+    "WORKED EXAMPLE 1 — agency/official query:\n" +
+    "User: 'cases challenging DHS or ICE actions'\n" +
+    "Good SQL:\n" +
+    "  SELECT cl_id FROM cases WHERE\n" +
+    "      case_name ILIKE '%Mayorkas%'\n" +
+    "      OR case_name ILIKE '%Noem%'\n" +
+    "      OR cl_id IN (SELECT DISTINCT cl_id FROM docket_entries\n" +
+    "                   WHERE fts @@ websearch_to_tsquery('english',\n" +
+    "                       'DHS OR ICE OR \"Department of Homeland Security\" OR \"Immigration and Customs Enforcement\" OR \"Homeland Security\" OR Mayorkas OR Noem'))\n" +
+    "Why it works: FTS on docket_entries is the workhorse — it catches the agency name, acronyms, and official names wherever they appear in motion or order text. The case_name OR-branches add proper-name captions on top. Note: we do NOT touch plaintiff/defendant — they're empty for ~99.5% of cases.\n\n" +
+    "WORKED EXAMPLE 2 — topical/conceptual query:\n" +
+    "User: 'cases involving immigration detention'\n" +
+    "Good SQL:\n" +
+    "  SELECT cl_id FROM cases WHERE\n" +
+    "      cl_id IN (SELECT DISTINCT cl_id FROM docket_entries\n" +
+    "                WHERE fts @@ websearch_to_tsquery('english',\n" +
+    "                    '\"immigration detention\" OR \"removal proceedings\" OR \"final order of removal\" OR \"ICE custody\" OR \"asylum\" OR \"deportation\"'))\n" +
+    "      OR nature_of_suit ILIKE '%alien detainee%'\n" +
+    "Why it works: Leads with FTS (the workhorse for topical queries). Metadata branch is OR'd, not AND'd — it ENRICHES rather than RESTRICTS.\n\n" +
+    "ANTI-EXAMPLE (DO NOT DO THIS):\n" +
+    "User: 'immigration detention cases'\n" +
+    "BAD SQL:\n" +
+    "  SELECT cl_id FROM cases WHERE\n" +
+    "      (case_name ILIKE '%immigration%' OR cause ILIKE '%immigration%' OR nature_of_suit ILIKE '%immigration%')\n" +
+    "      AND cl_id IN (SELECT cl_id FROM docket_entries WHERE fts @@ websearch_to_tsquery('english', 'immigration detention'))\n" +
+    "Why it fails: ANDing a fragile metadata filter with FTS wipes out the FTS recall. Returns near-zero rows.\n\n" + schema;
+}
+
+function parseSqlGen(raw) {
+  var cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  var v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    var firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) v = JSON.parse(firstObj);
+    else throw new Error('did not return valid JSON (response may have been truncated).');
+  }
+  if (typeof v !== 'object' || v === null) throw new Error('top-level value is not an object.');
+  return v;
+}
+
+async function corpusSqlHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const prompt = String((body && body.prompt) || "").trim();
+  if (!prompt) return json({ error: { message: "Missing prompt" } }, 400);
+  const scope = normalizeScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  // 1) LLM generates {sql, label}
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildSqlGenSystem(scope),
+      messages: [{ role: "user", content: "USER REQUEST:\n" + prompt + "\n\nReturn ONLY the JSON object." }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Query design step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parseSqlGen(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse the generated query: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+  const generatedSql = String(parsed.sql || "").trim();
+  const label = String(parsed.label || prompt.slice(0, 50)).trim();
+  if (!generatedSql) return json({ error: { message: "The model did not return a SQL query." } }, 502);
+
+  // 2) Sanitize (strip trailing ;, LIMIT, OFFSET) and apply scope in SQL.
+  const sanitized = generatedSql.replace(/;\s*$/g, "").replace(/\bLIMIT\s+\d+\b/gi, "").replace(/\bOFFSET\s+\d+\b/gi, "").trim();
+  let scopeClause = "";
+  if (scope.scope_sql) {
+    scopeClause = " WHERE sub.cl_id IN (" + stripOrderLimit(scope.scope_sql) + ")";
+  } else if (scope.cl_ids && scope.cl_ids.length > 0) {
+    scopeClause = " WHERE sub.cl_id IN (SELECT unnest('{" + scope.cl_ids.join(",") + "}'::bigint[]))";
+  }
+  const idsSql = "SELECT DISTINCT sub.cl_id FROM (" + sanitized + ") AS sub" + scopeClause;
+
+  // 3) Run it against the corpus; cap the result set.
+  let idRows;
+  try { idRows = await corpusRunQuery(env, idsSql); }
+  catch (e) { return json({ error: { message: "The generated query failed: " + e.message, code: "query_failed", generated_sql: generatedSql } }, 400); }
+  if (idRows.length > CLAUDE_MAX_RAW_ROWS) {
+    return json({ error: { message: "The query matched " + idRows.length.toLocaleString("en-US") + " cases (cap is " + CLAUDE_MAX_RAW_ROWS.toLocaleString("en-US") + "). Try a more specific prompt.", code: "too_many_rows" } }, 400);
+  }
+  const matched = idRows.map((r) => r.cl_id).filter((x) => x != null);
+
+  // 4) Fetch display rows for the first 10k by date (from the live corpus).
+  let displayRows = [];
+  if (matched.length > 0) {
+    const displaySql = "SELECT " + SQL_DISPLAY_COLS + " FROM cases WHERE cl_id IN (" + matched.join(",") + ") ORDER BY date_filed DESC NULLS LAST LIMIT 10000";
+    try { displayRows = await corpusRunQuery(env, displaySql); }
+    catch (e) { return json({ error: { message: "Fetching display rows failed: " + e.message } }, 502); }
+  }
+
+  return json({
+    generated_sql: generatedSql,
+    label,
+    cl_ids: matched,
+    count: matched.length,
+    display_rows: displayRows,
     _cost_cents: res.costCents,
     _balance_cents: res.balanceCents
   }, 200);
