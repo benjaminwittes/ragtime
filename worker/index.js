@@ -91,6 +91,12 @@ export default {
       if (path === "/corpus/sql" && request.method === "POST") {
         return await corpusSqlHandler(request, env, ctx);
       }
+      if (path === "/corpus/cases" && request.method === "POST") {
+        return await corpusCasesHandler(request, env, ctx);
+      }
+      if (path === "/corpus/read-batch" && request.method === "POST") {
+        return await corpusReadBatchHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -352,18 +358,26 @@ async function corpusRunQuery(env, sql) {
   return await r.json();
 }
 
-// Resolve auth for a corpus request that will make >=1 billed model call.
-// Mirrors askHandler's auth (IP rate-limit + paid/demo/byok), reusing the same
-// standalone helpers. Returns {authMode, apiKey, userId, account} or a Response.
-async function resolveCorpusAuth(request, env, ctx, provider, body) {
+// Per-IP rate limit shared by the corpus endpoints. Returns a 429 Response when
+// over the limit, else null. (Public fetch endpoints use this alone; the LLM
+// endpoints use it via resolveCorpusAuth.)
+async function checkIpRateLimit(request, env, ctx) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  const now = new Date();
-  const ipKey = `ip:${ip}:${yyyymmddhhmm(now)}`;
+  const ipKey = `ip:${ip}:${yyyymmddhhmm(new Date())}`;
   const ipCount = parseInt((await env.QUOTA.get(ipKey)) || "0", 10);
   if (ipCount >= PER_IP_PER_MIN) {
     return json({ error: { message: "Rate limit exceeded (10 req/min per IP)" } }, 429);
   }
   ctx.waitUntil(env.QUOTA.put(ipKey, String(ipCount + 1), { expirationTtl: 120 }));
+  return null;
+}
+
+// Resolve auth for a corpus request that will make >=1 billed model call.
+// Mirrors askHandler's auth (IP rate-limit + paid/demo/byok), reusing the same
+// standalone helpers. Returns {authMode, apiKey, userId, account} or a Response.
+async function resolveCorpusAuth(request, env, ctx, provider, body) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
 
   const authHeader = request.headers.get("Authorization") || "";
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -1080,6 +1094,178 @@ async function corpusSqlHandler(request, env, ctx) {
     display_rows: displayRows,
     _cost_cents: res.costCents,
     _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── Slice 3: parameterized fetch + Read ("Read cases" button) ───────────────
+// "Read cases" reviews each case's docket entries against a criterion (keep/drop
+// + reason). The long batched/parallel orchestration stays in the browser (it's
+// pure coordination, no SQL, and a minutes-long single Worker request would hit
+// Cloudflare's ~100s edge timeout). What moves server-side: the data fetches
+// (no client run_query) and the per-batch LLM call + prompt (the domain logic).
+var CLAUDE_READ_MAX_ENTRIES_PER_CASE = 30;
+var CLAUDE_READ_MAX_ENTRY_CHARS = 600;
+
+function extractFirstJsonArray(s) {
+  const start = s.indexOf("[");
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; }
+    else if (ch === '"') inStr = true;
+    else if (ch === "[") depth++;
+    else if (ch === "]") { depth--; if (depth === 0) return s.slice(start, i + 1); }
+  }
+  return null;
+}
+
+// Parameterized display-row fetch by cl_id. Public corpus data (no creds), so
+// just IP-rate-limited. Reusable: Read's result page, the AMA display-row fetch,
+// Analyze. The Worker builds the SQL — the client only sends ids.
+async function corpusCasesHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const ids = Array.isArray(body && body.ids) ? body.ids.map(Number).filter(Number.isFinite) : [];
+  if (ids.length === 0) return json({ rows: [] }, 200);
+  if (ids.length > 30000) return json({ error: { message: "Too many ids (max 30000)" } }, 400);
+  const sql = "SELECT " + SQL_DISPLAY_COLS + " FROM cases WHERE cl_id IN (" + ids.join(",") +
+              ") ORDER BY date_filed DESC NULLS LAST LIMIT 30000";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Fetch failed: " + e.message } }, 502); }
+  return json({ rows }, 200);
+}
+
+function buildReadBlock(caseRow, entries) {
+  const meta = [
+    'cl_id: ' + caseRow.cl_id,
+    'case_name: ' + (caseRow.case_name || ''),
+    'court: ' + (caseRow.court || '') + ' · judge: ' + (caseRow.judge || '—') +
+      ' · cause: ' + (caseRow.cause || '—') + ' · NOS: ' + (caseRow.nature_of_suit || '—') +
+      ' · filed: ' + (caseRow.date_filed || '—')
+  ].join('\n');
+  const entryLines = entries.map((e) => {
+    let desc = String(e.description || '').replace(/\s+/g, ' ').trim();
+    if (desc.length > CLAUDE_READ_MAX_ENTRY_CHARS) desc = desc.slice(0, CLAUDE_READ_MAX_ENTRY_CHARS) + '…';
+    return '#' + (e.entry_number != null ? e.entry_number : '?') + ' (' + (e.entry_date || '?') + '): ' + desc;
+  });
+  const entriesBlock = entryLines.length > 0
+    ? 'DOCKET ENTRIES (' + entryLines.length + ', newest first):\n' + entryLines.join('\n')
+    : 'DOCKET ENTRIES: (none available)';
+  return meta + '\n' + entriesBlock;
+}
+
+function buildReadSystem(n) {
+  return "You are reviewing federal court cases against a user-supplied criterion. " +
+    "For each case, decide keep/drop based ONLY on the docket entries shown.\n\n" +
+    "OUTPUT: a JSON array. One element per case, in input order. Each element has shape:\n" +
+    '  {"cl_id": <int>, "keep": <true|false>, "reason": "<= 25 word explanation>"}\n\n' +
+    "RULES:\n" +
+    "- Be conservative. If the entries do not clearly support keeping the case under the criterion, drop it with a reason explaining what's missing or insufficient.\n" +
+    "- The 'reason' field must be 25 words or fewer.\n" +
+    "- 'keep' is a literal boolean (true/false), not a string.\n" +
+    "- Output the JSON array only. No markdown, no code fences, no prose outside the array.\n" +
+    "- Return exactly " + n + " elements, one per case.";
+}
+
+function buildReadUser(criterion, queue) {
+  const parts = ['USER CRITERION:\n' + criterion + '\n\nCASES (n=' + queue.length + '):\n'];
+  queue.forEach((item, i) => parts.push('--- CASE ' + (i + 1) + ' ---\n' + item.block));
+  parts.push('\nReturn the JSON array now.');
+  return parts.join('\n\n');
+}
+
+function parseReadBatch(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  let arr;
+  try { arr = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstArr = extractFirstJsonArray(cleaned);
+    if (firstArr) arr = JSON.parse(firstArr);
+    else throw new Error('did not return a valid JSON array (may be truncated).');
+  }
+  if (!Array.isArray(arr)) throw new Error('response was not a JSON array.');
+  const out = {};
+  arr.forEach((item) => {
+    if (item && item.cl_id != null) out[item.cl_id] = { keep: !!item.keep, reason: String(item.reason || '').slice(0, 300) };
+  });
+  return out;
+}
+
+// One Read batch: fetch the batch's case metadata + top-N entries, auto-drop
+// cases with no entries, run ONE LLM keep/drop call on the rest, and return a
+// verdict for every requested cl_id. The browser drives the batching loop.
+async function corpusReadBatchHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const criterion = String((body && body.criterion) || "").trim();
+  if (!criterion) return json({ error: { message: "Missing criterion" } }, 400);
+  const clIds = Array.isArray(body && body.cl_ids) ? body.cl_ids.map(Number).filter(Number.isFinite) : [];
+  if (clIds.length === 0) return json({ verdicts: [], _cost_cents: 0 }, 200);
+  if (clIds.length > 100) return json({ error: { message: "Batch too large (max 100 cl_ids)" } }, 400);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let caseRows, entryRows;
+  try {
+    caseRows = await corpusRunQuery(env, "SELECT cl_id, case_name, court, judge, cause, nature_of_suit, date_filed FROM cases WHERE cl_id IN (" + clIds.join(",") + ")");
+    entryRows = await corpusRunQuery(env,
+      "SELECT cl_id, entry_number, entry_date, description FROM (" +
+      "  SELECT cl_id, entry_number, entry_date, description, ROW_NUMBER() OVER (PARTITION BY cl_id ORDER BY entry_number DESC) AS rn" +
+      "  FROM docket_entries WHERE cl_id IN (" + clIds.join(",") + ")" +
+      ") sub WHERE rn <= " + CLAUDE_READ_MAX_ENTRIES_PER_CASE);
+  } catch (e) {
+    return json({ error: { message: "Fetching case data failed: " + e.message } }, 502);
+  }
+  const caseById = {};
+  caseRows.forEach((r) => { caseById[r.cl_id] = r; });
+  const entriesById = {};
+  entryRows.forEach((r) => { (entriesById[r.cl_id] = entriesById[r.cl_id] || []).push(r); });
+
+  const verdicts = {};
+  const queue = [];
+  for (const id of clIds) {
+    const caseRow = caseById[id];
+    if (!caseRow) { verdicts[id] = { keep: false, reason: "case row not found in database" }; continue; }
+    const entries = (entriesById[id] || []).sort((a, b) => (b.entry_number || 0) - (a.entry_number || 0));
+    if (entries.length === 0) { verdicts[id] = { keep: false, reason: "no docket entries available to analyze" }; continue; }
+    queue.push({ cl_id: id, block: buildReadBlock(caseRow, entries) });
+  }
+
+  let cost = 0, bal = (auth.account ? auth.account.balance_cents : null);
+  if (queue.length > 0) {
+    let res;
+    try {
+      res = await corpusModelCall(env, ctx, auth, {
+        provider, model,
+        system: buildReadSystem(queue.length),
+        messages: [{ role: "user", content: buildReadUser(criterion, queue) }],
+        max_tokens: 4000
+      });
+    } catch (e) {
+      return json({ error: { message: "Read step: " + e.message, code: e.code } }, e.status || 502);
+    }
+    let parsed;
+    try { parsed = parseReadBatch(res.text); }
+    catch (e) { return json({ error: { message: "Could not parse read verdicts: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+    for (const item of queue) {
+      verdicts[item.cl_id] = parsed[item.cl_id] || { keep: false, reason: "no judgment returned" };
+    }
+    cost = res.costCents; bal = res.balanceCents;
+  }
+
+  return json({
+    verdicts: clIds.map((id) => ({ cl_id: id, keep: verdicts[id].keep, reason: verdicts[id].reason })),
+    _cost_cents: cost,
+    _balance_cents: bal
   }, 200);
 }
 
