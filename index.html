@@ -2394,6 +2394,79 @@ async function callClaude(systemPrompt, userContent, maxTok, opts) {
 // New name; same function. Use callLLM for any new code.
 var callLLM = callClaude;
 
+// POST to a Worker /corpus/* endpoint with the active LLM credentials. Mirrors
+// callClaude's auth (paid Bearer / demo password / BYO key) and its 402 +
+// _cost_cents/_balance_cents handling. Used by the server-side AMA (Ask) flow,
+// where the plan→execute→synthesize loop runs in the Worker (not the browser).
+async function corpusApiCall(path, payload) {
+  if (!llmAccessUnlocked()) {
+    throw new Error('AI features are locked. Click "Configure" in the sidebar.');
+  }
+  var body = Object.assign({}, payload);
+  var headers = { 'Content-Type': 'application/json' };
+  if (llmAccess.mode === 'paid') {
+    if (!paidAccess.session || !paidAccess.session.access_token) {
+      throw new Error('Lawfare session expired. Sign in again.');
+    }
+    headers['Authorization'] = 'Bearer ' + paidAccess.session.access_token;
+    if ('provider' in body) body.provider = 'anthropic';
+  } else if (llmAccess.mode === 'demo') {
+    body.password = llmAccess.demoPw;
+  } else {
+    var key = llmAccess.byoKeys[llmAccess.provider];
+    if (!key) {
+      throw new Error('No API key configured for ' + LLM_PROVIDERS[llmAccess.provider].label
+        + '. Click "Configure" and supply a key.');
+    }
+    body.user_api_key = key;
+  }
+
+  var attempt = 0, lastNetErr = null;
+  while (attempt < 2) {
+    attempt++;
+    var resp;
+    try {
+      resp = await fetch(WORKER_BASE + path, { method: 'POST', headers: headers, body: JSON.stringify(body) });
+    } catch (netErr) {
+      lastNetErr = netErr;
+      if (attempt < 2) { await new Promise(function(r){ setTimeout(r, 1500); }); continue; }
+      throw new Error('Could not reach AI proxy: ' + netErr.message + ' (retried once)');
+    }
+    var data;
+    try { data = await resp.json(); }
+    catch (e) { throw new Error('Proxy returned non-JSON (HTTP ' + resp.status + ')'); }
+
+    if (resp.status === 402 && llmAccess.mode === 'paid') {
+      var code = (data && data.error && data.error.code) || (data && data.code) || '';
+      var balance = (data && data.error && typeof data.error.balance_cents === 'number')
+        ? data.error.balance_cents : paidAccess.balanceCents;
+      paidAccess.balanceCents = balance;
+      renderBalanceWidget();
+      showEmptyBalanceModal({
+        code: code, balanceCents: balance,
+        estimatedMaxCents: (data && data.error && data.error.estimated_max_cents) || null
+      });
+      throw new Error('Balance too low to run this query.');
+    }
+    if (!resp.ok) {
+      var msg = (data && data.error && data.error.message) ? data.error.message : ('Proxy error ' + resp.status);
+      throw new Error(msg);
+    }
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+    if (llmAccess.mode === 'paid') {
+      if (typeof data._balance_cents === 'number') { paidAccess.balanceCents = data._balance_cents; renderBalanceWidget(); }
+      if (typeof data._cost_cents === 'number') {
+        amaSessionCostCents += data._cost_cents;
+        renderAmaCostLine();
+        showQueryCostRibbon(data._cost_cents, paidAccess.balanceCents);
+      }
+    }
+    return data;
+  }
+  throw new Error('Could not reach AI proxy: ' + (lastNetErr ? lastNetErr.message : 'unknown'));
+}
+
 // Friendly short name for the active model — used in user-facing error
 // messages so we don't tell a Gemini user that "Claude failed". Falls back
 // to a generic "AI" if the provider is unrecognized.
@@ -3666,385 +3739,25 @@ function renderAmaCostLine() {
   log.scrollTop = log.scrollHeight;
 }
 
-// Wrap callClaude so the AMA session can sum cost across multiple steps from
-// the _cost_cents annotation. Each step gets skipPreview:true; the AMA's own
-// pre-flight modal handles confirmation at the session level.
-async function amaCallClaude(systemPrompt, userContent, maxTok) {
-  // Snapshot balance before; subtract after to derive this step's cost.
-  var balBefore = paidAccess.balanceCents;
-  var raw = await callClaude(systemPrompt, userContent, maxTok, { skipPreview: true });
-  var balAfter = paidAccess.balanceCents;
-  if (llmAccess.mode === 'paid' && typeof balAfter === 'number' && typeof balBefore === 'number') {
-    var stepCost = Math.max(0, balBefore - balAfter);
-    amaSessionCostCents += stepCost;
-    renderAmaCostLine();
-  }
-  return raw;
-}
-
-// Build the scope summary that goes into the planning prompt.
+// Build the scope payload sent to the Worker's /corpus/plan endpoint. The Worker
+// scopes the agent's SQL to these cl_ids (inlined when small) or, for large
+// scopes, to scope_sql (the source page's SQL) instead of shipping 25k+ ids.
 function buildAmaScopeSummary() {
   var tip = stack[stack.length - 1];
   if (!tip || tip.operation_type === 'init') {
     return {
+      cl_ids: null, scope_sql: null, is_full_db: true,
       count: totalCaseCount,
-      isFullDatabase: true,
-      description: 'The full database — ' + fmtInt(totalCaseCount) + ' cases across all federal courts.',
-      cl_ids: null  // unconstrained
+      description: 'The full database — ' + fmtInt(totalCaseCount) + ' cases across all federal courts.'
     };
   }
-  return {
-    count: tip.outgoing_count,
-    isFullDatabase: false,
-    description: fmtInt(tip.outgoing_count) + ' cases from page ' + tip.page_id + ' (' + (tip.operation_label || tip.operation_type) + ').',
-    cl_ids: tip.outgoing_cl_ids.slice()
-  };
-}
-
-// SQL schema documentation that the planning model is given. Trimmed but accurate.
-var AMA_SCHEMA_DOC = [
-  'TABLE: cases — one row per federal court case.',
-  '  cl_id (bigint, PK)            — CourtListener case id; use this to identify a case in your output.',
-  '  case_name (text)              — e.g. "United States v. Smith"; FTS-indexed in column "fts" via to_tsvector.',
-  '  docket_number (text)          — e.g. "1:25-cv-00123".',
-  '  court (text)                  — court code, e.g. dcd, nyed, txsd, ca9.',
-  '  date_filed (date)             — case filing date.',
-  '  date_terminated (date)        — null if open.',
-  '  judge (text)                  — judge name; may be empty.',
-  '  cause (text)                  — statutory cause / FRCP basis.',
-  '  nature_of_suit (text)         — federal NOS code/label, e.g. "440 Civil Rights".',
-  '  jurisdiction_type (text)      — e.g. "Federal Question".',
-  '  plaintiff (text)              — plaintiff name(s).',
-  '  defendant (text)              — defendant name(s).',
-  '  fts (tsvector, generated)     — to_tsvector("english", case_name) — use for case-name FTS.',
-  '',
-  'TABLE: docket_entries — many rows per case.',
-  '  cl_id (bigint, FK→cases.cl_id)',
-  '  entry_number (bigint)         — sequential within a case.',
-  '  entry_date (text)             — ISO date string.',
-  '  description (text)            — entry text.',
-  '  court (text)',
-  '  fts (tsvector, generated)     — to_tsvector("english", description).',
-  '',
-  'NOTES:',
-  '- Case-level FTS: WHERE cases.fts @@ websearch_to_tsquery(\'english\', \'your search\').',
-  '- Entry-level FTS: WHERE docket_entries.fts @@ websearch_to_tsquery(\'english\', \'your search\').',
-  '- Use websearch_to_tsquery for natural-language input; supports quotes and OR.',
-  '- "Trump II" / current administration: filter by date_filed >= \'2025-01-20\'.',
-  '- "Federal agency defendant": defendant ILIKE \'%United States%\' OR defendant ILIKE \'%Department of%\' OR defendant ILIKE \'%Agency%\' (varies — sample first if uncertain).',
-  '- Read-only: only SELECT statements are accepted; LIMIT yourself to ≤ 10000 rows per query.'
-].join('\n');
-
-function buildAmaPlanningSystem() {
-  return [
-    'You are the planner for an agentic "ask me anything" tool over a federal litigation database. Your job is to look at a user question and the current scope, then return a JSON plan describing how you would answer it.',
-    '',
-    'You have access to a Postgres database (read-only) via SELECT queries. Schema:',
-    '',
-    AMA_SCHEMA_DOC,
-    '',
-    'Output a single JSON object with these keys (no prose, no code fences):',
-    '{',
-    '  "output_mode": "list" | "narrative" | "hybrid",',
-    '       // list = the question wants a refined set of cases (the field will be narrowed).',
-    '       // narrative = the question wants an analytical answer; the field is unchanged.',
-    '       // hybrid = both — narrative summary plus a refined list (most aggregate-with-examples questions).',
-    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
-    '  "candor_notes": ["caveats the user should see — e.g. fuzzy semantic categories you defined, sampling, fields you wished existed but don\'t"],',
-    '  "queries": [',
-    '    {"label": "what this query gathers", "sql": "SELECT ...; -- read-only, LIMIT ≤ 10000"},',
-    '    ...',
-    '  ],',
-    '  "estimated_cost_cents": <integer>,',
-    '       // your estimate of the synthesis call cost in cents (the planning call is already paid).',
-    '       // Synthesis input ≈ all query results in JSON (be honest about size); output ≈ 800-2000 tokens.',
-    '       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.',
-    '  "wants_synthesis": true',
-    '}',
-    '',
-    'Rules:',
-    '- Be ruthlessly economical with queries. Aggregate where possible (COUNT, AVG, group-by) rather than pulling raw rows. Only pull case rows when the user wants a list, and cap to 500 rows in that query unless the user explicitly asked for more.',
-    '- For trend questions, prefer one query that groups by year (or month) over many narrow queries.',
-    '- For "are X up or down" questions, compare two periods in one query.',
-    '- Do NOT plan to read docket-entry text in v9; if a question really needs it, say so in candor_notes ("would benefit from reading entries — not done in v9; consider Read mode after narrowing"). FTS over docket_entries.description is fine for identifying cases by topic.',
-    '- PERFORMANCE for narrowed scopes (esp. > 100K cases): FTS-first patterns are dramatically faster. To find docket entries matching some text WITHIN a scope, write "SELECT cl_id FROM scoped_docket_entries WHERE fts @@ ..." rather than joining scoped_cases × scoped_docket_entries first. Postgres can use the FTS GIN index on docket_entries.fts directly; the scope filter then narrows the much smaller FTS result set. Avoid heavy joins of scoped_cases × scoped_docket_entries with an FTS predicate at the join level — those reliably hit the statement timeout on six-figure scopes.',
-    '- WHEN THE CURRENT SCOPE IS NARROWED (cl_ids list provided): use the names "scoped_cases" instead of "cases" and "scoped_docket_entries" instead of "docket_entries". The runner substitutes these names with inline subqueries already filtered to the scope. CRITICAL: reference these names ONLY after FROM or JOIN keywords, and DO NOT alias them — write "FROM scoped_cases WHERE cause LIKE ..." (good), not "FROM scoped_cases sc WHERE sc.cause LIKE ..." (will break). To qualify a column, use the unaliased name: "scoped_cases.cl_id" works. WHEN SCOPE IS THE FULL DATABASE: use the regular table names "cases" and "docket_entries" (and you may alias them freely).',
-    '- For sampling at top-of-stack, you can use "ORDER BY random()" but be aware that\'s expensive on huge tables; prefer "ORDER BY date_filed DESC" with a LIMIT if you want a recency-biased sample.',
-    '- Output strict JSON only. No markdown. No code fences. No prose outside the object.'
-  ].join('\n');
-}
-
-function buildAmaPlanningUser(question, scope) {
-  return [
-    'USER QUESTION:',
-    question,
-    '',
-    'CURRENT SCOPE:',
-    scope.description,
-    scope.isFullDatabase
-      ? '(no cl_id constraint — your queries run against the full database; use table names "cases" and "docket_entries")'
-      : '(narrowed to ' + fmtInt(scope.count) + ' cl_ids; the runner will pre-define CTEs named scoped_cases and scoped_docket_entries — use THOSE names in your queries)',
-    '',
-    'Return the JSON plan now.'
-  ].join('\n');
-}
-
-function parseAmaPlan(raw) {
-  var cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-  var v;
-  try { v = JSON.parse(cleaned); }
-  catch (pe) {
-    var firstObj = extractFirstJsonValue(cleaned, 'object');
-    if (firstObj) {
-      try { v = JSON.parse(firstObj); }
-      catch (pe2) { throw new Error('Plan parse failed — JSON.parse error: ' + pe2.message); }
-    } else {
-      throw new Error('Plan parse failed — could not find a JSON object in the response.');
-    }
+  var clIds = (tip.outgoing_cl_ids || []).slice();
+  var desc = fmtInt(tip.outgoing_count) + ' cases from page ' + tip.page_id + ' (' + (tip.operation_label || tip.operation_type) + ').';
+  var SCOPE_LITERAL_LIMIT = 25000;
+  if (clIds.length > SCOPE_LITERAL_LIMIT && tip.executed_sql) {
+    return { cl_ids: null, scope_sql: tip.executed_sql, is_full_db: false, count: tip.outgoing_count, description: desc };
   }
-  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('Plan parse failed — top-level value is not an object.');
-  if (['list', 'narrative', 'hybrid'].indexOf(v.output_mode) < 0) throw new Error('Plan parse failed — output_mode must be list, narrative, or hybrid.');
-  if (!Array.isArray(v.queries)) throw new Error('Plan parse failed — queries must be an array.');
-  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
-  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
-  v.approach_summary = String(v.approach_summary || '').trim();
-  return v;
-}
-
-// Run the planned SQL queries. If scope.cl_ids is non-null, substitute the
-// table names "scoped_cases" and "scoped_docket_entries" in the agent's SQL
-// with inline subqueries that filter to the current scope.
-//
-// v9.0.1 — for large scopes (> SCOPE_LITERAL_LIMIT cl_ids), inlining the id
-// list as a Postgres array literal would crush the Supabase REST body limit.
-// We fall back to reusing the page's source SQL (manual_filter.executed_sql /
-// claude_sql.executed_sql) as the scope source.
-//
-// v9.0.4 — abandoned the CTE-prefix approach. PostgreSQL does not, in
-// practice, resolve CTE bindings inside parenthesized subqueries used as
-// derived tables — the agent's "FROM scoped_cases" couldn't see the
-// outer WITH's scoped_cases binding. Switched to direct table-name
-// substitution: "FROM scoped_cases" → "FROM (filtered subquery) AS scoped_cases".
-// The agent is told to reference these names only after FROM/JOIN and not
-// to alias them; that constraint makes the substitution safe.
-async function executeAmaPlan(plan, scope) {
-  var results = [];
-  var SCOPE_LITERAL_LIMIT = 25000;  // cl_ids inlined up to this; above, use page's SQL.
-  var scopeIdsSubquery = '';
-  if (scope.cl_ids && scope.cl_ids.length > 0) {
-    var tip = stack[stack.length - 1];
-    if (scope.cl_ids.length <= SCOPE_LITERAL_LIMIT) {
-      var arrLit = '{' + scope.cl_ids.join(',') + '}';
-      scopeIdsSubquery = "SELECT unnest('" + arrLit + "'::bigint[]) AS cl_id";
-    } else if (tip && tip.executed_sql) {
-      // v9.0.5 — strip ORDER BY / LIMIT from executed_sql (they're useless for an IN
-      // check and force wasted sorting on hundreds of thousands of rows). Also drop
-      // the outer "SELECT cl_id FROM (...)" wrap — executed_sql already projects
-      // cl_id, so we can use it directly.
-      scopeIdsSubquery = String(tip.executed_sql)
-        .replace(/\s+ORDER\s+BY[\s\S]*?(?=(?:\s+LIMIT|\s*$))/i, '')
-        .replace(/\s+LIMIT\s+\d+\s*$/i, '')
-        .trim();
-      appendAmaLog('Scope.', 'Using page SQL filter (' + fmtInt(scope.cl_ids.length) + ' cases) — too many ids to inline.', '');
-    } else {
-      throw new Error('AMA: scope is ' + fmtInt(scope.cl_ids.length) + ' cases — too large to inject directly, and the source page has no executable SQL to reuse. This usually means the page was created before v9.0.1; rerun the original filter to refresh the page, or narrow further before running AMA.');
-    }
-  }
-  // Build the SUBQUERY BODY (without the trailing alias) once. The alias is
-  // appended per-occurrence so the agent can use either the default name or
-  // its own alias (FROM scoped_cases sc → AS sc instead of AS scoped_cases).
-  var scopedCasesBody = scopeIdsSubquery
-    ? '(SELECT c.* FROM cases c WHERE c.cl_id IN (' + scopeIdsSubquery + '))'
-    : null;
-  var scopedEntriesBody = scopeIdsSubquery
-    ? '(SELECT d.* FROM docket_entries d WHERE d.cl_id IN (' + scopeIdsSubquery + '))'
-    : null;
-
-  // v9.0.6 — alias-aware substitution. Matches optional "AS alias" or bare
-  // alias after the table name; if present, that alias becomes the AS-name on
-  // the substituted subquery, so "FROM scoped_cases sc WHERE sc.x = ..." works.
-  // Bare-alias path uses a negative lookahead to avoid matching SQL keywords
-  // (WHERE, ON, JOIN, ORDER, etc.) as aliases.
-  var SQL_FOLLOW_KEYWORDS = 'WHERE|ON|USING|JOIN|LEFT|RIGHT|FULL|INNER|CROSS|OUTER|NATURAL|LATERAL|ORDER|GROUP|HAVING|LIMIT|OFFSET|FETCH|FOR|UNION|INTERSECT|EXCEPT|AND|OR|WINDOW|RETURNING';
-  function substituteScoped(sqlIn, name, body) {
-    var pattern = new RegExp(
-      '(\\b(?:FROM|JOIN)\\s+)' + name + '\\b' +
-        '(?:\\s+AS\\s+(\\w+)|\\s+(?!(?:' + SQL_FOLLOW_KEYWORDS + ')\\b)(\\w+))?',
-      'gi'
-    );
-    return sqlIn.replace(pattern, function(match, fromOrJoin, asAlias, bareAlias) {
-      var alias = asAlias || bareAlias || name;
-      return fromOrJoin + body + ' AS ' + alias;
-    });
-  }
-
-  for (var i = 0; i < plan.queries.length; i++) {
-    var q = plan.queries[i];
-    var label = q.label || ('query ' + (i + 1));
-    var sql = String(q.sql || '').trim();
-    if (!sql) continue;
-    sql = sql.replace(/;\s*$/, '').trim();
-    var execSql = sql;
-    if (scopedCasesBody) {
-      execSql = substituteScoped(execSql, 'scoped_cases', scopedCasesBody);
-      execSql = substituteScoped(execSql, 'scoped_docket_entries', scopedEntriesBody);
-    }
-    // v9.0.8 — Supabase's run_query RPC requires the query start with SELECT.
-    // If the agent wrote "WITH ... SELECT ...", wrap in an outer SELECT to
-    // pass the validator. Tested empirically that WITH inside a parenthesized
-    // subquery resolves correctly in this Postgres.
-    if (!/^\s*SELECT\b/i.test(execSql)) {
-      execSql = 'SELECT * FROM (' + execSql + ') AS ama_q';
-    }
-    appendAmaLog('Query ' + (i + 1) + '.', label, '');
-    var rows;
-    try {
-      rows = await sbRpc('run_query', { query_text: execSql });
-    } catch (err) {
-      appendAmaLog('Query ' + (i + 1) + '.', 'failed: ' + err.message, 'error');
-      throw new Error('Query "' + label + '" failed: ' + err.message);
-    }
-    appendAmaLog('  →', fmtInt(rows.length) + ' row' + (rows.length === 1 ? '' : 's'), 'done');
-    // Truncate per-query to keep synthesis input bounded.
-    var truncated = (rows.length > 500) ? rows.slice(0, 500) : rows;
-    results.push({ label: label, sql: sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 500 });
-  }
-  return results;
-}
-
-function buildAmaSynthesisSystem(outputMode) {
-  var listClause = (outputMode === 'list' || outputMode === 'hybrid')
-    ? '"cl_ids": [<bigint>, ...]   // the cl_ids the user should see; pulled from your query results.'
-    : '"cl_ids": null';
-  return [
-    'You are the synthesis step for an agentic AMA over a federal litigation database. The planner has already run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.',
-    '',
-    'Output a single JSON object (no prose, no code fences) with these keys:',
-    '{',
-    '  "answer_markdown": "...",  // markdown narrative; embed [case-ref:CL_ID] tokens to cite specific cases.',
-    '  ' + listClause + ',',
-    '  "candor_notes": ["any caveats discovered during synthesis"]',
-    '}',
-    '',
-    'Rules:',
-    '- LEAD with caveats when your confidence is materially lower than the user might assume. “Of a sample of 500...” is a different sentence from “All cases in the system show...”',
-    '- For list and hybrid output_modes, cl_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable cases, downgrade to narrative mode and explain.',
-    '- When citing a case, use the form [case-ref:12345] inline in the markdown — the UI replaces it with a clickable link.',
-    '- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.',
-    '- Output strict JSON only. No markdown outside answer_markdown. No code fences.',
-    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes (“”) for direct quotation, or single quotes (‘’ or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
-  ].join('\n');
-}
-
-function buildAmaSynthesisUser(question, plan, results) {
-  var resultsForModel = results.map(function(r) {
-    return {
-      label: r.label,
-      total_rows: r.total_rows,
-      was_truncated: r.was_truncated,
-      rows: r.rows
-    };
-  });
-  return [
-    'USER QUESTION:',
-    question,
-    '',
-    'YOUR PLAN (from the planning step):',
-    plan.approach_summary,
-    '',
-    'PLANNED OUTPUT MODE: ' + plan.output_mode,
-    '',
-    'CANDOR NOTES FROM PLANNING:',
-    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function(n) { return '- ' + n; }).join('\n') : '(none)',
-    '',
-    'QUERY RESULTS (JSON):',
-    JSON.stringify(resultsForModel, null, 2),
-    '',
-    'Return the synthesis JSON now.'
-  ].join('\n');
-}
-
-// v9.0.7 — repair unescaped double quotes inside the answer_markdown value.
-// The model sometimes writes natural quotation marks ("AR", "certified index")
-// inside the markdown without escaping, which breaks JSON.parse. We find the
-// answer_markdown field's body (between its opening and closing JSON quote)
-// and escape any internal double quote that isn't already preceded by a
-// backslash. Best-effort; if it doesn't help, the caller still gets a clear
-// error.
-function repairAmaJsonAnswerMarkdownQuotes(raw) {
-  var s = String(raw);
-  var startMatch = s.match(/"answer_markdown"\s*:\s*"/);
-  if (!startMatch) return s;
-  var startIdx = startMatch.index + startMatch[0].length;
-  // Find the closing quote of answer_markdown — it's the quote that's followed
-  // by a comma and the next field name, or by a closing brace.
-  var endPattern = /"(\s*,\s*"(?:cl_ids|candor_notes)"|\s*\})/;
-  var tail = s.slice(startIdx);
-  var endMatch = tail.search(endPattern);
-  // Iterate from the last plausible end backwards: the LAST `"` followed by
-  // `\s*[,}]` is likely the real string terminator.
-  var lastIdx = -1;
-  var probe = /"(\s*,\s*"(?:cl_ids|candor_notes)"|\s*\})/g;
-  var m;
-  while ((m = probe.exec(tail)) !== null) {
-    lastIdx = m.index;
-  }
-  if (lastIdx < 0) return s;
-  var content = tail.slice(0, lastIdx);
-  // Escape unescaped double quotes. Lookbehind: only match `"` not preceded by `\`.
-  // (Doesn't handle the rare `\\"` case where the backslash is itself escaped,
-  // but the model's natural output is the common case here.)
-  var repaired = content.replace(/(?<!\\)"/g, '\\"');
-  return s.slice(0, startIdx) + repaired + tail.slice(lastIdx);
-}
-
-function parseAmaSynthesis(raw, outputMode) {
-  var cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-  var v;
-  try { v = JSON.parse(cleaned); }
-  catch (pe) {
-    // First repair attempt: fix unescaped quotes inside answer_markdown.
-    try {
-      var repaired = repairAmaJsonAnswerMarkdownQuotes(cleaned);
-      if (repaired !== cleaned) {
-        v = JSON.parse(repaired);
-      } else {
-        throw pe; // no change made; fall through to next strategy
-      }
-    } catch (pe2) {
-      var firstObj = extractFirstJsonValue(cleaned, 'object');
-      if (firstObj) {
-        try { v = JSON.parse(firstObj); }
-        catch (pe3) {
-          // Try the repair on the extracted object too.
-          try {
-            v = JSON.parse(repairAmaJsonAnswerMarkdownQuotes(firstObj));
-          } catch (pe4) {
-            throw new Error('Synthesis parse failed — JSON.parse error: ' + pe4.message);
-          }
-        }
-      } else {
-        throw new Error('Synthesis parse failed — could not find a JSON object.');
-      }
-    }
-  }
-  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('Synthesis parse failed — top-level value is not an object.');
-  if (typeof v.answer_markdown !== 'string' || !v.answer_markdown.trim()) {
-    throw new Error('Synthesis parse failed — answer_markdown is empty.');
-  }
-  if (outputMode === 'list' || outputMode === 'hybrid') {
-    if (!Array.isArray(v.cl_ids) || v.cl_ids.length === 0) {
-      // Degrade rather than fail outright.
-      v.cl_ids = [];
-      v.candor_notes = (v.candor_notes || []).concat(['Output mode requested a case list but synthesis returned none — showing narrative only.']);
-    } else {
-      v.cl_ids = v.cl_ids.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); });
-    }
-  } else {
-    v.cl_ids = null;
-  }
-  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
-  return v;
+  return { cl_ids: clIds, scope_sql: null, is_full_db: false, count: tip.outgoing_count, description: desc };
 }
 
 // Pre-flight modal — returns Promise<bool>.
@@ -4129,31 +3842,26 @@ async function applyClaudeAma() {
   try {
     var scope = buildAmaScopeSummary();
 
-    // === Planning step ===
-    var planSys = buildAmaPlanningSystem();
-    var planUser = buildAmaPlanningUser(question, scope);
-    var planRaw;
+    // === Planning step (Worker /corpus/plan) ===
+    // The Worker runs the planning LLM call, generates + stores the SQL plan
+    // server-side, and returns an opaque token + a display copy + the estimate.
+    var provider = (llmAccess.mode === 'paid') ? 'anthropic' : llmAccess.provider;
+    var planResp;
     try {
-      // v9.0.9 — bumped from 1500. Complex hybrid plans (e.g., win/loss
-      // analyses with 7+ queries plus candor notes) routinely exceeded 1500
-      // tokens and got truncated mid-JSON, breaking the parse.
-      planRaw = await amaCallClaude(planSys, planUser, 4000);
+      planResp = await corpusApiCall('/corpus/plan', {
+        question: question, scope: scope, provider: provider, model: llmAccess.model
+      });
     } catch (err) {
       throw new Error('Planning step: ' + err.message);
     }
-    var plan;
-    try { plan = parseAmaPlan(planRaw); }
-    catch (err) {
-      console.error('AMA plan parse — raw response:', planRaw);
-      // v9.0.9 — detect truncation explicitly. If the raw response doesn't
-      // end with a closing brace, it likely got cut off by max_tokens.
-      var trimmed = String(planRaw).trim();
-      var likelyTruncated = !/\}\s*$/.test(trimmed);
-      var hint = likelyTruncated
-        ? ' (likely truncated mid-JSON — the planner exceeded max_tokens. Try a more focused question or report this so we can raise the cap further.)'
-        : '';
-      throw new Error('Could not parse plan from ' + aiName() + hint + ' Raw output start: ' + planRaw.slice(0, 600));
-    }
+    var plan = {
+      token: planResp.token,
+      output_mode: planResp.output_mode,
+      approach_summary: planResp.approach_summary || '',
+      candor_notes: planResp.candor_notes || [],
+      queries: planResp.queries || [],
+      estimated_cost_cents: planResp.estimated_cost_cents || 0
+    };
     appendAmaLog('Plan.', plan.output_mode + ' · ' + plan.queries.length + ' quer' + (plan.queries.length === 1 ? 'y' : 'ies') + ' · est. ' + fmtCents(plan.estimated_cost_cents), 'done');
 
     // === Pre-flight ===
@@ -4173,36 +3881,31 @@ async function applyClaudeAma() {
       }
     }
 
-    // === Execution ===
+    // === Execution + synthesis (Worker /corpus/execute) ===
+    // The Worker runs the stored plan's SQL against the corpus and synthesizes
+    // the answer. The plan token is one-shot (consumed server-side).
     statusEl.textContent = 'Running queries…';
     appendAmaLog('Step 2/3.', 'Executing planned queries…', '');
-    var results = await executeAmaPlan(plan, scope);
-
-    // === Synthesis ===
-    statusEl.textContent = 'Synthesizing answer…';
-    appendAmaLog('Step 3/3.', 'Synthesizing the answer…', '');
-    var synthSys = buildAmaSynthesisSystem(plan.output_mode);
-    var synthUser = buildAmaSynthesisUser(question, plan, results);
-    var synthRaw;
+    var execResp;
     try {
-      synthRaw = await amaCallClaude(synthSys, synthUser, plan.output_mode === 'narrative' ? 4000 : 6000);
+      execResp = await corpusApiCall('/corpus/execute', { token: plan.token });
     } catch (err) {
-      throw new Error('Synthesis step: ' + err.message);
+      throw new Error('Execution step: ' + err.message);
     }
-    var synth;
-    try { synth = parseAmaSynthesis(synthRaw, plan.output_mode); }
-    catch (err) {
-      console.error('AMA synth parse — raw response:', synthRaw);
-      throw new Error('Could not parse synthesis from ' + aiName() + '. Raw output start: ' + synthRaw.slice(0, 600));
-    }
+    appendAmaLog('Step 3/3.', 'Synthesized the answer.', 'done');
+    var synth = {
+      answer_markdown: execResp.answer_markdown,
+      cl_ids: execResp.cl_ids,
+      candor_notes: execResp.candor_notes || []
+    };
+    if (!synth.answer_markdown) throw new Error('The server returned an empty answer.');
     appendAmaLog('Done.', 'Total spent: ' + fmtCents(amaSessionCostCents), 'done');
 
     // === Commit page ===
     // v9.0.3 — must await: commitAmaResultPage is async (it awaits a SQL fetch
     // for the case display rows). Without await, renderAll() at the end of
     // applyClaudeAma fires BEFORE the new page is pushed and viewingIdx is
-    // updated, so the screen paints the manual_filter page even though the
-    // AMA page exists in the stack. State right, paint stale.
+    // updated, so the screen paints the stale page.
     await commitAmaResultPage(question, plan, synth, scope);
     promptEl.value = '';
 
@@ -4231,8 +3934,8 @@ async function commitAmaResultPage(question, plan, synth, scope) {
     // Narrowing path: outgoing is the subset returned by synthesis.
     // For composability, intersect with incoming when scope was narrowed.
     var allowed;
-    if (scope.cl_ids && scope.cl_ids.length > 0) {
-      var s = {}; scope.cl_ids.forEach(function(id) { s[id] = true; });
+    if (incoming && incoming.length > 0) {
+      var s = {}; incoming.forEach(function(id) { s[id] = true; });
       allowed = synth.cl_ids.filter(function(id) { return s[id]; });
     } else {
       allowed = synth.cl_ids.slice();

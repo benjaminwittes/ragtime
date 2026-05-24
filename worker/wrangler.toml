@@ -25,6 +25,12 @@ SUPABASE_URL = "https://aikdbjprndgksibbvcfs.supabase.co"
 STRIPE_PRICE_5_USD = "price_1TXoNIJS8oJAjJ8ojuPOv1la"
 STRIPE_PRICE_20_USD = "price_1TXoOxJS8oJAjJ8oqgWWK8B5"
 STRIPE_PRICE_50_USD = "price_1TXoQUJS8oJAjJ8ovHVaaMG1"
+# Corpus Supabase project (the PII-free research-data plane, post DB split).
+# The Worker queries it server-side for the /corpus/* endpoints. The key is the
+# PUBLISHABLE (anon) key — not a secret: run_query is SELECT-only and the corpus
+# holds no PII. Same public-key posture as the frontend's SB_KEY.
+CORPUS_SUPABASE_URL = "https://xsqdnuqyqyykkzuiqphr.supabase.co"
+CORPUS_SUPABASE_KEY = "sb_publishable_yXX3zE7j7bVfqLj6cy8oeA_allTHvzN"
 
 # KV namespace for per-IP rate-limit counters and the daily demo quota
 # counter. TTL'd entries; see askHandler in index.js for the keys used.

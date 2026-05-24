@@ -1,0 +1,6 @@
+# Cloudflare Wrangler local build / dev cache
+.wrangler/
+worker/.wrangler/
+
+# Node dev toolchain (installed globally / not committed)
+node_modules/
