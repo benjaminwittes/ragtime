@@ -2882,157 +2882,37 @@ async function runWithConcurrency(items, fn, concurrency, onProgress) {
   return results;
 }
 
-// Fetch the most recent CLAUDE_READ_MAX_ENTRIES_PER_CASE entries for each
-// cl_id in `clIds`. Returns { cl_id: [entry, ...] }, ordered most-recent first.
-// Chunks the IN clause to keep individual queries tractable.
-async function fetchEntriesForReadBatches(clIds) {
-  var byClId = {};
-  if (clIds.length === 0) return byClId;
-  var CHUNK = 500;
-  for (var i = 0; i < clIds.length; i += CHUNK) {
-    var chunk = clIds.slice(i, i + CHUNK);
-    var sql =
-      "SELECT cl_id, entry_number, entry_date, description FROM (" +
-      "  SELECT cl_id, entry_number, entry_date, description, " +
-      "         ROW_NUMBER() OVER (PARTITION BY cl_id ORDER BY entry_number DESC) AS rn " +
-      "  FROM docket_entries WHERE cl_id IN (" + chunk.join(',') + ")" +
-      ") sub WHERE rn <= " + CLAUDE_READ_MAX_ENTRIES_PER_CASE;
-    var rows = await sbRpc('run_query', { query_text: sql }) || [];
-    rows.forEach(function(r) {
-      if (!byClId[r.cl_id]) byClId[r.cl_id] = [];
-      byClId[r.cl_id].push(r);
-    });
-  }
-  // Sort each case's entries newest-first (entry_number DESC, which we already
-  // selected in that order, but defensively re-sort in case the RPC didn't
-  // preserve ordering).
-  Object.keys(byClId).forEach(function(k) {
-    byClId[k].sort(function(a, b) { return (b.entry_number || 0) - (a.entry_number || 0); });
-  });
-  return byClId;
-}
-
-// Build the per-case context block sent to Claude for one case.
-function buildReadCaseBlock(caseRow, entries) {
-  var meta = [
-    'cl_id: ' + caseRow.cl_id,
-    'case_name: ' + (caseRow.case_name || ''),
-    'court: ' + (caseRow.court || '') +
-      ' · judge: ' + (caseRow.judge || '—') +
-      ' · cause: ' + (caseRow.cause || '—') +
-      ' · NOS: ' + (caseRow.nature_of_suit || '—') +
-      ' · filed: ' + (caseRow.date_filed || '—')
-  ].join('\n');
-  var entryLines = entries.map(function(e) {
-    var desc = String(e.description || '').replace(/\s+/g, ' ').trim();
-    if (desc.length > CLAUDE_READ_MAX_ENTRY_CHARS) {
-      desc = safeSlice(desc, CLAUDE_READ_MAX_ENTRY_CHARS) + '…';
-    }
-    return '#' + (e.entry_number != null ? e.entry_number : '?') +
-           ' (' + (e.entry_date || '?') + '): ' + desc;
-  });
-  var entriesBlock = entryLines.length > 0
-    ? 'DOCKET ENTRIES (' + entryLines.length + ', newest first):\n' + entryLines.join('\n')
-    : 'DOCKET ENTRIES: (none available)';
-  return meta + '\n' + entriesBlock;
-}
-
-// Parse Claude's JSON-array response for a batch. Tolerates code fences,
-// surrounding chatter, and postambles containing stray brackets (see
-// extractFirstJsonValue, v8.0.1). Returns { cl_id: {keep, reason} }.
-function parseReadBatchResponse(raw, expectedClIds) {
-  var cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-  var arr;
-  try { arr = JSON.parse(cleaned); }
-  catch (pe) {
-    var firstArr = extractFirstJsonValue(cleaned, 'array');
-    if (firstArr) arr = JSON.parse(firstArr);
-    else {
-      console.error('[' + aiName() + ' Read] Full raw response:', raw);
-      var hint = (cleaned.indexOf('[') >= 0)
-        ? ' (response may have been truncated — try a smaller batch)'
-        : '';
-      throw new Error(aiName() + ' did not return a valid JSON array' + hint + '. Raw: ' + raw.slice(0, 1500));
-    }
-  }
-  if (!Array.isArray(arr)) throw new Error(aiName() + ' response was not a JSON array.');
-  var out = {};
-  arr.forEach(function(item) {
-    if (item && item.cl_id != null) {
-      out[item.cl_id] = {
-        keep: !!item.keep,
-        reason: String(item.reason || '').slice(0, 300)
-      };
-    }
-  });
-  return out;
-}
-
-// Send one batch to Claude. Returns { cl_id: {keep, reason} } for the batch.
-async function processClaudeReadBatch(criterion, batch) {
-  var systemPrompt =
-    "You are reviewing federal court cases against a user-supplied criterion. " +
-    "For each case, decide keep/drop based ONLY on the docket entries shown.\n\n" +
-    "OUTPUT: a JSON array. One element per case, in input order. Each element has shape:\n" +
-    '  {"cl_id": <int>, "keep": <true|false>, "reason": "<= 25 word explanation>"}\n\n' +
-    "RULES:\n" +
-    "- Be conservative. If the entries do not clearly support keeping the case under the criterion, drop it with a reason explaining what's missing or insufficient.\n" +
-    "- The 'reason' field must be 25 words or fewer.\n" +
-    "- 'keep' is a literal boolean (true/false), not a string.\n" +
-    "- Output the JSON array only. No markdown, no code fences, no prose outside the array.\n" +
-    "- Return exactly " + batch.length + " elements, one per case.";
-
-  var userParts = ['USER CRITERION:\n' + criterion + '\n\nCASES (n=' + batch.length + '):\n'];
-  batch.forEach(function(item, i) {
-    userParts.push('--- CASE ' + (i + 1) + ' ---\n' + item.block);
-  });
-  userParts.push('\nReturn the JSON array now.');
-  var userMessage = userParts.join('\n\n');
-
-  var raw = await callClaude(systemPrompt, userMessage, 4000, { skipPreview: true });
-  return parseReadBatchResponse(raw, batch.map(function(b) { return b.caseRow.cl_id; }));
-}
-
+// === READ CASES MODE (server-side per-batch) ===
+//
+// User describes a per-case criterion; each case's docket entries are reviewed
+// keep/drop. The Worker (/corpus/read-batch) fetches entries, builds the block,
+// and runs one keep/drop LLM call per batch (auto-dropping no-entry cases). The
+// browser only drives the batching/concurrency loop — no SQL, no domain logic.
 async function applyClaudeRead() {
   if (!isOnTip()) return;
   if (!claudeAccessUnlocked()) {
-    alert('Click "Unlock" in the Claude features panel to use this mode.');
+    alert('Click "Unlock" in the AI features panel to use this mode.');
     return;
   }
-
   var criterion = document.getElementById('read-prompt').value.trim();
   if (!criterion) { alert('Describe the per-case criterion first.'); return; }
 
   var tip = stack[stack.length - 1];
-  var incoming = tip.operation_type === 'init' ? [] : tip.outgoing_cl_ids.slice();
-  var incomingCount = tip.operation_type === 'init' ? totalCaseCount : incoming.length;
-  // v9.0.0 — hard cap removed; cost-preview modal is the gate. Soft warning
-  // for unusually large fields shows in the inline cost note and as a one-line
-  // confirm here so the user has a chance to back out before paying for recon.
-  if (incomingCount > CLAUDE_READ_MAX) {
-    var goRead = confirm('Field is ' + fmtInt(incomingCount) + ' cases — unusually large for Read mode. ' +
-      'You\'ll be shown a cost estimate before anything runs. Continue?');
-    if (!goRead) return;
-  }
-  if (incomingCount === 0) { alert('No cases in scope.'); return; }
-
-  // For init page (no incoming list), claude_read isn't meaningful — but the UI
-  // disables that mode on init. Defensive guard:
   if (tip.operation_type === 'init') {
     alert('Read mode is not available on the welcome page. Apply at least one filter first.');
     return;
   }
-
-  // Cost confirmation for non-trivial runs.
+  var incoming = tip.outgoing_cl_ids.slice();
+  var incomingCount = incoming.length;
+  if (incomingCount === 0) { alert('No cases in scope.'); return; }
+  if (incomingCount > CLAUDE_READ_MAX) {
+    if (!confirm('Field is ' + fmtInt(incomingCount) + ' cases — unusually large for Read mode. ' +
+      'You\'ll be shown a cost estimate before anything runs. Continue?')) return;
+  }
   var est = estimateClaudeReadCost(incomingCount);
   if (est.dollars >= 5.0) {
-    var ok = confirm(
-      'This will read ' + fmtInt(incomingCount) + ' cases.\n\n' +
-      'Estimated cost: ~$' + est.dollars.toFixed(2) + '\n' +
-      'Estimated time: ~' + est.minutes + ' min\n\n' +
-      'Continue?'
-    );
-    if (!ok) return;
+    if (!confirm('This will read ' + fmtInt(incomingCount) + ' cases.\n\n' +
+      'Estimated cost: ~$' + est.dollars.toFixed(2) + '\nEstimated time: ~' + est.minutes + ' min\n\nContinue?')) return;
   }
 
   transitionToActive();
@@ -3045,98 +2925,57 @@ async function applyClaudeRead() {
   statusEl.classList.add('active');
 
   try {
-    // Step 1: Fetch case rows for all incoming cl_ids (need metadata for context).
-    statusEl.textContent = 'Fetching case metadata...';
-    var caseFetchSql =
-      "SELECT cl_id, docket_number, case_name, date_filed, judge, cause, nature_of_suit, entry_count, cl_url, court FROM cases " +
-      "WHERE cl_id IN (" + incoming.join(',') + ") ORDER BY date_filed DESC";
-    var caseRows = await sbRpc('run_query', { query_text: caseFetchSql }) || [];
-    var caseById = {};
-    caseRows.forEach(function(r) { caseById[r.cl_id] = r; });
+    var provider = (llmAccess.mode === 'paid') ? 'anthropic' : llmAccess.provider;
 
-    // Step 2: Fetch docket entries (chunked).
-    statusEl.textContent = 'Fetching docket entries...';
-    var entriesById = await fetchEntriesForReadBatches(incoming);
-
-    // Step 3: Auto-drop cases with no entries; queue the rest for Claude.
-    var annotations = {};       // cl_id → { keep, reason }
-    var queue = [];             // items to send to Claude: { caseRow, block }
-    incoming.forEach(function(cl_id) {
-      var caseRow = caseById[cl_id];
-      if (!caseRow) {
-        annotations[cl_id] = { keep: false, reason: 'case row not found in database' };
-        return;
-      }
-      var entries = entriesById[cl_id] || [];
-      if (entries.length === 0) {
-        annotations[cl_id] = { keep: false, reason: 'no docket entries available to analyze' };
-        return;
-      }
-      queue.push({ caseRow: caseRow, block: buildReadCaseBlock(caseRow, entries) });
-    });
-
-    // Step 4: Batch the queue and run with limited concurrency.
+    // Batch the cl_ids; the Worker does fetch + block + one keep/drop LLM call
+    // per batch. The browser runs the concurrency loop.
     var batches = [];
-    for (var i = 0; i < queue.length; i += CLAUDE_READ_BATCH_SIZE) {
-      batches.push(queue.slice(i, i + CLAUDE_READ_BATCH_SIZE));
+    for (var i = 0; i < incoming.length; i += CLAUDE_READ_BATCH_SIZE) {
+      batches.push(incoming.slice(i, i + CLAUDE_READ_BATCH_SIZE));
     }
-
-    var totalCasesToRead = queue.length;
-    var casesProcessedCount = 0;
-    statusEl.textContent = 'Reading 0 / ' + fmtInt(totalCasesToRead) + ' cases...';
+    var totalCases = incoming.length;
+    statusEl.textContent = 'Reading 0 / ' + fmtInt(totalCases) + ' cases...';
 
     var batchResults = await runWithConcurrency(
       batches,
-      function(batch) { return processClaudeReadBatch(criterion, batch); },
+      function(batch) {
+        return corpusApiCall('/corpus/read-batch', {
+          criterion: criterion, cl_ids: batch, provider: provider, model: llmAccess.model
+        });
+      },
       CLAUDE_READ_CONCURRENCY,
       function(doneCount) {
-        // doneCount is "batches finished"; convert to "cases finished" approximately
-        casesProcessedCount = Math.min(totalCasesToRead, doneCount * CLAUDE_READ_BATCH_SIZE);
-        statusEl.textContent = 'Reading ' + fmtInt(casesProcessedCount) + ' / ' + fmtInt(totalCasesToRead) + ' cases...';
+        var processed = Math.min(totalCases, doneCount * CLAUDE_READ_BATCH_SIZE);
+        statusEl.textContent = 'Reading ' + fmtInt(processed) + ' / ' + fmtInt(totalCases) + ' cases...';
       }
     );
 
-    // Step 5: Aggregate batch results, surface any per-batch errors as failures.
-    var failures = [];
+    // Aggregate verdicts; a failed batch marks its cases dropped with the error.
+    var annotations = {};
     batchResults.forEach(function(r, bi) {
       if (r && r.__error) {
-        failures.push({ batchIndex: bi, error: r.__error });
-        // For the failed batch's cases, mark them as drop with the error reason
-        // so they're at least visible in per_case_annotations.
-        batches[bi].forEach(function(item) {
-          annotations[item.caseRow.cl_id] = { keep: false, reason: 'batch failed: ' + (r.__error.message || 'unknown error') };
+        batches[bi].forEach(function(id) {
+          annotations[id] = { keep: false, reason: 'batch failed: ' + (r.__error.message || 'unknown error') };
         });
-      } else if (r && typeof r === 'object') {
-        Object.keys(r).forEach(function(k) {
-          annotations[k] = r[k];
-        });
-        // Cases the batch was supposed to cover but Claude omitted: mark drop.
-        batches[bi].forEach(function(item) {
-          if (!annotations[item.caseRow.cl_id]) {
-            annotations[item.caseRow.cl_id] = { keep: false, reason: 'no judgment returned by Claude' };
-          }
+      } else if (r && Array.isArray(r.verdicts)) {
+        r.verdicts.forEach(function(v) { annotations[v.cl_id] = { keep: !!v.keep, reason: v.reason || '' }; });
+        batches[bi].forEach(function(id) {
+          if (!annotations[id]) annotations[id] = { keep: false, reason: 'no judgment returned' };
         });
       }
     });
 
-    // Step 6: Build outgoing list from cases marked keep=true.
     var keptIds = [];
-    incoming.forEach(function(cl_id) {
-      if (annotations[cl_id] && annotations[cl_id].keep) keptIds.push(cl_id);
-    });
+    incoming.forEach(function(id) { if (annotations[id] && annotations[id].keep) keptIds.push(id); });
 
-    // Step 7: Build display rows for kept cases (ordered by date_filed DESC).
-    var displayCases = caseRows.filter(function(r) {
-      return annotations[r.cl_id] && annotations[r.cl_id].keep;
-    });
-    var droppedDisplayCases = caseRows.filter(function(r) {
-      return !annotations[r.cl_id] || !annotations[r.cl_id].keep;
-    });
+    // Display rows for all incoming cases (kept + dropped) from the live corpus.
+    statusEl.textContent = 'Fetching results...';
+    var casesResp = await corpusApiCall('/corpus/cases', { ids: incoming });
+    var caseRows = (casesResp && casesResp.rows) || [];
+    var displayCases = caseRows.filter(function(r) { return annotations[r.cl_id] && annotations[r.cl_id].keep; });
+    var droppedDisplayCases = caseRows.filter(function(r) { return !annotations[r.cl_id] || !annotations[r.cl_id].keep; });
 
-    // Generate a short label from the criterion (Claude could do this, but the
-    // user's own phrasing is usually more informative — and avoids an extra API call).
     var shortLabel = criterion.length > 60 ? criterion.slice(0, 60) + '…' : criterion;
-
     var newPage = {
       page_id: stack.length,
       operation_type: 'claude_read',
@@ -3150,7 +2989,7 @@ async function applyClaudeRead() {
       outgoing_cl_ids: keptIds,
       outgoing_count: keptIds.length,
       cases: displayCases,
-      dropped_cases: droppedDisplayCases,  // claude_read only: kept off table but included in download
+      dropped_cases: droppedDisplayCases,
       per_case_annotations: annotations,
       artifact_markdown: null,
       created_at: new Date().toISOString()
@@ -3162,14 +3001,6 @@ async function applyClaudeRead() {
     modeArmed = false;
     closeDetail();
     document.getElementById('read-prompt').value = '';
-
-    if (failures.length > 0) {
-      alert(
-        'Read completed with ' + failures.length + ' batch failure(s) out of ' + batches.length + '.\n' +
-        'Affected cases were marked dropped with the error as their reason. ' +
-        'You can retry by going Back and re-running.'
-      );
-    }
   } catch (err) {
     alert(aiName() + ' Read failed: ' + err.message);
   }
@@ -3180,7 +3011,6 @@ async function applyClaudeRead() {
   btn.textContent = origLabel;
   renderAll();
 }
-
 
 // === CLAUDE ANALYSIS MODE ===
 //
