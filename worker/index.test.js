@@ -9,7 +9,8 @@ import {
   verifyStripeSignature,
   emailDomainAllowed,
   betaGate,
-  webhookHandler
+  webhookHandler,
+  checkUserRateLimit
 } from "./index.js";
 
 // ============================================================================
@@ -399,5 +400,60 @@ describe("betaGate", () => {
     const env = { SUPABASE_URL: "https://supa.test", SUPABASE_SERVICE_ROLE_KEY: "k" };
     const res = await betaGate(env, { sub: "u3", email: "x@gmail.com" });
     expect(res).toBeNull();
+  });
+});
+
+// ============================================================================
+// checkUserRateLimit — per-account request/min ceiling on the paid path. Bounds
+// request rate independent of IP (the prepaid balance bounds total spend). Uses
+// a per-minute KV counter; over the limit → 429 with code "user_rate_limited".
+// ============================================================================
+describe("checkUserRateLimit", () => {
+  // Minimal in-memory KV stand-in for env.QUOTA.
+  function mockKV(initial = {}) {
+    const store = { ...initial };
+    return {
+      store,
+      get: vi.fn(async (k) => (k in store ? store[k] : null)),
+      put: vi.fn(async (k, v) => { store[k] = v; })
+    };
+  }
+  const ctx = { waitUntil: (p) => p };
+  const now = new Date("2026-05-25T12:00:00Z");
+  // yyyymmddhhmm(now) → 202605251200
+  const keyFor = (u) => `user:${u}:202605251200`;
+
+  it("allows and increments when under the limit", async () => {
+    const QUOTA = mockKV();
+    const res = await checkUserRateLimit({ QUOTA }, ctx, "u1", now);
+    expect(res).toBeNull();
+    expect(QUOTA.store[keyFor("u1")]).toBe("1"); // counter bumped
+  });
+
+  it("returns 429 user_rate_limited at the limit", async () => {
+    // Already at the default cap (30) this minute.
+    const QUOTA = mockKV({ [keyFor("u2")]: "30" });
+    const res = await checkUserRateLimit({ QUOTA }, ctx, "u2", now);
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(429);
+    const payload = await res.json();
+    expect(payload.error.code).toBe("user_rate_limited");
+    // does NOT increment past the cap (no further KV write)
+    expect(QUOTA.put).not.toHaveBeenCalled();
+  });
+
+  it("honors a custom PER_USER_PER_MIN override", async () => {
+    const QUOTA = mockKV({ [keyFor("u3")]: "2" });
+    // cap of 2 → already at limit
+    const res = await checkUserRateLimit({ QUOTA, PER_USER_PER_MIN: "2" }, ctx, "u3", now);
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(429);
+  });
+
+  it("keys per user — one user's traffic doesn't limit another", async () => {
+    const QUOTA = mockKV({ [keyFor("busy")]: "30" });
+    const res = await checkUserRateLimit({ QUOTA }, ctx, "fresh", now);
+    expect(res).toBeNull();
+    expect(QUOTA.store[keyFor("fresh")]).toBe("1");
   });
 });
