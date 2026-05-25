@@ -31,14 +31,17 @@ describe("computeCostCents", () => {
     expect(computeCostCents({ inputTokens: 0, outputTokens: 1_000_000, rates: sonnet, markup: 1.0 })).toBe(1500);
   });
 
-  it("applies the markup multiplier (characterizes a 1-cent FP rounding artifact)", () => {
-    // Intended: $3.00 * 1.35 = $4.05 = 405 cents. The code returns 406 because
-    // 3 * 1.35 === 4.050000000000001 in IEEE-754, and Math.ceil tips it over by
-    // a cent. This is a (tiny, in-the-house's-favor) overcharge on amounts that
-    // land exactly on a cent boundary. Asserting the ACTUAL value pins current
-    // behavior; the fix (round to sane precision before ceil) is a flagged
-    // follow-up so this scaffold PR stays behavior-neutral. See note to Ben.
-    expect(computeCostCents({ inputTokens: 1_000_000, outputTokens: 0, rates: sonnet, markup: 1.35 })).toBe(406);
+  it("applies the markup multiplier without FP over-rounding", () => {
+    // $3.00 * 1.35 = $4.05 = exactly 405 cents. Before the toFixed(6) fix this
+    // returned 406 because 3 * 1.35 === 4.050000000000001 and Math.ceil tipped
+    // it over by a cent. This pins the corrected behavior.
+    expect(computeCostCents({ inputTokens: 1_000_000, outputTokens: 0, rates: sonnet, markup: 1.35 })).toBe(405);
+  });
+
+  it("still rounds a GENUINE sub-cent fraction up (the fix must not undercharge)", () => {
+    // 1_000_001 input tokens: 3.000003 * 1.35 * 100 = 405.000405 cents — a real
+    // fraction above 405, so it must ceil to 406, not collapse to 405.
+    expect(computeCostCents({ inputTokens: 1_000_001, outputTokens: 0, rates: sonnet, markup: 1.35 })).toBe(406);
   });
 
   it("rounds UP — a tiny query is never charged 0 (no free rides via rounding)", () => {

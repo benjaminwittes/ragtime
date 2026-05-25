@@ -2176,7 +2176,13 @@ async function supabaseFindUserByPaymentIntent(env, paymentIntentId) {
 
 function computeCostCents({ inputTokens, outputTokens, rates, markup }) {
   const rawDollars = (inputTokens * rates.input + outputTokens * rates.output) / 1e6;
-  return Math.ceil(rawDollars * markup * 100);
+  // Collapse IEEE-754 noise before the ceil. Without this, e.g. 3 * 1.35 ===
+  // 4.050000000000001, so Math.ceil(405.0000…) returns 406 — a 1-cent
+  // overcharge on amounts that land exactly on a cent boundary. Rounding to 6
+  // decimal places kills the ~1e-13 FP error while preserving any genuine
+  // sub-cent fraction (which still rounds up, so we never undercharge).
+  const cents = rawDollars * markup * 100;
+  return Math.ceil(Number(cents.toFixed(6)));
 }
 
 function estimateInputTokens(system, messages) {
