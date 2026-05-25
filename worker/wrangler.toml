@@ -8,11 +8,15 @@ compatibility_date = "2026-05-21"
 [observability]
 enabled = true
 
-# Scheduled cron triggers. Weekly billing reconciliation, Mondays 13:00 UTC
-# (~9am ET): the scheduled() handler in index.js compares each account's
-# balance_cents to the sum of its ledger rows and Slack-alerts on any drift.
+# Scheduled cron triggers (dispatched by event.cron in index.js scheduled()):
+#   "0 13 * * 1"     weekly, Mon 13:00 UTC (~9am ET) — billing reconciliation
+#                    (balance_cents vs sum(ledger), Slack-alert on drift).
+#   "*/30 * * * *"   every 30 min — OFF-BOX pipeline liveness check: alerts if
+#                    the corpus has stopped receiving new documents (the
+#                    pipeline + its watchdog run on Mac2 and can't detect the
+#                    box itself dying; this runs on Cloudflare, so it can).
 [triggers]
-crons = ["0 13 * * 1"]
+crons = ["0 13 * * 1", "*/30 * * * *"]
 
 # Plain-text variables. Stripe live-mode price IDs, the public Supabase
 # project URL, and the frontend app base URL. None of these are sensitive

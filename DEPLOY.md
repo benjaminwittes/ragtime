@@ -71,6 +71,16 @@ A periodic rotation drill (even just the service-role key) is worth running once
 
 Detailed schema, key management, and Stripe webhook setup are in the handoff document.
 
+## Monitoring & alerts
+
+All alerts go to Slack via the `SLACK_ALERT_WEBHOOK_URL` Worker secret (the `notify()` helper no-ops if it's unset). Sources:
+
+- **Billing anomalies** (in request handlers): webhook handler errors, query-debit failures, chargebacks.
+- **Weekly reconciliation** (cron `0 13 * * 1`): alerts if any account's `balance_cents` ≠ `sum(ledger)`.
+- **Off-box pipeline liveness** (cron `*/30 * * * *`): alerts if the corpus has received no new documents within `PIPELINE_STALE_MINUTES` (default 120). This runs on Cloudflare, independent of Mac2 — so unlike the pipeline's own on-box watchdog, it still fires if the whole machine dies. Tune the threshold via the `PIPELINE_STALE_MINUTES` var if the harvest cadence changes.
+
+Worker request/error logs: Cloudflare **Workers Observability** (enabled in `wrangler.toml`).
+
 ## Smoke-testing a Worker deploy
 
 No-cost checks that the deployed code is live (no LLM calls, no billing):

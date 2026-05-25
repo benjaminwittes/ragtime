@@ -12,7 +12,8 @@ import {
   webhookHandler,
   checkUserRateLimit,
   supabaseGetAccount,
-  verifyJwt
+  verifyJwt,
+  pipelineStaleness
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -538,5 +539,43 @@ describe("verifyJwt rejection (alg allow-list + claim checks)", () => {
   it("rejects an expired token before doing any crypto", async () => {
     const t = fakeJwt({ alg: "ES256", kid: "k1" }, { sub: "u1", exp: 1 }); // 1970
     expect(await verifyJwt(t, {})).toBeNull();
+  });
+});
+
+// ============================================================================
+// pipelineStaleness — pure decision logic for the off-box liveness check. Given
+// the newest corpus-document timestamp, decide whether ingestion has gone stale.
+// ============================================================================
+describe("pipelineStaleness", () => {
+  const now = Date.parse("2026-05-25T12:00:00Z");
+  const minsAgo = (m) => new Date(now - m * 60000).toISOString();
+
+  it("is NOT stale when a document arrived within the threshold", () => {
+    const r = pipelineStaleness(minsAgo(10), now, 120);
+    expect(r.stale).toBe(false);
+    expect(r.ageMinutes).toBe(10);
+  });
+
+  it("IS stale when the newest document is older than the threshold", () => {
+    const r = pipelineStaleness(minsAgo(200), now, 120);
+    expect(r.stale).toBe(true);
+    expect(r.ageMinutes).toBe(200);
+  });
+
+  it("treats exactly-at-threshold as not stale (strictly greater trips it)", () => {
+    expect(pipelineStaleness(minsAgo(120), now, 120).stale).toBe(false);
+    expect(pipelineStaleness(minsAgo(121), now, 120).stale).toBe(true);
+  });
+
+  it("is stale with null age when there are no documents at all", () => {
+    const r = pipelineStaleness(null, now, 120);
+    expect(r.stale).toBe(true);
+    expect(r.ageMinutes).toBeNull();
+  });
+
+  it("is stale (not throwing) on an unparseable timestamp", () => {
+    const r = pipelineStaleness("not-a-date", now, 120);
+    expect(r.stale).toBe(true);
+    expect(r.ageMinutes).toBeNull();
   });
 });
