@@ -31,10 +31,16 @@ on:
   pull_request:
     paths:
       - 'worker/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vitest.config.js'
   push:
     branches: [main]
     paths:
       - 'worker/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vitest.config.js'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -51,7 +57,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Money-path tests gate every deploy. vitest runs the suite in
+  # worker/index.test.js (pricing math, Stripe signature verification, webhook
+  # credit/debit idempotency, beta gate). If these fail, deploy never runs.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

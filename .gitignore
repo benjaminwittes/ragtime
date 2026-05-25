@@ -4,3 +4,8 @@ worker/.wrangler/
 
 # Node dev toolchain (installed globally / not committed)
 node_modules/
+
+# Local Claude Code + sandbox artifacts
+.claude/
+.sandbox-partial-pull/
+.DS_Store
