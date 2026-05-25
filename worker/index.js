@@ -16,25 +16,20 @@
 // non-streaming (Anthropic is the only path exposed to paid-tier and
 // the one that hits 524 in practice).
 //
-// Change in v3.1: JWT verification migrated from HS256 (legacy shared
-// `SUPABASE_JWT_SECRET`) to ES256 via Supabase's published JWKS endpoint
-// (`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`). Supabase auto-migrated
-// projects to asymmetric JWTs (ECDSA P-256) in 2025–2026, which the
-// previous HS256-only verifier could no longer read — every token was
-// rejected with "Invalid or expired session token", causing the paid-tier
-// `/api/balance` 401 loop. The worker now:
+// JWT verification: ES256 ONLY (via Supabase's published JWKS endpoint,
+// `<SUPABASE_URL>/auth/v1/.well-known/jwks.json`). Supabase migrated projects
+// to asymmetric JWTs (ECDSA P-256) at the 2026-05-16 cutover; the worker:
 //   - Reads the token's `alg` and `kid` header claims.
-//   - For ES256: fetches the JWK from Supabase's JWKS endpoint
-//     (cached in module memory for 10 minutes), imports the public key,
-//     and verifies via Web Crypto's ECDSA P-256 / SHA-256 path.
-//   - For HS256 (kept as fallback): does the legacy HMAC verification
-//     using env.SUPABASE_JWT_SECRET, so older tokens still work during
-//     any transitional window.
+//   - For ES256: fetches the JWK from Supabase's JWKS endpoint (cached in
+//     module memory for 10 minutes), imports the public key, and verifies via
+//     Web Crypto's ECDSA P-256 / SHA-256 path.
+//   - Any other `alg` (including "none" and HS*, the algorithm-confusion
+//     bypasses) is rejected.
+// The legacy HS256 fallback (shared `SUPABASE_JWT_SECRET`) was removed once it
+// went inert post-cutover; `SUPABASE_JWT_SECRET` is no longer read anywhere.
 //
 // Env vars required for paid-tier verification:
 //   SUPABASE_URL   — already set; reused for JWKS fetch.
-//   (SUPABASE_JWT_SECRET — only needed for HS256 fallback. Can be left
-//    in place; ignored when token alg is ES256. Safe to remove later.)
 
 var DEFAULT_DEMO_PASSWORD = "Lawfareskunkworks";
 var DAILY_QUOTA = 500;
@@ -1855,6 +1850,12 @@ async function verifyJwt(token, env) {
   const signingInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
   const sigBytes = b64UrlDecodeToBytes(sigB64);
 
+  // ES256 ONLY. Supabase signs session JWTs with its asymmetric (ES256) key
+  // since the 2026-05-16 cutover; the legacy HS256 path (verified with a shared
+  // SUPABASE_JWT_SECRET) has been inert ever since (the secret is unset, so it
+  // already returned null) and is removed here to keep the verifier to a single
+  // accepted algorithm. Any other alg — including "none" and HS*, the classic
+  // algorithm-confusion bypasses — falls through to the reject below.
   let ok = false;
   try {
     if (header.alg === "ES256") {
@@ -1876,19 +1877,6 @@ async function verifyJwt(token, env) {
         sigBytes,
         signingInput
       );
-    } else if (header.alg === "HS256") {
-      // Legacy fallback. Kept so any straggler HS256 tokens still verify
-      // during a transitional window. Safe to remove once you're sure
-      // no HS256 tokens are in circulation.
-      if (!env.SUPABASE_JWT_SECRET) return null;
-      const key = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(env.SUPABASE_JWT_SECRET),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["verify"]
-      );
-      ok = await crypto.subtle.verify("HMAC", key, sigBytes, signingInput);
     } else {
       console.error("verifyJwt: unsupported alg", header.alg);
       return null;
@@ -2523,5 +2511,6 @@ export {
   betaGate,
   webhookHandler,
   checkUserRateLimit,
-  supabaseGetAccount
+  supabaseGetAccount,
+  verifyJwt
 };

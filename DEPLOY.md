@@ -47,7 +47,22 @@ wrangler secret put ANTHROPIC_API_KEY   # prompts for the value, hidden
 
 (or use the Cloudflare dashboard → the `ragtimeproxy` Worker → Settings → Variables and Secrets). After rotating an upstream credential at Stripe / Supabase / Anthropic, update the matching Worker secret the same way.
 
-Optional bindings the code respects (defaults apply if unset): `DEMO_PASSWORD`, `BALANCE_FLOOR_CENTS` (default 5), `MARKUP` (default 1.35), `SUPABASE_JWT_SECRET` (legacy HS256 fallback; unused).
+Optional bindings the code respects (defaults apply if unset): `DEMO_PASSWORD`, `BALANCE_FLOOR_CENTS` (default 5), `MARKUP` (default 1.35), `PER_USER_PER_MIN` (paid per-account requests/min, default 30; also settable in `wrangler.toml`). The legacy `SUPABASE_JWT_SECRET` (old HS256 JWT fallback) is **no longer read by any code** — the verifier is ES256-only — so if it's still bound on the Worker it can be deleted.
+
+### Secret-rotation runbook
+
+`SUPABASE_SERVICE_ROLE_KEY` is the highest-value secret: it has full, RLS-bypassing admin over the APP (billing/PII) database. It lives only as a Worker secret binding (never in the client or this repo) and the Worker code never logs it, but if it is ever exposed, rotate immediately. Each `wrangler secret put` updates the binding atomically with **zero downtime** (the new value applies to subsequent requests; in-flight requests finish on the old isolate), so rotation is safe to do live.
+
+**Rotate the Supabase service-role key:**
+
+1. In the Supabase dashboard (the **APP** project) → **Settings → API Keys**, create a new secret key (`sb_secret_…`).
+2. Push it to the Worker: `cd worker && wrangler secret put SUPABASE_SERVICE_ROLE_KEY` (paste the new value).
+3. Smoke-test the paid path (sign in → `/api/balance` returns 200; run one paid query → it charges). If anything 500s with a Supabase auth error, the new key is wrong — re-do step 2 with a correct key before proceeding.
+4. **Revoke the old key** in the Supabase dashboard. Confirm the app still works (you're now on the new key).
+
+**Same pattern for the others:** rotate the upstream credential first (`STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` at Stripe, `ANTHROPIC_API_KEY` at Anthropic), then `wrangler secret put <NAME>`, smoke-test, then revoke the old upstream credential. For `STRIPE_WEBHOOK_SECRET`, roll the endpoint's signing secret in the Stripe dashboard and update the binding in the same window (a brief mismatch makes webhooks 400 and Stripe retries, so no events are lost).
+
+A periodic rotation drill (even just the service-role key) is worth running once before launch so the procedure is proven, not theoretical.
 
 ## Database, Auth, Payments (managed services)
 

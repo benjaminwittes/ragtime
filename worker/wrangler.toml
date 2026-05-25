@@ -56,10 +56,12 @@ id = "06040b3266fb4555a70204af4907b455"
 #   DEMO_PASSWORD             — overrides built-in default
 #   BALANCE_FLOOR_CENTS       — default 5
 #   MARKUP                    — default 1.35
-#   SUPABASE_JWT_SECRET       — legacy HS256 verification fallback;
-#                               unused since 2026-05-16 when legacy
-#                               Supabase JWT-based API keys were
-#                               disabled. Safe to leave unset.
+#   PER_USER_PER_MIN          — paid per-account req/min cap (default 30)
+#
+# Retired: SUPABASE_JWT_SECRET — was the legacy HS256 JWT verification
+#   fallback. The HS256 path was removed from index.js (verifier is ES256-only
+#   now), so this secret is no longer read by any code. If it's still bound on
+#   the deployed Worker, it can be deleted from the dashboard.
 #
 # Account ID is NOT hardcoded here. In CI, the deploy Action reads it
 # from the `CLOUDFLARE_ACCOUNT_ID` GitHub Actions variable. For local
