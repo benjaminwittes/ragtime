@@ -1,0 +1,14 @@
+{
+  "name": "ragtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RAGtime — test harness for the Cloudflare Worker (ragtimeproxy). The deployed app is worker/index.js + index.html; this package.json exists for the vitest test suite and CI.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  }
+}

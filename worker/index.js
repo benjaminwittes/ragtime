@@ -2474,3 +2474,22 @@ function bufToHex(buf) {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
+
+// ---------------- Test-only named exports ----------------
+// The deployed Worker runs ONLY the `export default {...}` above (Cloudflare
+// invokes default.fetch / default.scheduled). These extra named exports exist
+// so the vitest suite (worker/index.test.js) can unit-test the money-path
+// internals directly; they're inert in production and don't change the bundle's
+// runtime behavior. Keep this list narrow — export only what tests assert on.
+export {
+  lookupAnthropicRates,
+  computeCostCents,
+  estimateInputTokens,
+  constantTimeEqual,
+  bufToHex,
+  b64UrlDecodeToString,
+  verifyStripeSignature,
+  emailDomainAllowed,
+  betaGate,
+  webhookHandler
+};
