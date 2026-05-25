@@ -39,6 +39,11 @@ var DEFAULT_MARKUP = 1.35;
 var DEFAULT_BALANCE_FLOOR_CENTS = 5;
 var MAX_SPEND_RATIO = 1.5;
 var DEFAULT_PER_USER_PER_MIN = 30;
+// Off-box pipeline liveness: alert if the newest corpus document is older than
+// this many minutes. Generous default — the harvest lane sleeps ~30 min between
+// sweeps and backs off on CL rate limits, so a short lull is normal; this
+// catches a real outage (fleet down / Mac2 dead), not noise.
+var DEFAULT_PIPELINE_STALE_MINUTES = 120;
 
 // ---------------- JWKS cache (module-scope) ----------------
 // Lives for the life of one Worker isolate. Refreshed on miss-by-kid
@@ -123,9 +128,15 @@ export default {
     }
   },
 
-  // Cron trigger (see wrangler.toml [triggers]): weekly billing reconciliation.
+  // Cron triggers (see wrangler.toml [triggers]). Two schedules:
+  //   "0 13 * * 1"    weekly  → billing reconciliation
+  //   anything else   frequent→ off-box pipeline liveness check
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runReconciliation(env));
+    if (event.cron === "0 13 * * 1") {
+      ctx.waitUntil(runReconciliation(env));
+    } else {
+      ctx.waitUntil(runPipelineLivenessCheck(env));
+    }
   }
 };
 
@@ -1687,6 +1698,42 @@ async function runReconciliation(env) {
   }
 }
 
+// Off-box pipeline liveness (frequent Cron Trigger → scheduled()). The data
+// pipeline + its watchdog run ON Mac2, so they can't detect Mac2 itself dying.
+// This check runs on Cloudflare — fully off-box — and Slack-alerts if the corpus
+// has stopped receiving new documents, which is the externally-visible symptom
+// of the fleet/harvester (or the whole box) being down. Pure decision logic is
+// factored into pipelineStaleness() so it's unit-testable without network.
+function pipelineStaleness(latestIso, nowMs, staleMinutes) {
+  if (!latestIso) return { stale: true, ageMinutes: null };
+  const t = new Date(latestIso).getTime();
+  if (!Number.isFinite(t)) return { stale: true, ageMinutes: null };
+  const ageMinutes = Math.floor((nowMs - t) / 60000);
+  return { stale: ageMinutes > staleMinutes, ageMinutes };
+}
+
+async function runPipelineLivenessCheck(env) {
+  const staleMinutes = parseInt(env.PIPELINE_STALE_MINUTES || DEFAULT_PIPELINE_STALE_MINUTES, 10);
+  let rows;
+  try {
+    // documents.created_at is the most active ingest heartbeat (the harvest lane
+    // writes continuously for weeks of backlog; Pass-2 also writes here).
+    rows = await corpusRunQuery(env, "select max(created_at) as latest from public.documents");
+  } catch (e) {
+    await notify(env, `pipeline liveness: could not query the corpus (${e && e.message}). Worker→corpus path or the corpus DB may be down.`);
+    return;
+  }
+  const latestIso = Array.isArray(rows) && rows[0] ? rows[0].latest : null;
+  const { stale, ageMinutes } = pipelineStaleness(latestIso, Date.now(), staleMinutes);
+  if (stale) {
+    const age = ageMinutes == null ? "unknown (no documents found)" : `${ageMinutes} min ago`;
+    await notify(env,
+      `pipeline liveness: newest corpus document is ${age} (alert threshold ${staleMinutes} min). ` +
+      `Ingestion may be down — check the api/pass2 fleet + free-text harvester on Mac2.`
+    );
+  }
+}
+
 async function webhookHandler(request, env) {
   const sig = request.headers.get("Stripe-Signature") || "";
   const rawBody = await request.text();
@@ -2512,5 +2559,6 @@ export {
   webhookHandler,
   checkUserRateLimit,
   supabaseGetAccount,
-  verifyJwt
+  verifyJwt,
+  pipelineStaleness
 };
