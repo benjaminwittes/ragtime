@@ -43,6 +43,7 @@ var ANTHROPIC_VERSION = "2023-06-01";
 var DEFAULT_MARKUP = 1.35;
 var DEFAULT_BALANCE_FLOOR_CENTS = 5;
 var MAX_SPEND_RATIO = 1.5;
+var DEFAULT_PER_USER_PER_MIN = 30;
 
 // ---------------- JWKS cache (module-scope) ----------------
 // Lives for the life of one Worker isolate. Refreshed on miss-by-kid
@@ -184,6 +185,9 @@ async function askHandler(request, env, ctx) {
     // Soft-launch gate: paid tier is limited to allowed users during beta.
     const betaBlocked = await betaGate(env, claims);
     if (betaBlocked) return betaBlocked;
+    // Per-account rate limit (paid path): bounds request rate independent of IP.
+    const userRateLimited = await checkUserRateLimit(env, ctx, userId, now);
+    if (userRateLimited) return userRateLimited;
     if (provider !== "anthropic") {
       return json({ error: {
         message: 'Paid tier currently supports Anthropic only. To use OpenAI or Google, switch to "My API key".'
@@ -381,6 +385,26 @@ async function checkIpRateLimit(request, env, ctx) {
     return json({ error: { message: "Rate limit exceeded (10 req/min per IP)" } }, 429);
   }
   ctx.waitUntil(env.QUOTA.put(ipKey, String(ipCount + 1), { expirationTtl: 120 }));
+  return null;
+}
+
+// Per-user rate limit on the PAID path. Mirrors checkIpRateLimit but keyed on
+// the authenticated account, so one user can't exceed N requests/min even by
+// spreading across IPs (the per-IP guard alone wouldn't catch that). The
+// prepaid balance already bounds total SPEND; this bounds request RATE — i.e. a
+// runaway client loop or scripted abuse. Returns a 429 Response when over the
+// limit, else null. Tunable via PER_USER_PER_MIN (default 30).
+async function checkUserRateLimit(env, ctx, userId, now = new Date()) {
+  const perMin = parseInt(env.PER_USER_PER_MIN || DEFAULT_PER_USER_PER_MIN, 10);
+  const key = `user:${userId}:${yyyymmddhhmm(now)}`;
+  const count = parseInt((await env.QUOTA.get(key)) || "0", 10);
+  if (count >= perMin) {
+    return json({ error: {
+      message: `Rate limit exceeded (${perMin} requests/min for your account). Please slow down and retry shortly.`,
+      code: "user_rate_limited"
+    } }, 429);
+  }
+  ctx.waitUntil(env.QUOTA.put(key, String(count + 1), { expirationTtl: 120 }));
   return null;
 }
 
@@ -2497,5 +2521,6 @@ export {
   verifyStripeSignature,
   emailDomainAllowed,
   betaGate,
-  webhookHandler
+  webhookHandler,
+  checkUserRateLimit
 };

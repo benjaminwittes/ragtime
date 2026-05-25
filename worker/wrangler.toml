@@ -31,6 +31,10 @@ STRIPE_PRICE_50_USD = "price_1TXoQUJS8oJAjJ8ovHVaaMG1"
 # holds no PII. Same public-key posture as the frontend's SB_KEY.
 CORPUS_SUPABASE_URL = "https://xsqdnuqyqyykkzuiqphr.supabase.co"
 CORPUS_SUPABASE_KEY = "sb_publishable_yXX3zE7j7bVfqLj6cy8oeA_allTHvzN"
+# Per-account request/min ceiling on the PAID path (in addition to the per-IP
+# guard). Bounds request rate independent of IP; the prepaid balance bounds
+# total spend. Tune here without a code change. Default in code is 30.
+PER_USER_PER_MIN = "30"
 
 # KV namespace for per-IP rate-limit counters and the daily demo quota
 # counter. TTL'd entries; see askHandler in index.js for the keys used.
