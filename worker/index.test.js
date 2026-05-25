@@ -11,8 +11,23 @@ import {
   betaGate,
   webhookHandler,
   checkUserRateLimit,
-  supabaseGetAccount
+  supabaseGetAccount,
+  verifyJwt
 } from "./index.js";
+
+// base64url-encode a JS object (no padding) for building fake JWT segments.
+function b64urlJson(obj) {
+  return Buffer.from(JSON.stringify(obj))
+    .toString("base64")
+    .replace(/=+$/, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+// Build a fake "header.payload.sig" token. The signature is bogus — these are
+// for the REJECTION paths, which all return null before/without real crypto.
+function fakeJwt(header, payload, sig = "bogussig") {
+  return `${b64urlJson(header)}.${b64urlJson(payload)}.${sig}`;
+}
 
 // ============================================================================
 // Pricing math — computeCostCents decides what a paid user is actually charged.
@@ -489,5 +504,39 @@ describe("supabaseGetAccount user-id encoding", () => {
     // open new PostgREST query params. (* is a mark char left literal; harmless.)
     expect(captured).toContain("user_id=eq.evil%26select%3D*%26user_id%3Deq.someone-else");
     expect(captured).not.toContain("eq.evil&select="); // raw injection neutralized
+  });
+});
+
+// ============================================================================
+// verifyJwt — the auth boundary. The verifier accepts ES256 ONLY; everything
+// else (no signature, the "none" algorithm-confusion bypass, the removed HS256
+// path, malformed tokens, missing sub, expired) must return null. These cases
+// reject BEFORE any signature crypto, so they need no JWKS / keypair.
+// ============================================================================
+describe("verifyJwt rejection (alg allow-list + claim checks)", () => {
+  it("rejects the 'none' algorithm (no signature bypass)", async () => {
+    const t = fakeJwt({ alg: "none", typ: "JWT" }, { sub: "u1", exp: 9999999999 }, "");
+    expect(await verifyJwt(t, {})).toBeNull();
+  });
+
+  it("rejects HS256 (removed legacy path is not silently re-accepted)", async () => {
+    const t = fakeJwt({ alg: "HS256", typ: "JWT" }, { sub: "u1", exp: 9999999999 });
+    // Even if a JWT secret were present, HS256 is no longer an accepted alg.
+    expect(await verifyJwt(t, { SUPABASE_JWT_SECRET: "leftover-secret" })).toBeNull();
+  });
+
+  it("rejects a malformed token (not three segments)", async () => {
+    expect(await verifyJwt("only.two", {})).toBeNull();
+    expect(await verifyJwt("", {})).toBeNull();
+  });
+
+  it("rejects a token with no sub claim", async () => {
+    const t = fakeJwt({ alg: "ES256", kid: "k1" }, { exp: 9999999999 });
+    expect(await verifyJwt(t, {})).toBeNull();
+  });
+
+  it("rejects an expired token before doing any crypto", async () => {
+    const t = fakeJwt({ alg: "ES256", kid: "k1" }, { sub: "u1", exp: 1 }); // 1970
+    expect(await verifyJwt(t, {})).toBeNull();
   });
 });
