@@ -10,7 +10,8 @@ import {
   emailDomainAllowed,
   betaGate,
   webhookHandler,
-  checkUserRateLimit
+  checkUserRateLimit,
+  supabaseGetAccount
 } from "./index.js";
 
 // ============================================================================
@@ -458,5 +459,35 @@ describe("checkUserRateLimit", () => {
     const res = await checkUserRateLimit({ QUOTA }, ctx, "fresh", now);
     expect(res).toBeNull();
     expect(QUOTA.store[keyFor("fresh")]).toBe("1");
+  });
+});
+
+// ============================================================================
+// supabaseGetAccount — verifies the user id is URL-encoded into the PostgREST
+// query (defense-in-depth). The id is a verified-JWT UUID today, but encoding
+// ensures a value with PostgREST control chars (&, =, ?) can never escape the
+// `user_id=eq.<id>` filter and read/alter other rows.
+// ============================================================================
+describe("supabaseGetAccount user-id encoding", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("URL-encodes the user id so query-param injection can't escape the filter", async () => {
+    let captured = null;
+    const fn = vi.fn(async (url) => {
+      captured = String(url);
+      return new Response(JSON.stringify([{ user_id: "x", balance_cents: 0 }]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+    vi.stubGlobal("fetch", fn);
+    const env = { SUPABASE_URL: "https://supa.test", SUPABASE_SERVICE_ROLE_KEY: "k" };
+    // A hostile id that, unencoded, would inject extra PostgREST query params.
+    await supabaseGetAccount(env, "evil&select=*&user_id=eq.someone-else");
+    // The injection chars & and = are percent-encoded (%26 / %3D), so the whole
+    // hostile string collapses into ONE value of the user_id filter — it can't
+    // open new PostgREST query params. (* is a mark char left literal; harmless.)
+    expect(captured).toContain("user_id=eq.evil%26select%3D*%26user_id%3Deq.someone-else");
+    expect(captured).not.toContain("eq.evil&select="); // raw injection neutralized
   });
 });

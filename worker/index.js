@@ -2010,7 +2010,7 @@ async function supabaseFetch(env, path, init = {}) {
 async function supabaseGetAccount(env, userId) {
   const r = await supabaseFetch(
     env,
-    `/rest/v1/accounts?user_id=eq.${userId}&select=user_id,stripe_customer_id,balance_cents,per_query_cap_cents`
+    `/rest/v1/accounts?user_id=eq.${encodeURIComponent(userId)}&select=user_id,stripe_customer_id,balance_cents,per_query_cap_cents`
   );
   if (!r.ok) throw new Error(`Supabase getAccount failed: ${r.status}`);
   const rows = await r.json();
@@ -2018,7 +2018,7 @@ async function supabaseGetAccount(env, userId) {
 }
 
 async function supabaseGetUserEmail(env, userId) {
-  const r = await supabaseFetch(env, `/auth/v1/admin/users/${userId}`);
+  const r = await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(userId)}`);
   if (!r.ok) return null;
   const u = await r.json();
   return u.email || null;
@@ -2085,7 +2085,7 @@ async function betaGate(env, claimsOrUserId) {
 }
 
 async function supabaseUpdateAccount(env, userId, patch) {
-  const r = await supabaseFetch(env, `/rest/v1/accounts?user_id=eq.${userId}`, {
+  const r = await supabaseFetch(env, `/rest/v1/accounts?user_id=eq.${encodeURIComponent(userId)}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify(patch)
@@ -2096,7 +2096,7 @@ async function supabaseUpdateAccount(env, userId, patch) {
 async function supabaseGetRecentLedger(env, userId, limit) {
   const r = await supabaseFetch(
     env,
-    `/rest/v1/ledger?user_id=eq.${userId}&select=id,amount_cents,kind,metadata,created_at&order=created_at.desc&limit=${limit}`
+    `/rest/v1/ledger?user_id=eq.${encodeURIComponent(userId)}&select=id,amount_cents,kind,metadata,created_at&order=created_at.desc&limit=${limit}`
   );
   if (!r.ok) throw new Error(`Supabase getRecentLedger failed: ${r.status}`);
   return await r.json();
@@ -2522,5 +2522,6 @@ export {
   emailDomainAllowed,
   betaGate,
   webhookHandler,
-  checkUserRateLimit
+  checkUserRateLimit,
+  supabaseGetAccount
 };
