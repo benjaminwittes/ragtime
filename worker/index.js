@@ -165,14 +165,9 @@ async function askHandler(request, env, ctx) {
   if (!Array.isArray(messages) || messages.length === 0) {
     return json({ error: { message: "Missing messages" } }, 400);
   }
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const now = new Date();
-  const ipKey = `ip:${ip}:${yyyymmddhhmm(now)}`;
-  const ipCount = parseInt((await env.QUOTA.get(ipKey)) || "0", 10);
-  if (ipCount >= PER_IP_PER_MIN) {
-    return json({ error: { message: "Rate limit exceeded (10 req/min per IP)" } }, 429);
-  }
-  ctx.waitUntil(env.QUOTA.put(ipKey, String(ipCount + 1), { expirationTtl: 120 }));
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
 
   const authHeader = request.headers.get("Authorization") || "";
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -383,7 +378,28 @@ async function corpusRunQuery(env, sql) {
 // Per-IP rate limit shared by the corpus endpoints. Returns a 429 Response when
 // over the limit, else null. (Public fetch endpoints use this alone; the LLM
 // endpoints use it via resolveCorpusAuth.)
+//
+// Authed users (valid Supabase JWT) bypass the cap. The IP cap exists to bound
+// anonymous abuse — signed-in users are already bounded by the per-account cap
+// on the paid path and have an identity we can revoke if needed. Without this
+// bypass, legitimate parallel flows blow past 10/min on the first big action:
+// the Read button fires 4 parallel batches × ~25 cases each, so any Read over
+// ~250 cases (10 batches) is guaranteed to trip the ceiling.
+//
+// Two ways to present the JWT for bypass:
+//   - Authorization: Bearer <jwt>  — used by the paid path (also drives auth
+//     resolution for /ask + /corpus/*; see resolveCorpusAuth)
+//   - X-Session-Token: <jwt>       — used by signed-in users on demo / BYOK,
+//     where the body-level credential (`password` / `user_api_key`) wins for
+//     auth/billing, but the user still has a verifiable identity. Read here
+//     ONLY for anti-abuse; it does NOT confer paid-mode credentials.
 async function checkIpRateLimit(request, env, ctx) {
+  const authHeader = request.headers.get("Authorization") || "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch && (await verifyJwt(bearerMatch[1], env))) return null;
+  const sessionTok = request.headers.get("X-Session-Token") || "";
+  if (sessionTok && (await verifyJwt(sessionTok, env))) return null;
+
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const ipKey = `ip:${ip}:${yyyymmddhhmm(new Date())}`;
   const ipCount = parseInt((await env.QUOTA.get(ipKey)) || "0", 10);
@@ -2564,6 +2580,7 @@ export {
   emailDomainAllowed,
   betaGate,
   webhookHandler,
+  checkIpRateLimit,
   checkUserRateLimit,
   supabaseGetAccount,
   verifyJwt,

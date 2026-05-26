@@ -2281,6 +2281,13 @@ async function callClaude(systemPrompt, userContent, maxTok, opts) {
     }
     body.user_api_key = key;
   }
+  // For signed-in users on demo/BYOK, advertise the session so the Worker can
+  // bypass the per-IP rate limit (without changing auth/billing — the body-level
+  // credential still wins). The paid path already sets Authorization above.
+  if (llmAccess.mode !== 'paid'
+      && paidAccess.session && paidAccess.session.access_token) {
+    headers['X-Session-Token'] = paidAccess.session.access_token;
+  }
 
   var attempt = 0;
   var lastNetErr = null;
@@ -2371,6 +2378,13 @@ async function corpusApiCall(path, payload) {
         + '. Click "Configure" and supply a key.');
     }
     body.user_api_key = key;
+  }
+  // For signed-in users on demo/BYOK, advertise the session so the Worker can
+  // bypass the per-IP rate limit (without changing auth/billing — the body-level
+  // credential still wins). The paid path already sets Authorization above.
+  if (llmAccess.mode !== 'paid'
+      && paidAccess.session && paidAccess.session.access_token) {
+    headers['X-Session-Token'] = paidAccess.session.access_token;
   }
 
   var attempt = 0, lastNetErr = null;
