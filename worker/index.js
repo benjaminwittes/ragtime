@@ -589,7 +589,7 @@ function buildPlanningSystem() {
     '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
     '  "candor_notes": ["caveats the user should see — e.g. fuzzy semantic categories you defined, sampling, fields you wished existed but don\'t"],',
     '  "queries": [',
-    '    {"label": "what this query gathers", "sql": "SELECT ...; -- read-only, LIMIT ≤ 10000"},',
+    '    {"label": "what this query gathers", "sql": "SELECT ... FROM cases WHERE ... LIMIT 500"},',
     '    ...',
     '  ],',
     '  "estimated_cost_cents": <integer>,',
