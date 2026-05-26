@@ -375,6 +375,25 @@ async function corpusRunQuery(env, sql) {
   return await r.json();
 }
 
+// One auto-retry when Postgres returns 57014 (statement_timeout). The corpus
+// runs with a 60s ceiling; cold-cache reads on the FTS GIN index can exceed
+// that on the first attempt and finish quickly on the second once pages are
+// warm. Observed empirically: a Claude-SQL query that times out on click 1
+// typically succeeds on click 2. Only callers that can hit unpredictable
+// cold-cache shapes use this (Claude SQL + AMA plan/execute); the fixed-shape
+// readers (facets, cases, entries) stay on plain corpusRunQuery.
+async function withStatementTimeoutRetry(fn, maxAttempts = 2) {
+  let lastErr;
+  for (let i = 0; i < maxAttempts; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      if (!String(e && e.message).includes("57014")) throw e;
+    }
+  }
+  throw lastErr;
+}
+
 // Per-IP rate limit shared by the corpus endpoints. Returns a 429 Response when
 // over the limit, else null. (Public fetch endpoints use this alone; the LLM
 // endpoints use it via resolveCorpusAuth.)
@@ -734,7 +753,9 @@ async function executeCorpusPlan(env, plan, scope) {
     }
     if (!/^\s*SELECT\b/i.test(execSql)) execSql = 'SELECT * FROM (' + execSql + ') AS ama_q';
     let rows;
-    try { rows = await corpusRunQuery(env, execSql); }
+    // One auto-retry on 57014 — AMA SQL is LLM-generated against the same
+    // cold-cache-prone FTS surface as Claude SQL. See withStatementTimeoutRetry.
+    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
     catch (err) { throw new Error('Query "' + (q.label || ('query ' + (i + 1))) + '" failed: ' + err.message); }
     const truncated = (rows.length > 500) ? rows.slice(0, 500) : rows;
     results.push({ label: q.label || ('query ' + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 500 });
@@ -1127,9 +1148,10 @@ async function corpusSqlHandler(request, env, ctx) {
   }
   const idsSql = "SELECT DISTINCT sub.cl_id FROM (" + sanitized + ") AS sub" + scopeClause;
 
-  // 3) Run it against the corpus; cap the result set.
+  // 3) Run it against the corpus; cap the result set. One auto-retry on
+  // statement_timeout (57014) — see withStatementTimeoutRetry for rationale.
   let idRows;
-  try { idRows = await corpusRunQuery(env, idsSql); }
+  try { idRows = await withStatementTimeoutRetry(() => corpusRunQuery(env, idsSql)); }
   catch (e) { return json({ error: { message: "The generated query failed: " + e.message, code: "query_failed", generated_sql: generatedSql } }, 400); }
   if (idRows.length > CLAUDE_MAX_RAW_ROWS) {
     return json({ error: { message: "The query matched " + idRows.length.toLocaleString("en-US") + " cases (cap is " + CLAUDE_MAX_RAW_ROWS.toLocaleString("en-US") + "). Try a more specific prompt.", code: "too_many_rows" } }, 400);
@@ -2582,6 +2604,7 @@ export {
   webhookHandler,
   checkIpRateLimit,
   checkUserRateLimit,
+  withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,
   pipelineStaleness

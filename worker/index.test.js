@@ -12,6 +12,7 @@ import {
   webhookHandler,
   checkIpRateLimit,
   checkUserRateLimit,
+  withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,
   pipelineStaleness
@@ -628,6 +629,50 @@ describe("checkIpRateLimit", () => {
     );
     expect(res).not.toBeNull();
     expect(res.status).toBe(429);
+  });
+});
+
+// ============================================================================
+// withStatementTimeoutRetry — wraps a corpus query call with one retry when
+// Postgres returns 57014 (canceling statement due to statement_timeout). Models
+// the empirically-observed "fails first, succeeds second" cold-buffer-cache
+// pattern on the FTS GIN index. Only retries on 57014 — every other error
+// passes through immediately.
+// ============================================================================
+describe("withStatementTimeoutRetry", () => {
+  it("returns the value when fn succeeds first try (no retry)", async () => {
+    const fn = vi.fn(async () => ["ok"]);
+    const out = await withStatementTimeoutRetry(fn);
+    expect(out).toEqual(["ok"]);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries once on 57014 and returns the second-call value", async () => {
+    let n = 0;
+    const fn = vi.fn(async () => {
+      n++;
+      if (n === 1) throw new Error('run_query 500: {"code":"57014","message":"canceling statement due to statement timeout"}');
+      return [{ cl_id: 42 }];
+    });
+    const out = await withStatementTimeoutRetry(fn);
+    expect(out).toEqual([{ cl_id: 42 }]);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-throws the last error when both attempts time out", async () => {
+    const fn = vi.fn(async () => {
+      throw new Error('run_query 500: {"code":"57014","message":"canceling statement due to statement timeout"}');
+    });
+    await expect(withStatementTimeoutRetry(fn)).rejects.toThrow(/57014/);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT retry on non-57014 errors (e.g. syntax error, permission denied)", async () => {
+    const fn = vi.fn(async () => {
+      throw new Error('run_query 400: {"code":"42601","message":"syntax error at or near \\"FORM\\""}');
+    });
+    await expect(withStatementTimeoutRetry(fn)).rejects.toThrow(/42601/);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });
 
