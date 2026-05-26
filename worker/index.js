@@ -385,10 +385,20 @@ async function corpusRunQuery(env, sql) {
 // bypass, legitimate parallel flows blow past 10/min on the first big action:
 // the Read button fires 4 parallel batches × ~25 cases each, so any Read over
 // ~250 cases (10 batches) is guaranteed to trip the ceiling.
+//
+// Two ways to present the JWT for bypass:
+//   - Authorization: Bearer <jwt>  — used by the paid path (also drives auth
+//     resolution for /ask + /corpus/*; see resolveCorpusAuth)
+//   - X-Session-Token: <jwt>       — used by signed-in users on demo / BYOK,
+//     where the body-level credential (`password` / `user_api_key`) wins for
+//     auth/billing, but the user still has a verifiable identity. Read here
+//     ONLY for anti-abuse; it does NOT confer paid-mode credentials.
 async function checkIpRateLimit(request, env, ctx) {
   const authHeader = request.headers.get("Authorization") || "";
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
   if (bearerMatch && (await verifyJwt(bearerMatch[1], env))) return null;
+  const sessionTok = request.headers.get("X-Session-Token") || "";
+  if (sessionTok && (await verifyJwt(sessionTok, env))) return null;
 
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const ipKey = `ip:${ip}:${yyyymmddhhmm(new Date())}`;

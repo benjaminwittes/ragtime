@@ -581,6 +581,39 @@ describe("checkIpRateLimit", () => {
     expect(QUOTA.put).not.toHaveBeenCalled();
   });
 
+  it("bypasses the cap when a valid JWT is in X-Session-Token (demo/BYOK signed-in path)", async () => {
+    // demo/BYOK requests carry their credential in the body (password /
+    // user_api_key) and therefore can't put the JWT in Authorization without
+    // changing auth resolution. They advertise the session via X-Session-Token
+    // instead, which the Worker honors ONLY for anti-abuse bypass.
+    const ip = "5.5.5.5";
+    const { token, jwk } = await makeSignedJwt({ sub: "demo-signed-in", kid: "k-demo" });
+    stubJwks(jwk);
+    const QUOTA = mockKV();
+    QUOTA.get = vi.fn(async (k) => (k.startsWith(`ip:${ip}:`) ? "99" : null));
+    const env = { QUOTA, SUPABASE_URL: "https://supa-xsession.test" };
+    const res = await checkIpRateLimit(
+      reqFrom(ip, { "X-Session-Token": token }),
+      env, ctx
+    );
+    expect(res).toBeNull();
+    expect(QUOTA.get).not.toHaveBeenCalled();
+    expect(QUOTA.put).not.toHaveBeenCalled();
+  });
+
+  it("does NOT bypass when X-Session-Token is bogus (invalid JWT → IP cap still applies)", async () => {
+    const ip = "6.6.6.6";
+    const QUOTA = mockKV();
+    QUOTA.get = vi.fn(async (k) => (k.startsWith(`ip:${ip}:`) ? "10" : null));
+    const env = { QUOTA, SUPABASE_URL: "https://supa-bogus-xst.test" };
+    const res = await checkIpRateLimit(
+      reqFrom(ip, { "X-Session-Token": "not.a.valid.jwt" }),
+      env, ctx
+    );
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(429);
+  });
+
   it("does NOT bypass when the Authorization header is bogus (invalid JWT → IP cap still applies)", async () => {
     const ip = "4.4.4.4";
     // No fetch stub: if verifyJwt did try to resolve a JWK it would fail. But
