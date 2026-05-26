@@ -1,7 +1,9 @@
 -- Migration: run_query_word_boundary_guard
 -- Target: CORPUS Supabase project xsqdnuqyqyykkzuiqphr (holds public.run_query).
--- Status: NOT YET APPLIED — pending Ben's OK (alters a security boundary on the
---   live corpus DB). Update this header with the applied-date once applied.
+-- Applied to production (corpus project xsqdnuqyqyykkzuiqphr) on 2026-05-26
+-- via the Supabase execute_sql tool, verified end-to-end through the run_query
+-- RPC (probe `select max(created_at) ...` now succeeds; `drop table ...` still
+-- rejected).
 --
 -- Purpose: fix a false-positive in run_query's read-only guard.
 --
