@@ -351,6 +351,12 @@
   .claude-sql-help { font-size:10px; color:var(--text-muted); font-style:italic; margin-top:4px; line-height:1.4; }
   .claude-status { font-size:11px; color:var(--accent); font-style:italic; margin-top:6px; display:none; }
   .claude-status.active { display:block; }
+  /* Surfaces the generated SQL when /corpus/sql errors (e.g. statement timeout).
+     The Worker returns it in the error payload; this lets the user see exactly
+     what the model wrote and diagnose why the query failed. */
+  .claude-sql-error { display:none; margin-top:8px; padding:8px 10px; background:#fff5f5; border:1px solid #f3c2c2; border-radius:4px; font-family:var(--font-mono,ui-monospace,monospace); font-size:11px; color:#7a1f1f; white-space:pre-wrap; word-break:break-word; max-height:280px; overflow:auto; }
+  .claude-sql-error.active { display:block; }
+  .claude-sql-error .label { display:block; font-weight:600; margin-bottom:4px; color:#5a1414; font-family:var(--font-sans); font-style:italic; }
 
   /* v9.0.2 — small version badge next to the RAGtime header in the active state */
   .version-badge { font-family:var(--font-sans); font-size:10px; font-weight:500; color:var(--text-muted); margin-left:6px; vertical-align:super; }
@@ -931,6 +937,7 @@
           <button class="btn-clear" onclick="document.getElementById('sql-prompt').value=''">Clear</button>
         </div>
         <div class="claude-status" id="claude-sql-status"></div>
+        <div class="claude-sql-error" id="claude-sql-error"></div>
         <p class="ctx-note" id="sql-scope-note"></p>
       </div>
       <!-- claude_read: Claude reads each case's docket entries and decides keep/drop per case -->
@@ -2329,9 +2336,21 @@ async function callClaude(systemPrompt, userContent, maxTok, opts) {
     }
     if (!resp.ok) {
       var msg = (data && data.error && data.error.message) ? data.error.message : ('Proxy error ' + resp.status);
-      throw new Error(msg);
+      var e = new Error(msg);
+      // Surface diagnostic fields the Worker attaches to error payloads (e.g.
+      // generated_sql on /corpus/sql statement timeouts) so callers can show them.
+      if (data && data.error) {
+        if (data.error.code) e.code = data.error.code;
+        if (data.error.generated_sql) e.generatedSql = data.error.generated_sql;
+      }
+      throw e;
     }
-    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    if (data.error) {
+      var e2 = new Error(data.error.message || JSON.stringify(data.error));
+      if (data.error.code) e2.code = data.error.code;
+      if (data.error.generated_sql) e2.generatedSql = data.error.generated_sql;
+      throw e2;
+    }
 
     // v8.0: capture _cost_cents / _balance_cents annotations and surface them.
     if (llmAccess.mode === 'paid') {
@@ -2416,9 +2435,21 @@ async function corpusApiCall(path, payload) {
     }
     if (!resp.ok) {
       var msg = (data && data.error && data.error.message) ? data.error.message : ('Proxy error ' + resp.status);
-      throw new Error(msg);
+      var e = new Error(msg);
+      // Surface diagnostic fields the Worker attaches to error payloads (e.g.
+      // generated_sql on /corpus/sql statement timeouts) so callers can show them.
+      if (data && data.error) {
+        if (data.error.code) e.code = data.error.code;
+        if (data.error.generated_sql) e.generatedSql = data.error.generated_sql;
+      }
+      throw e;
     }
-    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    if (data.error) {
+      var e2 = new Error(data.error.message || JSON.stringify(data.error));
+      if (data.error.code) e2.code = data.error.code;
+      if (data.error.generated_sql) e2.generatedSql = data.error.generated_sql;
+      throw e2;
+    }
 
     if (llmAccess.mode === 'paid') {
       if (typeof data._balance_cents === 'number') { paidAccess.balanceCents = data._balance_cents; renderBalanceWidget(); }
@@ -2748,6 +2779,10 @@ async function applyClaudeSql() {
 
   var btn = document.getElementById('btn-commit-sql');
   var statusEl = document.getElementById('claude-sql-status');
+  var errEl = document.getElementById('claude-sql-error');
+  // Clear any prior error display before the new attempt.
+  errEl.classList.remove('active');
+  errEl.textContent = '';
   btn.disabled = true;
   var origLabel = btn.textContent;
   btn.innerHTML = '<span class="sp"></span> Working...';
@@ -2788,6 +2823,20 @@ async function applyClaudeSql() {
     document.getElementById('sql-prompt').value = '';
   } catch (err) {
     alert(aiName() + ' SQL failed: ' + err.message);
+    // When the Worker attaches the failed SQL (e.g. statement timeout), show it
+    // in the page so the user can see what the model wrote and copy it. Without
+    // this the SQL is dropped on the floor and timeouts are hard to diagnose.
+    if (err.generatedSql) {
+      errEl.innerHTML = '';
+      var labelEl = document.createElement('span');
+      labelEl.className = 'label';
+      labelEl.textContent = 'Generated SQL (the query that failed):';
+      var codeEl = document.createElement('code');
+      codeEl.textContent = err.generatedSql;
+      errEl.appendChild(labelEl);
+      errEl.appendChild(codeEl);
+      errEl.classList.add('active');
+    }
   }
 
   statusEl.classList.remove('active');
