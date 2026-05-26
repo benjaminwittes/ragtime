@@ -1,8 +1,10 @@
 -- Migration: run_query_least_privilege_owner
 -- Target: CORPUS Supabase project xsqdnuqyqyykkzuiqphr (holds public.run_query).
--- Status: NOT YET APPLIED. Reviewable-first — this touches the security boundary
--- on the LIVE corpus DB, so it must not be applied without Ben's explicit OK and
--- the pre-apply checklist at the bottom of this file.
+-- Status: APPLIED to prod 2026-05-26. Verified: owner is corpus_readonly; role has
+-- USAGE+SELECT only (no CREATE/INSERT/UPDATE/DELETE); all five read shapes return
+-- data through the RPC; a SELECT calling a writing function (the test that dodges
+-- the keyword screen) fails with "permission denied for table cases" — proving the
+-- least-privilege guarantee.
 --
 -- ── Why ──────────────────────────────────────────────────────────────────────
 -- public.run_query(text) is the SECURITY DEFINER RPC the Worker uses for EVERY
@@ -146,7 +148,18 @@ $function$;
 
 -- 4) Hand ownership to the least-privilege role. This is the load-bearing line:
 --    a SECURITY DEFINER function executes with its owner's privileges.
+--
+-- Supabase quirk: ALTER FUNCTION ... OWNER TO X requires X to have CREATE on the
+-- function's schema. On Supabase, `public` is owned by `pg_database_owner` (not by
+-- the migrating `postgres` role), so corpus_readonly can't acquire CREATE via
+-- group membership. We grant CREATE temporarily, do the ALTER, then immediately
+-- REVOKE — CREATE is checked only at ALTER time and the function's ownership
+-- persists after the REVOKE. corpus_readonly's persistent perm set remains
+-- USAGE+SELECT only. (On a vanilla PG cluster where the migrating role owns
+-- `public`, the GRANT/REVOKE pair is a harmless no-op.)
+GRANT CREATE ON SCHEMA public TO corpus_readonly;
 ALTER FUNCTION public.run_query(text) OWNER TO corpus_readonly;
+REVOKE CREATE ON SCHEMA public FROM corpus_readonly;
 
 -- EXECUTE grants (who may CALL the RPC) are preserved across CREATE OR REPLACE and
 -- ALTER OWNER, so the Worker's existing access is unchanged. Not re-granted here
