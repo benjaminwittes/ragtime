@@ -1718,12 +1718,19 @@ async function runPipelineLivenessCheck(env) {
   try {
     // documents.created_at is the most active ingest heartbeat (the harvest lane
     // writes continuously for weeks of backlog; Pass-2 also writes here).
-    rows = await corpusRunQuery(env, "select max(created_at) as latest from public.documents");
+    // Read it via PostgREST, NOT run_query: that RPC's guard rejects any query
+    // text containing "create" as a substring, which "created_at" trips — a probe
+    // that can't run its own query is useless as a liveness check.
+    const r = await corpusFetch(env, "/rest/v1/documents?select=created_at&order=created_at.desc&limit=1");
+    if (!r.ok) {
+      throw new Error(`documents read ${r.status}: ${String(await r.text()).slice(0, 300)}`);
+    }
+    rows = await r.json();
   } catch (e) {
     await notify(env, `pipeline liveness: could not query the corpus (${e && e.message}). Worker→corpus path or the corpus DB may be down.`);
     return;
   }
-  const latestIso = Array.isArray(rows) && rows[0] ? rows[0].latest : null;
+  const latestIso = Array.isArray(rows) && rows[0] ? rows[0].created_at : null;
   const { stale, ageMinutes } = pipelineStaleness(latestIso, Date.now(), staleMinutes);
   if (stale) {
     const age = ageMinutes == null ? "unknown (no documents found)" : `${ageMinutes} min ago`;
