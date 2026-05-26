@@ -10,6 +10,7 @@ import {
   emailDomainAllowed,
   betaGate,
   webhookHandler,
+  checkIpRateLimit,
   checkUserRateLimit,
   supabaseGetAccount,
   verifyJwt,
@@ -475,6 +476,125 @@ describe("checkUserRateLimit", () => {
     const res = await checkUserRateLimit({ QUOTA }, ctx, "fresh", now);
     expect(res).toBeNull();
     expect(QUOTA.store[keyFor("fresh")]).toBe("1");
+  });
+});
+
+// ============================================================================
+// checkIpRateLimit — per-IP request/min ceiling shared by all corpus endpoints.
+// Bounds anonymous abuse on the public surface. Authed users (valid Supabase
+// JWT) bypass the cap: signed-in users are already bounded by the per-account
+// cap on the paid path, and the legitimate parallel flows (e.g. Read fires
+// 4 parallel batches) would otherwise blow past 10/min on the first big action.
+// ============================================================================
+describe("checkIpRateLimit", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function mockKV(initial = {}) {
+    const store = { ...initial };
+    return {
+      store,
+      get: vi.fn(async (k) => (k in store ? store[k] : null)),
+      put: vi.fn(async (k, v) => { store[k] = v; })
+    };
+  }
+  const ctx = { waitUntil: (p) => p };
+  function reqFrom(ip, headers = {}) {
+    return new Request("https://w.test/x", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": ip, ...headers }
+    });
+  }
+  // Build a real ES256-signed JWT + matching JWKS payload. verifyJwt does real
+  // ECDSA crypto, so a fake signature won't bypass — we need a working keypair.
+  async function makeSignedJwt({ sub = "u-authed", exp = Math.floor(Date.now() / 1000) + 3600, kid = "test-kid" } = {}) {
+    const { publicKey, privateKey } = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]
+    );
+    const jwkPub = await crypto.subtle.exportKey("jwk", publicKey);
+    jwkPub.kid = kid; jwkPub.use = "sig"; jwkPub.alg = "ES256";
+    const b64u = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url");
+    const header = { alg: "ES256", kid, typ: "JWT" };
+    const payload = { sub, exp };
+    const signingInput = `${b64u(header)}.${b64u(payload)}`;
+    const sig = await crypto.subtle.sign(
+      { name: "ECDSA", hash: { name: "SHA-256" } },
+      privateKey,
+      new TextEncoder().encode(signingInput)
+    );
+    const sigB64 = Buffer.from(sig).toString("base64url");
+    return { token: `${signingInput}.${sigB64}`, jwk: jwkPub };
+  }
+  // Stub fetch to serve a JWKS payload at any Supabase JWKS URL. Each test uses
+  // a unique SUPABASE_URL so the module-level jwksCache misses cleanly.
+  function stubJwks(jwk) {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      if (String(url).endsWith("/auth/v1/.well-known/jwks.json")) {
+        return new Response(JSON.stringify({ keys: [jwk] }), {
+          status: 200, headers: { "Content-Type": "application/json" }
+        });
+      }
+      return new Response("not stubbed", { status: 500 });
+    }));
+  }
+
+  it("allows and increments the per-minute counter when under the cap (anonymous)", async () => {
+    const QUOTA = mockKV();
+    const res = await checkIpRateLimit(reqFrom("1.1.1.1"), { QUOTA }, ctx);
+    expect(res).toBeNull();
+    // One KV write was scheduled for the per-minute counter.
+    expect(QUOTA.put).toHaveBeenCalledTimes(1);
+    const [key, val] = QUOTA.put.mock.calls[0];
+    expect(key).toMatch(/^ip:1\.1\.1\.1:\d{12}$/);
+    expect(val).toBe("1");
+  });
+
+  it("returns 429 at the cap (anonymous)", async () => {
+    // Find the current minute key the function will use and pre-load it at 10.
+    const ip = "2.2.2.2";
+    const QUOTA = mockKV();
+    // Seed every minute-key for the IP at the cap via a synthetic store hit.
+    QUOTA.get = vi.fn(async (k) => (k.startsWith(`ip:${ip}:`) ? "10" : null));
+    const res = await checkIpRateLimit(reqFrom(ip), { QUOTA }, ctx);
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(429);
+    const payload = await res.json();
+    expect(payload.error.message).toMatch(/Rate limit exceeded/);
+    // Does not increment past the cap.
+    expect(QUOTA.put).not.toHaveBeenCalled();
+  });
+
+  it("bypasses the cap for a request with a valid JWT", async () => {
+    const ip = "3.3.3.3";
+    const { token, jwk } = await makeSignedJwt({ sub: "authed-user" });
+    stubJwks(jwk);
+    const QUOTA = mockKV();
+    // Pre-load over the cap; bypass should still let it through.
+    QUOTA.get = vi.fn(async (k) => (k.startsWith(`ip:${ip}:`) ? "99" : null));
+    const env = { QUOTA, SUPABASE_URL: "https://supa-bypass.test" };
+    const res = await checkIpRateLimit(
+      reqFrom(ip, { Authorization: `Bearer ${token}` }),
+      env, ctx
+    );
+    expect(res).toBeNull();
+    // Bypass means we never read or wrote the IP counter.
+    expect(QUOTA.get).not.toHaveBeenCalled();
+    expect(QUOTA.put).not.toHaveBeenCalled();
+  });
+
+  it("does NOT bypass when the Authorization header is bogus (invalid JWT → IP cap still applies)", async () => {
+    const ip = "4.4.4.4";
+    // No fetch stub: if verifyJwt did try to resolve a JWK it would fail. But
+    // the token is malformed (only two segments), so verifyJwt rejects before
+    // any crypto / JWKS fetch.
+    const QUOTA = mockKV();
+    QUOTA.get = vi.fn(async (k) => (k.startsWith(`ip:${ip}:`) ? "10" : null));
+    const env = { QUOTA, SUPABASE_URL: "https://supa-nobypass.test" };
+    const res = await checkIpRateLimit(
+      reqFrom(ip, { Authorization: "Bearer not.a.valid.jwt" }),
+      env, ctx
+    );
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(429);
   });
 });
 
