@@ -29,4 +29,14 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  // Context providers idiomatically export both the Provider component and
+  // a corresponding hook (useDocs / useStack / etc.) from the same file.
+  // The fast-refresh hit on hook-only changes is acceptable; relaxing the
+  // rule keeps the standard React pattern intact.
+  {
+    files: ['src/docs/DocsContext.tsx', 'src/stack/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
