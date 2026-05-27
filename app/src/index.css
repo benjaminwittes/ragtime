@@ -1,0 +1,11 @@
+/* PR 1 scaffold — minimal base styles.
+ * The full design system (Lawfare branding tokens, typography,
+ * dark mode, etc.) lands in PR 2. Everything here is placeholder.
+ */
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #fafafa;
+  color: #222;
+}
