@@ -2,7 +2,7 @@
 
 This directory is the **React/Vite/TypeScript rebuild** of RAGtime's frontend, which currently ships as a single-file `index.html` at the repo root. The rebuild is scoped in `CLAUDE.md` (Phase I beta plan, "UI rebuild" workstream) and detailed across the per-surface query-design briefs (1–7) in iCloud.
 
-**Status as of PR 1:** scaffold only. Vite + React 19 + TypeScript + ESLint, deploying nothing yet. The production site at https://benjaminwittes.github.io/ragtime/ is still served from the legacy single-file `index.html` at the repo root. Production cutover happens at the END of the foundation work, not in this PR.
+**Status as of PR 2:** scaffold + design system. Vite + React 19 + TypeScript + ESLint, plus Tailwind 4 and shadcn/ui (Nova preset) with Lawfare brand tokens (teal accent palette `#006A72` family, EB Garamond serif headings, Lato body text — all matching the legacy `index.html`). Still deploying nothing — the production site at https://benjaminwittes.github.io/ragtime/ is served from the legacy single-file `index.html` at the repo root. Production cutover happens at the END of the foundation work, not now.
 
 ## Develop locally
 
@@ -39,14 +39,31 @@ npm run build       # tsc -b runs the typechecker as part of the build
 - **Vite 8** — build tooling
 - **React 19** — UI runtime
 - **TypeScript** — strict mode (default Vite config)
+- **Tailwind 4** — utility-first CSS (via `@tailwindcss/vite` plugin)
+- **shadcn/ui** (Nova preset, Radix primitives) — base component library; added components live in `src/components/ui/`. Add more via `npx shadcn@latest add <component>`.
+- **lucide-react** — icon library (ships with shadcn Nova preset)
 - **ESLint 10** — linting
 
-Later PRs add:
-- PR 2 — Design system (shadcn/Radix base components, Lawfare branding tokens, EB Garamond + Lato typography)
-- PR 3 — Per-corpus capability descriptor abstraction
+## Lawfare brand tokens
+
+Brand foundation defined in `src/index.css`. shadcn semantic tokens (`--primary`, `--ring`, etc.) are overridden with Lawfare values in the `:root` block; Lawfare-specific extras (palette, typography) live in `@theme` blocks above.
+
+- Teal accent palette: `#006A72` (primary), `#008A94` (light), `#00535A` (dark), `#E6F0F1` (background tint). Available as `bg-lawfare-teal`, `bg-lawfare-teal-bg`, etc.
+- Typography: serif (EB Garamond) for headings, sans (Lato) for body. Both loaded via Google Fonts in `index.html`. Use `font-serif` / `font-sans` Tailwind classes.
+- The default shadcn `Button` and `Input` already use `--primary` / `--ring` → Lawfare teal flows through automatically.
+
+## Path aliases
+
+`@/` resolves to `src/`. Configured in `vite.config.ts` (Vite's resolver) and `tsconfig.json` / `tsconfig.app.json` (TypeScript's resolver). Use `@/components/ui/button`, `@/lib/utils`, etc.
+
+## Planned PR sequence
+
+- ✅ PR 1 — Scaffold (Vite + React + TS + CI, no deploy)
+- ✅ PR 2 — Design system (Tailwind 4 + shadcn + Lawfare brand tokens)
+- PR 3 — Per-corpus capability descriptor (TS types every spoke implements)
 - PR 4 — Docs registry (floating documentation infrastructure per brief #6 decision 9b)
 - PR 5 — Litigation spoke port (the first concrete corpus surface, per brief #6)
-- PR 6+ — Other spokes (OLC, USC, CFR, FRUS), collections architecture (per brief #7), "more like this" architecture hooks
+- PR 6+ — Other spokes (OLC, USC, CFR, FRUS), collections architecture (per brief #7), "more like this" architecture hooks (per the 2026-05-27 decision)
 
 ## Why a separate package.json?
 
