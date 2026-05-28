@@ -2,7 +2,7 @@
 
 This directory is the **React/Vite/TypeScript rebuild** of RAGtime's frontend, which currently ships as a single-file `index.html` at the repo root. The rebuild is scoped in `CLAUDE.md` (Phase I beta plan, "UI rebuild" workstream) and detailed across the per-surface query-design briefs (1–7) in iCloud.
 
-**Status as of PR 2:** scaffold + design system. Vite + React 19 + TypeScript + ESLint, plus Tailwind 4 and shadcn/ui (Nova preset) with Lawfare brand tokens (teal accent palette `#006A72` family, EB Garamond serif headings, Lato body text — all matching the legacy `index.html`). Still deploying nothing — the production site at https://benjaminwittes.github.io/ragtime/ is served from the legacy single-file `index.html` at the repo root. Production cutover happens at the END of the foundation work, not now.
+**Status as of PR 3:** scaffold + design system + capability descriptor (TypeScript contract for every corpus spoke). Vite + React 19 + TypeScript + ESLint + Tailwind 4 + shadcn/ui + Lawfare brand tokens + `CorpusSpoke` types and a stub litigation spoke that type-checks against them. Still deploying nothing — the production site at https://benjaminwittes.github.io/ragtime/ is served from the legacy single-file `index.html` at the repo root. Production cutover happens at the END of the foundation work, not now.
 
 ## Develop locally
 
@@ -56,14 +56,24 @@ Brand foundation defined in `src/index.css`. shadcn semantic tokens (`--primary`
 
 `@/` resolves to `src/`. Configured in `vite.config.ts` (Vite's resolver) and `tsconfig.json` / `tsconfig.app.json` (TypeScript's resolver). Use `@/components/ui/button`, `@/lib/utils`, etc.
 
+## Spoke architecture
+
+Every corpus surface ("spoke") implements `CorpusSpoke` from `src/spokes/types.ts`. The descriptor declares title / status / disclosure / holdings / query modes / facets / scopes / "more like this" hooks / default search depth — driven into UI by a generic renderer (lands in PR 5 with the litigation port).
+
+- Type contract: `src/spokes/types.ts`
+- Design rationale + field-to-brief mapping: `src/spokes/SPEC.md`
+- Stub litigation spoke (declarative; no UI yet): `src/spokes/litigation/`
+- Registry: `src/spokes/registry.ts`
+- Stack / page / pivot types (with stash-and-pivot semantics per the 2026-05-27 "more like this" hook decision): `src/stack/types.ts`
+
 ## Planned PR sequence
 
 - ✅ PR 1 — Scaffold (Vite + React + TS + CI, no deploy)
 - ✅ PR 2 — Design system (Tailwind 4 + shadcn + Lawfare brand tokens)
-- PR 3 — Per-corpus capability descriptor (TS types every spoke implements)
+- ✅ PR 3 — Capability descriptor (TS types, stub litigation spoke, stack types with pivot support)
 - PR 4 — Docs registry (floating documentation infrastructure per brief #6 decision 9b)
-- PR 5 — Litigation spoke port (the first concrete corpus surface, per brief #6)
-- PR 6+ — Other spokes (OLC, USC, CFR, FRUS), collections architecture (per brief #7), "more like this" architecture hooks (per the 2026-05-27 decision)
+- PR 5 — Litigation spoke port (the first concrete corpus surface, per brief #6; generic spoke renderer lands here too)
+- PR 6+ — Other spokes (OLC, USC, CFR, FRUS), collections architecture (per brief #7), "more like this" implementation post-beta
 
 ## Why a separate package.json?
 
