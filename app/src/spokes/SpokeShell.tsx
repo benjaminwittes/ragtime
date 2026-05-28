@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  ANALYSIS_HARD_CAP,
   type CaseDisplayRow,
   type CorpusFacets,
   type FilterFields,
   WorkerSqlError,
   fetchCorpusFacets,
+  runClaudeAnalysis,
   runClaudeRead,
   runClaudeSql,
   runManualFilter,
@@ -12,6 +14,7 @@ import {
 import { useDocs } from '@/docs/DocsContext'
 import { useByok } from '@/llm/use-byok'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
+import { ClaudeAnalysisForm } from './components/ClaudeAnalysisForm'
 import { ClaudeReadForm } from './components/ClaudeReadForm'
 import { ClaudeSqlForm } from './components/ClaudeSqlForm'
 import { FilterForm } from './components/FilterForm'
@@ -119,9 +122,19 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const enabledModes = useMemo<QueryMode[]>(() => {
     const enabled: QueryMode[] = ['manual_filter']
     if (byokConfigured) enabled.push('claude_sql')
-    // claude_read operates on the current scope; only enable if both BYOK is
-    // configured AND there are rows to read.
+    // claude_read / claude_analysis operate on the current scope; only
+    // enable if BYOK is configured AND there are rows to read/analyze.
     if (byokConfigured && scopeSize > 0) enabled.push('claude_read')
+    // claude_analysis additionally has a server-side scope cap — disabling
+    // the tab beyond the cap surfaces the limit before the user invests in
+    // typing a prompt.
+    if (
+      byokConfigured &&
+      scopeSize > 0 &&
+      scopeSize <= ANALYSIS_HARD_CAP
+    ) {
+      enabled.push('claude_analysis')
+    }
     return enabled
   }, [byokConfigured, scopeSize])
 
@@ -242,6 +255,38 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
+  async function handleClaudeAnalysisSubmit(prompt: string) {
+    if (!byok) {
+      setQueryError('Configure a BYOK key in AI access (header) first.')
+      return
+    }
+    if (!rows || rows.length === 0) return
+    const incomingIds = rows.map((r) => r.cl_id)
+    setQueryLoading(true)
+    setQueryError(undefined)
+    setHasRun(true)
+    try {
+      const r = await runClaudeAnalysis(prompt, incomingIds, byok)
+      // Analyze never narrows — the Worker re-fetches display rows from the
+      // corpus and returns them; trust those as authoritative (consistent
+      // order with SQL_DISPLAY_COLS).
+      setRows(r.cases)
+      setCount(r.cases.length)
+      setSource({
+        kind: 'claude_analysis',
+        prompt,
+        markdown: r.markdown,
+        annotations: r.annotations,
+        analyzedCount: r.cases.length,
+      })
+    } catch (e) {
+      setQueryError(e instanceof Error ? e.message : String(e))
+      // Preserve scope on failure.
+    } finally {
+      setQueryLoading(false)
+    }
+  }
+
   // Case-detail state. Open === true while the sheet is mounted+animating;
   // openCase keeps the row reference around through the close animation so
   // the panel content doesn't flicker on dismiss. (We don't clear openCase
@@ -298,6 +343,14 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           scopeSize={scopeSize}
           progressLabel={progressLabel}
           onSubmit={handleClaudeReadSubmit}
+        />
+      )}
+      {activeMode === 'claude_analysis' && (
+        <ClaudeAnalysisForm
+          loading={queryLoading}
+          byokConfigured={byokConfigured}
+          scopeSize={scopeSize}
+          onSubmit={handleClaudeAnalysisSubmit}
         />
       )}
       <ResultsList
