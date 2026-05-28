@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AMA_CONFIRM_THRESHOLD_CENTS,
   ANALYSIS_HARD_CAP,
+  type AmaPlan,
+  type AmaScope,
   type CaseDisplayRow,
   type CorpusFacets,
   type FilterFields,
   WorkerSqlError,
+  fetchCasesByIds,
   fetchCorpusFacets,
   runClaudeAnalysis,
+  runClaudeExecute,
+  runClaudePlan,
   runClaudeRead,
   runClaudeSql,
   runManualFilter,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { useByok } from '@/llm/use-byok'
+import { AmaPreflight } from './components/AmaPreflight'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
+import { ClaudeAmaForm, type AmaLogLine } from './components/ClaudeAmaForm'
 import { ClaudeAnalysisForm } from './components/ClaudeAnalysisForm'
 import { ClaudeReadForm } from './components/ClaudeReadForm'
 import { ClaudeSqlForm } from './components/ClaudeSqlForm'
@@ -135,6 +143,9 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     ) {
       enabled.push('claude_analysis')
     }
+    // claude_ama is BYOK-only at v1; it operates on the current scope OR the
+    // full corpus, so it has no scope gate. The pre-flight modal handles cost.
+    if (byokConfigured) enabled.push('claude_ama')
     return enabled
   }, [byokConfigured, scopeSize])
 
@@ -287,6 +298,189 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
+  // AMA orchestrator state. The pre-flight modal is gated by
+  // `pendingPlan` — when non-null, the modal is shown and the user must
+  // confirm before /corpus/execute fires. `amaLog` drives the inline session
+  // log on the form (Planning / Plan / Executing / Done / Total cost).
+  const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
+  const [pendingPlan, setPendingPlan] = useState<{
+    plan: AmaPlan
+    question: string
+    /** Snapshot of the rows at submission time. Used to filter the kept set
+     *  locally when AMA narrows over an existing scope; null when AMA ran
+     *  against the full corpus. */
+    incomingRows: CaseDisplayRow[] | null
+  } | null>(null)
+
+  function appendAmaLog(line: AmaLogLine) {
+    setAmaLog((prev) => [...prev, line])
+  }
+
+  /** Build the AMA scope payload. No prior rows = run against the full
+   *  corpus; otherwise scope the agent's queries to the current row set.
+   *  Mirrors buildAmaScopeSummary() in legacy index.html. */
+  function buildAmaScope(): AmaScope {
+    if (!rows || rows.length === 0) {
+      return {
+        is_full_db: true,
+        count: 0,
+        description: 'The full corpus across all federal courts.',
+      }
+    }
+    return {
+      cl_ids: rows.map((r) => r.cl_id),
+      is_full_db: false,
+      count: rows.length,
+      description: `${rows.length.toLocaleString()} cases from the current result page.`,
+    }
+  }
+
+  async function handleClaudeAmaSubmit(question: string) {
+    if (!byok) {
+      setQueryError('Configure a BYOK key in AI access (header) first.')
+      return
+    }
+    setQueryLoading(true)
+    setQueryError(undefined)
+    setAmaLog([])
+    appendAmaLog({ label: 'Step 1/3.', message: 'Planning the query…' })
+    // hasRun stays false through planning + pre-flight so a cancel leaves
+    // the page in its prior state. We flip it once rows land in
+    // runAmaExecute; the inline session log surfaces failures in the
+    // meantime so the user still sees what happened.
+    const scope = buildAmaScope()
+    const incomingRowsSnapshot = rows ?? null
+    let plan: AmaPlan
+    try {
+      plan = await runClaudePlan(question, scope, byok)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      appendAmaLog({ label: 'Plan failed.', message: msg, status: 'error' })
+      setHasRun(true)
+      setQueryError(msg)
+      setQueryLoading(false)
+      return
+    }
+    appendAmaLog({
+      label: 'Plan.',
+      message: `${plan.output_mode} · ${plan.queries.length} quer${plan.queries.length === 1 ? 'y' : 'ies'} · est. ${fmtCents(plan.estimated_cost_cents)}`,
+      status: 'done',
+    })
+
+    if (plan.estimated_cost_cents > AMA_CONFIRM_THRESHOLD_CENTS) {
+      // Pause for pre-flight confirmation. The modal callbacks will either
+      // resume into runAmaExecute or cancel out.
+      setPendingPlan({
+        plan,
+        question,
+        incomingRows: incomingRowsSnapshot,
+      })
+      return
+    }
+    await runAmaExecute(plan, question, incomingRowsSnapshot)
+  }
+
+  async function runAmaExecute(
+    plan: AmaPlan,
+    question: string,
+    incomingRowsSnapshot: CaseDisplayRow[] | null,
+  ) {
+    if (!byok) return
+    appendAmaLog({ label: 'Step 2/3.', message: 'Executing planned queries…' })
+    try {
+      const synth = await runClaudeExecute(plan.token, byok)
+      appendAmaLog({
+        label: 'Step 3/3.',
+        message: 'Synthesized the answer.',
+        status: 'done',
+      })
+
+      const incomingCount =
+        incomingRowsSnapshot?.length ?? facets?.case_count ?? 0
+      let outRows: CaseDisplayRow[]
+      let narrowed = false
+      const wantsList =
+        synth.output_mode === 'list' || synth.output_mode === 'hybrid'
+      if (wantsList && synth.cl_ids && synth.cl_ids.length > 0) {
+        narrowed = true
+        if (incomingRowsSnapshot && incomingRowsSnapshot.length > 0) {
+          // Filter the local rows we already have — no fetch needed.
+          const incomingMap = new Map(
+            incomingRowsSnapshot.map((r) => [r.cl_id, r]),
+          )
+          outRows = synth.cl_ids
+            .map((id) => incomingMap.get(id))
+            .filter((r): r is CaseDisplayRow => r != null)
+        } else {
+          // Full-corpus narrowing path — fetch display rows for the kept ids.
+          outRows = await fetchCasesByIds(synth.cl_ids.slice(0, 10000))
+        }
+      } else {
+        // Narrative-only — rows pass through. Empty for full-corpus
+        // narrative answers (the agent's narrative is the whole result).
+        outRows = incomingRowsSnapshot ?? []
+      }
+
+      const allCandor = dedupe([
+        ...(plan.candor_notes ?? []),
+        ...(synth.candor_notes ?? []),
+      ])
+
+      setHasRun(true)
+      setRows(outRows)
+      setCount(outRows.length)
+      setSource({
+        kind: 'claude_ama',
+        question,
+        outputMode: synth.output_mode,
+        planSummary: plan.approach_summary,
+        candorNotes: allCandor,
+        answerMarkdown: synth.answer_markdown,
+        incomingCount,
+        outgoingCount: outRows.length,
+        narrowed,
+      })
+      // Final cost line. _cost_cents is only populated for the paid path;
+      // BYOK leaves them undefined, in which case we just omit the tally.
+      const total = (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0)
+      if (total > 0) {
+        appendAmaLog({
+          label: 'Done.',
+          message: `Total spent: ${fmtCents(total)}`,
+          status: 'done',
+        })
+      } else {
+        appendAmaLog({ label: 'Done.', message: '', status: 'done' })
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      appendAmaLog({ label: 'Execute failed.', message: msg, status: 'error' })
+      setHasRun(true)
+      setQueryError(msg)
+      // Preserve incoming rows so the user doesn't lose their scope.
+    } finally {
+      setQueryLoading(false)
+    }
+  }
+
+  async function handleAmaProceed() {
+    if (!pendingPlan) return
+    const { plan, question, incomingRows } = pendingPlan
+    setPendingPlan(null)
+    await runAmaExecute(plan, question, incomingRows)
+  }
+
+  function handleAmaCancel() {
+    if (!pendingPlan) return
+    appendAmaLog({
+      label: 'Cancelled.',
+      message: 'User cancelled at pre-flight.',
+      status: 'error',
+    })
+    setPendingPlan(null)
+    setQueryLoading(false)
+  }
+
   // Case-detail state. Open === true while the sheet is mounted+animating;
   // openCase keeps the row reference around through the close animation so
   // the panel content doesn't flicker on dismiss. (We don't clear openCase
@@ -353,6 +547,15 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           onSubmit={handleClaudeAnalysisSubmit}
         />
       )}
+      {activeMode === 'claude_ama' && (
+        <ClaudeAmaForm
+          loading={queryLoading}
+          byokConfigured={byokConfigured}
+          scopeSize={scopeSize}
+          log={amaLog}
+          onSubmit={handleClaudeAmaSubmit}
+        />
+      )}
       <ResultsList
         rows={rows}
         count={count}
@@ -367,6 +570,34 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         open={detailOpen}
         onOpenChange={setDetailOpen}
       />
+      <AmaPreflight
+        plan={pendingPlan?.plan ?? null}
+        open={!!pendingPlan}
+        onProceed={handleAmaProceed}
+        onCancel={handleAmaCancel}
+      />
     </div>
   )
+}
+
+/** Compact cent → dollars/cents formatter. <100¢ stays in cents for the
+ *  low-cost-per-step UX; ≥100¢ flips to dollars. */
+function fmtCents(c: number | undefined): string {
+  if (c == null || !Number.isFinite(c)) return '—'
+  if (c < 100) return `${c.toFixed(1)}¢`
+  return `$${(c / 100).toFixed(2)}`
+}
+
+/** Stable de-duplication for candor notes — preserves first-occurrence order
+ *  so plan caveats stay above synthesis caveats. */
+function dedupe(xs: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const x of xs) {
+    if (!seen.has(x)) {
+      seen.add(x)
+      out.push(x)
+    }
+  }
+  return out
 }
