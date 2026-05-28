@@ -2,19 +2,22 @@
  * Worker client — typed wrappers for the Cloudflare Worker's /corpus/* endpoints.
  *
  * The Worker (ragtimeproxy) is the corpus query path's server-side surface;
- * /corpus/* endpoints query the corpus Supabase project. They're public + IP
- * rate-limited (no auth required for the free-tier reads used here). Auth-
- * gated AI endpoints (/corpus/sql, /corpus/analyze, /corpus/plan,
- * /corpus/execute) land in later PRs.
+ * /corpus/* endpoints query the corpus Supabase project. The free-tier read
+ * endpoints are public + IP rate-limited; AI endpoints take the user's BYOK
+ * (or, eventually, a Lawfare session JWT) in the request body.
  *
  * v1 wired endpoints:
  *  - POST /corpus/facets — corpus counts + court / judge / collection lists
  *  - POST /corpus/filter — manual filter execution against the cases table
+ *  - POST /corpus/sql    — AI writes SQL from a natural-language prompt
+ *  - POST /corpus/entries — docket entries for one case (case-detail panel)
  *
  * WORKER URL: VITE_WORKER_URL env var, with the production URL as the
  * fallback. Override in `app/.env.local` for dev work against a local
  * `wrangler dev` instance.
  */
+
+import type { ByokConfig } from '@/llm/byok-context'
 
 const WORKER_URL =
   (import.meta.env.VITE_WORKER_URL as string | undefined) ||
@@ -134,6 +137,92 @@ export async function runManualFilter(
     throw new Error(`/corpus/filter failed (${r.status}): ${msg}`)
   }
   return (await r.json()) as FilterResult
+}
+
+/* ----------------------------------------------------------------------------
+ * /corpus/sql — AI-writes-SQL ("claude_sql" mode)
+ * ------------------------------------------------------------------------- */
+
+export type SqlGenRequest = {
+  /** Natural-language description of the filter the user wants. */
+  prompt: string
+  /** Same stacking scope shape as /corpus/filter. v1 we send an empty
+   *  scope; the stack runtime (PR 4g) populates this with the prior page's
+   *  cl_ids / scope_sql. */
+  scope?: FilterScope
+}
+
+/**
+ * /corpus/sql success response. The id-set + display_rows shape mirrors
+ * /corpus/filter so the results list renderer doesn't care which mode
+ * produced the page. Extra fields: the model-generated SQL and the model's
+ * short `label` for the operation (used in breadcrumbs once the stack
+ * runtime exists).
+ *
+ * `_cost_cents` and `_balance_cents` are only populated for the Lawfare-
+ * paid auth path; BYOK calls leave them undefined/0.
+ */
+export type SqlGenResult = {
+  generated_sql: string
+  label: string
+  cl_ids: number[]
+  count: number
+  display_rows: CaseDisplayRow[]
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/**
+ * /corpus/sql error envelope. The Worker surfaces `generated_sql` on
+ * `query_failed` so the user can see what the model produced even when it
+ * didn't execute.
+ */
+export type SqlGenError = {
+  message: string
+  code?: 'too_many_rows' | 'query_failed' | string
+  /** Present on query_failed — the SQL that the model produced but couldn't
+   *  be executed against the corpus. */
+  generated_sql?: string
+}
+
+export class WorkerSqlError extends Error {
+  code?: string
+  generatedSql?: string
+  status: number
+  constructor(err: SqlGenError, status: number) {
+    super(err.message)
+    this.name = 'WorkerSqlError'
+    this.code = err.code
+    this.generatedSql = err.generated_sql
+    this.status = status
+  }
+}
+
+export async function runClaudeSql(
+  req: SqlGenRequest,
+  byok: ByokConfig,
+): Promise<SqlGenResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sql`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: byok.provider,
+      model: byok.model,
+      prompt: req.prompt,
+      scope: req.scope ?? {},
+      user_api_key: byok.apiKey,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: SqlGenError
+    }
+    const err = body.error ?? {
+      message: `Request failed (${r.status} ${r.statusText})`,
+    }
+    throw new WorkerSqlError(err, r.status)
+  }
+  return (await r.json()) as SqlGenResult
 }
 
 /* ----------------------------------------------------------------------------
