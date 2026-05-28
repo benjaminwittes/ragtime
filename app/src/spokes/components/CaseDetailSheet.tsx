@@ -45,22 +45,25 @@ export function CaseDetailSheet({
         // desktop is a reasonable middle ground.
         className="!w-full !max-w-3xl flex h-full flex-col gap-0 p-0"
       >
-        {theCase && <CaseDetailBody theCase={theCase} />}
+        {/* The `key={cl_id}` here remounts CaseDetailBody whenever the user
+            opens a different case. That way state (entries / loading /
+            error) starts fresh per case, without resetting it via a
+            setState-in-effect. */}
+        {theCase && <CaseDetailBody key={theCase.cl_id} theCase={theCase} />}
       </SheetContent>
     </Sheet>
   )
 }
 
 function CaseDetailBody({ theCase }: { theCase: CaseDisplayRow }) {
+  // Because the parent passes a unique `key` per case, this component is
+  // mounted fresh per case — initial state needs no reset effect.
   const [entries, setEntries] = useState<DocketEntryRow[] | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     let cancelled = false
-    setEntries(undefined)
-    setLoading(true)
-    setError(undefined)
     void (async () => {
       try {
         const r = await fetchCaseEntries(theCase.cl_id)
