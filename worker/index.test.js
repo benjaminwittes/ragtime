@@ -4,6 +4,7 @@ import {
   computeCostCents,
   estimateInputTokens,
   checkPaidBudget,
+  pickCheckoutReturnOrigin,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -196,6 +197,71 @@ describe("checkPaidBudget", () => {
     expect(r.ok).toBe(false);
     expect(r.code).toBe("empty_balance");
     expect(r.message).toMatch(/balance is empty/i);
+  });
+});
+
+// ============================================================================
+// pickCheckoutReturnOrigin — Stripe redirects the user's browser to whatever
+// URL we hand it after checkout, so the allowlist here is a security
+// boundary. Tests confirm: production fallback when nothing is requested,
+// allowlist honoring (production + localhost dev), rejection of foreign
+// origins, malformed-input safety.
+// ============================================================================
+describe("pickCheckoutReturnOrigin", () => {
+  const prodEnv = { APP_BASE_URL: "https://benjaminwittes.github.io/ragtime" };
+
+  it("falls back to APP_BASE_URL when no request is provided", () => {
+    expect(pickCheckoutReturnOrigin(undefined, prodEnv)).toBe(
+      "https://benjaminwittes.github.io/ragtime",
+    );
+    expect(pickCheckoutReturnOrigin("", prodEnv)).toBe(
+      "https://benjaminwittes.github.io/ragtime",
+    );
+  });
+
+  it("honors a request that matches the production origin (with path)", () => {
+    expect(
+      pickCheckoutReturnOrigin(
+        "https://benjaminwittes.github.io/ragtime/",
+        prodEnv,
+      ),
+    ).toBe("https://benjaminwittes.github.io/ragtime");
+  });
+
+  it("honors localhost dev origins (Vite default port)", () => {
+    expect(pickCheckoutReturnOrigin("http://localhost:5173/", prodEnv)).toBe(
+      "http://localhost:5173",
+    );
+    expect(pickCheckoutReturnOrigin("http://127.0.0.1:5173/", prodEnv)).toBe(
+      "http://127.0.0.1:5173",
+    );
+  });
+
+  it("rejects foreign origins, falling back to APP_BASE_URL", () => {
+    // A tampered request must not redirect the user post-checkout.
+    expect(
+      pickCheckoutReturnOrigin("https://evil.example.com/", prodEnv),
+    ).toBe("https://benjaminwittes.github.io/ragtime");
+  });
+
+  it("rejects non-allowlisted localhost ports (only :5173)", () => {
+    expect(
+      pickCheckoutReturnOrigin("http://localhost:3000/", prodEnv),
+    ).toBe("https://benjaminwittes.github.io/ragtime");
+  });
+
+  it("rejects malformed URLs", () => {
+    expect(pickCheckoutReturnOrigin("not-a-url", prodEnv)).toBe(
+      "https://benjaminwittes.github.io/ragtime",
+    );
+  });
+
+  it("strips a trailing slash so the appended ?checkout=... query is clean", () => {
+    // Worker uses ${baseUrl}/?checkout=success&session_id=...; we want
+    // exactly one '/' before '?', not two.
+    expect(pickCheckoutReturnOrigin("http://localhost:5173/", prodEnv)).toBe(
+      "http://localhost:5173",
+    );
   });
 });
 
