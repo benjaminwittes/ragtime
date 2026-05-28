@@ -3,6 +3,7 @@ import {
   lookupAnthropicRates,
   computeCostCents,
   estimateInputTokens,
+  checkPaidBudget,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -121,6 +122,80 @@ describe("estimateInputTokens", () => {
 
   it("handles missing content without throwing", () => {
     expect(estimateInputTokens(null, [{ role: "user" }])).toBe(Math.ceil(8 / 3.5));
+  });
+});
+
+// ============================================================================
+// checkPaidBudget — the policy that gates billed calls. Owns:
+//   - Whether a user is allowed to start at all (balance vs. floor)
+//   - Whether their next query fits in the remaining headroom
+// Includes the courtesy-deficit semantics: a negative floor lets a user
+// run a small deficit before being blocked.
+// ============================================================================
+describe("checkPaidBudget", () => {
+  it("allows a healthy balance with room to spare", () => {
+    const r = checkPaidBudget({ balanceCents: 500, floorCents: -50, estMaxCents: 100 });
+    expect(r.ok).toBe(true);
+    expect(r.headroomCents).toBe(550); // 500 - (-50)
+  });
+
+  it("blocks when the balance is below the floor (positive floor)", () => {
+    const r = checkPaidBudget({ balanceCents: 4, floorCents: 5, estMaxCents: 1 });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("empty_balance");
+    expect(r.balanceCents).toBe(4);
+    expect(r.floorCents).toBe(5);
+  });
+
+  it("blocks when the balance is below the floor (negative floor / courtesy deficit)", () => {
+    const r = checkPaidBudget({ balanceCents: -51, floorCents: -50, estMaxCents: 1 });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("empty_balance");
+    // The error message for negative floors mentions the courtesy floor so
+    // the UI can surface what's blocking the user.
+    expect(r.message).toMatch(/courtesy floor/i);
+  });
+
+  it("allows balance exactly at the floor when no estimate is offered", () => {
+    // balance === floor → headroom = 0 → only zero-cost calls pass.
+    const r = checkPaidBudget({ balanceCents: -50, floorCents: -50, estMaxCents: 0 });
+    expect(r.ok).toBe(true);
+    expect(r.headroomCents).toBe(0);
+  });
+
+  it("blocks a query whose estimate exceeds headroom", () => {
+    // balance 100, floor 0 → headroom 100; query at 101 should fail.
+    const r = checkPaidBudget({ balanceCents: 100, floorCents: 0, estMaxCents: 101 });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("insufficient_for_estimate");
+    expect(r.headroomCents).toBe(100);
+    expect(r.estMaxCents).toBe(101);
+  });
+
+  it("allows the courtesy deficit to soak up a small overrun", () => {
+    // balance 30, floor -50 → headroom 80. A 75¢ estimate is allowed even
+    // though it pushes the worst-case ending balance to -45 (legal under
+    // the courtesy floor); without the deficit it would have been blocked.
+    const r = checkPaidBudget({ balanceCents: 30, floorCents: -50, estMaxCents: 75 });
+    expect(r.ok).toBe(true);
+    expect(r.headroomCents).toBe(80);
+  });
+
+  it("permits queries against a negative balance while above the floor", () => {
+    // balance -30 (in the courtesy zone), floor -50 → headroom 20. A 15¢
+    // query is allowed; a 25¢ query is not.
+    const a = checkPaidBudget({ balanceCents: -30, floorCents: -50, estMaxCents: 15 });
+    expect(a.ok).toBe(true);
+    const b = checkPaidBudget({ balanceCents: -30, floorCents: -50, estMaxCents: 25 });
+    expect(b.ok).toBe(false);
+    expect(b.code).toBe("insufficient_for_estimate");
+  });
+
+  it("preserves the 'empty' phrasing when floor is non-negative", () => {
+    const r = checkPaidBudget({ balanceCents: -1, floorCents: 0, estMaxCents: 1 });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("empty_balance");
+    expect(r.message).toMatch(/balance is empty/i);
   });
 });
 

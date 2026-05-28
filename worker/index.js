@@ -36,9 +36,60 @@ var DAILY_QUOTA = 500;
 var PER_IP_PER_MIN = 10;
 var ANTHROPIC_VERSION = "2023-06-01";
 var DEFAULT_MARKUP = 1.35;
-var DEFAULT_BALANCE_FLOOR_CENTS = 5;
-var MAX_SPEND_RATIO = 1.5;
+// Courtesy deficit policy: the minimum balance below which new paid queries
+// are blocked. Negative values let a user run a small deficit before being
+// cut off — useful because cost estimates are conservative and small queries
+// can land slightly past zero. Default -50¢ (≈ one moderate AMA query of
+// over-spend) was chosen empirically: enough to absorb estimate slop but
+// small enough that the next top-up clears it. Override via the
+// BALANCE_FLOOR_CENTS env binding.
+var DEFAULT_BALANCE_FLOOR_CENTS = -50;
 var DEFAULT_PER_USER_PER_MIN = 30;
+
+/**
+ * Pure paid-budget check. Decides whether a paid user is allowed to start a
+ * billed call given their current balance, the floor policy, and the
+ * worst-case cost estimate. Replaces the old floor + MAX_SPEND_RATIO logic
+ * with a single headroom = balance - floor rule:
+ *
+ *   - balance < floor                          → empty_balance
+ *   - estMaxCents > (balance - floor)          → insufficient_for_estimate
+ *   - else                                     → ok, with the headroom value
+ *
+ * Negative floors implement the courtesy deficit: at floor=-50, a user with
+ * balance=0 can run queries up to 50¢ estimated; a user at balance=-30 can
+ * run up to 20¢; balance=-51 is blocked.
+ *
+ * Returns `{ ok: true, headroomCents }` on success, or `{ ok: false, code,
+ * message, balanceCents, floorCents, headroomCents, estMaxCents }` on
+ * failure. Callers translate the failure into the right HTTP shape.
+ */
+function checkPaidBudget({ balanceCents, floorCents, estMaxCents }) {
+  if (balanceCents < floorCents) {
+    return {
+      ok: false,
+      code: "empty_balance",
+      message: floorCents >= 0
+        ? "Your balance is empty. Top up to continue."
+        : `Your balance is below the courtesy floor (${(floorCents / 100).toFixed(2)}). Top up to continue.`,
+      balanceCents,
+      floorCents,
+    };
+  }
+  const headroomCents = balanceCents - floorCents;
+  if (estMaxCents > headroomCents) {
+    return {
+      ok: false,
+      code: "insufficient_for_estimate",
+      message: `This query could cost up to $${(estMaxCents / 100).toFixed(2)}; your remaining headroom is $${(headroomCents / 100).toFixed(2)}. Top up or refine.`,
+      balanceCents,
+      floorCents,
+      headroomCents,
+      estMaxCents,
+    };
+  }
+  return { ok: true, headroomCents };
+}
 // Off-box pipeline liveness: alert if the newest corpus document is older than
 // this many minutes. Generous default — the harvest lane sleeps ~30 min between
 // sweeps and backs off on CL rate limits, so a short lull is normal; this
@@ -199,12 +250,6 @@ async function askHandler(request, env, ctx) {
       return json({ error: { message: "Account not found. This is a server-side issue; please contact support." } }, 500);
     }
     const floor = parseInt(env.BALANCE_FLOOR_CENTS || DEFAULT_BALANCE_FLOOR_CENTS, 10);
-    if (account.balance_cents < floor) {
-      return json({ error: {
-        message: "Your balance is empty. Top up to continue.",
-        code: "empty_balance"
-      } }, 402);
-    }
     const rates = lookupAnthropicRates(model);
     if (!rates) {
       return json({ error: { message: 'No price configured for model "' + model + '". Contact support.' } }, 400);
@@ -217,12 +262,21 @@ async function askHandler(request, env, ctx) {
       rates,
       markup: parseFloat(env.MARKUP || DEFAULT_MARKUP)
     });
-    if (estMaxCents > account.balance_cents * MAX_SPEND_RATIO) {
+    const budget = checkPaidBudget({
+      balanceCents: account.balance_cents,
+      floorCents: floor,
+      estMaxCents,
+    });
+    if (!budget.ok) {
       return json({ error: {
-        message: `This query could cost up to $${(estMaxCents / 100).toFixed(2)}; your balance is $${(account.balance_cents / 100).toFixed(2)}. Top up or refine the query.`,
-        code: "insufficient_for_estimate",
-        estimated_max_cents: estMaxCents,
-        balance_cents: account.balance_cents
+        message: budget.message,
+        code: budget.code,
+        balance_cents: budget.balanceCents,
+        floor_cents: budget.floorCents,
+        ...(budget.code === "insufficient_for_estimate" ? {
+          estimated_max_cents: budget.estMaxCents,
+          headroom_cents: budget.headroomCents,
+        } : {}),
       } }, 402);
     }
     authMode = "paid";
@@ -506,16 +560,18 @@ async function corpusModelCall(env, ctx, auth, params) {
     rates = lookupAnthropicRates(model);
     if (!rates) throw fail('No price configured for model "' + model + '". Contact support.', 400);
     const floor = parseInt(env.BALANCE_FLOOR_CENTS || DEFAULT_BALANCE_FLOOR_CENTS, 10);
-    if (auth.account.balance_cents < floor) throw fail("Your balance is empty. Top up to continue.", 402, "empty_balance");
     const estMaxCents = computeCostCents({
       inputTokens: estimateInputTokens(system, messages),
       outputTokens: max_tokens || 4000,
       rates,
       markup: parseFloat(env.MARKUP || DEFAULT_MARKUP)
     });
-    if (estMaxCents > auth.account.balance_cents * MAX_SPEND_RATIO) {
-      throw fail(`This step could cost up to $${(estMaxCents / 100).toFixed(2)}; your balance is $${(auth.account.balance_cents / 100).toFixed(2)}. Top up or refine the question.`, 402, "insufficient_for_estimate");
-    }
+    const budget = checkPaidBudget({
+      balanceCents: auth.account.balance_cents,
+      floorCents: floor,
+      estMaxCents,
+    });
+    if (!budget.ok) throw fail(budget.message, 402, budget.code);
   }
   // Strip lone UTF-16 surrogates before sending to the provider. The client used
   // to do this (sanitizeForAnthropic) before /ask; now corpus row text reaches
@@ -2595,6 +2651,7 @@ export {
   lookupAnthropicRates,
   computeCostCents,
   estimateInputTokens,
+  checkPaidBudget,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
