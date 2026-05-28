@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import type { CaseDisplayRow } from '@/lib/worker-client'
+import ReactMarkdown from 'react-markdown'
+import type {
+  AnalysisAnnotation,
+  CaseDisplayRow,
+} from '@/lib/worker-client'
 
 /**
  * How a result page was produced. Drives the "How this was produced"
@@ -30,6 +34,22 @@ export type ResultSource =
       keptCount: number
       /** Per-case verdict map. Drives the keep/drop badge + reason per row. */
       verdicts: Record<number, { keep: boolean; reason: string }>
+    }
+  | {
+      kind: 'claude_analysis'
+      /** The user's analytical prompt. */
+      prompt: string
+      /** The model's narrative markdown. Rendered in a top disclosure
+       *  (default open) above the case list. Case references use the
+       *  `[Case Name](#case-<cl_id>)` syntax from the Worker's system
+       *  prompt; intra-page anchors wire via row id attributes. */
+      markdown: string
+      /** Per-case annotations keyed by cl_id. Drives optional columns
+       *  (rank / score / category / label) — only the present fields
+       *  render. */
+      annotations: Record<number, AnalysisAnnotation>
+      /** Cases analyzed (= rows.length; analyze never narrows). */
+      analyzedCount: number
     }
 
 /**
@@ -100,9 +120,17 @@ export function ResultsList({
     )
   }
 
+  // Per-case annotation columns for claude_analysis — only show columns
+  // where at least one row has a value (the model omits annotations on
+  // descriptive prompts, and may include only a subset of the four fields).
+  const annotationCols = computeAnnotationCols(source, rows)
+
   return (
     <div className="px-6 py-4">
       {source && <SourceDisclosure source={source} />}
+      {source?.kind === 'claude_analysis' && (
+        <AnalysisNarrative markdown={source.markdown} />
+      )}
       <p className="mb-3 font-mono text-xs text-muted-foreground">
         {(count ?? rows.length).toLocaleString()} cases · showing first{' '}
         {rows.length.toLocaleString()}
@@ -119,6 +147,14 @@ export function ResultsList({
               <Th>Cause</Th>
               <Th className="text-right">Entries</Th>
               {source?.kind === 'claude_read' && <Th>AI reason</Th>}
+              {annotationCols.includes('rank') && (
+                <Th className="text-right">Rank</Th>
+              )}
+              {annotationCols.includes('score') && (
+                <Th className="text-right">Score</Th>
+              )}
+              {annotationCols.includes('category') && <Th>Category</Th>}
+              {annotationCols.includes('label') && <Th>Label</Th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -127,9 +163,14 @@ export function ResultsList({
                 source?.kind === 'claude_read'
                   ? source.verdicts[r.cl_id]
                   : undefined
+              const annotation =
+                source?.kind === 'claude_analysis'
+                  ? source.annotations[r.cl_id]
+                  : undefined
               return (
                 <tr
                   key={r.cl_id}
+                  id={`case-${r.cl_id}`}
                   role="button"
                   tabIndex={0}
                   onClick={() => onOpenCase(r)}
@@ -140,7 +181,7 @@ export function ResultsList({
                     }
                   }}
                   aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
-                  className="cursor-pointer hover:bg-muted/50 focus:bg-muted/60 focus:outline-none"
+                  className="cursor-pointer scroll-mt-20 hover:bg-muted/50 focus:bg-muted/60 focus:outline-none target:bg-primary/10"
                 >
                   <Td>
                     <span className="font-medium text-foreground">
@@ -169,6 +210,26 @@ export function ResultsList({
                       {verdict?.reason ?? '—'}
                     </Td>
                   )}
+                  {annotationCols.includes('rank') && (
+                    <Td className="text-right font-mono text-xs tabular-nums">
+                      {annotation?.rank ?? '—'}
+                    </Td>
+                  )}
+                  {annotationCols.includes('score') && (
+                    <Td className="text-right font-mono text-xs tabular-nums">
+                      {annotation?.score ?? '—'}
+                    </Td>
+                  )}
+                  {annotationCols.includes('category') && (
+                    <Td className="max-w-xs truncate text-xs">
+                      {annotation?.category ?? '—'}
+                    </Td>
+                  )}
+                  {annotationCols.includes('label') && (
+                    <Td className="max-w-sm text-xs">
+                      {annotation?.label ?? '—'}
+                    </Td>
+                  )}
                 </tr>
               )
             })}
@@ -177,6 +238,118 @@ export function ResultsList({
       </div>
     </div>
   )
+}
+
+/**
+ * Top-of-result narrative block for claude_analysis. Renders the model's
+ * markdown via react-markdown. Case references in the markdown use the
+ * `[Case Name](#case-<cl_id>)` syntax (per the Worker's analysis system
+ * prompt) — we let them render as native anchor links; the rows below have
+ * matching `id="case-<cl_id>"` attributes so the browser scrolls to the row
+ * and CSS `:target` highlights it briefly.
+ *
+ * Default open. Always-visible disclosure pattern so users see the full
+ * narrative without an extra click, but they can collapse it if they want
+ * to skim the table.
+ */
+function AnalysisNarrative({ markdown }: { markdown: string }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <details
+      open={open}
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      className="mb-3 rounded-md border border-border bg-card"
+    >
+      <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/40">
+        Analysis
+      </summary>
+      <div className="space-y-3 border-t border-border px-5 py-4 text-sm text-foreground">
+        <ReactMarkdown components={MARKDOWN_COMPONENTS}>
+          {markdown}
+        </ReactMarkdown>
+      </div>
+    </details>
+  )
+}
+
+/**
+ * Explicit element styling for the narrative markdown. Tailwind v4 doesn't
+ * ship the `prose` utilities (those are v3's @tailwindcss/typography), so
+ * we style each element directly. Matches the editorial register of the
+ * legacy spoke surface — serif headings, primary-color links, monospace
+ * inline code.
+ */
+const MARKDOWN_COMPONENTS = {
+  h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h1 className="font-serif text-2xl font-semibold mt-2 mb-3" {...props} />
+  ),
+  h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h2
+      className="font-serif text-xl font-semibold mt-5 mb-2 border-b border-border pb-1"
+      {...props}
+    />
+  ),
+  h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3 className="font-serif text-base font-semibold mt-4 mb-1.5" {...props} />
+  ),
+  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p className="leading-relaxed text-foreground" {...props} />
+  ),
+  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a className="text-primary hover:underline" {...props} />
+  ),
+  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
+    <ul className="list-disc pl-6 space-y-1" {...props} />
+  ),
+  ol: (props: React.OlHTMLAttributes<HTMLOListElement>) => (
+    <ol className="list-decimal pl-6 space-y-1" {...props} />
+  ),
+  li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
+    <li className="leading-relaxed" {...props} />
+  ),
+  blockquote: (props: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
+    <blockquote
+      className="border-l-4 border-muted-foreground/30 pl-4 italic text-muted-foreground"
+      {...props}
+    />
+  ),
+  strong: (props: React.HTMLAttributes<HTMLElement>) => (
+    <strong className="font-semibold text-foreground" {...props} />
+  ),
+  em: (props: React.HTMLAttributes<HTMLElement>) => (
+    <em className="italic" {...props} />
+  ),
+  code: (props: React.HTMLAttributes<HTMLElement>) => (
+    <code
+      className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
+      {...props}
+    />
+  ),
+  hr: (props: React.HTMLAttributes<HTMLHRElement>) => (
+    <hr className="my-4 border-border" {...props} />
+  ),
+}
+
+/**
+ * Compute which annotation columns to render — only those where at least
+ * one row has a value. Avoids rendering "—" columns for analyses where the
+ * model didn't use a particular dimension.
+ */
+function computeAnnotationCols(
+  source: ResultSource | undefined,
+  rows: readonly CaseDisplayRow[],
+): Array<'rank' | 'score' | 'category' | 'label'> {
+  if (source?.kind !== 'claude_analysis') return []
+  const cols: Array<'rank' | 'score' | 'category' | 'label'> = []
+  if (rows.some((r) => source.annotations[r.cl_id]?.rank != null))
+    cols.push('rank')
+  if (rows.some((r) => source.annotations[r.cl_id]?.score != null))
+    cols.push('score')
+  if (rows.some((r) => source.annotations[r.cl_id]?.category != null))
+    cols.push('category')
+  if (rows.some((r) => source.annotations[r.cl_id]?.label != null))
+    cols.push('label')
+  return cols
 }
 
 function Th({
@@ -230,7 +403,9 @@ function shortCause(c: string | null | undefined): string {
  */
 function SourceDisclosure({ source }: { source: ResultSource }) {
   const [open, setOpen] = useState(
-    source.kind === 'claude_sql' || source.kind === 'claude_read',
+    source.kind === 'claude_sql' ||
+      source.kind === 'claude_read' ||
+      source.kind === 'claude_analysis',
   )
   const title =
     source.kind === 'claude_sql'
@@ -239,7 +414,9 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
         : 'How this was produced'
       : source.kind === 'claude_read'
         ? `AI read ${source.incomingCount.toLocaleString()} cases · kept ${source.keptCount.toLocaleString()}`
-        : 'Executed SQL'
+        : source.kind === 'claude_analysis'
+          ? `AI analyzed ${source.analyzedCount.toLocaleString()} cases`
+          : 'Executed SQL'
 
   return (
     <details
@@ -278,6 +455,16 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
             </span>
             <p className="mt-1 whitespace-pre-wrap text-foreground">
               {source.criterion}
+            </p>
+          </div>
+        )}
+        {source.kind === 'claude_analysis' && (
+          <div>
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Analytical prompt
+            </span>
+            <p className="mt-1 whitespace-pre-wrap text-foreground">
+              {source.prompt}
             </p>
           </div>
         )}

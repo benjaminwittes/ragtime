@@ -226,6 +226,99 @@ export async function runClaudeSql(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/analyze — one-shot analytical narrative ("claude_analysis" mode)
+ * ------------------------------------------------------------------------- */
+
+/** Server-side hard cap on cases per /corpus/analyze (the context won't fit
+ *  beyond this). Mirrors CLAUDE_ANALYSIS_HARD_CAP in worker/index.js. */
+export const ANALYSIS_HARD_CAP = 2000
+
+/** Per-case annotations the model may emit alongside the narrative. All
+ *  fields are optional — the model includes only what fits the prompt
+ *  (e.g., "rank by severity" produces `rank`; "describe patterns" may
+ *  produce nothing). */
+export type AnalysisAnnotation = {
+  rank?: number
+  score?: number
+  category?: string
+  label?: string
+}
+
+export type AnalysisResult = {
+  /** Narrative markdown. Case references use the `[Case Name](#case-<cl_id>)`
+   *  syntax so the result page can wire intra-page anchors. */
+  markdown: string
+  /** Per-case annotations, keyed by cl_id. The model may omit annotations
+   *  for descriptive prompts that don't ask for ranking/categorizing. */
+  annotations: Record<number, AnalysisAnnotation>
+  /** Display rows the Worker fetched for the analysis context. The shell
+   *  uses these to render the case list beneath the narrative (cases are
+   *  NOT narrowed by analyze — every input case appears in the result). */
+  cases: CaseDisplayRow[]
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export class WorkerAnalysisError extends Error {
+  code?: string
+  status: number
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'WorkerAnalysisError'
+    this.status = status
+    this.code = code
+  }
+}
+
+export async function runClaudeAnalysis(
+  prompt: string,
+  clIds: readonly number[],
+  byok: ByokConfig,
+): Promise<AnalysisResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/analyze`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: byok.provider,
+      model: byok.model,
+      prompt,
+      cl_ids: clIds,
+      user_api_key: byok.apiKey,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAnalysisError(
+      body.error?.message ?? `Request failed (${r.status})`,
+      r.status,
+      body.error?.code,
+    )
+  }
+  const raw = (await r.json()) as {
+    markdown: string
+    annotations?: Record<string, AnalysisAnnotation>
+    cases: CaseDisplayRow[]
+    _cost_cents?: number
+    _balance_cents?: number
+  }
+  // The Worker emits annotations keyed by cl_id as a string-keyed object
+  // (JSON convention). Normalize to number keys for ergonomic lookup.
+  const annotations: Record<number, AnalysisAnnotation> = {}
+  for (const [k, v] of Object.entries(raw.annotations ?? {})) {
+    annotations[Number(k)] = v
+  }
+  return {
+    markdown: raw.markdown,
+    annotations,
+    cases: raw.cases,
+    _cost_cents: raw._cost_cents,
+    _balance_cents: raw._balance_cents,
+  }
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/read-batch — per-case AI keep/drop judgment ("claude_read" mode)
  * ------------------------------------------------------------------------- */
 
