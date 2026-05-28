@@ -1,3 +1,5 @@
+import { DocsTrigger } from '@/docs/DocsTrigger'
+import { AccessSettings } from '@/llm/AccessSettings'
 import type { CorpusHoldings, CorpusSpoke } from '../types'
 
 /**
@@ -31,9 +33,13 @@ export function SpokeHeader({
           <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
             {spoke.title}
           </h1>
-          <p className="font-mono text-xs text-muted-foreground">
-            {spoke.slug}
-          </p>
+          <div className="flex items-center gap-2">
+            <AccessSettings />
+            <DocsTrigger />
+            <p className="font-mono text-xs text-muted-foreground">
+              {spoke.slug}
+            </p>
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{disclosure}</p>
 

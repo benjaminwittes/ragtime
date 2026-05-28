@@ -1,16 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   type CaseDisplayRow,
   type CorpusFacets,
   type FilterFields,
+  WorkerSqlError,
   fetchCorpusFacets,
+  runClaudeSql,
   runManualFilter,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
+import { useByok } from '@/llm/use-byok'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
+import { ClaudeSqlForm } from './components/ClaudeSqlForm'
 import { FilterForm } from './components/FilterForm'
 import { ModeRow } from './components/ModeRow'
-import { ResultsList } from './components/ResultsList'
+import { ResultsList, type ResultSource } from './components/ResultsList'
 import { SpokeHeader } from './components/SpokeHeader'
 import type {
   CorpusHoldings,
@@ -21,21 +25,26 @@ import type {
 /**
  * Generic spoke renderer chassis (per the SPEC.md design rationale).
  *
- * v1 (PR 4b): chassis + manual filter only. Other modes are visible in the
- * mode row but disabled until later PRs. No stack runtime yet (per brief #6
- * §6 modifications, stack affordances appear only after at least one
- * operation has produced a page; this PR's flat one-page execution sidesteps
- * the stack data model, which lands with PR 4d-4g).
+ * v1 (PR 4b): chassis + manual filter only.
+ * v1.5 (PR 4c): + case-detail sheet.
+ * v1.6 (PR 4d, this PR): + claude_sql via BYOK.
+ *
+ * No stack runtime yet (per brief #6 §6 modifications, stack affordances
+ * appear only after at least one operation has produced a page; this PR's
+ * flat one-page execution sidesteps the stack data model, which lands with
+ * PR 4g). Each query supersedes the previous result page.
  *
  * Data flow:
  *   - On mount: fetch /corpus/facets, populate holdings + filter dropdowns.
- *   - On filter submit: POST /corpus/filter with the form fields, replace
- *     the result rows. (No stack yet — each submit just supersedes.)
+ *   - On filter submit: POST /corpus/filter, replace the result rows.
+ *   - On claude_sql submit: POST /corpus/sql with BYOK, replace the result
+ *     rows AND surface the model-generated SQL + label per brief #6 §7b.
  *   - On mount/unmount: setActiveSpokeSlug() so the docs-overlay shows
  *     spoke-scoped entries.
  */
 export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const { setActiveSpokeSlug } = useDocs()
+  const { config: byok, isConfigured: byokConfigured } = useByok()
 
   // Docs context: tell the overlay which spoke is active so entries scoped
   // to this corpus appear (per docs-registry contract from PR 4a / #36).
@@ -81,32 +90,89 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }, [spoke])
 
-  // Mode selection. v1 only manual_filter is functional.
+  // Mode selection. manual_filter is always functional; claude_sql becomes
+  // available once a BYOK is configured.
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
-  const enabledModes: QueryMode[] = ['manual_filter']
+  const enabledModes = useMemo<QueryMode[]>(() => {
+    const enabled: QueryMode[] = ['manual_filter']
+    if (byokConfigured) enabled.push('claude_sql')
+    return enabled
+  }, [byokConfigured])
 
-  // Filter results state. Per brief #6 §6, stack affordances are hidden
-  // until a page exists — `hasRun` tracks that for the empty-state UI.
+  // Result-page state. `source` tracks how the page was produced so the
+  // results list can surface mode-specific provenance (e.g., the generated
+  // SQL + the user's prompt for claude_sql) per brief #6 §7b auditability.
   const [rows, setRows] = useState<CaseDisplayRow[] | undefined>(undefined)
   const [count, setCount] = useState<number | undefined>(undefined)
-  const [filterLoading, setFilterLoading] = useState(false)
-  const [filterError, setFilterError] = useState<string | undefined>(undefined)
+  const [source, setSource] = useState<ResultSource | undefined>(undefined)
+  const [queryLoading, setQueryLoading] = useState(false)
+  const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
 
   async function handleFilterSubmit(fields: FilterFields) {
-    setFilterLoading(true)
-    setFilterError(undefined)
+    setQueryLoading(true)
+    setQueryError(undefined)
     setHasRun(true)
     try {
       const r = await runManualFilter(fields)
       setRows(r.display_rows)
       setCount(r.count)
+      setSource({ kind: 'manual_filter', generatedSql: r.generated_sql })
     } catch (e) {
-      setFilterError(e instanceof Error ? e.message : String(e))
+      setQueryError(e instanceof Error ? e.message : String(e))
+      setRows([])
+      setCount(0)
+      setSource(undefined)
+    } finally {
+      setQueryLoading(false)
+    }
+  }
+
+  async function handleClaudeSqlSubmit(prompt: string) {
+    if (!byok) {
+      // Shouldn't be reachable — the form disables the submit when there's
+      // no key — but guard anyway.
+      setQueryError('Configure a BYOK key in AI access (header) first.')
+      return
+    }
+    setQueryLoading(true)
+    setQueryError(undefined)
+    setHasRun(true)
+    try {
+      const r = await runClaudeSql({ prompt }, byok)
+      setRows(r.display_rows)
+      setCount(r.count)
+      setSource({
+        kind: 'claude_sql',
+        prompt,
+        label: r.label,
+        generatedSql: r.generated_sql,
+      })
+    } catch (e) {
+      if (e instanceof WorkerSqlError) {
+        setQueryError(e.message)
+        // Even on failure, surface the model's SQL so the user can
+        // diagnose what the AI proposed — the auditability principle
+        // (brief #6 §7b item 3).
+        if (e.generatedSql) {
+          setSource({
+            kind: 'claude_sql',
+            prompt,
+            label: '',
+            generatedSql: e.generatedSql,
+            errored: true,
+          })
+        } else {
+          setSource(undefined)
+        }
+      } else {
+        setQueryError(e instanceof Error ? e.message : String(e))
+        setSource(undefined)
+      }
       setRows([])
       setCount(0)
     } finally {
-      setFilterLoading(false)
+      setQueryLoading(false)
     }
   }
 
@@ -148,16 +214,24 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 }
               : undefined
           }
-          loading={filterLoading}
+          loading={queryLoading}
           onSubmit={handleFilterSubmit}
+        />
+      )}
+      {activeMode === 'claude_sql' && (
+        <ClaudeSqlForm
+          loading={queryLoading}
+          byokConfigured={byokConfigured}
+          onSubmit={handleClaudeSqlSubmit}
         />
       )}
       <ResultsList
         rows={rows}
         count={count}
-        loading={filterLoading}
-        error={filterError}
+        loading={queryLoading}
+        error={queryError}
         hasRun={hasRun}
+        source={source}
         onOpenCase={handleOpenCase}
       />
       <CaseDetailSheet
