@@ -461,6 +461,55 @@ export async function runClaudeExecute(
  * incoming scope was the full corpus (no local row cache to filter against).
  * ------------------------------------------------------------------------- */
 
+/* ----------------------------------------------------------------------------
+ * /api/checkout — Stripe Checkout session for paid-tier top-up
+ * ------------------------------------------------------------------------- */
+
+/** Block sizes the Worker accepts (drives Stripe price-ID lookup). */
+export type TopupBlock = '5' | '20' | '50'
+
+export type CheckoutSession = {
+  checkout_url: string
+  session_id: string
+}
+
+/**
+ * Start a Stripe Checkout session for the signed-in paid user. The Worker
+ * returns a URL the user should be redirected to; on completion Stripe
+ * sends them back to the configured success/cancel URL plus the webhook
+ * fires asynchronously to credit the balance.
+ *
+ * `returnOrigin` is the current page's origin — the Worker validates it
+ * against an allowlist (production + localhost dev) before using it as
+ * the post-checkout redirect base. Caller passes window.location.origin.
+ */
+export async function startCheckout(opts: {
+  block: TopupBlock
+  sessionToken: string
+  returnOrigin: string
+}): Promise<CheckoutSession> {
+  const r = await fetch(`${WORKER_URL}/api/checkout`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${opts.sessionToken}`,
+    },
+    body: JSON.stringify({
+      block: opts.block,
+      return_origin: opts.returnOrigin,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string }
+    }
+    throw new Error(
+      body.error?.message ?? `Checkout failed (${r.status})`,
+    )
+  }
+  return (await r.json()) as CheckoutSession
+}
+
 export async function fetchCasesByIds(
   ids: readonly number[],
 ): Promise<CaseDisplayRow[]> {

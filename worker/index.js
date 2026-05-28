@@ -64,6 +64,49 @@ var DEFAULT_PER_USER_PER_MIN = 30;
  * message, balanceCents, floorCents, headroomCents, estMaxCents }` on
  * failure. Callers translate the failure into the right HTTP shape.
  */
+/**
+ * Resolve the return origin for a Stripe Checkout redirect. The frontend
+ * passes `return_origin` in the /api/checkout body; we honor it only when
+ * it matches a known allowlist (the configured APP_BASE_URL and the
+ * standard React dev server hosts). Otherwise we fall back to the
+ * configured APP_BASE_URL (production).
+ *
+ * This is a security boundary — Stripe redirects the user's browser to
+ * whatever URL we hand it after checkout, so an unvalidated value could
+ * land the user on an attacker-controlled domain with the session id in
+ * the query string. The allowlist keeps the surface tight.
+ *
+ * Pure function (no env mutation, no fetch) so it's testable in isolation.
+ */
+function pickCheckoutReturnOrigin(requested, env) {
+  const fallback = env.APP_BASE_URL || "https://benjaminwittes.github.io/ragtime";
+  if (typeof requested !== "string" || !requested) return fallback;
+  let origin;
+  try {
+    const u = new URL(requested);
+    origin = u.origin;
+  } catch {
+    return fallback;
+  }
+  // Allowlist: the configured production origin (origin only, ignore path)
+  // and the standard Vite dev server.
+  const allowed = new Set();
+  try { allowed.add(new URL(fallback).origin); } catch { /* malformed env */ }
+  allowed.add("http://localhost:5173");
+  allowed.add("http://127.0.0.1:5173");
+  if (!allowed.has(origin)) return fallback;
+  // Preserve the requested URL's pathname if the user provided one
+  // (e.g. https://benjaminwittes.github.io/ragtime/), but trim any trailing
+  // slash so success_url's "/?checkout=..." doesn't double up.
+  try {
+    const u = new URL(requested);
+    const path = u.pathname.replace(/\/$/, "");
+    return `${u.origin}${path}`;
+  } catch {
+    return fallback;
+  }
+}
+
 function checkPaidBudget({ balanceCents, floorCents, estMaxCents }) {
   if (balanceCents < floorCents) {
     return {
@@ -1728,7 +1771,12 @@ async function checkoutHandler(request, env) {
     customerId = cust.id;
     await supabaseUpdateAccount(env, userId, { stripe_customer_id: customerId });
   }
-  const baseUrl = env.APP_BASE_URL || "https://benjaminwittes.github.io/ragtime";
+  // Pick the return-origin for the Stripe redirect. Default is APP_BASE_URL
+  // (production), but the client can request a different origin via
+  // `return_origin` — useful for the React dev server. We only honor values
+  // that match a known allowlist so a tampered request can't redirect the
+  // user to an attacker-controlled site post-checkout.
+  const baseUrl = pickCheckoutReturnOrigin(body && body.return_origin, env);
   const session = await stripeApi(env, "POST", "/v1/checkout/sessions", {
     mode: "payment",
     customer: customerId,
@@ -2652,6 +2700,7 @@ export {
   computeCostCents,
   estimateInputTokens,
   checkPaidBudget,
+  pickCheckoutReturnOrigin,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,

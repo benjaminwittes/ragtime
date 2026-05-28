@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
 import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
 import { SpokeShell } from '@/spokes/SpokeShell'
@@ -55,19 +56,28 @@ function App() {
     setRoute(parseRoute(pathname))
   }
 
-  if (route.kind === 'spoke') {
-    const spoke = getSpokeBySlug(route.slug)
-    if (spoke) {
-      if (spoke.status === 'active') return <SpokeShell spoke={spoke} />
-      // Coming-soon or archived: show the descriptor-driven landing page
-      // rather than mounting the (non-functional) SpokeShell.
-      return <ComingSoonSpoke spoke={spoke} onNavigate={navigate} />
-    }
-  }
-  if (route.kind === 'not-found') {
-    return <NotFound pathname={route.pathname} onNavigate={navigate} />
-  }
-  return <Hub onNavigate={navigate} />
+  // The CheckoutReturnGate is rendered as a sibling next to every route so
+  // it picks up `?checkout=success|cancel` on whichever surface the user
+  // lands on after Stripe redirect (typically the hub at "/", but any
+  // signed-in path is valid).
+  const surface =
+    route.kind === 'spoke'
+      ? (() => {
+          const spoke = getSpokeBySlug(route.slug)
+          if (!spoke) return <NotFound pathname={`/corpus/${route.slug}`} onNavigate={navigate} />
+          if (spoke.status === 'active') return <SpokeShell spoke={spoke} />
+          return <ComingSoonSpoke spoke={spoke} onNavigate={navigate} />
+        })()
+      : route.kind === 'not-found'
+        ? <NotFound pathname={route.pathname} onNavigate={navigate} />
+        : <Hub onNavigate={navigate} />
+
+  return (
+    <>
+      {surface}
+      <CheckoutReturnGate />
+    </>
+  )
 }
 
 function NotFound({

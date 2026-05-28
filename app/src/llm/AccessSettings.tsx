@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/use-auth'
+import { TopupDialog } from '@/auth/TopupDialog'
 import { usePaid } from '@/auth/use-paid'
 import type { Provider } from './byok-context'
 import { useByok } from './use-byok'
@@ -243,6 +244,7 @@ function SignInForm() {
 function SignedInView({ onClose }: { onClose: () => void }) {
   const paid = usePaid()
   const [signingOut, setSigningOut] = useState(false)
+  const [topupOpen, setTopupOpen] = useState(false)
 
   async function handleSignOut() {
     setSigningOut(true)
@@ -303,11 +305,11 @@ function SignedInView({ onClose }: { onClose: () => void }) {
           <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
         )}
         <div className="mt-4 flex items-center gap-2">
-          <Button type="button" disabled>
+          <Button type="button" onClick={() => setTopupOpen(true)}>
             Top up
           </Button>
           <span className="text-[11px] text-muted-foreground">
-            Stripe Checkout flow lands in a follow-up PR.
+            Prepaid blocks via Stripe Checkout.
           </span>
         </div>
       </section>
@@ -324,6 +326,8 @@ function SignedInView({ onClose }: { onClose: () => void }) {
           {signingOut ? 'Signing out…' : 'Sign out'}
         </Button>
       </section>
+
+      <TopupDialog open={topupOpen} onOpenChange={setTopupOpen} />
     </div>
   )
 }
