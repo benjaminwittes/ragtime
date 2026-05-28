@@ -323,8 +323,8 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     if (!rows || rows.length === 0) {
       return {
         is_full_db: true,
-        count: 0,
-        description: 'The full corpus across all federal courts.',
+        count: facets?.case_count ?? 0,
+        description: `The full corpus${facets ? ' (' + facets.case_count.toLocaleString() + ' cases)' : ''} across all federal courts.`,
       }
     }
     return {
@@ -395,8 +395,13 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         status: 'done',
       })
 
+      // Empty or null incoming rows = no narrowed scope = the agent ran
+      // against the full corpus. Use facets.case_count so the disclosure
+      // shows the true "considered" total instead of 0.
       const incomingCount =
-        incomingRowsSnapshot?.length ?? facets?.case_count ?? 0
+        incomingRowsSnapshot && incomingRowsSnapshot.length > 0
+          ? incomingRowsSnapshot.length
+          : (facets?.case_count ?? 0)
       let outRows: CaseDisplayRow[]
       let narrowed = false
       const wantsList =
