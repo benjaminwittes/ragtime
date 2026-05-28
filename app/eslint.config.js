@@ -19,4 +19,14 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  // shadcn-generated UI primitives follow the shadcn convention of exporting
+  // both the component and a variants object (e.g., Button + buttonVariants)
+  // from the same file. The react-refresh "only-export-components" rule
+  // doesn't apply cleanly here; relax it for src/components/ui/**.
+  {
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
