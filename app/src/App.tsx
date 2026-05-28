@@ -3,8 +3,9 @@ import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
 import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
 import { SpokeShell } from '@/spokes/SpokeShell'
+import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
-import type { CorpusSlug } from '@/spokes/types'
+import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
 
 /**
  * Top-level app shell + minimal pathname router.
@@ -65,7 +66,7 @@ function App() {
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
           if (!spoke) return <NotFound pathname={`/corpus/${route.slug}`} onNavigate={navigate} />
-          if (spoke.status === 'active') return <SpokeShell spoke={spoke} />
+          if (spoke.status === 'active') return activeSpokeShell(spoke)
           return <ComingSoonSpoke spoke={spoke} onNavigate={navigate} />
         })()
       : route.kind === 'not-found'
@@ -78,6 +79,17 @@ function App() {
       <CheckoutReturnGate />
     </>
   )
+}
+
+/**
+ * Pick the right shell for an active spoke. The litigation spoke uses the
+ * full stack-runtime `SpokeShell`; USC v1 alpha uses a slimmer
+ * manual-filter-only shell while AI modes + stack runtime catch up.
+ * Other spokes will add their own branches as they come online.
+ */
+function activeSpokeShell(spoke: CorpusSpoke) {
+  if (spoke.slug === 'usc') return <UscSpokeShell spoke={spoke} />
+  return <SpokeShell spoke={spoke} />
 }
 
 function NotFound({

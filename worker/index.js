@@ -204,6 +204,12 @@ export default {
       if (path === "/corpus/entries" && request.method === "POST") {
         return await corpusEntriesHandler(request, env, ctx);
       }
+      if (path === "/corpus/usc/facets" && request.method === "POST") {
+        return await corpusUscFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/usc/filter" && request.method === "POST") {
+        return await corpusUscFilterHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -1715,6 +1721,128 @@ async function corpusFacetsHandler(request, env, ctx) {
   }
 }
 
+// ============================================================================
+// USC (United States Code) corpus — v1 alpha (manual filter)
+//
+// First non-litigation spoke. Different schema (usc_sections), different
+// filter axes (title / positive-law / status / FTS / citation), different
+// "rows" shape (citation + heading instead of case_name + docket).
+//
+// Display columns kept minimal: enough for the manual-filter results
+// table — `id`, `title_num`, `title_name`, `citation`, `heading`,
+// `section_identifier`, `is_positive_law`, `status`, `text_length`. The
+// full `text_content` is fetched separately by the section-detail view
+// (lands in a follow-up PR).
+//
+// AI modes for USC need USC-shaped system prompts (the cases schema doc
+// doesn't apply) and land in their own PR; v1 alpha is keyword + metadata
+// filtering only, per brief #3's free-tier metadata floor principle.
+// ============================================================================
+
+var USC_DISPLAY_COLS = "id, title_num, title_name, citation, heading, section_identifier, is_positive_law, status, text_length";
+
+/**
+ * Build the WHERE clause for /corpus/usc/filter. Only fields the user
+ * explicitly provided land in the SQL — empty / undefined fields are
+ * dropped. Inputs that go into the SQL as literals are escaped via the
+ * same single-quote-doubling rule the litigation handler uses; integer
+ * fields are coerced and rejected if non-finite (preventing injection).
+ *
+ * Supported axes:
+ *   search             FTS over fts (websearch_to_tsquery)
+ *   title              integer title number; exact match on title_num
+ *   citation           "8 U.S.C. § 1225" — exact match on the canonical
+ *                      citation column (the #1 USC entry path per brief
+ *                      #3 §1 question #2)
+ *   positiveLaw        boolean — true filters to is_positive_law sections
+ *   status             active / repealed / etc — exact match on status
+ *   heading            substring (ILIKE %heading%) on the section heading
+ */
+function buildUscFilterWhere(fields) {
+  var parts = [];
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var q = fields.search.trim().replace(/'/g, "''");
+    parts.push("fts @@ websearch_to_tsquery('english', '" + q + "')");
+  }
+  if (fields.title != null) {
+    var t = Number(fields.title);
+    if (Number.isFinite(t)) parts.push("title_num = " + Math.floor(t));
+  }
+  if (fields.citation && typeof fields.citation === 'string' && fields.citation.trim()) {
+    var c = fields.citation.trim().replace(/'/g, "''");
+    parts.push("citation = '" + c + "'");
+  }
+  if (fields.heading && typeof fields.heading === 'string' && fields.heading.trim()) {
+    var h = fields.heading.trim().replace(/'/g, "''");
+    parts.push("heading ILIKE '%" + h + "%'");
+  }
+  if (fields.positiveLaw === true) parts.push("is_positive_law = true");
+  if (fields.positiveLaw === false) parts.push("is_positive_law = false");
+  if (fields.status && typeof fields.status === 'string' && fields.status.trim()) {
+    var s = fields.status.trim().replace(/'/g, "''");
+    parts.push("status = '" + s + "'");
+  }
+  return parts.length ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusUscFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    const stats = await corpusRunQuery(env,
+      "SELECT (SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.usc_sections'::regclass) AS section_count, " +
+      "(SELECT MAX(release_point) FROM usc_sections) AS release_point");
+    // Title list — (title_num, title_name) pairs, distinct, ordered numerically.
+    // 53 titles is small enough to ship as a single fetch.
+    const titles = await corpusRunQuery(env,
+      "SELECT title_num, title_name FROM (" +
+      "SELECT DISTINCT title_num, title_name FROM usc_sections WHERE title_num IS NOT NULL" +
+      ") z ORDER BY title_num");
+    const statuses = await corpusRunQuery(env,
+      "SELECT v FROM (" +
+      "SELECT DISTINCT status AS v FROM usc_sections WHERE status IS NOT NULL AND status <> ''" +
+      ") z ORDER BY v");
+    const s = stats[0] || {};
+    return json({
+      section_count: s.section_count,
+      release_point: s.release_point,
+      titles: titles.map((r) => ({ num: r.title_num, name: r.title_name })),
+      statuses: statuses.map((r) => r.v)
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "USC facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+async function corpusUscFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const where = buildUscFilterWhere(fields);
+  // Match the litigation pattern: id-set query + display query. USC has no
+  // scope-stacking yet (v1 alpha has no stack runtime), so no scope param.
+  const idsSql = "SELECT id FROM usc_sections" + where;
+  const rowsSql = "SELECT " + USC_DISPLAY_COLS + " FROM usc_sections" + where +
+    " ORDER BY title_num NULLS LAST, section_num NULLS LAST LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "USC filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const ids = idRows.map((r) => r.id).filter((x) => x != null);
+  return json({
+    ids,
+    display_rows: rows,
+    count: ids.length,
+    generated_sql: rowsSql,
+    executed_sql: idsSql
+  }, 200);
+}
+
 // Docket entries for one case (the case-detail view).
 async function corpusEntriesHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
@@ -2701,6 +2829,7 @@ export {
   estimateInputTokens,
   checkPaidBudget,
   pickCheckoutReturnOrigin,
+  buildUscFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
