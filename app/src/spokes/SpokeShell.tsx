@@ -5,12 +5,14 @@ import {
   type FilterFields,
   WorkerSqlError,
   fetchCorpusFacets,
+  runClaudeRead,
   runClaudeSql,
   runManualFilter,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { useByok } from '@/llm/use-byok'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
+import { ClaudeReadForm } from './components/ClaudeReadForm'
 import { ClaudeSqlForm } from './components/ClaudeSqlForm'
 import { FilterForm } from './components/FilterForm'
 import { ModeRow } from './components/ModeRow'
@@ -91,13 +93,13 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   }, [spoke])
 
   // Mode selection. manual_filter is always functional; claude_sql becomes
-  // available once a BYOK is configured.
+  // available once a BYOK is configured. claude_read additionally requires
+  // a populated scope (it operates on the current result page).
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
-  const enabledModes = useMemo<QueryMode[]>(() => {
-    const enabled: QueryMode[] = ['manual_filter']
-    if (byokConfigured) enabled.push('claude_sql')
-    return enabled
-  }, [byokConfigured])
+
+  // Forward-declared: rows / scope state lives further down but enabledModes
+  // depends on whether rows exist, so we use a derived count below.
+  // (`hasScope` is computed alongside the rows state.)
 
   // Result-page state. `source` tracks how the page was produced so the
   // results list can surface mode-specific provenance (e.g., the generated
@@ -108,6 +110,20 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  // Progress label for batched ops (claude_read). Empty during one-shot ops.
+  const [progressLabel, setProgressLabel] = useState<string | undefined>(
+    undefined,
+  )
+
+  const scopeSize = rows?.length ?? 0
+  const enabledModes = useMemo<QueryMode[]>(() => {
+    const enabled: QueryMode[] = ['manual_filter']
+    if (byokConfigured) enabled.push('claude_sql')
+    // claude_read operates on the current scope; only enable if both BYOK is
+    // configured AND there are rows to read.
+    if (byokConfigured && scopeSize > 0) enabled.push('claude_read')
+    return enabled
+  }, [byokConfigured, scopeSize])
 
   async function handleFilterSubmit(fields: FilterFields) {
     setQueryLoading(true)
@@ -176,6 +192,56 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
+  async function handleClaudeReadSubmit(criterion: string) {
+    if (!byok) {
+      setQueryError('Configure a BYOK key in AI access (header) first.')
+      return
+    }
+    if (!rows || rows.length === 0) return
+    const incomingIds = rows.map((r) => r.cl_id)
+    const incomingMap = new Map(rows.map((r) => [r.cl_id, r]))
+    setQueryLoading(true)
+    setQueryError(undefined)
+    setProgressLabel(`Reading 0 / ${incomingIds.length.toLocaleString()} cases…`)
+    setHasRun(true)
+    try {
+      const { verdicts } = await runClaudeRead({
+        criterion,
+        clIds: incomingIds,
+        byok,
+        onProgress: (done, total) => {
+          setProgressLabel(
+            `Reading ${done.toLocaleString()} / ${total.toLocaleString()} cases…`,
+          )
+        },
+      })
+      // Filter the existing display rows to the kept set — we already have
+      // the full CaseDisplayRow for every incoming case, so there's no need
+      // to re-fetch via /corpus/cases (the legacy index.html re-fetches
+      // because its incoming scope can outpace what's locally rendered).
+      const keptRows = incomingIds
+        .filter((id) => verdicts[id]?.keep)
+        .map((id) => incomingMap.get(id))
+        .filter((r): r is CaseDisplayRow => r != null)
+      setRows(keptRows)
+      setCount(keptRows.length)
+      setSource({
+        kind: 'claude_read',
+        criterion,
+        incomingCount: incomingIds.length,
+        keptCount: keptRows.length,
+        verdicts,
+      })
+    } catch (e) {
+      setQueryError(e instanceof Error ? e.message : String(e))
+      // Preserve the existing rows so the user doesn't lose their scope on
+      // an orchestrator-level failure.
+    } finally {
+      setQueryLoading(false)
+      setProgressLabel(undefined)
+    }
+  }
+
   // Case-detail state. Open === true while the sheet is mounted+animating;
   // openCase keeps the row reference around through the close animation so
   // the panel content doesn't flicker on dismiss. (We don't clear openCase
@@ -223,6 +289,15 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           loading={queryLoading}
           byokConfigured={byokConfigured}
           onSubmit={handleClaudeSqlSubmit}
+        />
+      )}
+      {activeMode === 'claude_read' && (
+        <ClaudeReadForm
+          loading={queryLoading}
+          byokConfigured={byokConfigured}
+          scopeSize={scopeSize}
+          progressLabel={progressLabel}
+          onSubmit={handleClaudeReadSubmit}
         />
       )}
       <ResultsList
