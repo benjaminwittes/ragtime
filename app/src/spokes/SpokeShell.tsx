@@ -7,6 +7,7 @@ import {
   type CaseDisplayRow,
   type CorpusFacets,
   type FilterFields,
+  type FilterScope,
   WorkerSqlError,
   fetchCasesByIds,
   fetchCorpusFacets,
@@ -19,7 +20,10 @@ import {
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { useByok } from '@/llm/use-byok'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { AmaPreflight } from './components/AmaPreflight'
+import { Breadcrumb } from './components/Breadcrumb'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
 import { ClaudeAmaForm, type AmaLogLine } from './components/ClaudeAmaForm'
 import { ClaudeAnalysisForm } from './components/ClaudeAnalysisForm'
@@ -27,8 +31,16 @@ import { ClaudeReadForm } from './components/ClaudeReadForm'
 import { ClaudeSqlForm } from './components/ClaudeSqlForm'
 import { FilterForm } from './components/FilterForm'
 import { ModeRow } from './components/ModeRow'
-import { ResultsList, type ResultSource } from './components/ResultsList'
+import { ResultsList } from './components/ResultsList'
 import { SpokeHeader } from './components/SpokeHeader'
+import {
+  type StackPage,
+  buildClaudeAmaLabel,
+  buildClaudeAnalysisLabel,
+  buildClaudeReadLabel,
+  buildClaudeSqlLabel,
+  buildManualFilterLabel,
+} from './stack'
 import type {
   CorpusHoldings,
   CorpusSpoke,
@@ -38,20 +50,24 @@ import type {
 /**
  * Generic spoke renderer chassis (per the SPEC.md design rationale).
  *
- * v1 (PR 4b): chassis + manual filter only.
- * v1.5 (PR 4c): + case-detail sheet.
- * v1.6 (PR 4d, this PR): + claude_sql via BYOK.
+ * v1.7 (PR 4h, this PR): stack runtime. Every operation pushes a
+ * `StackPage`; the breadcrumb lets the user view past pages read-only.
+ * The TIP (last page) is always the active scope for new operations.
+ * Brief #6 §0 decision 1: "the stack literally instantiates the
+ * auditability principle: the audit trail IS the navigable history of
+ * operations."
  *
- * No stack runtime yet (per brief #6 §6 modifications, stack affordances
- * appear only after at least one operation has produced a page; this PR's
- * flat one-page execution sidesteps the stack data model, which lands with
- * PR 4g). Each query supersedes the previous result page.
+ * Stack affordances (breadcrumb, viewing-past banner) appear only after
+ * the first operation lands — empty state is genuinely empty per the
+ * brief's "rebuild fixes that wart" call-out.
  *
  * Data flow:
- *   - On mount: fetch /corpus/facets, populate holdings + filter dropdowns.
- *   - On filter submit: POST /corpus/filter, replace the result rows.
- *   - On claude_sql submit: POST /corpus/sql with BYOK, replace the result
- *     rows AND surface the model-generated SQL + label per brief #6 §7b.
+ *   - On mount: fetch /corpus/facets, populate holdings + dropdowns.
+ *   - On any mode submit: build scope from `tipPage` (the current scope),
+ *     run the Worker call, push a new page onto the stack.
+ *   - Viewing past via the breadcrumb is strictly read-only — submits
+ *     are guarded against viewing-past and the form is hidden behind a
+ *     banner with a "return to current" affordance.
  *   - On mount/unmount: setActiveSpokeSlug() so the docs-overlay shows
  *     spoke-scoped entries.
  */
@@ -80,14 +96,9 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     let cancelled = false
     void (async () => {
       try {
-        // Single call serves both purposes — getHoldings (per descriptor)
-        // and the filter form. The Worker's /corpus/facets returns counts
-        // + dropdown lists in one round-trip.
         const f = await fetchCorpusFacets()
         if (cancelled) return
         setFacets(f)
-        // Drive holdings through the descriptor so any future override on
-        // the holdings shape doesn't get bypassed here.
         const h = await spoke.getHoldings()
         if (cancelled) return
         setHoldings(h)
@@ -103,39 +114,72 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }, [spoke])
 
-  // Mode selection. manual_filter is always functional; claude_sql becomes
-  // available once a BYOK is configured. claude_read additionally requires
-  // a populated scope (it operates on the current result page).
+  // Mode selection. manual_filter is always functional; AI modes become
+  // available once a BYOK is configured. claude_read / claude_analysis
+  // additionally require a populated tip scope.
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
 
-  // Forward-declared: rows / scope state lives further down but enabledModes
-  // depends on whether rows exist, so we use a derived count below.
-  // (`hasScope` is computed alongside the rows state.)
-
-  // Result-page state. `source` tracks how the page was produced so the
-  // results list can surface mode-specific provenance (e.g., the generated
-  // SQL + the user's prompt for claude_sql) per brief #6 §7b auditability.
-  const [rows, setRows] = useState<CaseDisplayRow[] | undefined>(undefined)
-  const [count, setCount] = useState<number | undefined>(undefined)
-  const [source, setSource] = useState<ResultSource | undefined>(undefined)
+  // ── Stack state ────────────────────────────────────────────────────────
+  // The stack is the audit trail (brief #6 decision 1). Each operation
+  // pushes a StackPage. `viewingIdx` lets the user read-only-browse past
+  // pages via the breadcrumb; new operations always derive scope from
+  // the tip (= `stack[stack.length - 1]`), not from the viewing page.
+  const [stack, setStack] = useState<StackPage[]>([])
+  const [viewingIdx, setViewingIdx] = useState<number>(-1)
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
-  const [hasRun, setHasRun] = useState(false)
   // Progress label for batched ops (claude_read). Empty during one-shot ops.
   const [progressLabel, setProgressLabel] = useState<string | undefined>(
     undefined,
   )
 
-  const scopeSize = rows?.length ?? 0
+  // ── Derived stack state ────────────────────────────────────────────────
+  const tipPage = stack.length > 0 ? stack[stack.length - 1] : undefined
+  const viewingPage =
+    viewingIdx >= 0 && viewingIdx < stack.length
+      ? stack[viewingIdx]
+      : undefined
+  const isViewingTip = stack.length > 0 && viewingIdx === stack.length - 1
+  const hasStack = stack.length > 0
+  /** True when the user is browsing a past page (stack has entries AND
+   *  viewing isn't the tip). Empty stack is NOT viewing-past — the form
+   *  needs to render so the user can run their first operation. */
+  const isViewingPast = hasStack && !isViewingTip
+  const canSubmit = !isViewingPast
+
+  // Scope size = tip's row count. AI modes (read/analysis) gate on this
+  // because they operate on the active scope, not a past one.
+  const scopeSize = tipPage?.rows.length ?? 0
+
+  /** Push a new page onto the stack and move viewing to it. */
+  function pushPage(p: Omit<StackPage, 'id'>) {
+    const newPage: StackPage = { ...p, id: crypto.randomUUID() }
+    setStack((prev) => [...prev, newPage])
+    setViewingIdx(stack.length) // new tip index
+  }
+
+  /** Enter read-only view of a past page. -1 = the implicit "all cases"
+   *  root (no page rendered; just the breadcrumb). */
+  function viewPast(idx: number) {
+    setViewingIdx(idx)
+  }
+
+  /** Return to the tip — the active scope for new operations. */
+  function returnToTip() {
+    setViewingIdx(stack.length - 1)
+  }
+
+  /** Build the scope payload for /corpus/filter and /corpus/sql from the
+   *  tip's row IDs. Empty stack → empty scope (full corpus). */
+  function buildScopeFromTip(): FilterScope {
+    if (!tipPage || tipPage.rows.length === 0) return {}
+    return { cl_ids: tipPage.rows.map((r) => r.cl_id) }
+  }
+
   const enabledModes = useMemo<QueryMode[]>(() => {
     const enabled: QueryMode[] = ['manual_filter']
     if (byokConfigured) enabled.push('claude_sql')
-    // claude_read / claude_analysis operate on the current scope; only
-    // enable if BYOK is configured AND there are rows to read/analyze.
     if (byokConfigured && scopeSize > 0) enabled.push('claude_read')
-    // claude_analysis additionally has a server-side scope cap — disabling
-    // the tab beyond the cap surfaces the limit before the user invests in
-    // typing a prompt.
     if (
       byokConfigured &&
       scopeSize > 0 &&
@@ -143,91 +187,86 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     ) {
       enabled.push('claude_analysis')
     }
-    // claude_ama is BYOK-only at v1; it operates on the current scope OR the
-    // full corpus, so it has no scope gate. The pre-flight modal handles cost.
+    // claude_ama is BYOK-only; it operates on the current scope OR the full
+    // corpus, so it has no scope gate. The pre-flight modal handles cost.
     if (byokConfigured) enabled.push('claude_ama')
     return enabled
   }, [byokConfigured, scopeSize])
 
+  // ── Handlers ───────────────────────────────────────────────────────────
+
   async function handleFilterSubmit(fields: FilterFields) {
+    if (!canSubmit) return
     setQueryLoading(true)
     setQueryError(undefined)
-    setHasRun(true)
     try {
-      const r = await runManualFilter(fields)
-      setRows(r.display_rows)
-      setCount(r.count)
-      setSource({ kind: 'manual_filter', generatedSql: r.generated_sql })
+      const r = await runManualFilter(fields, buildScopeFromTip())
+      pushPage({
+        operationType: 'manual_filter',
+        operationLabel: buildManualFilterLabel(fields),
+        rows: r.display_rows,
+        count: r.count,
+        source: { kind: 'manual_filter', generatedSql: r.generated_sql },
+      })
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
-      setRows([])
-      setCount(0)
-      setSource(undefined)
     } finally {
       setQueryLoading(false)
     }
   }
 
   async function handleClaudeSqlSubmit(prompt: string) {
+    if (!canSubmit) return
     if (!byok) {
-      // Shouldn't be reachable — the form disables the submit when there's
-      // no key — but guard anyway.
       setQueryError('Configure a BYOK key in AI access (header) first.')
       return
     }
     setQueryLoading(true)
     setQueryError(undefined)
-    setHasRun(true)
     try {
-      const r = await runClaudeSql({ prompt }, byok)
-      setRows(r.display_rows)
-      setCount(r.count)
-      setSource({
-        kind: 'claude_sql',
-        prompt,
-        label: r.label,
-        generatedSql: r.generated_sql,
+      const r = await runClaudeSql(
+        { prompt, scope: buildScopeFromTip() },
+        byok,
+      )
+      pushPage({
+        operationType: 'claude_sql',
+        operationLabel: buildClaudeSqlLabel(prompt, r.label),
+        rows: r.display_rows,
+        count: r.count,
+        source: {
+          kind: 'claude_sql',
+          prompt,
+          label: r.label,
+          generatedSql: r.generated_sql,
+        },
       })
     } catch (e) {
       if (e instanceof WorkerSqlError) {
         setQueryError(e.message)
-        // Even on failure, surface the model's SQL so the user can
-        // diagnose what the AI proposed — the auditability principle
-        // (brief #6 §7b item 3).
-        if (e.generatedSql) {
-          setSource({
-            kind: 'claude_sql',
-            prompt,
-            label: '',
-            generatedSql: e.generatedSql,
-            errored: true,
-          })
-        } else {
-          setSource(undefined)
-        }
+        // Brief #6 §7b item 3 — surface the generated SQL even on
+        // failure. We DON'T push a page for failures (the audit trail
+        // captures successful operations only); the error and SQL
+        // surface inline on the current view.
       } else {
         setQueryError(e instanceof Error ? e.message : String(e))
-        setSource(undefined)
       }
-      setRows([])
-      setCount(0)
     } finally {
       setQueryLoading(false)
     }
   }
 
   async function handleClaudeReadSubmit(criterion: string) {
+    if (!canSubmit) return
     if (!byok) {
       setQueryError('Configure a BYOK key in AI access (header) first.')
       return
     }
-    if (!rows || rows.length === 0) return
-    const incomingIds = rows.map((r) => r.cl_id)
-    const incomingMap = new Map(rows.map((r) => [r.cl_id, r]))
+    if (!tipPage || tipPage.rows.length === 0) return
+    const incomingIds = tipPage.rows.map((r) => r.cl_id)
+    const incomingMap = new Map(tipPage.rows.map((r) => [r.cl_id, r]))
     setQueryLoading(true)
     setQueryError(undefined)
     setProgressLabel(`Reading 0 / ${incomingIds.length.toLocaleString()} cases…`)
-    setHasRun(true)
     try {
       const { verdicts } = await runClaudeRead({
         criterion,
@@ -239,27 +278,25 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           )
         },
       })
-      // Filter the existing display rows to the kept set — we already have
-      // the full CaseDisplayRow for every incoming case, so there's no need
-      // to re-fetch via /corpus/cases (the legacy index.html re-fetches
-      // because its incoming scope can outpace what's locally rendered).
       const keptRows = incomingIds
         .filter((id) => verdicts[id]?.keep)
         .map((id) => incomingMap.get(id))
         .filter((r): r is CaseDisplayRow => r != null)
-      setRows(keptRows)
-      setCount(keptRows.length)
-      setSource({
-        kind: 'claude_read',
-        criterion,
-        incomingCount: incomingIds.length,
-        keptCount: keptRows.length,
-        verdicts,
+      pushPage({
+        operationType: 'claude_read',
+        operationLabel: buildClaudeReadLabel(criterion),
+        rows: keptRows,
+        count: keptRows.length,
+        source: {
+          kind: 'claude_read',
+          criterion,
+          incomingCount: incomingIds.length,
+          keptCount: keptRows.length,
+          verdicts,
+        },
       })
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
-      // Preserve the existing rows so the user doesn't lose their scope on
-      // an orchestrator-level failure.
     } finally {
       setQueryLoading(false)
       setProgressLabel(undefined)
@@ -267,48 +304,50 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   }
 
   async function handleClaudeAnalysisSubmit(prompt: string) {
+    if (!canSubmit) return
     if (!byok) {
       setQueryError('Configure a BYOK key in AI access (header) first.')
       return
     }
-    if (!rows || rows.length === 0) return
-    const incomingIds = rows.map((r) => r.cl_id)
+    if (!tipPage || tipPage.rows.length === 0) return
+    const incomingIds = tipPage.rows.map((r) => r.cl_id)
     setQueryLoading(true)
     setQueryError(undefined)
-    setHasRun(true)
     try {
       const r = await runClaudeAnalysis(prompt, incomingIds, byok)
-      // Analyze never narrows — the Worker re-fetches display rows from the
-      // corpus and returns them; trust those as authoritative (consistent
-      // order with SQL_DISPLAY_COLS).
-      setRows(r.cases)
-      setCount(r.cases.length)
-      setSource({
-        kind: 'claude_analysis',
-        prompt,
-        markdown: r.markdown,
-        annotations: r.annotations,
-        analyzedCount: r.cases.length,
+      // Analyze never narrows — re-fetched rows from the Worker are
+      // authoritative (consistent order with SQL_DISPLAY_COLS).
+      pushPage({
+        operationType: 'claude_analysis',
+        operationLabel: buildClaudeAnalysisLabel(prompt),
+        rows: r.cases,
+        count: r.cases.length,
+        source: {
+          kind: 'claude_analysis',
+          prompt,
+          markdown: r.markdown,
+          annotations: r.annotations,
+          analyzedCount: r.cases.length,
+        },
       })
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
-      // Preserve scope on failure.
     } finally {
       setQueryLoading(false)
     }
   }
 
-  // AMA orchestrator state. The pre-flight modal is gated by
-  // `pendingPlan` — when non-null, the modal is shown and the user must
-  // confirm before /corpus/execute fires. `amaLog` drives the inline session
-  // log on the form (Planning / Plan / Executing / Done / Total cost).
+  // ── AMA orchestrator ───────────────────────────────────────────────────
+  // The pre-flight modal is gated by `pendingPlan` — when non-null, the
+  // modal is shown and the user must confirm before /corpus/execute fires.
+  // `amaLog` drives the inline session log on the form.
   const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
   const [pendingPlan, setPendingPlan] = useState<{
     plan: AmaPlan
     question: string
-    /** Snapshot of the rows at submission time. Used to filter the kept set
-     *  locally when AMA narrows over an existing scope; null when AMA ran
-     *  against the full corpus. */
+    /** Snapshot of the tip's rows at submission time. Used to filter the
+     *  kept set locally when AMA narrows over an existing scope; null when
+     *  AMA ran against the full corpus. */
     incomingRows: CaseDisplayRow[] | null
   } | null>(null)
 
@@ -316,11 +355,10 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setAmaLog((prev) => [...prev, line])
   }
 
-  /** Build the AMA scope payload. No prior rows = run against the full
-   *  corpus; otherwise scope the agent's queries to the current row set.
-   *  Mirrors buildAmaScopeSummary() in legacy index.html. */
+  /** Build the AMA scope payload from the tip. No tip = run against full
+   *  corpus. Mirrors buildAmaScopeSummary() in legacy index.html. */
   function buildAmaScope(): AmaScope {
-    if (!rows || rows.length === 0) {
+    if (!tipPage || tipPage.rows.length === 0) {
       return {
         is_full_db: true,
         count: facets?.case_count ?? 0,
@@ -328,14 +366,15 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       }
     }
     return {
-      cl_ids: rows.map((r) => r.cl_id),
+      cl_ids: tipPage.rows.map((r) => r.cl_id),
       is_full_db: false,
-      count: rows.length,
-      description: `${rows.length.toLocaleString()} cases from the current result page.`,
+      count: tipPage.rows.length,
+      description: `${tipPage.rows.length.toLocaleString()} cases from the current page.`,
     }
   }
 
   async function handleClaudeAmaSubmit(question: string) {
+    if (!canSubmit) return
     if (!byok) {
       setQueryError('Configure a BYOK key in AI access (header) first.')
       return
@@ -344,19 +383,14 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryError(undefined)
     setAmaLog([])
     appendAmaLog({ label: 'Step 1/3.', message: 'Planning the query…' })
-    // hasRun stays false through planning + pre-flight so a cancel leaves
-    // the page in its prior state. We flip it once rows land in
-    // runAmaExecute; the inline session log surfaces failures in the
-    // meantime so the user still sees what happened.
     const scope = buildAmaScope()
-    const incomingRowsSnapshot = rows ?? null
+    const incomingRowsSnapshot = tipPage?.rows ?? null
     let plan: AmaPlan
     try {
       plan = await runClaudePlan(question, scope, byok)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       appendAmaLog({ label: 'Plan failed.', message: msg, status: 'error' })
-      setHasRun(true)
       setQueryError(msg)
       setQueryLoading(false)
       return
@@ -368,8 +402,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     })
 
     if (plan.estimated_cost_cents > AMA_CONFIRM_THRESHOLD_CENTS) {
-      // Pause for pre-flight confirmation. The modal callbacks will either
-      // resume into runAmaExecute or cancel out.
       setPendingPlan({
         plan,
         question,
@@ -395,9 +427,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         status: 'done',
       })
 
-      // Empty or null incoming rows = no narrowed scope = the agent ran
-      // against the full corpus. Use facets.case_count so the disclosure
-      // shows the true "considered" total instead of 0.
+      // Empty or null incoming rows = full corpus.
       const incomingCount =
         incomingRowsSnapshot && incomingRowsSnapshot.length > 0
           ? incomingRowsSnapshot.length
@@ -409,7 +439,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       if (wantsList && synth.cl_ids && synth.cl_ids.length > 0) {
         narrowed = true
         if (incomingRowsSnapshot && incomingRowsSnapshot.length > 0) {
-          // Filter the local rows we already have — no fetch needed.
           const incomingMap = new Map(
             incomingRowsSnapshot.map((r) => [r.cl_id, r]),
           )
@@ -417,7 +446,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             .map((id) => incomingMap.get(id))
             .filter((r): r is CaseDisplayRow => r != null)
         } else {
-          // Full-corpus narrowing path — fetch display rows for the kept ids.
           outRows = await fetchCasesByIds(synth.cl_ids.slice(0, 10000))
         }
       } else {
@@ -431,22 +459,23 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         ...(synth.candor_notes ?? []),
       ])
 
-      setHasRun(true)
-      setRows(outRows)
-      setCount(outRows.length)
-      setSource({
-        kind: 'claude_ama',
-        question,
-        outputMode: synth.output_mode,
-        planSummary: plan.approach_summary,
-        candorNotes: allCandor,
-        answerMarkdown: synth.answer_markdown,
-        incomingCount,
-        outgoingCount: outRows.length,
-        narrowed,
+      pushPage({
+        operationType: 'claude_ama',
+        operationLabel: buildClaudeAmaLabel(question),
+        rows: outRows,
+        count: outRows.length,
+        source: {
+          kind: 'claude_ama',
+          question,
+          outputMode: synth.output_mode,
+          planSummary: plan.approach_summary,
+          candorNotes: allCandor,
+          answerMarkdown: synth.answer_markdown,
+          incomingCount,
+          outgoingCount: outRows.length,
+          narrowed,
+        },
       })
-      // Final cost line. _cost_cents is only populated for the paid path;
-      // BYOK leaves them undefined, in which case we just omit the tally.
       const total = (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0)
       if (total > 0) {
         appendAmaLog({
@@ -460,9 +489,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       appendAmaLog({ label: 'Execute failed.', message: msg, status: 'error' })
-      setHasRun(true)
       setQueryError(msg)
-      // Preserve incoming rows so the user doesn't lose their scope.
     } finally {
       setQueryLoading(false)
     }
@@ -486,10 +513,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryLoading(false)
   }
 
-  // Case-detail state. Open === true while the sheet is mounted+animating;
-  // openCase keeps the row reference around through the close animation so
-  // the panel content doesn't flicker on dismiss. (We don't clear openCase
-  // until the user picks a new one or refilters.)
+  // ── Case-detail state ──────────────────────────────────────────────────
   const [detailOpen, setDetailOpen] = useState(false)
   const [openCase, setOpenCase] = useState<CaseDisplayRow | null>(null)
 
@@ -512,7 +536,20 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         enabledModes={enabledModes}
         onSelect={setActiveMode}
       />
-      {activeMode === 'manual_filter' && (
+      {hasStack && (
+        <Breadcrumb
+          stack={stack}
+          viewingIdx={viewingIdx}
+          onViewPast={viewPast}
+          onReturnToTip={returnToTip}
+        />
+      )}
+      {isViewingPast && (
+        <ViewingPastBanner onReturnToTip={returnToTip} />
+      )}
+      {/* Forms — visible only when on the tip. Viewing past is read-only;
+       *  the banner above gives the user a one-click way back. */}
+      {canSubmit && activeMode === 'manual_filter' && (
         <FilterForm
           facets={spoke.facets}
           facetData={
@@ -528,14 +565,14 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           onSubmit={handleFilterSubmit}
         />
       )}
-      {activeMode === 'claude_sql' && (
+      {canSubmit && activeMode === 'claude_sql' && (
         <ClaudeSqlForm
           loading={queryLoading}
           byokConfigured={byokConfigured}
           onSubmit={handleClaudeSqlSubmit}
         />
       )}
-      {activeMode === 'claude_read' && (
+      {canSubmit && activeMode === 'claude_read' && (
         <ClaudeReadForm
           loading={queryLoading}
           byokConfigured={byokConfigured}
@@ -544,7 +581,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           onSubmit={handleClaudeReadSubmit}
         />
       )}
-      {activeMode === 'claude_analysis' && (
+      {canSubmit && activeMode === 'claude_analysis' && (
         <ClaudeAnalysisForm
           loading={queryLoading}
           byokConfigured={byokConfigured}
@@ -552,7 +589,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           onSubmit={handleClaudeAnalysisSubmit}
         />
       )}
-      {activeMode === 'claude_ama' && (
+      {canSubmit && activeMode === 'claude_ama' && (
         <ClaudeAmaForm
           loading={queryLoading}
           byokConfigured={byokConfigured}
@@ -562,12 +599,12 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         />
       )}
       <ResultsList
-        rows={rows}
-        count={count}
+        rows={viewingPage?.rows}
+        count={viewingPage?.count}
         loading={queryLoading}
         error={queryError}
-        hasRun={hasRun}
-        source={source}
+        hasRun={hasStack}
+        source={viewingPage?.source}
         onOpenCase={handleOpenCase}
       />
       <CaseDetailSheet
@@ -585,6 +622,37 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   )
 }
 
+/**
+ * Banner shown when the user is browsing a past stack page. The breadcrumb
+ * already has a "Return to current" button on the right; this banner makes
+ * the read-only state unmistakable above the result area.
+ */
+function ViewingPastBanner({ onReturnToTip }: { onReturnToTip: () => void }) {
+  return (
+    <div
+      role="status"
+      className={cn(
+        'flex items-center justify-between gap-4 border-b border-amber-400/40',
+        'bg-amber-500/10 px-6 py-2 text-xs text-amber-900 dark:text-amber-200',
+      )}
+    >
+      <span>
+        Viewing a past page (read-only). Return to the current page to run
+        new operations.
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onReturnToTip}
+        className="h-7 border-amber-400/60 text-xs"
+      >
+        Return to current
+      </Button>
+    </div>
+  )
+}
+
 /** Compact cent → dollars/cents formatter. <100¢ stays in cents for the
  *  low-cost-per-step UX; ≥100¢ flips to dollars. */
 function fmtCents(c: number | undefined): string {
@@ -593,8 +661,7 @@ function fmtCents(c: number | undefined): string {
   return `$${(c / 100).toFixed(2)}`
 }
 
-/** Stable de-duplication for candor notes — preserves first-occurrence order
- *  so plan caveats stay above synthesis caveats. */
+/** Stable de-duplication for candor notes. */
 function dedupe(xs: readonly string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
