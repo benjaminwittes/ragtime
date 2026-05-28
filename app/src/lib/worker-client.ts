@@ -137,6 +137,78 @@ export async function runManualFilter(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/entries — case detail
+ * ------------------------------------------------------------------------- */
+
+/** One docket entry row, shaped by the Worker's SELECT in corpusEntriesHandler. */
+export type DocketEntryRow = {
+  entry_number: number | null
+  entry_date: string | null
+  description: string | null
+}
+
+export type CaseEntriesResult = {
+  entries: DocketEntryRow[]
+}
+
+export async function fetchCaseEntries(clId: number): Promise<CaseEntriesResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/entries`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ cl_id: clId }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/entries failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CaseEntriesResult
+}
+
+/* ----------------------------------------------------------------------------
+ * Docket-entry rendering helpers (ported from index.html)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Strip bracketed 6-10 digit PACER internal document IDs (they don't map to
+ * public URLs) and normalize whitespace. Mirrors `renderDescription` in
+ * index.html. Returns the cleaned plain text; callers wrap in their own
+ * element + handle escaping (React handles that automatically).
+ */
+export function cleanEntryDescription(desc: string | null | undefined): string {
+  if (!desc) return ''
+  return String(desc)
+    .replace(/\s*\[\d{6,10}\]\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Build a CourtListener deep-link to a specific docket entry. Mirrors
+ * `entryLink` in index.html.
+ *
+ * The pattern `/<docket-id>/<entry-num>/<docket-slug>/` works for districts
+ * with small entry numbers; circuits and very large entry numbers fall back
+ * to the docket URL with an `#entry-N` anchor.
+ */
+export function entryDeepLink(
+  clUrl: string | null | undefined,
+  entryNum: number | null | undefined,
+  court: string | null | undefined,
+): string {
+  if (!clUrl) return '#'
+  const courtIsCircuit = court ? /^(ca\d+|cadc|cafc)$/.test(court) : false
+  const isLargeEntryNum =
+    entryNum != null && /^\d{6,}$/.test(String(entryNum))
+  const m = clUrl.match(
+    /^(https:\/\/www\.courtlistener\.com\/docket\/\d+)\/([^/?#]+)\/?$/,
+  )
+  if (m && !courtIsCircuit && !isLargeEntryNum && entryNum != null) {
+    return `${m[1]}/${entryNum}/${m[2]}/`
+  }
+  return clUrl.replace(/\/?$/, '/') + `#entry-${entryNum ?? ''}`
+}
+
+/* ----------------------------------------------------------------------------
  * Court taxonomy helpers
  * ------------------------------------------------------------------------- */
 
