@@ -13,20 +13,29 @@ import type { AmaPlan } from '@/lib/worker-client'
  * give the user a chance to refine the question rather than absorb a large
  * spend by reflex.
  *
- * Paid-tier UI (balance, per-query cap warning) is gated behind `mode`; for
- * PR 4g it's always BYOK. The paid-tier sign-in PR will populate the missing
- * fields without changing the API.
+ * Paid-mode extras (PR 4j): when `paidAccount` is non-null, the modal also
+ * shows the user's current balance and per-query cap, and warns when the
+ * estimate exceeds either. The Proceed button's copy adjusts to
+ * "Proceed (override cap)" when the user is choosing to spend above their
+ * own cap. Mirrors the legacy `showAmaPreflight()` cap/warning logic.
  */
 export function AmaPreflight({
   plan,
   open,
   onProceed,
   onCancel,
+  paidAccount,
 }: {
   plan: AmaPlan | null
   open: boolean
   onProceed: () => void
   onCancel: () => void
+  /** Paid-tier account snapshot. `null` in BYOK mode — balance/cap section
+   *  is hidden in that case. */
+  paidAccount: {
+    balance_cents: number
+    per_query_cap_cents: number
+  } | null
 }) {
   if (!plan) return null
 
@@ -36,6 +45,15 @@ export function AmaPreflight({
       : plan.output_mode === 'narrative'
         ? 'Narrative answer'
         : 'Hybrid (narrative + list)'
+
+  // Paid-mode budget signals.
+  const exceedsCap = paidAccount
+    ? plan.estimated_cost_cents > paidAccount.per_query_cap_cents
+    : false
+  const exceedsBalance = paidAccount
+    ? plan.estimated_cost_cents > paidAccount.balance_cents
+    : false
+  const proceedLabel = exceedsCap ? 'Proceed (override cap)' : 'Proceed'
 
   return (
     <Dialog.Root
@@ -102,7 +120,50 @@ export function AmaPreflight({
             <dd className="font-mono">
               {plan.queries.length.toLocaleString()}
             </dd>
+
+            {paidAccount && (
+              <>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Balance
+                </dt>
+                <dd className="font-mono">
+                  {fmtCents(paidAccount.balance_cents)}
+                </dd>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Per-query cap
+                </dt>
+                <dd className="font-mono">
+                  {fmtCents(paidAccount.per_query_cap_cents)}
+                </dd>
+              </>
+            )}
           </dl>
+
+          {paidAccount && exceedsCap && (
+            <p
+              className={cn(
+                'mt-3 rounded-md border border-amber-400/50 bg-amber-500/10',
+                'px-3 py-2 text-xs text-amber-900 dark:text-amber-200',
+              )}
+            >
+              Plan estimate ({fmtCents(plan.estimated_cost_cents)}) exceeds
+              your per-query cap ({fmtCents(paidAccount.per_query_cap_cents)}).
+              Refine the question to lower the estimate, or proceed once as
+              an override.
+            </p>
+          )}
+          {paidAccount && !exceedsCap && exceedsBalance && (
+            <p
+              className={cn(
+                'mt-3 rounded-md border border-destructive/40',
+                'bg-destructive/10 px-3 py-2 text-xs text-destructive',
+              )}
+            >
+              Plan estimate exceeds your balance. The query may still
+              complete cheaper than the high estimate, but if execution
+              would push the balance below zero the Worker will stop it.
+            </p>
+          )}
 
           <section className="mt-4 space-y-1">
             <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -140,7 +201,7 @@ export function AmaPreflight({
               Cancel
             </Button>
             <Button type="button" onClick={onProceed}>
-              Proceed
+              {proceedLabel}
             </Button>
           </div>
         </Dialog.Content>
