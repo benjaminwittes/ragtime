@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -61,15 +61,17 @@ export function FilterForm({
   const [from, setFrom] = useState(LITIGATION_FLOOR)
   const [to, setTo] = useState('')
 
-  // Court state: a Set of selected codes. Default to "all" once facetData arrives.
-  const [courtsSel, setCourtsSel] = useState<Set<string>>(new Set())
-  const [courtsInitialized, setCourtsInitialized] = useState(false)
-  useEffect(() => {
-    if (!courtsInitialized && facetData?.courts.length) {
-      setCourtsSel(new Set(facetData.courts))
-      setCourtsInitialized(true)
-    }
-  }, [facetData, courtsInitialized])
+  // Court state. `undefined` = user hasn't touched the courts; default to
+  // "all selected" derived from facetData. This sidesteps the "initialize
+  // state from async-arriving props" antipattern (`useEffect` that calls
+  // setState) — the default is computed during render instead.
+  const [userCourtsSel, setUserCourtsSel] = useState<Set<string> | undefined>(
+    undefined,
+  )
+  const courtsSel = useMemo(
+    () => userCourtsSel ?? new Set(facetData?.courts ?? []),
+    [userCourtsSel, facetData],
+  )
 
   const activePreset = useMemo<CourtPreset | null>(() => {
     if (!facetData) return null
@@ -78,12 +80,16 @@ export function FilterForm({
 
   function applyPreset(preset: CourtPreset) {
     if (!facetData) return
-    setCourtsSel(new Set(resolveCourtPreset(preset, facetData.courts)))
+    setUserCourtsSel(new Set(resolveCourtPreset(preset, facetData.courts)))
   }
 
   function toggleCourt(code: string) {
-    setCourtsSel((prev) => {
-      const next = new Set(prev)
+    setUserCourtsSel((prev) => {
+      // If the user hasn't touched the selection yet, the visible state is
+      // "all courts" from facetData — toggling one off means starting from
+      // that baseline.
+      const base = prev ?? new Set(facetData?.courts ?? [])
+      const next = new Set(base)
       if (next.has(code)) next.delete(code)
       else next.add(code)
       return next
@@ -99,7 +105,8 @@ export function FilterForm({
     setCause('')
     setFrom(LITIGATION_FLOOR)
     setTo('')
-    if (facetData) setCourtsSel(new Set(facetData.courts))
+    // Reset back to the "default = all courts from facetData" state.
+    setUserCourtsSel(undefined)
   }
 
   function handleSubmit(e: React.FormEvent) {
