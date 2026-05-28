@@ -226,6 +226,122 @@ export async function runClaudeSql(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/read-batch — per-case AI keep/drop judgment ("claude_read" mode)
+ * ------------------------------------------------------------------------- */
+
+/** One AI verdict on a case. Shape matches the Worker's parseReadBatch output. */
+export type ReadVerdict = {
+  cl_id: number
+  keep: boolean
+  reason: string
+}
+
+export type ReadBatchResult = {
+  verdicts: ReadVerdict[]
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Tuning knobs ported from index.html — small enough to be hand-curated and
+ *  worth keeping near the orchestrator that uses them. */
+export const READ_BATCH_SIZE = 25 // cases per /corpus/read-batch call
+export const READ_CONCURRENCY = 4 // parallel in-flight calls
+export const READ_MAX_BATCH = 100 // Worker hard cap per batch
+
+/** Single /corpus/read-batch call against a slice of case IDs. */
+export async function runReadBatch(
+  criterion: string,
+  clIds: readonly number[],
+  byok: ByokConfig,
+): Promise<ReadBatchResult> {
+  if (clIds.length === 0) return { verdicts: [] }
+  if (clIds.length > READ_MAX_BATCH) {
+    throw new Error(`Batch too large: ${clIds.length} > ${READ_MAX_BATCH}`)
+  }
+  const r = await fetch(`${WORKER_URL}/corpus/read-batch`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: byok.provider,
+      model: byok.model,
+      criterion,
+      cl_ids: clIds,
+      user_api_key: byok.apiKey,
+    }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/read-batch failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as ReadBatchResult
+}
+
+/**
+ * Orchestrator — reads all cases in `clIds` against `criterion`, batching to
+ * READ_BATCH_SIZE and running READ_CONCURRENCY batches in flight at a time.
+ * Calls `onProgress` after each completed batch so the UI can update a
+ * "Reading N / M cases…" status line.
+ *
+ * On batch failure: that batch's cases get marked dropped with the error
+ * message as the reason (same shape as legacy index.html). The orchestrator
+ * itself does NOT throw — partial results are useful.
+ */
+export async function runClaudeRead(opts: {
+  criterion: string
+  clIds: readonly number[]
+  byok: ByokConfig
+  onProgress?: (completed: number, total: number) => void
+  signal?: AbortSignal
+}): Promise<{ verdicts: Record<number, { keep: boolean; reason: string }> }> {
+  const { criterion, clIds, byok, onProgress, signal } = opts
+  const batches: number[][] = []
+  for (let i = 0; i < clIds.length; i += READ_BATCH_SIZE) {
+    batches.push([...clIds.slice(i, i + READ_BATCH_SIZE)])
+  }
+  const verdicts: Record<number, { keep: boolean; reason: string }> = {}
+  let completed = 0
+  onProgress?.(0, clIds.length)
+
+  // Concurrency-limited fan-out. Each "worker" pulls the next index off a
+  // shared cursor and runs its batch until none are left.
+  let cursor = 0
+  async function workerLoop() {
+    while (true) {
+      if (signal?.aborted) return
+      const i = cursor++
+      if (i >= batches.length) return
+      const batch = batches[i]
+      try {
+        const r = await runReadBatch(criterion, batch, byok)
+        for (const v of r.verdicts) {
+          verdicts[v.cl_id] = { keep: v.keep, reason: v.reason }
+        }
+        for (const id of batch) {
+          if (!(id in verdicts)) {
+            verdicts[id] = { keep: false, reason: 'no judgment returned' }
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        for (const id of batch) {
+          verdicts[id] = { keep: false, reason: `batch failed: ${msg}` }
+        }
+      } finally {
+        completed += batch.length
+        onProgress?.(Math.min(completed, clIds.length), clIds.length)
+      }
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(READ_CONCURRENCY, batches.length) },
+    () => workerLoop(),
+  )
+  await Promise.all(workers)
+  return { verdicts }
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/entries — case detail
  * ------------------------------------------------------------------------- */
 

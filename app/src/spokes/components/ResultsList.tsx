@@ -21,6 +21,16 @@ export type ResultSource =
       /** True when the run failed but the model still produced SQL. */
       errored?: boolean
     }
+  | {
+      kind: 'claude_read'
+      criterion: string
+      /** Total cases read (incoming scope size). */
+      incomingCount: number
+      /** Cases the AI judged keep===true (= rows.length after filtering). */
+      keptCount: number
+      /** Per-case verdict map. Drives the keep/drop badge + reason per row. */
+      verdicts: Record<number, { keep: boolean; reason: string }>
+    }
 
 /**
  * Result page — case rows + optional "how this was produced" disclosure.
@@ -108,45 +118,60 @@ export function ResultsList({
               <Th>Filed</Th>
               <Th>Cause</Th>
               <Th className="text-right">Entries</Th>
+              {source?.kind === 'claude_read' && <Th>AI reason</Th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {rows.map((r) => (
-              <tr
-                key={r.cl_id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onOpenCase(r)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    onOpenCase(r)
-                  }
-                }}
-                aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
-                className="cursor-pointer hover:bg-muted/50 focus:bg-muted/60 focus:outline-none"
-              >
-                <Td>
-                  <span className="font-medium text-foreground">
-                    {r.case_name ?? '(no name)'}
-                  </span>
-                </Td>
-                <Td className="font-mono text-xs text-muted-foreground">
-                  {r.docket_number ?? '—'}
-                </Td>
-                <Td className="font-mono text-xs uppercase">
-                  {r.court ?? '—'}
-                </Td>
-                <Td className="text-xs">{r.judge ?? '—'}</Td>
-                <Td className="font-mono text-xs">{r.date_filed ?? '—'}</Td>
-                <Td className="max-w-xs truncate text-xs" title={r.cause ?? undefined}>
-                  {shortCause(r.cause)}
-                </Td>
-                <Td className="text-right font-mono text-xs tabular-nums">
-                  {r.entry_count ?? '—'}
-                </Td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const verdict =
+                source?.kind === 'claude_read'
+                  ? source.verdicts[r.cl_id]
+                  : undefined
+              return (
+                <tr
+                  key={r.cl_id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onOpenCase(r)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenCase(r)
+                    }
+                  }}
+                  aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
+                  className="cursor-pointer hover:bg-muted/50 focus:bg-muted/60 focus:outline-none"
+                >
+                  <Td>
+                    <span className="font-medium text-foreground">
+                      {r.case_name ?? '(no name)'}
+                    </span>
+                  </Td>
+                  <Td className="font-mono text-xs text-muted-foreground">
+                    {r.docket_number ?? '—'}
+                  </Td>
+                  <Td className="font-mono text-xs uppercase">
+                    {r.court ?? '—'}
+                  </Td>
+                  <Td className="text-xs">{r.judge ?? '—'}</Td>
+                  <Td className="font-mono text-xs">{r.date_filed ?? '—'}</Td>
+                  <Td
+                    className="max-w-xs truncate text-xs"
+                    title={r.cause ?? undefined}
+                  >
+                    {shortCause(r.cause)}
+                  </Td>
+                  <Td className="text-right font-mono text-xs tabular-nums">
+                    {r.entry_count ?? '—'}
+                  </Td>
+                  {source?.kind === 'claude_read' && (
+                    <Td className="max-w-sm text-xs text-muted-foreground">
+                      {verdict?.reason ?? '—'}
+                    </Td>
+                  )}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -204,13 +229,17 @@ function shortCause(c: string | null | undefined): string {
  * are higher when the AI wrote it).
  */
 function SourceDisclosure({ source }: { source: ResultSource }) {
-  const [open, setOpen] = useState(source.kind === 'claude_sql')
+  const [open, setOpen] = useState(
+    source.kind === 'claude_sql' || source.kind === 'claude_read',
+  )
   const title =
     source.kind === 'claude_sql'
       ? source.errored
         ? 'How this was produced (failed)'
         : 'How this was produced'
-      : 'Executed SQL'
+      : source.kind === 'claude_read'
+        ? `AI read ${source.incomingCount.toLocaleString()} cases · kept ${source.keptCount.toLocaleString()}`
+        : 'Executed SQL'
 
   return (
     <details
@@ -242,14 +271,26 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
             )}
           </>
         )}
-        <div>
-          <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Generated SQL
-          </span>
-          <pre className="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-[11px] leading-relaxed text-foreground">
-            {source.generatedSql}
-          </pre>
-        </div>
+        {source.kind === 'claude_read' && (
+          <div>
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Criterion
+            </span>
+            <p className="mt-1 whitespace-pre-wrap text-foreground">
+              {source.criterion}
+            </p>
+          </div>
+        )}
+        {(source.kind === 'claude_sql' || source.kind === 'manual_filter') && (
+          <div>
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Generated SQL
+            </span>
+            <pre className="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-[11px] leading-relaxed text-foreground">
+              {source.generatedSql}
+            </pre>
+          </div>
+        )}
       </div>
     </details>
   )
