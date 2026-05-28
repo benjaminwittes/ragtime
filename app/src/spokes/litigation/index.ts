@@ -1,39 +1,42 @@
 import type { CorpusSpoke } from '../types'
+import { fetchCorpusFacets } from '@/lib/worker-client'
 
 /**
- * STUB litigation spoke.
+ * Litigation spoke.
  *
- * Declares the descriptor shape to validate the type system and seed the
- * registry. The actual implementation (UI, query execution, detail panel,
- * AI mode flows) lands in PR 5 per the foundation-work sequence, drawing
- * directly from the existing single-file `index.html` per the brief #6
- * "wholesale port" decision.
+ * Declares the descriptor for the litigation surface. The rendering layer
+ * (header band, filter form, results list, etc.) is the generic spoke
+ * renderer in ../SpokeShell.tsx; the descriptor here drives what it shows.
  *
- * `getHoldings` currently returns zeros — once the spoke is wired to the
- * Worker's /corpus/* endpoints (or directly to the corpus Supabase project
- * for free-tier reads), it'll hit the corpus_holdings matview added in
- * brief #6 decision 10 and return real counts.
+ * `getHoldings` calls the Worker's /corpus/facets endpoint — which the
+ * filter form also consumes — and reshapes its response into the
+ * descriptor's CorpusHoldings type.
  */
 export const litigationSpoke: CorpusSpoke = {
   slug: 'litigation',
   title: 'Federal court litigation',
   description:
     'Federal district court and appellate dockets, with full docket entries and OCR text of attached filings.',
-  status: 'coming-soon',
+  status: 'active',
 
   plainEnglishDisclosure:
     'Federal cases filed since January 20, 2025. Current as of [last_synced_at].',
 
-  getHoldings: async () => ({
-    counts: { cases: 0, docketEntries: 0 },
-    coverage:
-      'Federal district + appellate courts, post-2025-01-20 floor (backward expansion deferred to post-beta)',
-    lastUpdated: new Date(0),
-    knownGaps: [
-      'No coverage pre-2025-01-20 — backward expansion on rainy-day list',
-      'FTS over full document text deferred to PR alongside spoke implementation (brief #6 decision 7)',
-    ],
-  }),
+  getHoldings: async () => {
+    const f = await fetchCorpusFacets()
+    return {
+      counts: { cases: f.case_count, docketEntries: f.entry_count },
+      coverage:
+        'Federal district + appellate courts, post-2025-01-20 floor (backward expansion deferred to post-beta).',
+      // `last_synced` is YYYY-MM-DD from the Worker; preserved as string so
+      // formatters can choose how to render. CorpusHoldings allows Date|string.
+      lastUpdated: f.last_synced,
+      knownGaps: [
+        'No coverage pre-2025-01-20 — backward expansion on rainy-day list.',
+        'FTS runs over docket-entry descriptions today; full-document FTS lands when the documents.text_content column is populated by the ragtime-pipeline backfill (harvest-pcg agent) and indexed (brief #6 decision 7).',
+      ],
+    }
+  },
 
   // Five modes ported wholesale per brief #6 decision 3 — the set has earned
   // its keep through production use; the React port is a re-skin + refactor,
