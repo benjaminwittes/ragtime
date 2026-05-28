@@ -1,0 +1,64 @@
+name: Build App
+
+# Builds and validates the React app (`app/`) on PR + push.
+#
+# Trigger behavior:
+#   - pull_request touching app/**  → install, lint, build (validates compile)
+#   - push to main touching app/**  → same (validates main stays buildable)
+#
+# This workflow does NOT deploy the app. The production site at
+# https://benjaminwittes.github.io/ragtime/ is still served from the legacy
+# single-file index.html at the repo root via GH Pages source = main:/.
+# A separate cutover PR will:
+#   (a) flip GH Pages to deploy the React build artifact (either via
+#       actions/deploy-pages with source = "GitHub Actions", or via a
+#       gh-pages branch pattern),
+#   (b) add the actual deploy step to this workflow,
+#   (c) coordinate the DNS/serving cutover so the live site doesn't blink.
+# Until then, this workflow is build-validation only.
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-app.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never let two builds race each other.
+concurrency:
+  group: build-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
