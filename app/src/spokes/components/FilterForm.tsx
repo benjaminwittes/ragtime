@@ -153,39 +153,71 @@ export function FilterForm({
       </div>
 
       {showCourts && (
-        <Field label="Courts">
+        // Fieldset, not Field — Field wraps in a <label>, which would make
+        // the preset buttons inherit the whole legend + checkbox list as
+        // their accessible names. <fieldset><legend> is the correct
+        // semantic for a group of related controls.
+        <fieldset className="block space-y-1.5">
+          <legend className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Courts
+          </legend>
           <div className="space-y-2">
-            <div className="flex flex-wrap gap-1.5">
-              {(['all', 'district', 'circuit', 'none'] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => applyPreset(p)}
-                  disabled={!facetData}
-                  className={cn(
-                    'rounded-md border border-border px-2.5 py-1 text-xs font-medium transition-colors',
-                    activePreset === p
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'bg-background text-foreground hover:bg-muted',
-                    !facetData && 'cursor-not-allowed opacity-50',
-                  )}
-                >
-                  {p === 'all'
+            <div
+              role="group"
+              aria-label="Court selection presets"
+              className="flex flex-wrap gap-1.5"
+            >
+              {(['all', 'district', 'circuit', 'none'] as const).map((p) => {
+                const label =
+                  p === 'all'
                     ? 'All'
                     : p === 'district'
                       ? 'District'
                       : p === 'circuit'
                         ? 'Circuit'
-                        : 'None'}
-                </button>
-              ))}
-              <span className="ml-auto self-center text-xs text-muted-foreground">
+                        : 'None'
+                const a11yLabel =
+                  p === 'all'
+                    ? 'Select all courts'
+                    : p === 'district'
+                      ? 'Select district courts only'
+                      : p === 'circuit'
+                        ? 'Select circuit courts only'
+                        : 'Clear court selection'
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    aria-pressed={activePreset === p}
+                    aria-label={a11yLabel}
+                    onClick={() => applyPreset(p)}
+                    disabled={!facetData}
+                    className={cn(
+                      'rounded-md border border-border px-2.5 py-1 text-xs font-medium transition-colors',
+                      activePreset === p
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'bg-background text-foreground hover:bg-muted',
+                      !facetData && 'cursor-not-allowed opacity-50',
+                    )}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+              <span
+                aria-live="polite"
+                className="ml-auto self-center text-xs text-muted-foreground"
+              >
                 {facetData
                   ? `${courtsSel.size} of ${facetData.courts.length} selected`
                   : 'loading…'}
               </span>
             </div>
-            <ScrollArea className="h-48 rounded-md border border-border bg-background">
+            <ScrollArea
+              role="group"
+              aria-label="Court list"
+              className="h-48 rounded-md border border-border bg-background"
+            >
               <ul className="divide-y divide-border">
                 {(facetData?.courts ?? []).map((code) => {
                   const checked = courtsSel.has(code)
@@ -228,7 +260,7 @@ export function FilterForm({
               </ul>
             </ScrollArea>
           </div>
-        </Field>
+        </fieldset>
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
