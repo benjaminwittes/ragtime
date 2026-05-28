@@ -17,7 +17,7 @@
  * `wrangler dev` instance.
  */
 
-import type { ByokConfig } from '@/llm/byok-context'
+import { type AuthArg, authBody, authHeaders } from '@/lib/auth-arg'
 
 const WORKER_URL =
   (import.meta.env.VITE_WORKER_URL as string | undefined) ||
@@ -200,17 +200,15 @@ export class WorkerSqlError extends Error {
 
 export async function runClaudeSql(
   req: SqlGenRequest,
-  byok: ByokConfig,
+  auth: AuthArg,
 ): Promise<SqlGenResult> {
   const r = await fetch(`${WORKER_URL}/corpus/sql`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: authHeaders(auth),
     body: JSON.stringify({
-      provider: byok.provider,
-      model: byok.model,
+      ...authBody(auth),
       prompt: req.prompt,
       scope: req.scope ?? {},
-      user_api_key: byok.apiKey,
     }),
   })
   if (!r.ok) {
@@ -273,17 +271,15 @@ export class WorkerAnalysisError extends Error {
 export async function runClaudeAnalysis(
   prompt: string,
   clIds: readonly number[],
-  byok: ByokConfig,
+  auth: AuthArg,
 ): Promise<AnalysisResult> {
   const r = await fetch(`${WORKER_URL}/corpus/analyze`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: authHeaders(auth),
     body: JSON.stringify({
-      provider: byok.provider,
-      model: byok.model,
+      ...authBody(auth),
       prompt,
       cl_ids: clIds,
-      user_api_key: byok.apiKey,
     }),
   })
   if (!r.ok) {
@@ -405,17 +401,15 @@ export class WorkerAmaError extends Error {
 export async function runClaudePlan(
   question: string,
   scope: AmaScope,
-  byok: ByokConfig,
+  auth: AuthArg,
 ): Promise<AmaPlan> {
   const r = await fetch(`${WORKER_URL}/corpus/plan`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: authHeaders(auth),
     body: JSON.stringify({
-      provider: byok.provider,
-      model: byok.model,
+      ...authBody(auth),
       question,
       scope,
-      user_api_key: byok.apiKey,
     }),
   })
   if (!r.ok) {
@@ -434,14 +428,16 @@ export async function runClaudePlan(
 
 export async function runClaudeExecute(
   token: string,
-  byok: ByokConfig,
+  auth: AuthArg,
 ): Promise<AmaSynthesis> {
   const r = await fetch(`${WORKER_URL}/corpus/execute`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: authHeaders(auth),
     body: JSON.stringify({
       token,
-      user_api_key: byok.apiKey,
+      // BYOK still carries the api key in the body; paid mode adds nothing
+      // here since the JWT is on the Authorization header.
+      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
     }),
   })
   if (!r.ok) {
@@ -509,7 +505,7 @@ export const READ_MAX_BATCH = 100 // Worker hard cap per batch
 export async function runReadBatch(
   criterion: string,
   clIds: readonly number[],
-  byok: ByokConfig,
+  auth: AuthArg,
 ): Promise<ReadBatchResult> {
   if (clIds.length === 0) return { verdicts: [] }
   if (clIds.length > READ_MAX_BATCH) {
@@ -517,13 +513,11 @@ export async function runReadBatch(
   }
   const r = await fetch(`${WORKER_URL}/corpus/read-batch`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: authHeaders(auth),
     body: JSON.stringify({
-      provider: byok.provider,
-      model: byok.model,
+      ...authBody(auth),
       criterion,
       cl_ids: clIds,
-      user_api_key: byok.apiKey,
     }),
   })
   if (!r.ok) {
@@ -546,11 +540,11 @@ export async function runReadBatch(
 export async function runClaudeRead(opts: {
   criterion: string
   clIds: readonly number[]
-  byok: ByokConfig
+  auth: AuthArg
   onProgress?: (completed: number, total: number) => void
   signal?: AbortSignal
 }): Promise<{ verdicts: Record<number, { keep: boolean; reason: string }> }> {
-  const { criterion, clIds, byok, onProgress, signal } = opts
+  const { criterion, clIds, auth, onProgress, signal } = opts
   const batches: number[][] = []
   for (let i = 0; i < clIds.length; i += READ_BATCH_SIZE) {
     batches.push([...clIds.slice(i, i + READ_BATCH_SIZE)])
@@ -569,7 +563,7 @@ export async function runClaudeRead(opts: {
       if (i >= batches.length) return
       const batch = batches[i]
       try {
-        const r = await runReadBatch(criterion, batch, byok)
+        const r = await runReadBatch(criterion, batch, auth)
         for (const v of r.verdicts) {
           verdicts[v.cl_id] = { keep: v.keep, reason: v.reason }
         }

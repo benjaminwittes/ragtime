@@ -19,7 +19,8 @@ import {
   runManualFilter,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
-import { useByok } from '@/llm/use-byok'
+import { usePaid } from '@/auth/use-paid'
+import { useAuth } from '@/lib/use-auth'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AmaPreflight } from './components/AmaPreflight'
@@ -73,7 +74,13 @@ import type {
  */
 export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const { setActiveSpokeSlug } = useDocs()
-  const { config: byok, isConfigured: byokConfigured } = useByok()
+  const auth = useAuth()
+  const paid = usePaid()
+  // `byokConfigured` retained as a boolean for forms that gate on auth
+  // availability — its meaning becomes "any AI auth is available", which
+  // matches what the forms actually need. Renamed for clarity later if it
+  // creates friction; for now the diff stays focused on auth wiring.
+  const byokConfigured = auth.hasAuth
 
   // Docs context: tell the overlay which spoke is active so entries scoped
   // to this corpus appear (per docs-registry contract from PR 4a / #36).
@@ -217,8 +224,8 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   async function handleClaudeSqlSubmit(prompt: string) {
     if (!canSubmit) return
-    if (!byok) {
-      setQueryError('Configure a BYOK key in AI access (header) first.')
+    if (!auth.auth) {
+      setQueryError('Configure AI access (header, top right) first.')
       return
     }
     setQueryLoading(true)
@@ -226,8 +233,11 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r = await runClaudeSql(
         { prompt, scope: buildScopeFromTip() },
-        byok,
+        auth.auth,
       )
+      if (typeof r._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(r._balance_cents)
+      }
       pushPage({
         operationType: 'claude_sql',
         operationLabel: buildClaudeSqlLabel(prompt, r.label),
@@ -257,8 +267,8 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   async function handleClaudeReadSubmit(criterion: string) {
     if (!canSubmit) return
-    if (!byok) {
-      setQueryError('Configure a BYOK key in AI access (header) first.')
+    if (!auth.auth) {
+      setQueryError('Configure AI access (header, top right) first.')
       return
     }
     if (!tipPage || tipPage.rows.length === 0) return
@@ -271,7 +281,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       const { verdicts } = await runClaudeRead({
         criterion,
         clIds: incomingIds,
-        byok,
+        auth: auth.auth,
         onProgress: (done, total) => {
           setProgressLabel(
             `Reading ${done.toLocaleString()} / ${total.toLocaleString()} cases…`,
@@ -305,8 +315,8 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   async function handleClaudeAnalysisSubmit(prompt: string) {
     if (!canSubmit) return
-    if (!byok) {
-      setQueryError('Configure a BYOK key in AI access (header) first.')
+    if (!auth.auth) {
+      setQueryError('Configure AI access (header, top right) first.')
       return
     }
     if (!tipPage || tipPage.rows.length === 0) return
@@ -314,7 +324,10 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryLoading(true)
     setQueryError(undefined)
     try {
-      const r = await runClaudeAnalysis(prompt, incomingIds, byok)
+      const r = await runClaudeAnalysis(prompt, incomingIds, auth.auth)
+      if (typeof r._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(r._balance_cents)
+      }
       // Analyze never narrows — re-fetched rows from the Worker are
       // authoritative (consistent order with SQL_DISPLAY_COLS).
       pushPage({
@@ -375,8 +388,8 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!canSubmit) return
-    if (!byok) {
-      setQueryError('Configure a BYOK key in AI access (header) first.')
+    if (!auth.auth) {
+      setQueryError('Configure AI access (header, top right) first.')
       return
     }
     setQueryLoading(true)
@@ -387,7 +400,10 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     const incomingRowsSnapshot = tipPage?.rows ?? null
     let plan: AmaPlan
     try {
-      plan = await runClaudePlan(question, scope, byok)
+      plan = await runClaudePlan(question, scope, auth.auth)
+      if (typeof plan._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(plan._balance_cents)
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       appendAmaLog({ label: 'Plan failed.', message: msg, status: 'error' })
@@ -417,10 +433,13 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     question: string,
     incomingRowsSnapshot: CaseDisplayRow[] | null,
   ) {
-    if (!byok) return
+    if (!auth.auth) return
     appendAmaLog({ label: 'Step 2/3.', message: 'Executing planned queries…' })
     try {
-      const synth = await runClaudeExecute(plan.token, byok)
+      const synth = await runClaudeExecute(plan.token, auth.auth)
+      if (typeof synth._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(synth._balance_cents)
+      }
       appendAmaLog({
         label: 'Step 3/3.',
         message: 'Synthesized the answer.',
@@ -617,6 +636,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         open={!!pendingPlan}
         onProceed={handleAmaProceed}
         onCancel={handleAmaCancel}
+        paidAccount={auth.isPaid ? paid.account : null}
       />
     </div>
   )

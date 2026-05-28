@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LogOutIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -9,39 +10,61 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/use-auth'
+import { usePaid } from '@/auth/use-paid'
 import type { Provider } from './byok-context'
 import { useByok } from './use-byok'
 
 /**
- * "AI access" header affordance — opens a sheet where the user configures
- * their bring-your-own-key. v1 supports Anthropic only (the Worker accepts
- * OpenAI / Google on the BYOK path, but the React app doesn't surface them
- * yet — adding more providers is a config-only follow-up).
+ * "AI access" header affordance — opens a sheet with two ways to authorize
+ * AI mode calls:
  *
- * Lives next to the docs trigger in the spoke header. Renders a status pip
- * (configured / not configured) so the user can see at a glance whether
- * AI modes are available without opening the sheet.
+ *   1. Lawfare-billed (paid tier) — magic-link sign-in via Supabase Auth.
+ *      Signed-in users see their email, balance, and per-query cap, plus
+ *      a sign-out button. Top-up (Stripe Checkout) is a follow-up PR.
+ *
+ *   2. Bring your own key — paste an Anthropic API key. The Worker forwards
+ *      it to the provider on each call and discards.
+ *
+ *   Both can be configured simultaneously; the spoke's `useAuth()` resolves
+ *   to whichever is active (paid > BYOK precedence per the legacy app).
+ *
+ * The trigger renders a status pip — emerald when paid is active, slate
+ * when BYOK only, grey when neither. The sheet itself is paged: a tab row
+ * at the top lets the user switch between the paid and BYOK panels.
  */
 export function AccessSettings() {
-  const { config, isConfigured, save, clear, defaultModelFor } = useByok()
+  const auth = useAuth()
   const [open, setOpen] = useState(false)
+  // Default the active tab to whatever the user has configured (or paid
+  // when neither, since paid is the recommended path). Persisted only for
+  // the lifetime of the sheet open — re-opens restart from the default.
+  const [tab, setTab] = useState<'paid' | 'byok'>(
+    auth.isPaid ? 'paid' : auth.hasByok ? 'byok' : 'paid',
+  )
+
+  const pipColor = auth.isPaid
+    ? 'bg-primary'
+    : auth.hasByok
+      ? 'bg-emerald-500'
+      : 'bg-muted-foreground/40'
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Configure AI access (bring your own key)"
+        onClick={() => {
+          setTab(auth.isPaid ? 'paid' : auth.hasByok ? 'byok' : 'paid')
+          setOpen(true)
+        }}
+        aria-label="Configure AI access"
         className={cn(
           'flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium hover:bg-muted',
         )}
       >
         <span
           aria-hidden="true"
-          className={cn(
-            'inline-block size-1.5 rounded-full',
-            isConfigured ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-          )}
+          className={cn('inline-block size-1.5 rounded-full', pipColor)}
         />
         AI access
       </button>
@@ -52,29 +75,274 @@ export function AccessSettings() {
         <SheetHeader className="border-b border-border p-5 pr-12">
           <SheetTitle className="font-serif text-xl">AI access</SheetTitle>
           <SheetDescription>
-            Bring your own API key. AI modes (
-            <span className="font-mono">claude_sql</span>, etc.) will call the
-            Cloudflare Worker, which forwards your prompt to the provider
-            using this key. Stored in your browser's localStorage; cleared
-            with the Clear button below.
+            AI modes (writes SQL, reads cases, analyzes, AMA) need credentials.
+            Pick one path; you can switch later.
           </SheetDescription>
         </SheetHeader>
+        <div className="border-b border-border bg-muted/30">
+          <TabRow tab={tab} setTab={setTab} />
+        </div>
         <div className="flex-1 overflow-y-auto p-5">
-          <ByokForm
-            initial={config}
-            defaultModelFor={defaultModelFor}
-            onSave={(next) => {
-              save(next)
-              setOpen(false)
-            }}
-            onClear={() => {
-              clear()
-              setOpen(false)
-            }}
-          />
+          {tab === 'paid' ? (
+            <PaidPanel onClose={() => setOpen(false)} />
+          ) : (
+            <ByokPanel onClose={() => setOpen(false)} />
+          )}
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function TabRow({
+  tab,
+  setTab,
+}: {
+  tab: 'paid' | 'byok'
+  setTab: (t: 'paid' | 'byok') => void
+}) {
+  return (
+    <div role="tablist" className="flex">
+      <TabButton
+        active={tab === 'paid'}
+        onClick={() => setTab('paid')}
+        label="Lawfare-billed"
+        sub="Prepaid blocks"
+      />
+      <TabButton
+        active={tab === 'byok'}
+        onClick={() => setTab('byok')}
+        label="Bring your own key"
+        sub="Anthropic only"
+      />
+    </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+  sub,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  sub: string
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        'flex-1 border-b-2 px-4 py-3 text-left text-sm transition',
+        active
+          ? 'border-primary text-foreground'
+          : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+      )}
+    >
+      <span className="block font-medium">{label}</span>
+      <span className="block text-[11px] text-muted-foreground">{sub}</span>
+    </button>
+  )
+}
+
+function PaidPanel({ onClose }: { onClose: () => void }) {
+  const paid = usePaid()
+  if (paid.signedIn) {
+    return <SignedInView onClose={onClose} />
+  }
+  return <SignInForm />
+}
+
+function SignInForm() {
+  const paid = usePaid()
+  const [email, setEmail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = email.trim()
+    if (!trimmed || trimmed.indexOf('@') < 1) {
+      setError('Enter a valid email address.')
+      return
+    }
+    setError(null)
+    setSubmitting(true)
+    try {
+      const errMsg = await paid.signInWithEmail(trimmed)
+      if (errMsg) {
+        setError(errMsg)
+      } else {
+        setSentTo(trimmed)
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (sentTo) {
+    return (
+      <div className="space-y-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm">
+        <p className="font-medium text-foreground">
+          Check your email.
+        </p>
+        <p className="text-foreground/90">
+          We sent a sign-in link to{' '}
+          <code className="font-mono">{sentTo}</code>. Click it to come back
+          signed in.
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setSentTo(null)}
+          className="h-7 px-2 text-xs"
+        >
+          Use a different email
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <p className="text-sm text-foreground/90">
+          Sign in to use Lawfare-billed Anthropic credit. We send a one-time
+          sign-in link to your email — no password.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          First-time users start with a $0 balance; top up after sign-in.
+        </p>
+      </div>
+      <label className="block space-y-1.5">
+        <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Email
+        </span>
+        <Input
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          disabled={submitting}
+        />
+      </label>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button type="submit" disabled={submitting || !email.trim()}>
+        {submitting ? 'Sending…' : 'Send sign-in link'}
+      </Button>
+    </form>
+  )
+}
+
+function SignedInView({ onClose }: { onClose: () => void }) {
+  const paid = usePaid()
+  const [signingOut, setSigningOut] = useState(false)
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    try {
+      await paid.signOut()
+    } finally {
+      setSigningOut(false)
+      onClose()
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <section>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Signed in as
+        </h3>
+        <p className="mt-1 font-medium text-foreground">
+          {paid.email ?? '—'}
+        </p>
+      </section>
+
+      <section className="rounded-md border border-border bg-card p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Balance
+          </h3>
+          <button
+            type="button"
+            onClick={() => void paid.refreshBalance()}
+            className="text-[11px] text-primary hover:underline"
+            disabled={paid.balanceLoading}
+          >
+            {paid.balanceLoading ? 'refreshing…' : 'refresh'}
+          </button>
+        </div>
+        <p
+          className={cn(
+            'mt-1 font-mono text-3xl font-semibold tabular-nums',
+            paid.account && paid.account.balance_cents <= 50
+              ? 'text-destructive'
+              : paid.account && paid.account.balance_cents <= 500
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-foreground',
+          )}
+        >
+          {paid.account ? fmtCents(paid.account.balance_cents) : '—'}
+        </p>
+        {paid.account && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Per-query cap:{' '}
+            <span className="font-mono">
+              {fmtCents(paid.account.per_query_cap_cents)}
+            </span>
+          </p>
+        )}
+        {paid.balanceError && (
+          <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
+        )}
+        <div className="mt-4 flex items-center gap-2">
+          <Button type="button" disabled>
+            Top up
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
+            Stripe Checkout flow lands in a follow-up PR.
+          </span>
+        </div>
+      </section>
+
+      <section>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="flex items-center gap-2"
+        >
+          <LogOutIcon className="size-3.5" />
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </Button>
+      </section>
+    </div>
+  )
+}
+
+function ByokPanel({ onClose }: { onClose: () => void }) {
+  const { config, save, clear, defaultModelFor } = useByok()
+  return (
+    <ByokForm
+      initial={config}
+      defaultModelFor={defaultModelFor}
+      onSave={(next) => {
+        save(next)
+        onClose()
+      }}
+      onClear={() => {
+        clear()
+        onClose()
+      }}
+    />
   )
 }
 
@@ -93,8 +361,6 @@ function ByokForm({
   }) => void
   onClear: () => void
 }) {
-  // v1 only exposes Anthropic. State machinery is in place for OpenAI /
-  // Google so adding them later is a small follow-up.
   const provider: Provider = 'anthropic'
   const [model, setModel] = useState(initial?.model ?? defaultModelFor(provider))
   const [apiKey, setApiKey] = useState(initial?.apiKey ?? '')
@@ -103,11 +369,20 @@ function ByokForm({
     e.preventDefault()
     const trimmedKey = apiKey.trim()
     if (!trimmedKey) return
-    onSave({ provider, model: model.trim() || defaultModelFor(provider), apiKey: trimmedKey })
+    onSave({
+      provider,
+      model: model.trim() || defaultModelFor(provider),
+      apiKey: trimmedKey,
+    })
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <p className="text-sm text-foreground/90">
+        Paste an Anthropic API key. The Worker forwards your prompt to the
+        provider using this key and discards it. Stored in your browser&apos;s
+        localStorage; cleared with the Clear button.
+      </p>
       <Field label="Provider">
         <select
           value={provider}
@@ -118,8 +393,8 @@ function ByokForm({
           <option value="anthropic">Anthropic</option>
         </select>
         <p className="mt-1 text-xs text-muted-foreground">
-          OpenAI and Google are accepted by the Worker but not yet surfaced in
-          this UI.
+          OpenAI and Google are accepted by the Worker but not yet surfaced
+          in this UI.
         </p>
       </Field>
 
@@ -131,9 +406,6 @@ function ByokForm({
         />
         <p className="mt-1 text-xs text-muted-foreground">
           Default: <code className="font-mono">{defaultModelFor(provider)}</code>.
-          Override to use a different Claude model (e.g.,{' '}
-          <code className="font-mono">claude-opus-4-7</code>,{' '}
-          <code className="font-mono">claude-haiku-4-5</code>).
         </p>
       </Field>
 
@@ -146,11 +418,6 @@ function ByokForm({
           onChange={(e) => setApiKey(e.target.value)}
           placeholder="sk-ant-..."
         />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Stored in your browser's localStorage. Sent to the Cloudflare Worker
-          in the request body on each AI-mode call; the Worker forwards it to
-          the provider and discards it.
-        </p>
       </Field>
 
       <div className="flex items-center gap-2 pt-2">
@@ -182,4 +449,10 @@ function Field({
       {children}
     </label>
   )
+}
+
+function fmtCents(c: number): string {
+  if (!Number.isFinite(c)) return '—'
+  if (c < 100) return `${c.toFixed(0)}¢`
+  return `$${(c / 100).toFixed(2)}`
 }
