@@ -319,6 +319,170 @@ export async function runClaudeAnalysis(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/plan + /corpus/execute — agentic AMA ("claude_ama" mode)
+ *
+ * Two-pass surface. Phase 1 (plan) runs a planning LLM call against question +
+ * scope, stores the plan server-side under an opaque `token`, and returns a
+ * display copy (approach summary, output mode, candor notes, query labels) +
+ * an estimated cost. Phase 2 (execute) runs the STORED plan's SQL against the
+ * corpus and synthesizes the answer; the token is one-shot. Between the two
+ * phases the UI shows a pre-flight modal (in paid mode) or just logs the
+ * estimate (in BYOK mode) — legacy index.html behavior, faithfully ported.
+ * ------------------------------------------------------------------------- */
+
+/** Output shape decided by the agent during planning. */
+export type AmaOutputMode = 'list' | 'narrative' | 'hybrid'
+
+/** Per-query metadata returned in the plan's display copy. The SQL is shown
+ *  for transparency (brief #6 §7b auditability); the Worker re-executes from
+ *  the SERVER-STORED plan, not from this copy. */
+export type AmaPlanQuery = { label: string; sql: string }
+
+/** Plan returned by /corpus/plan. `token` is opaque — the Worker dereferences
+ *  it during /corpus/execute. */
+export type AmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Synthesis returned by /corpus/execute. For `list` / `hybrid` mode the
+ *  agent returns `cl_ids` — the narrowed subset. For `narrative` mode the
+ *  rows pass through unchanged. */
+export type AmaSynthesis = {
+  answer_markdown: string
+  /** Non-null only for `list` / `hybrid` outputs. */
+  cl_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Scope payload accepted by /corpus/plan. Either `cl_ids` (inlined for small
+ *  scopes) or `scope_sql` (for large scopes); both omitted = the full corpus. */
+export type AmaScope = {
+  cl_ids?: number[] | null
+  scope_sql?: string | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+/** Legacy index.html threshold — pre-flight modal only fires when the
+ *  estimated cost exceeds this. Matches CONFIRM_THRESHOLD_CENTS in
+ *  index.html v9.x. */
+export const AMA_CONFIRM_THRESHOLD_CENTS = 25
+
+export class WorkerAmaError extends Error {
+  step: 'plan' | 'execute'
+  status: number
+  code?: string
+  constructor(
+    message: string,
+    step: 'plan' | 'execute',
+    status: number,
+    code?: string,
+  ) {
+    super(message)
+    this.name = 'WorkerAmaError'
+    this.step = step
+    this.status = status
+    this.code = code
+  }
+}
+
+export async function runClaudePlan(
+  question: string,
+  scope: AmaScope,
+  byok: ByokConfig,
+): Promise<AmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/plan`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: byok.provider,
+      model: byok.model,
+      question,
+      scope,
+      user_api_key: byok.apiKey,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as AmaPlan
+}
+
+export async function runClaudeExecute(
+  token: string,
+  byok: ByokConfig,
+): Promise<AmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/execute`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      token,
+      user_api_key: byok.apiKey,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as AmaSynthesis
+}
+
+/* ----------------------------------------------------------------------------
+ * /corpus/cases — display rows by id-set
+ *
+ * Used by claude_ama when the synthesis returns narrowed cl_ids but the
+ * incoming scope was the full corpus (no local row cache to filter against).
+ * ------------------------------------------------------------------------- */
+
+export async function fetchCasesByIds(
+  ids: readonly number[],
+): Promise<CaseDisplayRow[]> {
+  if (ids.length === 0) return []
+  const r = await fetch(`${WORKER_URL}/corpus/cases`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/cases failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { rows: CaseDisplayRow[] }
+  return body.rows
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/read-batch — per-case AI keep/drop judgment ("claude_read" mode)
  * ------------------------------------------------------------------------- */
 

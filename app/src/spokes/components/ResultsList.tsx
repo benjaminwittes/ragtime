@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type {
+  AmaOutputMode,
   AnalysisAnnotation,
   CaseDisplayRow,
 } from '@/lib/worker-client'
@@ -50,6 +51,28 @@ export type ResultSource =
       annotations: Record<number, AnalysisAnnotation>
       /** Cases analyzed (= rows.length; analyze never narrows). */
       analyzedCount: number
+    }
+  | {
+      kind: 'claude_ama'
+      /** The user's question. */
+      question: string
+      /** Plan shape the agent chose. Drives the disclosure copy. */
+      outputMode: AmaOutputMode
+      /** Plain-English plan summary from the planning step. */
+      planSummary: string
+      /** Combined candor notes from plan + synthesis. */
+      candorNotes: string[]
+      /** Synthesis markdown — same shape as claude_analysis (uses
+       *  `[Case Name](#case-<cl_id>)` anchors). */
+      answerMarkdown: string
+      /** Cases the agent considered (incoming scope, or the full corpus
+       *  size when there was no prior page). */
+      incomingCount: number
+      /** Cases in the result page (= rows.length). For list/hybrid this is
+       *  the narrowed subset; for narrative it's the pass-through. */
+      outgoingCount: number
+      /** True when the synthesis narrowed the field. */
+      narrowed: boolean
     }
 
 /**
@@ -130,6 +153,9 @@ export function ResultsList({
       {source && <SourceDisclosure source={source} />}
       {source?.kind === 'claude_analysis' && (
         <AnalysisNarrative markdown={source.markdown} />
+      )}
+      {source?.kind === 'claude_ama' && (
+        <AnalysisNarrative title="Answer" markdown={source.answerMarkdown} />
       )}
       <p className="mb-3 font-mono text-xs text-muted-foreground">
         {(count ?? rows.length).toLocaleString()} cases · showing first{' '}
@@ -252,7 +278,13 @@ export function ResultsList({
  * narrative without an extra click, but they can collapse it if they want
  * to skim the table.
  */
-function AnalysisNarrative({ markdown }: { markdown: string }) {
+function AnalysisNarrative({
+  markdown,
+  title = 'Analysis',
+}: {
+  markdown: string
+  title?: string
+}) {
   const [open, setOpen] = useState(true)
   return (
     <details
@@ -261,7 +293,7 @@ function AnalysisNarrative({ markdown }: { markdown: string }) {
       className="mb-3 rounded-md border border-border bg-card"
     >
       <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/40">
-        Analysis
+        {title}
       </summary>
       <div className="space-y-3 border-t border-border px-5 py-4 text-sm text-foreground">
         <ReactMarkdown components={MARKDOWN_COMPONENTS}>
@@ -391,6 +423,19 @@ function shortCause(c: string | null | undefined): string {
   return c.length > 40 ? c.substring(0, 38) + '…' : c
 }
 
+function amaTitle(source: Extract<ResultSource, { kind: 'claude_ama' }>): string {
+  const shape =
+    source.outputMode === 'list'
+      ? 'list'
+      : source.outputMode === 'hybrid'
+        ? 'narrative + list'
+        : 'narrative'
+  if (source.narrowed) {
+    return `AMA (${shape}) — considered ${source.incomingCount.toLocaleString()} · kept ${source.outgoingCount.toLocaleString()}`
+  }
+  return `AMA (${shape}) — considered ${source.incomingCount.toLocaleString()} cases`
+}
+
 /**
  * Collapsible "How this was produced" disclosure. For manual_filter, shows
  * the executed SQL. For claude_sql, shows the user's prompt, the model's
@@ -405,7 +450,8 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
   const [open, setOpen] = useState(
     source.kind === 'claude_sql' ||
       source.kind === 'claude_read' ||
-      source.kind === 'claude_analysis',
+      source.kind === 'claude_analysis' ||
+      source.kind === 'claude_ama',
   )
   const title =
     source.kind === 'claude_sql'
@@ -416,7 +462,9 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
         ? `AI read ${source.incomingCount.toLocaleString()} cases · kept ${source.keptCount.toLocaleString()}`
         : source.kind === 'claude_analysis'
           ? `AI analyzed ${source.analyzedCount.toLocaleString()} cases`
-          : 'Executed SQL'
+          : source.kind === 'claude_ama'
+            ? amaTitle(source)
+            : 'Executed SQL'
 
   return (
     <details
@@ -467,6 +515,40 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
               {source.prompt}
             </p>
           </div>
+        )}
+        {source.kind === 'claude_ama' && (
+          <>
+            <div>
+              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Question
+              </span>
+              <p className="mt-1 whitespace-pre-wrap text-foreground">
+                {source.question}
+              </p>
+            </div>
+            {source.planSummary && (
+              <div>
+                <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Plan
+                </span>
+                <p className="mt-1 leading-relaxed text-foreground/90">
+                  {source.planSummary}
+                </p>
+              </div>
+            )}
+            {source.candorNotes.length > 0 && (
+              <div>
+                <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Candor notes
+                </span>
+                <ul className="mt-1 list-disc pl-5 leading-relaxed text-muted-foreground">
+                  {source.candorNotes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
         {(source.kind === 'claude_sql' || source.kind === 'manual_filter') && (
           <div>
