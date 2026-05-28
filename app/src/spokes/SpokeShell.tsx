@@ -7,6 +7,7 @@ import {
   runManualFilter,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
+import { CaseDetailSheet } from './components/CaseDetailSheet'
 import { FilterForm } from './components/FilterForm'
 import { ModeRow } from './components/ModeRow'
 import { ResultsList } from './components/ResultsList'
@@ -109,6 +110,18 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
+  // Case-detail state. Open === true while the sheet is mounted+animating;
+  // openCase keeps the row reference around through the close animation so
+  // the panel content doesn't flicker on dismiss. (We don't clear openCase
+  // until the user picks a new one or refilters.)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [openCase, setOpenCase] = useState<CaseDisplayRow | null>(null)
+
+  function handleOpenCase(row: CaseDisplayRow) {
+    setOpenCase(row)
+    setDetailOpen(true)
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SpokeHeader
@@ -145,6 +158,12 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={filterLoading}
         error={filterError}
         hasRun={hasRun}
+        onOpenCase={handleOpenCase}
+      />
+      <CaseDetailSheet
+        case={openCase}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
       />
     </div>
   )

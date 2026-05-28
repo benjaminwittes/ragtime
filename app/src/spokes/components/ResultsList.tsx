@@ -16,6 +16,7 @@ export function ResultsList({
   loading,
   error,
   hasRun,
+  onOpenCase,
 }: {
   rows: readonly CaseDisplayRow[] | undefined
   count: number | undefined
@@ -23,6 +24,10 @@ export function ResultsList({
   error: string | undefined
   /** Whether the user has executed any filter yet. False on first paint. */
   hasRun: boolean
+  /** Click handler for "open this case in the detail sheet". v1 just opens
+   *  the sheet inline; the stack runtime (PR 4g) will replace this with
+   *  a stack-push that records the detail as its own page. */
+  onOpenCase: (row: CaseDisplayRow) => void
 }) {
   if (!hasRun && !loading) {
     return (
@@ -82,22 +87,24 @@ export function ResultsList({
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((r) => (
-              <tr key={r.cl_id} className="hover:bg-muted/50">
+              <tr
+                key={r.cl_id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpenCase(r)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onOpenCase(r)
+                  }
+                }}
+                aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
+                className="cursor-pointer hover:bg-muted/50 focus:bg-muted/60 focus:outline-none"
+              >
                 <Td>
-                  {r.cl_url ? (
-                    <a
-                      href={r.cl_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-foreground hover:underline"
-                    >
-                      {r.case_name ?? '(no name)'}
-                    </a>
-                  ) : (
-                    <span className="font-medium text-foreground">
-                      {r.case_name ?? '(no name)'}
-                    </span>
-                  )}
+                  <span className="font-medium text-foreground">
+                    {r.case_name ?? '(no name)'}
+                  </span>
                 </Td>
                 <Td className="font-mono text-xs text-muted-foreground">
                   {r.docket_number ?? '—'}
