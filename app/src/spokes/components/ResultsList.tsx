@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type {
   AmaOutputMode,
   AnalysisAnnotation,
@@ -133,6 +134,24 @@ export function ResultsList({
   }
 
   if (!rows || rows.length === 0) {
+    // claude_ama narrative-only path: the answer IS the result; there are
+    // no cases to render. Show the narrative; suppress the "No cases
+    // matched" copy (which is for narrowing modes where the user expected
+    // a case list).
+    if (source?.kind === 'claude_ama') {
+      return (
+        <div className="px-6 py-4">
+          <SourceDisclosure source={source} />
+          <AnalysisNarrative title="Answer" markdown={source.answerMarkdown} />
+          {source.narrowed && (
+            <p className="mt-3 text-center text-sm text-muted-foreground">
+              The agent narrowed to a list but none of the chosen cases
+              survived intersection with the current scope.
+            </p>
+          )}
+        </div>
+      )
+    }
     return (
       <div className="px-6 py-8 space-y-4">
         {source && <SourceDisclosure source={source} />}
@@ -296,7 +315,10 @@ function AnalysisNarrative({
         {title}
       </summary>
       <div className="space-y-3 border-t border-border px-5 py-4 text-sm text-foreground">
-        <ReactMarkdown components={MARKDOWN_COMPONENTS}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={MARKDOWN_COMPONENTS}
+        >
           {markdown}
         </ReactMarkdown>
       </div>
@@ -359,6 +381,29 @@ const MARKDOWN_COMPONENTS = {
   ),
   hr: (props: React.HTMLAttributes<HTMLHRElement>) => (
     <hr className="my-4 border-border" {...props} />
+  ),
+  table: (props: React.TableHTMLAttributes<HTMLTableElement>) => (
+    <div className="my-3 overflow-x-auto rounded-md border border-border">
+      <table className="w-full text-sm" {...props} />
+    </div>
+  ),
+  thead: (props: React.HTMLAttributes<HTMLTableSectionElement>) => (
+    <thead
+      className="bg-muted text-xs uppercase tracking-wide text-muted-foreground"
+      {...props}
+    />
+  ),
+  tbody: (props: React.HTMLAttributes<HTMLTableSectionElement>) => (
+    <tbody className="divide-y divide-border" {...props} />
+  ),
+  tr: (props: React.HTMLAttributes<HTMLTableRowElement>) => (
+    <tr {...props} />
+  ),
+  th: (props: React.ThHTMLAttributes<HTMLTableCellElement>) => (
+    <th className="px-3 py-2 text-left font-medium" {...props} />
+  ),
+  td: (props: React.TdHTMLAttributes<HTMLTableCellElement>) => (
+    <td className="px-3 py-2 align-top" {...props} />
   ),
 }
 
