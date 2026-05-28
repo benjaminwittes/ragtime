@@ -1,17 +1,21 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { spokes } from '@/spokes/registry'
+import { DocsTrigger } from '@/docs/DocsTrigger'
 
 function App() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-6 py-16">
-        <header className="mb-12">
-          <h1 className="font-serif text-5xl font-bold tracking-tight text-foreground">
-            RAGtime
-          </h1>
-          <p className="mt-2 text-base text-muted-foreground">
-            React rebuild — capability descriptor (PR 3 of foundation work)
-          </p>
+        <header className="mb-12 flex items-baseline justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-5xl font-bold tracking-tight text-foreground">
+              RAGtime
+            </h1>
+            <p className="mt-2 text-base text-muted-foreground">
+              React rebuild — docs registry infrastructure (PR 4a of foundation work)
+            </p>
+          </div>
+          <DocsTrigger />
         </header>
 
         <section className="space-y-6">
@@ -21,23 +25,31 @@ function App() {
                 What this PR adds
               </CardTitle>
               <CardDescription>
-                The TypeScript contract every corpus spoke implements
-                (<code className="font-mono text-sm">CorpusSpoke</code>), the
-                stack-of-operations + pivot types
-                (<code className="font-mono text-sm">Page</code>,{' '}
-                <code className="font-mono text-sm">Stack</code>,{' '}
-                <code className="font-mono text-sm">StackHistory</code> — with
-                stash-and-pivot semantics built in per the 2026-05-27 "more
-                like this" hook decision), and a stub registry. No UI is
-                rendered from the descriptors yet; the renderer ships with
-                the litigation spoke port in PR 5.
+                The floating-documentation infrastructure that replaces the
+                welcome card's "How to use" content and the mode-button
+                tooltips (per brief #6 §6). Press{' '}
+                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">?</kbd>{' '}
+                anywhere to open it, or click the "? Docs" button in the
+                header. Suppressed inside text inputs so it doesn't fight
+                with normal typing.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Design rationale and field-by-field mapping to brief decisions
-                live at{' '}
-                <code className="font-mono text-sm">src/spokes/SPEC.md</code>.
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                The registry (<code className="font-mono text-sm">src/docs/registry.ts</code>)
+                is empty at v1 — the overlay shows an empty-state message.
+                Editorial content is a later editorial pass (PR 4b), likely
+                staged with each spoke's implementation so per-spoke docs are
+                written against the real surface rather than a stub.
+              </p>
+              <p>
+                Entries are scoped <code className="font-mono text-sm">global</code>{' '}
+                (always visible) or to a specific corpus spoke (visible only
+                when that spoke is the active context). The spoke renderer
+                (lands PR 5) will call{' '}
+                <code className="font-mono text-sm">setActiveSpokeSlug()</code>{' '}
+                when the user enters / leaves a spoke; the overlay filters
+                accordingly.
               </p>
             </CardContent>
           </Card>
@@ -45,14 +57,11 @@ function App() {
           <Card>
             <CardHeader>
               <CardTitle className="font-serif text-2xl">
-                Registered spokes (live read from the registry)
+                Registered spokes (carried from PR 3)
               </CardTitle>
               <CardDescription>
-                The list below is loaded from{' '}
-                <code className="font-mono text-sm">@/spokes/registry</code>,
-                which type-checks against{' '}
-                <code className="font-mono text-sm">CorpusSpoke</code>. Adding
-                a spoke is one import + array entry.
+                Live read from{' '}
+                <code className="font-mono text-sm">@/spokes/registry</code>.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -79,14 +88,6 @@ function App() {
                     <dd className="font-mono">{spoke.facets.length}</dd>
                     <dt className="text-muted-foreground">Scopes</dt>
                     <dd className="font-mono">{spoke.scopes?.length ?? 0}</dd>
-                    <dt className="text-muted-foreground">Flagships</dt>
-                    <dd className="font-mono">
-                      {spoke.flagships.present.join(' / ')}
-                      {spoke.flagships.paradigmatic &&
-                        ` (★ ${spoke.flagships.paradigmatic})`}
-                    </dd>
-                    <dt className="text-muted-foreground">Default depth</dt>
-                    <dd className="font-mono">{spoke.defaultSearchDepth}</dd>
                     <dt className="text-muted-foreground">More like this</dt>
                     <dd className="font-mono">
                       {spoke.moreLikeThis
@@ -94,9 +95,6 @@ function App() {
                         : '—'}
                     </dd>
                   </dl>
-                  <p className="mt-3 text-xs italic text-muted-foreground">
-                    {spoke.plainEnglishDisclosure}
-                  </p>
                 </div>
               ))}
             </CardContent>
@@ -109,22 +107,22 @@ function App() {
             <CardContent>
               <ul className="space-y-2 text-sm text-muted-foreground list-disc pl-5">
                 <li>
-                  <strong className="text-foreground">PR 4</strong> — Docs
-                  registry (floating documentation infrastructure per brief #6
-                  decision 9b)
+                  <strong className="text-foreground">PR 4b</strong> —
+                  Editorial content (the actual "How to use" + cross-cutting
+                  principles entries; conversation with Ben on what goes in)
                 </li>
                 <li>
-                  <strong className="text-foreground">PR 5</strong> — Litigation
-                  spoke port: real implementation of the five modes from{' '}
-                  <code className="font-mono text-xs">index.html</code> against
-                  the descriptor + design system. The generic spoke renderer
-                  lands here too.
+                  <strong className="text-foreground">PR 5</strong> —
+                  Litigation spoke port: real implementation of the five
+                  modes from <code className="font-mono text-xs">index.html</code>;
+                  generic spoke renderer lands here; calls{' '}
+                  <code className="font-mono text-xs">setActiveSpokeSlug('litigation')</code>{' '}
+                  to set docs context
                 </li>
                 <li>
-                  <strong className="text-foreground">PR 6+</strong> — OLC, USC,
-                  CFR, FRUS spokes (each is mostly descriptor + corpus-specific
-                  query module); collections architecture per brief #7;
-                  "more like this" implementation post-beta.
+                  <strong className="text-foreground">PR 6+</strong> — Other
+                  spokes (OLC, USC, CFR, FRUS), collections architecture per
+                  brief #7, "more like this" implementation post-beta
                 </li>
               </ul>
             </CardContent>

@@ -2,7 +2,7 @@
 
 This directory is the **React/Vite/TypeScript rebuild** of RAGtime's frontend, which currently ships as a single-file `index.html` at the repo root. The rebuild is scoped in `CLAUDE.md` (Phase I beta plan, "UI rebuild" workstream) and detailed across the per-surface query-design briefs (1–7) in iCloud.
 
-**Status as of PR 3:** scaffold + design system + capability descriptor (TypeScript contract for every corpus spoke). Vite + React 19 + TypeScript + ESLint + Tailwind 4 + shadcn/ui + Lawfare brand tokens + `CorpusSpoke` types and a stub litigation spoke that type-checks against them. Still deploying nothing — the production site at https://benjaminwittes.github.io/ragtime/ is served from the legacy single-file `index.html` at the repo root. Production cutover happens at the END of the foundation work, not now.
+**Status as of PR 4a:** scaffold + design system + capability descriptor + **docs-registry infrastructure**. Floating-documentation overlay (shadcn Sheet, opened via `?` keyboard shortcut or the header "? Docs" button) that will replace the welcome card's "How to use" content + the mode-button tooltips per brief #6 §6. Registry is empty at v1 — editorial content (PR 4b) is a later pass. Still deploying nothing — the production site at https://benjaminwittes.github.io/ragtime/ is served from the legacy single-file `index.html` at the repo root. Production cutover happens at the END of the foundation work, not now.
 
 ## Develop locally
 
@@ -66,12 +66,24 @@ Every corpus surface ("spoke") implements `CorpusSpoke` from `src/spokes/types.t
 - Registry: `src/spokes/registry.ts`
 - Stack / page / pivot types (with stash-and-pivot semantics per the 2026-05-27 "more like this" hook decision): `src/stack/types.ts`
 
+## Docs registry
+
+Floating documentation overlay (per brief #6 §6 — replaces welcome card "How to use" + mode tooltips). Opened by `?` keyboard shortcut or the "? Docs" button in the header.
+
+- Types: `src/docs/types.ts`
+- Registry (entries empty at v1): `src/docs/registry.ts`
+- Overlay UI: `src/docs/DocsOverlay.tsx` (shadcn Sheet)
+- Context provider + hook + keyboard shortcut: `src/docs/DocsContext.tsx`
+- Trigger button: `src/docs/DocsTrigger.tsx`
+- Entries are scoped `global` (always shown) or to a specific corpus spoke (shown only when that spoke is active). Spoke renderer (PR 5) calls `setActiveSpokeSlug()` to set context.
+
 ## Planned PR sequence
 
 - ✅ PR 1 — Scaffold (Vite + React + TS + CI, no deploy)
 - ✅ PR 2 — Design system (Tailwind 4 + shadcn + Lawfare brand tokens)
 - ✅ PR 3 — Capability descriptor (TS types, stub litigation spoke, stack types with pivot support)
-- PR 4 — Docs registry (floating documentation infrastructure per brief #6 decision 9b)
+- ✅ PR 4a — Docs registry infrastructure (overlay, registry types, keyboard shortcut, empty content set)
+- PR 4b — Editorial content (the actual "How to use" + cross-cutting principles entries; conversation with Ben on wording)
 - PR 5 — Litigation spoke port (the first concrete corpus surface, per brief #6; generic spoke renderer lands here too)
 - PR 6+ — Other spokes (OLC, USC, CFR, FRUS), collections architecture (per brief #7), "more like this" implementation post-beta
 
