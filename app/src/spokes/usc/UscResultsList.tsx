@@ -74,69 +74,88 @@ export function UscResultsList({
         {(count ?? rows.length).toLocaleString()} sections · showing first{' '}
         {rows.length.toLocaleString()}
       </p>
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <Th>Citation</Th>
-              <Th>Heading</Th>
-              <Th>Title</Th>
-              <Th>Status</Th>
+      <UscSectionRowsTable rows={rows} onOpenSection={onOpenSection} />
+    </div>
+  )
+}
+
+/**
+ * Just the table — columns + rows, no surrounding chrome. Reused by both
+ * the manual-filter results list above and the AMA cited-sections panel
+ * (PR 4v Note 1 — cited rows match filter rows exactly). USC has no
+ * source_url field in the corpus; the ↗ to uscode.house.gov is deferred
+ * to PR C (constructed-URL fanning).
+ */
+export function UscSectionRowsTable({
+  rows,
+  onOpenSection,
+}: {
+  rows: readonly UscSectionDisplayRow[]
+  onOpenSection: (row: UscSectionDisplayRow) => void
+}) {
+  return (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="w-full text-sm">
+        <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <Th>Citation</Th>
+            <Th>Heading</Th>
+            <Th>Title</Th>
+            <Th>Status</Th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map((r) => (
+            <tr
+              key={r.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpenSection(r)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onOpenSection(r)
+                }
+              }}
+              aria-label={`Open ${r.citation ?? 'section ' + r.id} in detail panel`}
+              className="cursor-pointer hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
+            >
+              <Td>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono text-xs font-medium text-foreground">
+                    {r.citation ?? '—'}
+                  </span>
+                  {r.is_positive_law && <PositiveLawBadge />}
+                </div>
+              </Td>
+              <Td className="text-xs text-foreground">
+                {r.heading ?? '—'}
+              </Td>
+              <Td className="text-xs">
+                {r.title_num != null && (
+                  <span className="font-mono text-muted-foreground">
+                    {r.title_num}
+                  </span>
+                )}
+                {r.title_name && (
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    · {prettyTitleName(r.title_name)}
+                  </span>
+                )}
+              </Td>
+              <Td>
+                {r.status ? (
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {r.status}
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </Td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onOpenSection(r)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    onOpenSection(r)
-                  }
-                }}
-                aria-label={`Open ${r.citation ?? 'section ' + r.id} in detail panel`}
-                className="cursor-pointer hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
-              >
-                <Td>
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-mono text-xs font-medium text-foreground">
-                      {r.citation ?? '—'}
-                    </span>
-                    {r.is_positive_law && <PositiveLawBadge />}
-                  </div>
-                </Td>
-                <Td className="text-xs text-foreground">
-                  {r.heading ?? '—'}
-                </Td>
-                <Td className="text-xs">
-                  {r.title_num != null && (
-                    <span className="font-mono text-muted-foreground">
-                      {r.title_num}
-                    </span>
-                  )}
-                  {r.title_name && (
-                    <span className="ml-1.5 text-xs text-muted-foreground">
-                      · {prettyTitleName(r.title_name)}
-                    </span>
-                  )}
-                </Td>
-                <Td>
-                  {r.status ? (
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {r.status}
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

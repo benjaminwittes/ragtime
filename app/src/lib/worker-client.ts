@@ -931,6 +931,12 @@ export type OlcOpinionDisplayRow = {
   author: string | null
   date_issued: string | null
   source: string | null
+  /** DOJ-published canonical URL (justice.gov/olc/file/...). Added PR 4v so
+   *  result rows + AMA cited rows can render the audit-link affordance
+   *  without a follow-up detail fetch. */
+  source_url_doj: string | null
+  /** Knight FOIA source URL for opinions DOJ never published. */
+  source_url_knight: string | null
   page_count: number | null
   text_length: number | null
   ocr_quality: string | null
@@ -1208,6 +1214,11 @@ export type FrusDocumentDisplayRow = {
   volume_id: string | null
   place_name: string | null
   classification: string | null
+  /** Canonical history.state.gov URL. 100% populated in the corpus (verified
+   *  empirically). Added to the display row in PR 4v so every surface that
+   *  mentions a FRUS document can carry the audit link without an extra
+   *  detail fetch (brief #1 §4b auditability). */
+  source_url: string | null
   text_length: number | null
 }
 
@@ -1886,6 +1897,71 @@ export function detectCourtPreset(
     return 'circuit'
   }
   return null
+}
+
+/* ----------------------------------------------------------------------------
+ * items-by-ids (PR 4v) — AMA cited-result polish
+ *
+ * AMA synthesis returns a list of <doc>_ids. PR 4q–4t shipped "Doc #N"
+ * button stubs as a v1 shortcut. This endpoint per spoke returns the
+ * metadata-rich display rows for an id list, in caller-supplied order,
+ * so the AMA cited list can render with the same shape as the manual-
+ * filter result list (Note 1 from Ben's testing pass; brief #1 §4b
+ * auditability).
+ * ------------------------------------------------------------------------- */
+
+async function fetchItemsByIds<Row>(
+  url: string,
+  ids: readonly number[],
+): Promise<Row[]> {
+  if (ids.length === 0) return []
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`${url} failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { display_rows: Row[] }
+  return body.display_rows
+}
+
+export function fetchUscItemsByIds(
+  ids: readonly number[],
+): Promise<UscSectionDisplayRow[]> {
+  return fetchItemsByIds<UscSectionDisplayRow>(
+    `${WORKER_URL}/corpus/usc/items-by-ids`,
+    ids,
+  )
+}
+
+export function fetchCfrItemsByIds(
+  ids: readonly number[],
+): Promise<CfrSectionDisplayRow[]> {
+  return fetchItemsByIds<CfrSectionDisplayRow>(
+    `${WORKER_URL}/corpus/cfr/items-by-ids`,
+    ids,
+  )
+}
+
+export function fetchOlcItemsByIds(
+  ids: readonly number[],
+): Promise<OlcOpinionDisplayRow[]> {
+  return fetchItemsByIds<OlcOpinionDisplayRow>(
+    `${WORKER_URL}/corpus/olc/items-by-ids`,
+    ids,
+  )
+}
+
+export function fetchFrusItemsByIds(
+  ids: readonly number[],
+): Promise<FrusDocumentDisplayRow[]> {
+  return fetchItemsByIds<FrusDocumentDisplayRow>(
+    `${WORKER_URL}/corpus/frus/items-by-ids`,
+    ids,
+  )
 }
 
 /* ----------------------------------------------------------------------------

@@ -136,25 +136,13 @@ export function CfrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     null,
   )
 
+  /** Open a section in the detail panel. PR 4v unified the manual-filter
+   *  and AMA cited-list contracts to pass full rows (previously the AMA
+   *  list passed id-only and the handler synthesized a placeholder, since
+   *  cited items rendered as "§N" stubs; now they're metadata-rich rows
+   *  from items-by-ids). */
   function handleOpenSection(row: CfrSectionDisplayRow) {
     setOpenSection(row)
-    setDetailOpen(true)
-  }
-
-  function handleOpenSectionById(id: number) {
-    const placeholder: CfrSectionDisplayRow = {
-      id,
-      title_num: null,
-      title_name: null,
-      citation: null,
-      heading: null,
-      section_identifier: null,
-      reserved: null,
-      source: null,
-      text_length: null,
-      up_to_date_as_of: null,
-    }
-    setOpenSection(placeholder)
     setDetailOpen(true)
   }
 
@@ -319,7 +307,7 @@ export function CfrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           plan={amaResultPlan}
           loading={amaLoading}
           error={amaError}
-          onOpenSection={handleOpenSectionById}
+          onOpenSection={handleOpenSection}
         />
       )}
       <CfrSectionDetailSheet

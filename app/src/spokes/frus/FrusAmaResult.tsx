@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { FrusAmaPlan, FrusAmaSynthesis } from '@/lib/worker-client'
+import {
+  type FrusAmaPlan,
+  type FrusAmaSynthesis,
+  type FrusDocumentDisplayRow,
+  fetchFrusItemsByIds,
+} from '@/lib/worker-client'
+import { FrusDocumentRowsTable } from './FrusResultsList'
 
 /**
  * AMA result panel for the FRUS spoke. Brief #5 §5: chronological by
@@ -33,7 +38,10 @@ export function FrusAmaResult({
   plan: FrusAmaPlan | null
   loading: boolean
   error: string | undefined
-  onOpenDocument: (id: number) => void
+  /** Open a document in the detail panel. PR 4v: contract changed from
+   *  id-only to full row so the cited list renders with the same
+   *  metadata-rich table the manual filter uses. */
+  onOpenDocument: (row: FrusDocumentDisplayRow) => void
 }) {
   if (loading && !synthesis) {
     return (
@@ -75,9 +83,71 @@ export function FrusAmaResult({
       </article>
       {synthesis.document_ids && synthesis.document_ids.length > 0 && (
         <CitedDocuments
+          // Remount on ids change so state initializes to defaults rather
+          // than reset-in-effect (react-hooks/set-state-in-effect lint rule).
+          key={synthesis.document_ids.join(',')}
           ids={synthesis.document_ids}
-          onOpen={onOpenDocument}
+          onOpenDocument={onOpenDocument}
         />
+      )}
+    </section>
+  )
+}
+
+/**
+ * Cited-documents panel. PR 4v: fetches metadata for the synthesis-returned
+ * document ids and renders them with the same `FrusDocumentRowsTable` the
+ * manual filter uses (Title · Date · Volume · Place · Classification · ↗).
+ */
+function CitedDocuments({
+  ids,
+  onOpenDocument,
+}: {
+  ids: readonly number[]
+  onOpenDocument: (row: FrusDocumentDisplayRow) => void
+}) {
+  const [rows, setRows] = useState<FrusDocumentDisplayRow[] | null>(null)
+  const [rowsError, setRowsError] = useState<string | null>(null)
+  // Loading derived; parent remounts via `key` when ids change.
+  const rowsLoading = rows === null && rowsError === null
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const fetched = await fetchFrusItemsByIds(ids as number[])
+        if (cancelled) return
+        setRows(fetched)
+      } catch (e) {
+        if (cancelled) return
+        setRowsError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [ids])
+
+  return (
+    <section className="mt-6 border-t border-border pt-4">
+      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Cited documents ({ids.length.toLocaleString()})
+      </h3>
+      {rowsLoading && (
+        <p className="text-xs text-muted-foreground">Loading cited documents…</p>
+      )}
+      {rowsError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Couldn&apos;t load cited documents: {rowsError}
+        </p>
+      )}
+      {rows && rows.length > 0 && (
+        <FrusDocumentRowsTable rows={rows} onOpenDocument={onOpenDocument} />
+      )}
+      {rows && rows.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          (No matching documents found for the cited ids.)
+        </p>
       )}
     </section>
   )
@@ -133,37 +203,6 @@ function CandorNotes({ notes }: { notes: readonly string[] }) {
         ))}
       </ul>
     </aside>
-  )
-}
-
-function CitedDocuments({
-  ids,
-  onOpen,
-}: {
-  ids: readonly number[]
-  onOpen: (id: number) => void
-}) {
-  return (
-    <section className="mt-6 border-t border-border pt-4">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Cited documents ({ids.length.toLocaleString()})
-      </h3>
-      <ul className="mt-2 flex flex-wrap gap-2">
-        {ids.map((id) => (
-          <li key={id}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs font-mono"
-              onClick={() => onOpen(id)}
-            >
-              Doc #{id}
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }
 

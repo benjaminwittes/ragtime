@@ -225,6 +225,9 @@ export default {
       if (path === "/corpus/usc/summarize-section" && request.method === "POST") {
         return await corpusUscSummarizeHandler(request, env, ctx);
       }
+      if (path === "/corpus/usc/items-by-ids" && request.method === "POST") {
+        return await corpusUscItemsByIdsHandler(request, env, ctx);
+      }
       if (path === "/corpus/cfr/facets" && request.method === "POST") {
         return await corpusCfrFacetsHandler(request, env, ctx);
       }
@@ -242,6 +245,9 @@ export default {
       }
       if (path === "/corpus/cfr/summarize-section" && request.method === "POST") {
         return await corpusCfrSummarizeHandler(request, env, ctx);
+      }
+      if (path === "/corpus/cfr/items-by-ids" && request.method === "POST") {
+        return await corpusCfrItemsByIdsHandler(request, env, ctx);
       }
       if (path === "/corpus/olc/facets" && request.method === "POST") {
         return await corpusOlcFacetsHandler(request, env, ctx);
@@ -261,6 +267,9 @@ export default {
       if (path === "/corpus/olc/summarize-opinion" && request.method === "POST") {
         return await corpusOlcSummarizeHandler(request, env, ctx);
       }
+      if (path === "/corpus/olc/items-by-ids" && request.method === "POST") {
+        return await corpusOlcItemsByIdsHandler(request, env, ctx);
+      }
       if (path === "/corpus/frus/facets" && request.method === "POST") {
         return await corpusFrusFacetsHandler(request, env, ctx);
       }
@@ -278,6 +287,9 @@ export default {
       }
       if (path === "/corpus/frus/summarize-document" && request.method === "POST") {
         return await corpusFrusSummarizeHandler(request, env, ctx);
+      }
+      if (path === "/corpus/frus/items-by-ids" && request.method === "POST") {
+        return await corpusFrusItemsByIdsHandler(request, env, ctx);
       }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
@@ -2133,14 +2145,14 @@ function buildUscSynthesisSystem(outputMode) {
     "",
     "Output a single JSON object (no prose, no code fences) with these keys:",
     "{",
-    '  "answer_markdown": "...",  // markdown narrative; embed [usc-ref:SECTION_ID] tokens to cite specific sections.',
+    '  "answer_markdown": "...",  // markdown narrative; cite specific sections in prose using canonical USC citation form (e.g. "18 U.S.C. § 1112"). DO NOT embed internal id tokens.',
     "  " + listClause + ",",
     '  "candor_notes": ["any caveats discovered during synthesis"]',
     "}",
     "",
     "Rules:",
     "- USC sections are BINDING federal law. Describe what the text says; never opine on policy correctness, never invent interpretation that isn't textually grounded.",
-    "- CITE EVERY CLAIM. Each substantive sentence must be cited to a specific section via [usc-ref:SECTION_ID]. The UI replaces this with a click-through. Weave the canonical citation into prose when natural ('Under 8 U.S.C. § 1225 [usc-ref:12345], an alien arriving at the border…').",
+    "- CITE EVERY CLAIM via the canonical USC citation in PROSE — '18 U.S.C. § 1112', '8 U.S.C. § 1225(b)(1)(A)(ii)', etc. The user navigates to each cited section via the Cited Sections list that renders below the narrative; do NOT embed [usc-ref:N] tokens or any other internal id markers. Bad: '...Under 8 U.S.C. § 1225 [usc-ref:12345], an alien...'. Good: '...Under 8 U.S.C. § 1225, an alien...'.",
     "- RELEASE-POINT CURRENCY. Every answer that turns on specific section text must include the currency caveat in candor_notes: 'Current as of release 119-93; changes since not reflected.'",
     "- NON-POSITIVE-LAW. When the answer leans on a non-positive-law title section (is_positive_law=false on that row), surface this in candor_notes: 'The relevant section is in [Title N], a non-positive-law title — the codified text here is an organized restatement of the underlying Statutes at Large.' This is especially load-bearing for Title 26 (Internal Revenue Code) and Title 50 (War and National Defense).",
     "- CONSTITUTION GAP. If the answer turns substantially on Article II / Bill of Rights, lead with that limitation: 'The answer turns substantially on [Article II § N / the Nth Amendment], which is outside USC's scope (RAGtime does not yet hold the constitutional text). Within USC, [the analysis follows].'",
@@ -2791,14 +2803,14 @@ function buildCfrSynthesisSystem(outputMode) {
     "",
     "Output a single JSON object (no prose, no code fences) with these keys:",
     "{",
-    '  "answer_markdown": "...",  // markdown narrative; embed [cfr-ref:SECTION_ID] tokens to cite specific sections.',
+    '  "answer_markdown": "...",  // markdown narrative; cite specific sections in prose using canonical CFR citation form (e.g. "45 CFR § 164.502"). DO NOT embed internal id tokens.',
     "  " + listClause + ",",
     '  "candor_notes": ["any caveats discovered during synthesis"]',
     "}",
     "",
     "Rules:",
     "- CFR sections are BINDING federal regulatory text. Describe what they say; never opine on compliance burden or policy.",
-    "- CITE EVERY CLAIM. Each substantive sentence must be cited to a specific section via [cfr-ref:SECTION_ID]. Weave the canonical citation into prose ('45 CFR § 164.502 [cfr-ref:N] permits…').",
+    "- CITE EVERY CLAIM via the canonical CFR citation in PROSE — '45 CFR § 164.502', '12 CFR § 1026.36(a)', etc. The user navigates to each cited section via the Cited Sections list that renders below the narrative; do NOT embed [cfr-ref:N] tokens or any other internal id markers. Bad: '...45 CFR § 164.502 [cfr-ref:42] permits...'. Good: '...45 CFR § 164.502 permits...'.",
     "- PER-SECTION CURRENCY. CFR currency is per-section, not monolithic. When the answer turns on a specific section, surface its up_to_date_as_of date inline or in candor_notes: 'Current as of [section's up_to_date_as_of]; later amendments not reflected.'",
     "- COMPLIANCE SYNTHESIS (Flagship A). For 'What regs apply to X doing Y' questions, lead with an explicit ASSUMPTIONS block: state the actor type, activity, and any other facts the synthesis assumed. Researchers need to know what scope was modeled.",
     "- AUTHORITY SYNTHESIS (Flagship B). For 'What does agency X have authority to regulate' questions, surface the cross-corpus limitation in candor_notes: 'v1 does not yet cross-reference USC (statutory authority), OLC (executive interpretation), or litigation (challenges to agency authority). The answer is the regulatory-text piece only — to know whether an agency *has* the authority it claims, the statutory and litigation pieces matter.'",
@@ -3118,7 +3130,12 @@ async function corpusCfrSummarizeHandler(request, env, ctx) {
 // keep payloads cheap; the detail handler returns everything.
 // ============================================================================
 
-var OLC_DISPLAY_COLS = "id, title, author, date_issued::text AS date_issued, source, page_count, text_length, ocr_quality";
+// `source_url_doj` + `source_url_knight` join here (PR 4v) so result rows
+// and AMA cited-list rows can render an auditable "↗ source" affordance
+// without a follow-up detail fetch. Per brief #1 §4b (auditability): every
+// row that mentions a document gets a one-click path to the canonical
+// primary source.
+var OLC_DISPLAY_COLS = "id, title, author, date_issued::text AS date_issued, source, source_url_doj, source_url_knight, page_count, text_length, ocr_quality";
 
 /**
  * Build the WHERE clause for /corpus/olc/filter. Same single-quote
@@ -3266,9 +3283,11 @@ async function corpusOlcOpinionHandler(request, env, ctx) {
 //
 // Mirrors the litigation /corpus/plan + /corpus/execute shape (so the React
 // pre-flight modal pattern carries across), but with OLC-specific schema,
-// citation syntax ([olc-ref:OPINION_ID]), and editorial guardrails (the
-// released-vs-issued caveat, DOJ-vs-Knight-FOIA provenance, degraded-OCR
-// flag, NEVER editorializing on contested doctrine).
+// canonical citation syntax (opinion title + year + author where known, in
+// prose; cited list below the narrative does the navigation — PR 4v dropped
+// the inline-token pattern), and editorial guardrails (the released-vs-
+// issued caveat, DOJ-vs-Knight-FOIA provenance, degraded-OCR flag, NEVER
+// editorializing on contested doctrine).
 
 // Scope normalization for OLC. Litigation's normalizeScope handles cl_ids +
 // scope_sql; OLC is small (2,145 opinions max) so we only support an inline
@@ -3428,14 +3447,14 @@ function buildOlcSynthesisSystem(outputMode) {
     "",
     "Output a single JSON object (no prose, no code fences) with these keys:",
     "{",
-    '  "answer_markdown": "...",  // markdown narrative; embed [olc-ref:OPINION_ID] tokens to cite specific opinions.',
+    '  "answer_markdown": "...",  // markdown narrative; cite opinions in prose by title + year (e.g. "OLC\'s 1987 opinion on the Appointments Clause"). DO NOT embed internal id tokens.',
     "  " + listClause + ",",
     '  "candor_notes": ["any caveats discovered during synthesis"]',
     "}",
     "",
     "Rules:",
     "- ATTRIBUTION-FORWARD. OLC is the executive's authoritative legal *position*, not a court's holding. Describe what OLC has said; never editorialize on whether it is correct.",
-    "- CITE EVERY POSITION. Each claim about what OLC believes about X must be cited to a specific opinion via [olc-ref:OPINION_ID]. The UI replaces this with a clickable link. Where the row has a title or date, surface them inline ('OLC's 1987 opinion on X [olc-ref:42]').",
+    "- CITE EVERY POSITION via OPINION TITLE + YEAR (and author where the row has it) in PROSE — 'OLC's 1987 opinion on the Appointments Clause', 'Olson's 1986 memo on executive privilege', 'the 2014 opinion on recess appointments'. The user navigates to each cited opinion via the Cited Opinions list that renders below the narrative; do NOT embed [olc-ref:N] tokens or any other internal id markers. Bad: '...OLC's 1987 opinion on X [olc-ref:42] concluded...'. Good: '...OLC's 1987 opinion on X concluded...'.",
     "- PROVENANCE WHEN MEANINGFUL. If your set includes Knight-FOIA opinions DOJ never published, mention that — it's a completeness signal for the user.",
     "- DEGRADED OCR. If any row has ocr_quality = 'degraded', surface that in candor_notes — synthesis from those rows is lower-confidence.",
     "- RELEASED-vs-ISSUED CAVEAT. Any count-by-year statement must include the caveat that counts reflect released opinions only, not OLC's true annual output.",
@@ -3771,7 +3790,12 @@ async function corpusOlcSummarizeHandler(request, env, ctx) {
 // from inline (the natural browse spine).
 // ============================================================================
 
-var FRUS_DISPLAY_COLS = "id, title, doc_date::text AS doc_date, volume_id, place_name, classification, text_length";
+// `source_url` joins here (PR 4v) so every row that mentions a FRUS
+// document carries a one-click path to history.state.gov. Brief #1 §4b
+// (auditability): for FRUS, the link to the State Department's
+// publication IS the canonical check. Buried at the bottom of the
+// detail panel before 4v; now surfaced on every row.
+var FRUS_DISPLAY_COLS = "id, title, doc_date::text AS doc_date, volume_id, place_name, classification, source_url, text_length";
 
 /**
  * Build the WHERE clause for /corpus/frus/filter. Same single-quote
@@ -3927,6 +3951,107 @@ async function corpusFrusDocumentHandler(request, env, ctx) {
   return json({ document: rows[0] }, 200);
 }
 
+// ── items-by-ids endpoints (PR 4v) ──────────────────────────────────────────
+// AMA synthesis returns a list of <doc>_ids; the result panel needs
+// metadata-rich display rows for each, not "Doc #N" stubs (the v1 shortcut
+// PR 4q–4t shipped). Each spoke gets its own items-by-ids handler that
+// takes the id list and returns rows in caller-supplied order using the
+// spoke's existing filter-display columns — so the AMA cited list and the
+// manual-filter result list render identically.
+//
+// Brief #1 §4b auditability: rows that mention a document MUST carry a
+// one-click path to the canonical primary source. The FRUS/OLC display-
+// column expansions above (source_url, source_url_doj/source_url_knight)
+// make that link available on every row this endpoint returns.
+
+var ITEMS_BY_IDS_CAP = 25000;
+
+/** Shared input validation. Filters to finite positive integers; rejects
+ *  oversize lists. Empty input is valid and short-circuits to []. */
+function parseItemsByIdsRequest(raw) {
+  if (raw === undefined || raw === null) return { error: "Missing ids" };
+  if (!Array.isArray(raw)) return { error: "ids must be an array" };
+  if (raw.length > ITEMS_BY_IDS_CAP) {
+    return { error: "ids array too large (max " + ITEMS_BY_IDS_CAP + ")" };
+  }
+  const ids = raw
+    .filter((x) => x != null)
+    .map(Number)
+    .filter((x) => Number.isFinite(x) && x > 0)
+    .map((x) => Math.floor(x));
+  return { ids };
+}
+
+/** Build the items-by-ids SQL. Preserves caller order via array_position —
+ *  the AMA planner's ranking is meaningful (chronological for FRUS, date-DESC
+ *  for OLC, ts_rank for USC/CFR), and the cited list should mirror it. */
+function buildItemsByIdsSql(displayCols, table, ids) {
+  const arrayLiteral = "'{" + ids.join(",") + "}'::bigint[]";
+  return "SELECT " + displayCols + " FROM " + table +
+    " WHERE id IN (SELECT unnest(" + arrayLiteral + ")) " +
+    "ORDER BY array_position(" + arrayLiteral + ", id)";
+}
+
+async function corpusUscItemsByIdsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseItemsByIdsRequest(body && body.ids);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  if (parsed.ids.length === 0) return json({ display_rows: [] }, 200);
+  const sql = buildItemsByIdsSql(USC_DISPLAY_COLS, "usc_sections", parsed.ids);
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "USC items-by-ids failed: " + e.message } }, 502); }
+  return json({ display_rows: rows }, 200);
+}
+
+async function corpusCfrItemsByIdsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseItemsByIdsRequest(body && body.ids);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  if (parsed.ids.length === 0) return json({ display_rows: [] }, 200);
+  const sql = buildItemsByIdsSql(CFR_DISPLAY_COLS, "cfr_sections", parsed.ids);
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "CFR items-by-ids failed: " + e.message } }, 502); }
+  return json({ display_rows: rows }, 200);
+}
+
+async function corpusOlcItemsByIdsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseItemsByIdsRequest(body && body.ids);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  if (parsed.ids.length === 0) return json({ display_rows: [] }, 200);
+  const sql = buildItemsByIdsSql(OLC_DISPLAY_COLS, "olc_opinions", parsed.ids);
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "OLC items-by-ids failed: " + e.message } }, 502); }
+  return json({ display_rows: rows }, 200);
+}
+
+async function corpusFrusItemsByIdsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseItemsByIdsRequest(body && body.ids);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  if (parsed.ids.length === 0) return json({ display_rows: [] }, 200);
+  const sql = buildItemsByIdsSql(FRUS_DISPLAY_COLS, "frus_documents", parsed.ids);
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "FRUS items-by-ids failed: " + e.message } }, 502); }
+  return json({ display_rows: rows }, 200);
+}
+
 // ── FRUS AI modes (PR 4r) ───────────────────────────────────────────────────
 // Brief #5 §3 names three flagships, asymmetric: C (narrative synthesis) is
 // paradigmatic; A (documentary coverage) and B (specific document retrieval)
@@ -3994,7 +4119,7 @@ var FRUS_AMA_SCHEMA_DOC = [
   "- Person search uses jsonb containment. To find docs mentioning Stalin: persons @> '[{\"name\": \"Stalin\"}]'::jsonb. To enumerate persons mentioned in a result set: SELECT p->>'name' FROM frus_documents, jsonb_array_elements(persons) AS p WHERE ... GROUP BY 1 ORDER BY count(*) DESC.",
   "- Place search uses ILIKE on place_name (free-text strings).",
   "- Classification is preserved verbatim — use it as historical-interest signal, not as a current security marking (these are 30+ years old).",
-  "- Cite documents with the FULL chain when synthesizing — volume + doc_number + title + date + place + classification. The UI replaces [frus-ref:DOC_ID] tokens with click-throughs.",
+  "- Cite documents in prose with the full citation chain — 'FRUS 1958-1960, Vol. XV, Doc. 138 — Memcon Acheson/Lloyd, London, October 17, 1958 (SECRET)'. The user navigates to each cited document via the Cited Documents list that renders below the narrative; do NOT embed any internal id markers in the prose.",
   "- COVERAGE/EXISTENCE QUESTIONS ('Has the US ever...'). For 'no' answers especially, surface the SEARCH DATASET in candor_notes so the user can interrogate the formulation ('Searched fts for X OR Y OR Z; returned 0 matches across 314K documents.').",
   "- ANALYTICAL COUNTS. Surface the denominator (e.g. 'Of 314,483 documents, 437 mention Stalin between 1948 and 1955') in candor_notes.",
   "- Read-only: only SELECT statements are accepted; cap planned queries at LIMIT 500 (text_content is large; bigger pulls blow up synthesis input)."
@@ -4122,7 +4247,7 @@ function buildFrusSynthesisSystem(outputMode) {
     "",
     "Output a single JSON object (no prose, no code fences) with these keys:",
     "{",
-    '  "answer_markdown": "...",  // markdown narrative; embed [frus-ref:DOC_ID] tokens to cite specific documents.',
+    '  "answer_markdown": "...",  // markdown narrative; cite documents in prose with the FULL FRUS citation chain (volume + doc_number + title + date + place + classification). DO NOT embed internal id tokens.',
     "  " + listClause + ",",
     '  "candor_notes": ["any caveats discovered during synthesis"]',
     "}",
@@ -4130,7 +4255,7 @@ function buildFrusSynthesisSystem(outputMode) {
     "Rules:",
     "- CHRONOLOGICAL by default for narrative output. Order events by date; surface transitions explicitly ('In May 1961…', 'Three months later…').",
     "- ATTRIBUTION-FORWARD. Name persons explicitly when the document attribution is clear (who said what to whom, when). The persons jsonb field gives you this for free where TEI extraction succeeded.",
-    "- CITE EVERY CLAIM. Each substantive sentence about events / positions / decisions must be cited to a specific document via [frus-ref:DOC_ID]. The UI replaces this with a click-through. Where the row has title + date + place + classification, weave them into the prose ('A May 14, 1961 cable from London marked SECRET [frus-ref:12345] reports that…').",
+    "- CITE EVERY CLAIM via the FULL FRUS chain in PROSE — 'FRUS 1958-1960, Vol. XV, Doc. 138 (Memcon Acheson/Lloyd, London, October 17, 1958, SECRET)' or naturally folded in: 'A May 14, 1961 cable from London marked SECRET (FRUS 1961-1963, Vol. XII, Doc. 47) reports that...'. The user navigates to each cited document via the Cited Documents list that renders below the narrative; do NOT embed [frus-ref:N] tokens or any other internal id markers. Bad: '...cable from London [frus-ref:12345] reports...'. Good: '...cable from London (FRUS 1961-1963, Vol. XII, Doc. 47) reports...'.",
     "- CLASSIFICATION IS HISTORICAL-INTEREST SIGNAL. When citing a document, surface its original classification level when it's interesting (e.g., a document marked TOP SECRET at the time, or — for the inverse signal — a document marked UNCLASSIFIED on a sensitive topic).",
     "- COVERAGE/EXISTENCE answers (output_mode = hybrid in response to 'has the US ever' questions): lead with a clean yes/no verdict; back it with the document list. For 'no' answers, the search dataset (which FTS terms / date ranges / classification filters the planner tried) MUST be surfaced in candor_notes so the user can interrogate the formulation.",
     "- ANALYTICAL answers (output_mode = narrative for counting questions): surface the denominator and the methodology explicitly. 'Of 314,483 documents in the corpus, 437 mention Stalin between 1948 and 1955' — never just '437 documents mention Stalin'.",
@@ -5675,5 +5800,8 @@ export {
   buildHubQueriesUsc,
   buildHubQueriesCfr,
   buildHubQueriesOlc,
-  buildHubQueriesFrus
+  buildHubQueriesFrus,
+  ITEMS_BY_IDS_CAP,
+  parseItemsByIdsRequest,
+  buildItemsByIdsSql
 };

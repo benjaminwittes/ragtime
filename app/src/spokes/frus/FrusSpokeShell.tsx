@@ -139,25 +139,12 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     null,
   )
 
+  /** Open a document in the detail panel. Used by both manual-filter rows
+   *  and AMA cited rows (PR 4v unified both — cited rows are now metadata-
+   *  rich rather than id-only stubs, so the handler receives full row
+   *  data uniformly). */
   function handleOpenDocument(row: FrusDocumentDisplayRow) {
     setOpenDocument(row)
-    setDetailOpen(true)
-  }
-
-  /** Open the detail sheet for a document-id citation from the AMA result.
-   *  The detail sheet re-fetches the full document; the placeholder row is
-   *  just enough to drive remount. */
-  function handleOpenDocumentById(id: number) {
-    const placeholder: FrusDocumentDisplayRow = {
-      id,
-      title: null,
-      doc_date: null,
-      volume_id: null,
-      place_name: null,
-      classification: null,
-      text_length: null,
-    }
-    setOpenDocument(placeholder)
     setDetailOpen(true)
   }
 
@@ -323,7 +310,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           plan={amaResultPlan}
           loading={amaLoading}
           error={amaError}
-          onOpenDocument={handleOpenDocumentById}
+          onOpenDocument={handleOpenDocument}
         />
       )}
       <FrusDocumentDetailSheet
