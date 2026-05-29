@@ -996,6 +996,70 @@ function buildSynthesisUser(question, plan, results) {
   ].join('\n');
 }
 
+/** Shape salvaged content into a spoke's synthesis schema (PR 4w). The
+ *  idsField name differs per spoke (opinion_ids / document_ids /
+ *  section_ids); list-mode is forced empty so the UI doesn't try to render
+ *  partial cited rows. */
+function buildSalvagedSynthesis(salvaged, outputMode, idsField) {
+  const out = {
+    answer_markdown: salvaged.answer_markdown,
+    candor_notes: [salvaged.candor_note],
+  };
+  out[idsField] = outputMode === "narrative" ? null : [];
+  return out;
+}
+
+/**
+ * Salvage path for truncated synthesis output (PR 4w; addresses Note 4 from
+ * Ben's first testing pass — "Could not parse synthesis: could not find a
+ * JSON object"). When the model's response gets cut off mid-JSON before the
+ * closing brace, our brace-balance parser returns null and the synthesis
+ * call's spend is invisible from the user's perspective.
+ *
+ * Heuristic: find the `"answer_markdown":` key. If the tail past it lacks
+ * the closing structure (`","candor_notes":` / `","<doc>_ids":` / `"}`), we
+ * treat it as truncated and recover whatever markdown the model managed to
+ * emit. Returns null when the response isn't truncated (let the normal
+ * parser handle it) or when there's too little recoverable content to be
+ * useful.
+ *
+ * Each `parse<Spoke>Synthesis` calls this as a last resort in its catch
+ * chain, then shapes the salvage into the spoke-specific synthesis schema
+ * (with the spoke's <doc>_ids field forced empty so the UI doesn't try to
+ * render partial cited results).
+ */
+function salvageTruncatedSynthesis(raw) {
+  const s = String(raw);
+  const startMatch = s.match(/"answer_markdown"\s*:\s*"/);
+  if (!startMatch) return null;
+  const startIdx = startMatch.index + startMatch[0].length;
+  const tail = s.slice(startIdx);
+  // If the tail contains any of the closing structures, this isn't a
+  // truncation — the issue is elsewhere; let the normal parser handle it.
+  if (/"(\s*,\s*"(?:cl_ids|opinion_ids|section_ids|document_ids|candor_notes)"|\s*\})/.test(tail)) {
+    return null;
+  }
+  // Undo JSON string-escape sequences in the salvaged markdown.
+  let markdown = tail
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\r/g, "\r")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\")
+    // Drop a trailing partial escape character if the model was cut off
+    // mid-escape.
+    .replace(/\\$/, "")
+    .trimEnd();
+  // Too little content to be useful as a degraded answer.
+  if (markdown.length < 50) return null;
+  return {
+    answer_markdown: markdown +
+      "\n\n*[Output was truncated — the model ran out of tokens before completing the answer. Try re-running the question, or narrow it (smaller date range, single agency, single administration) to bring the synthesis output under the token cap.]*",
+    candor_note:
+      "Synthesis output was truncated mid-generation (token limit reached). The answer above is the partial markdown the model managed to emit before the cutoff; the remainder (additional cited sources, closing analysis) was not generated.",
+  };
+}
+
 function repairAnswerMarkdownQuotes(raw) {
   const s = String(raw);
   const startMatch = s.match(/"answer_markdown"\s*:\s*"/);
@@ -1132,7 +1196,7 @@ async function corpusExecuteHandler(request, env, ctx) {
       provider: blob.provider, model: blob.model,
       system: buildSynthesisSystem(blob.plan.output_mode),
       messages: [{ role: "user", content: buildSynthesisUser(blob.question, blob.plan, results) }],
-      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+      max_tokens: blob.plan.output_mode === "narrative" ? 8000 : 6000
     });
   } catch (e) {
     return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
@@ -2059,8 +2123,13 @@ function buildUscPlanningSystem() {
     "- PULL METADATA, NOT FULL TEXT. Planned queries should select id, citation, heading, title_num, structure_path, is_positive_law, status — NEVER text_content. Synthesis works from headings + citations; the user reads full text via the detail sheet.",
     "- USE CITATION LOOKUP when the question names a specific citation. WHERE citation = '8 U.S.C. § 1225' is faster + more reliable than FTS.",
     "- USE TITLE SCOPE when the question targets a known title or chapter. 'tax' → title_num IN (26, 11). 'criminal' → title_num=18. 'UCMJ' → title_num=10 AND chapter='47'.",
-    "- KEYWORD UNDERPERFORMS for conceptual queries ('what laws enshrine due-process principles?'). Use OR generously; flag in candor_notes that keyword search may under-recall concepts and semantic retrieval (pgvector) is Phase 2.",
+    "- KEYWORD UNDERPERFORMS — FAN OUT WITH OR GENEROUSLY. The user's phrasing is often NOT the statute's phrasing. Single-term ANDed queries will under-recall. Specific failure modes you must guard against:",
+    "    * **Agency name vs statutory formulation.** User says 'National Park Service regulations'; the criminal statute says 'rules and regulations prescribed by the Secretary of the Interior governing the use of the National Park System'. Searching just 'National Park Service' will miss it. Always fan: 'National Park Service' OR 'National Park System' OR 'Park Service' OR 'Secretary of the Interior'. Same pattern for any agency: include the parent department, the umbrella system, and the official-position formulation.",
+    "    * **Criminal-statute formulation.** User says 'crime to violate'; criminal statutes use generic formulations: 'Whoever violates', 'shall be fined', 'imprisoned not more than', 'punishable by'. Add an FTS branch covering these patterns when the question is about criminal liability: websearch_to_tsquery('english', '\"shall be fined\" OR \"imprisoned\" OR \"Whoever violates\"').",
+    "    * **Conceptual / doctrinal queries.** 'Due process', 'commerce clause', 'preemption' — concepts may not appear as keyword phrases in the operative text. Fan to common formulations + add a candor note that keyword search may under-recall conceptual questions and semantic retrieval (pgvector) is Phase 2.",
+    "  WORKED EXAMPLE — *'federal criminal statutes that make it a crime to violate National Park Service regulations'*: known ground truth = 18 U.S.C. § 1865, which uses statutory phrasings 'Secretary of the Interior', 'rules and regulations', 'shall be fined or imprisoned'. A good plan combines title_num IN (16, 18, 54) (the conservation + crimes + national-parks-program titles) with FTS that fans: websearch_to_tsquery('english', '(\"National Park Service\" OR \"National Park System\" OR \"Park Service\" OR \"Secretary of the Interior\") AND (\"shall be fined\" OR \"imprisoned\" OR \"Whoever violates\" OR \"rules and regulations\")'). A BAD plan: filter on title_num=18 AND fts ~ 'National Park Service' (will return 0 — the agency name isn't in the statute).",
     "- ANALYTICAL COUNTS. Always surface the denominator and the matching pattern: 'Pattern-matched on [terms] across all 60,416 sections; N matched. Counts X, not Y.'",
+    "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned query with strong OR coverage is better than five literal-term queries.",
     "- CONSTITUTION GAP. When an answer turns substantially on Article II or the Bill of Rights, add a candor_note that RAGtime does not hold the constitutional text yet (post-launch acquisition).",
     "- NEVER editorialize. USC sections are binding text; describe what they say, do not opine on policy or interpretation beyond what's textually grounded.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (section_ids list provided): use the name \"scoped_usc_sections\" instead of \"usc_sections\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. WHEN SCOPE IS THE FULL CORPUS: use \"usc_sections\".",
@@ -2158,6 +2227,7 @@ function buildUscSynthesisSystem(outputMode) {
     "- CONSTITUTION GAP. If the answer turns substantially on Article II / Bill of Rights, lead with that limitation: 'The answer turns substantially on [Article II § N / the Nth Amendment], which is outside USC's scope (RAGtime does not yet hold the constitutional text). Within USC, [the analysis follows].'",
     "- AUTHORITY SYNTHESIS (Flagship B) note. If the question asks 'Can the President / [agency] do X', surface in candor_notes that v1 does not yet cross-reference CFR (implementing regulations), OLC (executive interpretation), or litigation (challenges) — those are deferred. The USC answer is the statutory-authority piece only.",
     "- ANALYTICAL ANSWERS. Surface the denominator and the matching pattern in answer_markdown itself, not just candor_notes: 'Of 60,416 sections, N matched the pattern [pattern].'",
+    "- ZERO-RESULT HONESTY. When the query results are empty (or near-empty) for what should be a non-trivial question, the answer_markdown MUST: (1) name the FTS terms tried in prose ('I searched titles 16, 18, and 54 for the phrases ...'), (2) acknowledge this may be a keyword recall failure rather than a true absence of statute on the topic — explain that the statute may use different language than the question's phrasing (a common pattern: questions name agencies; statutes name the umbrella department or the official's title), and (3) suggest one or two reformulations the user could try. DO NOT just say 'no results found' — that's opaque about whether USC is genuinely silent or the keyword search missed.",
     "- For list/hybrid output_modes, section_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable sections, downgrade to narrative and explain.",
     "- Be tight. The user wants the legal answer, not a methodology essay. Keep candor_notes for caveats.",
     "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
@@ -2203,9 +2273,15 @@ function parseUscSynthesis(raw, outputMode) {
         try { v = JSON.parse(firstObj); }
         catch (pe3) {
           try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
-          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+          catch (pe4) {
+            const salvaged = salvageTruncatedSynthesis(raw);
+            if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "section_ids");
+            throw new Error("JSON.parse error: " + pe4.message);
+          }
         }
       } else {
+        const salvaged = salvageTruncatedSynthesis(raw);
+        if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "section_ids");
         throw new Error("could not find a JSON object.");
       }
     }
@@ -2302,7 +2378,7 @@ async function corpusUscExecuteHandler(request, env, ctx) {
       provider: blob.provider, model: blob.model,
       system: buildUscSynthesisSystem(blob.plan.output_mode),
       messages: [{ role: "user", content: buildUscSynthesisUser(blob.question, blob.plan, results) }],
-      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+      max_tokens: blob.plan.output_mode === "narrative" ? 8000 : 6000
     });
   } catch (e) {
     return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
@@ -2719,7 +2795,13 @@ function buildCfrPlanningSystem() {
     "- AGENCY ROUTING. When the question targets a specific agency, derive a (title_num, chapter) filter rather than FTS-matching on the agency name. FDA → title_num=21. EPA → title_num=40. Fed → title_num=12 AND chapter='II'.",
     "- PART SCOPE for known rule packages. HIPAA Privacy → title_num=45 AND part IN ('160','164'). Reg Z → title_num=12 AND part='1026'. NEPA EIS → title_num=40 AND part BETWEEN '1500' AND '1508'.",
     "- USC↔CFR IMPLEMENTS QUERIES. v1 uses FTS proxy ('5 U.S.C. § 552' citation pattern in text_content). The eCFR-authorities join table is deferred; surface this approximation in candor_notes.",
+    "- KEYWORD UNDERPERFORMS — FAN OUT WITH OR GENEROUSLY. The user's phrasing is often NOT the regulation's phrasing. Specific failure modes:",
+    "    * **Activity terms vs regulatory formulation.** User says 'commercial drone operations'; the regulation says 'unmanned aircraft systems', 'small unmanned aircraft', 'operations for compensation or hire'. Always fan to the regulatory terms of art: 'commercial drone' OR 'unmanned aircraft' OR 'small unmanned aircraft system' OR 'sUAS'. The CFR's drafting language is technical; consumer phrasing won't match.",
+    "    * **Activity verbs.** User says 'rules forbidding X'; regulations use 'prohibited', 'may not', 'shall not', 'unlawful', 'restricted'. Fan: '\"may not\" OR \"shall not\" OR prohibited OR restricted OR unlawful'.",
+    "    * **Conceptual queries.** Same pgvector-is-Phase-2 caveat as USC.",
+    "  WORKED EXAMPLE — *'regs prohibiting projecting images on federal buildings'*: don't just FTS 'projecting images'. The regulations use 'demonstration', 'display', 'sign', 'use of the property', 'public use'. Fan: title_num=36 (parks) OR title_num=41 (public contracts/property) AND fts ~ '(\"projecting\" OR \"display\" OR \"sign\" OR \"demonstration\") AND (\"federal building\" OR \"public property\" OR \"national park\" OR \"national monument\")'. A BAD plan: FTS '\"projecting images\"' literal — returns 0.",
     "- ANALYTICAL COUNTS. Surface denominator AND pattern: 'Across 227,554 sections, pattern-matched on [pattern]; N matched.'",
+    "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned query with strong OR coverage is better than five literal-term queries.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (section_ids list provided): use the name \"scoped_cfr_sections\" instead of \"cfr_sections\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. WHEN SCOPE IS THE FULL CORPUS: use \"cfr_sections\".",
     "- NEVER editorialize. CFR sections are binding regulatory text; describe what they say, do not opine on compliance burden or regulatory policy.",
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
@@ -2817,6 +2899,7 @@ function buildCfrSynthesisSystem(outputMode) {
     "- USC↔CFR FTS PROXY. When the question asked 'what regulations implement [USC citation]', surface in candor_notes: 'v1 uses an FTS match on the citation text as a proxy; the structured eCFR-authorities join is deferred to a follow-up. False negatives are possible where the implementing reg cites a parent provision rather than the specific section.'",
     "- DEFINITIONAL LAYER. For 'how do federal regs define X' questions, surface in candor_notes: 'v1 uses FTS to find definitional language; the parsed cfr_definitions table with scope_note is deferred to a follow-up. The same term may be defined differently across subparts.'",
     "- ANALYTICAL ANSWERS. Surface the denominator and matching pattern in answer_markdown itself: 'Across 227,554 sections, N matched [pattern].'",
+    "- ZERO-RESULT HONESTY. When the query results are empty (or near-empty) for what should be a non-trivial question, the answer_markdown MUST: (1) name the FTS terms tried in prose ('I searched title 40 and title 36 for the phrases ...'), (2) acknowledge this may be a keyword recall failure — explain that regulations use technical terms of art that the user's phrasing may not match (e.g., 'commercial drone' vs 'unmanned aircraft system'; agency names vs umbrella department), and (3) suggest one or two reformulations. DO NOT just say 'no results found' — that's opaque about whether the CFR is genuinely silent or the keyword search missed.",
     "- For list/hybrid output_modes, section_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable sections, downgrade to narrative and explain.",
     "- Be tight. The user wants the regulatory answer, not a methodology essay. Keep candor_notes for caveats.",
     "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
@@ -2862,9 +2945,15 @@ function parseCfrSynthesis(raw, outputMode) {
         try { v = JSON.parse(firstObj); }
         catch (pe3) {
           try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
-          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+          catch (pe4) {
+            const salvaged = salvageTruncatedSynthesis(raw);
+            if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "section_ids");
+            throw new Error("JSON.parse error: " + pe4.message);
+          }
         }
       } else {
+        const salvaged = salvageTruncatedSynthesis(raw);
+        if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "section_ids");
         throw new Error("could not find a JSON object.");
       }
     }
@@ -2961,7 +3050,7 @@ async function corpusCfrExecuteHandler(request, env, ctx) {
       provider: blob.provider, model: blob.model,
       system: buildCfrSynthesisSystem(blob.plan.output_mode),
       messages: [{ role: "user", content: buildCfrSynthesisUser(blob.question, blob.plan, results) }],
-      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+      max_tokens: blob.plan.output_mode === "narrative" ? 8000 : 6000
     });
   } catch (e) {
     return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
@@ -3367,6 +3456,12 @@ function buildOlcPlanningSystem() {
     "- For narrative questions over a topic ('how has OLC's view of X evolved'), order by date_issued ASC and cap at 200 opinions per query — that's plenty of evidence for the synthesis step.",
     "- author / recipient / president are NULL on every row today. Do NOT plan queries that filter or group on them. If the question really wants administration analysis, add candor_notes: 'Administration field is not populated yet; v1 surfaces opinions by date_issued, not by administration.'",
     "- For 'what's been overturned/withdrawn' questions, surface the supersession-noise caveat in candor_notes and run an honest text search (fts @@ websearch_to_tsquery('english', 'withdraw OR overrule OR supersede')) without claiming the result list is authoritative.",
+    "- KEYWORD UNDERPERFORMS — FAN OUT WITH OR GENEROUSLY. OLC questions are doctrinal; the user's phrasing rarely matches the opinion's. Specific failure modes:",
+    "    * **Doctrine vs phrasing.** User asks about 'executive privilege'; the opinion may use 'the President's communications privilege', 'deliberative process privilege', 'presidential confidentiality', 'Article II authority over executive communications'. Fan: '\"executive privilege\" OR \"communications privilege\" OR \"deliberative process\" OR \"presidential confidentiality\"'.",
+    "    * **Authority/power constructions.** 'Can the President do X' → 'authority', 'power', 'constitutional', 'inherent', 'Article II', 'executive function'. Fan all of these in tandem with the action verb of the question.",
+    "    * **Agency/officer formulations.** Like USC/CFR: the OLC opinion may name the umbrella department, statutory authority, or constitutional clause rather than the agency the user named.",
+    "  WORKED EXAMPLE — *'OLC opinions on the President's power to remove agency heads'*: don't just FTS 'remove agency heads'. Fan: websearch_to_tsquery('english', '(\"removal power\" OR \"power to remove\" OR \"at-will removal\" OR \"removability\") AND (\"agency\" OR \"officer\" OR \"principal officer\" OR \"inferior officer\")'). Add Article II as a candor-note hook since the constitutional dimension is dispositive for many of these.",
+    "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned query with strong OR coverage is better than five literal-term queries.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (opinion_ids list provided): use the name \"scoped_olc_opinions\" instead of \"olc_opinions\". The runner substitutes this with an inline subquery already filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_olc_opinions WHERE date_issued > '2010-01-01'\" (good), not \"FROM scoped_olc_opinions o WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"olc_opinions\".",
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
   ].join("\n");
@@ -3458,6 +3553,7 @@ function buildOlcSynthesisSystem(outputMode) {
     "- PROVENANCE WHEN MEANINGFUL. If your set includes Knight-FOIA opinions DOJ never published, mention that — it's a completeness signal for the user.",
     "- DEGRADED OCR. If any row has ocr_quality = 'degraded', surface that in candor_notes — synthesis from those rows is lower-confidence.",
     "- RELEASED-vs-ISSUED CAVEAT. Any count-by-year statement must include the caveat that counts reflect released opinions only, not OLC's true annual output.",
+    "- ZERO-RESULT HONESTY. When the query results are empty (or near-empty) for what should be a non-trivial question, the answer_markdown MUST: (1) name the FTS terms tried in prose ('I searched for opinions matching ...'), (2) acknowledge this may be a keyword recall failure — explain that OLC opinions are doctrinal and often phrase concepts differently than questions (e.g., 'executive privilege' may appear as 'the President's communications privilege'; agency names may not appear at all where the analysis is about constitutional power), and (3) note that this could also genuinely mean OLC has not opined on the topic in publicly-released opinions (with the released-vs-issued caveat). Suggest one or two reformulations. DO NOT just say 'no results found'.",
     "- For list and hybrid output_modes, opinion_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable opinions, downgrade to narrative mode and explain.",
     "- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.",
     "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
@@ -3503,9 +3599,15 @@ function parseOlcSynthesis(raw, outputMode) {
         try { v = JSON.parse(firstObj); }
         catch (pe3) {
           try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
-          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+          catch (pe4) {
+            const salvaged = salvageTruncatedSynthesis(raw);
+            if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "opinion_ids");
+            throw new Error("JSON.parse error: " + pe4.message);
+          }
         }
       } else {
+        const salvaged = salvageTruncatedSynthesis(raw);
+        if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "opinion_ids");
         throw new Error("could not find a JSON object.");
       }
     }
@@ -3602,7 +3704,7 @@ async function corpusOlcExecuteHandler(request, env, ctx) {
       provider: blob.provider, model: blob.model,
       system: buildOlcSynthesisSystem(blob.plan.output_mode),
       messages: [{ role: "user", content: buildOlcSynthesisUser(blob.question, blob.plan, results) }],
-      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+      max_tokens: blob.plan.output_mode === "narrative" ? 8000 : 6000
     });
   } catch (e) {
     return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
@@ -4163,8 +4265,15 @@ function buildFrusPlanningSystem() {
     "- CAP QUERIES at LIMIT 500. The corpus is large; bigger pulls blow up synthesis input.",
     "- USE THE VOLUMES TABLE as scope hint. If the question targets a known volume (era + region), the volume_id filter is faster than FTS. 'Eisenhower Suez' → look for volumes with content_date around 1956-1957 + 'Suez' or 'Near East' in title_complete.",
     "- PERSON QUERIES. Use jsonb containment: persons @> '[{\"name\": \"Stalin\"}]'::jsonb. Names can be partial — fall back to text search on text_content if the jsonb lookup returns nothing.",
+    "- KEYWORD UNDERPERFORMS — FAN OUT WITH OR GENEROUSLY. The user's phrasing is often NOT the diplomatic record's phrasing. Specific failure modes:",
+    "    * **Event/place names.** User says 'the Suez Crisis'; the cables say 'situation in the Middle East', 'Egyptian nationalization of the Canal', 'tripartite intervention', 'Eden government'. Fan: '(\"Suez\" OR \"Egypt\" OR \"Canal\" OR \"Middle East\") AND (1956 OR 1957)'. Anchor with the date range when known.",
+    "    * **Country/region name variants.** 'Iran' (1953-) ↔ 'Persia' (pre-1935). 'Burma' ↔ 'Myanmar'. 'Soviet Union' ↔ 'USSR' ↔ 'Russia'. 'PRC' ↔ 'Communist China' ↔ 'Peking' ↔ 'Beijing'. The diplomatic record's vocabulary reflects the era. Fan all plausible variants for the period in question.",
+    "    * **Person names.** Use persons jsonb containment first; if zero hits, FTS the surname AND any common given-name short form. 'Kennan' alone often suffices; 'McGeorge Bundy' should fan to '(\"McGeorge Bundy\" OR \"Mac Bundy\" OR \"Bundy\")'.",
+    "    * **Policy/concept terms.** 'Containment' as State Department phrasing predates the popular term. 'Détente' often appears as 'easing of tensions' or 'modus vivendi' in cables. Fan to common period synonyms.",
+    "  WORKED EXAMPLE — *'history of US embassy in Israel'*: don't just FTS 'embassy in Israel'. The cables discuss this under terms like 'Jerusalem', 'Tel Aviv', 'recognition', 'capital', 'consulate'. Fan: doc_date BETWEEN '1948-01-01' AND '2017-12-31' AND fts ~ '(\"Jerusalem\" OR \"Tel Aviv\" OR \"embassy\" OR \"recognition of Israel\") AND (capital OR \"Holy City\" OR consulate OR mission)'. Most reliable for FRUS: scope first by relevant volumes (volume_id IN (SELECT volume_id FROM frus_volumes WHERE content_date_min ≥ '1948' AND title_complete ILIKE '%Israel%'))) and THEN FTS within scope.",
     "- COVERAGE/EXISTENCE. For 'has the US ever' questions, include the SEARCH DATASET (the FTS terms you tried) in candor_notes regardless of whether anything matched — for 'no' answers, this is required content.",
     "- ANALYTICAL COUNTS. Always include the denominator (corpus size or the relevant subset) in candor_notes.",
+    "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned query with strong OR coverage is better than five literal-term queries.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (document_ids list provided): use the name \"scoped_frus_documents\" instead of \"frus_documents\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_frus_documents WHERE classification = 'Secret'\" (good), not \"FROM scoped_frus_documents d WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"frus_documents\".",
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
   ].join("\n");
@@ -4259,6 +4368,7 @@ function buildFrusSynthesisSystem(outputMode) {
     "- CLASSIFICATION IS HISTORICAL-INTEREST SIGNAL. When citing a document, surface its original classification level when it's interesting (e.g., a document marked TOP SECRET at the time, or — for the inverse signal — a document marked UNCLASSIFIED on a sensitive topic).",
     "- COVERAGE/EXISTENCE answers (output_mode = hybrid in response to 'has the US ever' questions): lead with a clean yes/no verdict; back it with the document list. For 'no' answers, the search dataset (which FTS terms / date ranges / classification filters the planner tried) MUST be surfaced in candor_notes so the user can interrogate the formulation.",
     "- ANALYTICAL answers (output_mode = narrative for counting questions): surface the denominator and the methodology explicitly. 'Of 314,483 documents in the corpus, 437 mention Stalin between 1948 and 1955' — never just '437 documents mention Stalin'.",
+    "- ZERO-RESULT HONESTY. When the query results are empty (or near-empty) for what should be a non-trivial question, the answer_markdown MUST: (1) name the FTS terms and date ranges tried in prose, (2) acknowledge this may be a recall failure — explain that the diplomatic record's vocabulary reflects the era (country names change, terminology evolves, agencies are named differently) and may not match the question's modern phrasing, and (3) suggest one or two reformulations (period-appropriate terminology, alternative spellings, broader date range). DO NOT just say 'no results found' — that's opaque about whether the corpus is genuinely silent or the query phrasing missed.",
     "- DO NOT EDITORIALIZE on contested historical interpretations. FRUS terrain includes covert operations, regime-change involvement, contested intelligence judgments — describe and cite, never opine.",
     "- For list and hybrid output_modes, document_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable documents, downgrade to narrative mode and explain.",
     "- Be tight. Keep candor_notes for caveats. The user wants the answer, not a methodology essay.",
@@ -4305,9 +4415,15 @@ function parseFrusSynthesis(raw, outputMode) {
         try { v = JSON.parse(firstObj); }
         catch (pe3) {
           try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
-          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+          catch (pe4) {
+            const salvaged = salvageTruncatedSynthesis(raw);
+            if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "document_ids");
+            throw new Error("JSON.parse error: " + pe4.message);
+          }
         }
       } else {
+        const salvaged = salvageTruncatedSynthesis(raw);
+        if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "document_ids");
         throw new Error("could not find a JSON object.");
       }
     }
@@ -4404,7 +4520,7 @@ async function corpusFrusExecuteHandler(request, env, ctx) {
       provider: blob.provider, model: blob.model,
       system: buildFrusSynthesisSystem(blob.plan.output_mode),
       messages: [{ role: "user", content: buildFrusSynthesisUser(blob.question, blob.plan, results) }],
-      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+      max_tokens: blob.plan.output_mode === "narrative" ? 8000 : 6000
     });
   } catch (e) {
     return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
@@ -5803,5 +5919,7 @@ export {
   buildHubQueriesFrus,
   ITEMS_BY_IDS_CAP,
   parseItemsByIdsRequest,
-  buildItemsByIdsSql
+  buildItemsByIdsSql,
+  salvageTruncatedSynthesis,
+  buildSalvagedSynthesis
 };

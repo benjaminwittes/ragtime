@@ -65,7 +65,13 @@ import {
   buildHubQueriesFrus,
   ITEMS_BY_IDS_CAP,
   parseItemsByIdsRequest,
-  buildItemsByIdsSql
+  buildItemsByIdsSql,
+  salvageTruncatedSynthesis,
+  buildSalvagedSynthesis,
+  parseOlcSynthesis,
+  parseFrusSynthesis,
+  parseUscSynthesis,
+  parseCfrSynthesis
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -1710,6 +1716,165 @@ describe("buildItemsByIdsSql", () => {
     const sql = buildItemsByIdsSql("id", "t", [1]);
     // Worker's corpusRunQuery doesn't accept multi-statement input; no semicolon.
     expect(sql).not.toMatch(/;/);
+  });
+});
+
+// ============================================================================
+// Synthesis salvage (PR 4w) — recover degraded narrative when the model's
+// output truncated mid-JSON. Addresses Note 4 from the testing pass.
+// ============================================================================
+
+describe("salvageTruncatedSynthesis", () => {
+  it("returns null when input has no answer_markdown key", () => {
+    expect(salvageTruncatedSynthesis('{"foo": "bar"}')).toBeNull();
+    expect(salvageTruncatedSynthesis("just garbage")).toBeNull();
+    expect(salvageTruncatedSynthesis("")).toBeNull();
+  });
+
+  it("returns null when JSON is complete (closing structure present)", () => {
+    // Has the closing `","candor_notes":` — not truncated; let the normal parser handle.
+    const complete = '{"answer_markdown": "Hello world", "candor_notes": []}';
+    expect(salvageTruncatedSynthesis(complete)).toBeNull();
+    // Has the closing `","opinion_ids":` — also not truncated.
+    const completeOlc = '{"answer_markdown": "Hello world", "opinion_ids": [1, 2]}';
+    expect(salvageTruncatedSynthesis(completeOlc)).toBeNull();
+    // Has just the closing brace — not truncated.
+    const completeBare = '{"answer_markdown": "Hello world"}';
+    expect(salvageTruncatedSynthesis(completeBare)).toBeNull();
+  });
+
+  it("recovers truncated markdown when no closing structure is found", () => {
+    // Long enough recoverable content to be useful (>50 chars).
+    const truncated =
+      '{"answer_markdown": "The Eisenhower administration responded to the Suez Crisis through a series of diplomatic interventions';
+    const result = salvageTruncatedSynthesis(truncated);
+    expect(result).not.toBeNull();
+    expect(result.answer_markdown).toMatch(/Eisenhower administration/);
+    expect(result.answer_markdown).toMatch(/truncated/);
+    expect(result.candor_note).toMatch(/truncated mid-generation/);
+  });
+
+  it("drops content shorter than 50 chars", () => {
+    const tinyTruncation = '{"answer_markdown": "short';
+    expect(salvageTruncatedSynthesis(tinyTruncation)).toBeNull();
+  });
+
+  it("unescapes JSON string-escape sequences in the recovered markdown", () => {
+    // The model emitted \\n, \\", and \\\\ — we want them rendered as
+    // literal newline, double-quote, backslash respectively.
+    const truncated =
+      '{"answer_markdown": "Line one.\\nLine two with a \\"quoted\\" word.\\nBackslash test: C:\\\\Users\\\\benji';
+    const result = salvageTruncatedSynthesis(truncated);
+    expect(result).not.toBeNull();
+    expect(result.answer_markdown).toMatch(/Line one\.\nLine two/);
+    expect(result.answer_markdown).toMatch(/"quoted"/);
+    expect(result.answer_markdown).toMatch(/C:\\Users\\benji/);
+  });
+
+  it("drops a trailing partial escape (e.g. ends with single backslash)", () => {
+    const truncated =
+      '{"answer_markdown": "The cable from London reports a serious escalation. The Acheson memo argues that further action is needed\\';
+    const result = salvageTruncatedSynthesis(truncated);
+    expect(result).not.toBeNull();
+    // Recovered content should NOT end with a dangling backslash.
+    const markdownBeforeMarker = result.answer_markdown.split("\n\n*[")[0];
+    expect(markdownBeforeMarker).not.toMatch(/\\$/);
+  });
+});
+
+describe("buildSalvagedSynthesis", () => {
+  const salvagePayload = {
+    answer_markdown: "Partial narrative ...",
+    candor_note: "Output was truncated.",
+  };
+
+  it("shapes the salvage into the spoke-specific schema (OLC = opinion_ids)", () => {
+    const out = buildSalvagedSynthesis(salvagePayload, "narrative", "opinion_ids");
+    expect(out.answer_markdown).toBe("Partial narrative ...");
+    expect(out.candor_notes).toEqual(["Output was truncated."]);
+    expect(out.opinion_ids).toBeNull();
+  });
+
+  it("forces list-mode ids to empty array (UI shouldn't try to render partial)", () => {
+    const out = buildSalvagedSynthesis(salvagePayload, "list", "document_ids");
+    expect(out.document_ids).toEqual([]);
+  });
+
+  it("forces hybrid-mode ids to empty array too", () => {
+    const out = buildSalvagedSynthesis(salvagePayload, "hybrid", "section_ids");
+    expect(out.section_ids).toEqual([]);
+  });
+
+  it("forces narrative-mode ids to null", () => {
+    const out = buildSalvagedSynthesis(salvagePayload, "narrative", "section_ids");
+    expect(out.section_ids).toBeNull();
+  });
+});
+
+describe("parse<Spoke>Synthesis salvage integration", () => {
+  // A truncated FRUS response: the planner's "tell me about the history of
+  // discussions of whether the American embassy in Israel should be in Tel
+  // Aviv or Jerusalem" exact failure mode — model emitted a long narrative,
+  // hit the token cap before closing the JSON. PR 4v's parser threw "could
+  // not find a JSON object" and the user got nothing; PR 4w salvages.
+  const truncatedFrus =
+    '{"answer_markdown": "The question of whether the American embassy in Israel should be located in Tel Aviv or Jerusalem occupied U.S. policy from 1948 onward. Initially Tel Aviv was chosen for diplomatic reasons related to international recognition. The Jerusalem Embassy Act of 1995 mandated relocation but included a presidential waiver';
+
+  it("FRUS narrative-mode: salvage path returns degraded narrative instead of throwing", () => {
+    const v = parseFrusSynthesis(truncatedFrus, "narrative");
+    expect(v.answer_markdown).toMatch(/Tel Aviv/);
+    expect(v.answer_markdown).toMatch(/Jerusalem/);
+    expect(v.answer_markdown).toMatch(/truncated/);
+    expect(v.document_ids).toBeNull();
+    expect(v.candor_notes.join(" ")).toMatch(/truncated mid-generation/);
+  });
+
+  it("FRUS hybrid-mode: salvage forces document_ids = [] (no partial render)", () => {
+    const v = parseFrusSynthesis(truncatedFrus, "hybrid");
+    expect(v.document_ids).toEqual([]);
+  });
+
+  // Each spoke parser gets symmetric salvage behavior. One smoke test per.
+  it("OLC: salvage path returns degraded narrative with opinion_ids = null", () => {
+    const truncatedOlc =
+      '{"answer_markdown": "OLC has opined on the recess-appointment power across several administrations. The 1979 opinion on intra-session recesses concluded';
+    const v = parseOlcSynthesis(truncatedOlc, "narrative");
+    expect(v.answer_markdown).toMatch(/recess-appointment/);
+    expect(v.answer_markdown).toMatch(/truncated/);
+    expect(v.opinion_ids).toBeNull();
+  });
+
+  it("USC: salvage path returns degraded narrative with section_ids = []", () => {
+    const truncatedUsc =
+      '{"answer_markdown": "Title 18 contains multiple sections addressing whistleblower retaliation, primarily through §1513 (retaliating against a witness) and §1514 (civil action to restrain harassment). Title 5 §2302 enumerates prohibited personnel practices';
+    const v = parseUscSynthesis(truncatedUsc, "hybrid");
+    expect(v.answer_markdown).toMatch(/whistleblower/);
+    expect(v.answer_markdown).toMatch(/truncated/);
+    expect(v.section_ids).toEqual([]);
+  });
+
+  it("CFR: salvage path returns degraded narrative with section_ids = []", () => {
+    const truncatedCfr =
+      '{"answer_markdown": "The HIPAA Privacy Rule, codified at 45 CFR Parts 160 and 164, establishes national standards for the protection of individually identifiable health information. §164.502 sets the general rules for uses and disclosures';
+    const v = parseCfrSynthesis(truncatedCfr, "list");
+    expect(v.answer_markdown).toMatch(/HIPAA/);
+    expect(v.answer_markdown).toMatch(/truncated/);
+    expect(v.section_ids).toEqual([]);
+  });
+
+  it("does NOT salvage when the response was a well-formed empty-rows answer (regression guard)", () => {
+    // Model returned a clean JSON answer saying "no results" — must NOT
+    // trigger salvage; normal parser handles it.
+    const cleanZeroResultUsc = JSON.stringify({
+      answer_markdown:
+        "I searched titles 16, 18, and 54 for the phrases 'National Park Service' OR 'National Park System' AND 'criminal'; zero matching sections. This may be a recall failure — try the phrasing 'Secretary of the Interior' AND 'rules and regulations'.",
+      section_ids: [],
+      candor_notes: ["Searched titles 16, 18, 54 with FTS fan: no matches."],
+    });
+    const v = parseUscSynthesis(cleanZeroResultUsc, "list");
+    expect(v.answer_markdown).toMatch(/recall failure/);
+    expect(v.candor_notes.length).toBeGreaterThan(0);
+    expect(v.candor_notes.join(" ")).not.toMatch(/truncated mid-generation/);
   });
 });
 

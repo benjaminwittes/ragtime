@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  AMA_CONFIRM_THRESHOLD_CENTS,
   type CfrAmaPlan,
   type CfrAmaScope,
   type CfrAmaSynthesis,
@@ -18,6 +17,7 @@ import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
+import { isAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
@@ -198,7 +198,9 @@ export function CfrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       status: 'done',
     })
 
-    if (plan.estimated_cost_cents > AMA_CONFIRM_THRESHOLD_CENTS) {
+    // PR 4w: pre-flight on every query unless user opted out. See
+    // OlcSpokeShell for full rationale.
+    if (!isAmaPreflightSkipped()) {
       setPendingPlan({ plan, question })
       return
     }
