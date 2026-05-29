@@ -71,7 +71,8 @@ import {
   parseOlcSynthesis,
   parseFrusSynthesis,
   parseUscSynthesis,
-  parseCfrSynthesis
+  parseCfrSynthesis,
+  parseSynthesis
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -1860,6 +1861,26 @@ describe("parse<Spoke>Synthesis salvage integration", () => {
     expect(v.answer_markdown).toMatch(/HIPAA/);
     expect(v.answer_markdown).toMatch(/truncated/);
     expect(v.section_ids).toEqual([]);
+  });
+
+  // PR 4y: litigation parity. Same salvage chain as the four spokes, but the
+  // idsField is cl_ids and the parser is parseSynthesis (litigation predates
+  // the per-spoke parsers).
+  it("litigation: salvage path returns degraded narrative with cl_ids = null in narrative mode", () => {
+    const truncatedLitigation =
+      '{"answer_markdown": "Across the post-2025-01-20 docket, immigration TROs have clustered in the District of Maryland and the Northern District of California. Courts have repeatedly applied the four-factor test from Winter v. NRDC to evaluate the likelihood of irreparable harm';
+    const v = parseSynthesis(truncatedLitigation, "narrative");
+    expect(v.answer_markdown).toMatch(/immigration TROs/);
+    expect(v.answer_markdown).toMatch(/truncated/);
+    expect(v.cl_ids).toBeNull();
+    expect(v.candor_notes.join(" ")).toMatch(/truncated mid-generation/);
+  });
+
+  it("litigation: salvage forces cl_ids = [] in hybrid mode (no partial cited rows)", () => {
+    const truncatedLitigation =
+      '{"answer_markdown": "Several recent cases have addressed the limits of executive authority over independent agencies';
+    const v = parseSynthesis(truncatedLitigation, "hybrid");
+    expect(v.cl_ids).toEqual([]);
   });
 
   it("does NOT salvage when the response was a well-formed empty-rows answer (regression guard)", () => {
