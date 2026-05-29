@@ -2,20 +2,27 @@ import type { CorpusSpoke } from '../types'
 import { fetchUscFacets } from '@/lib/worker-client'
 
 /**
- * USC (United States Code) spoke — v1 alpha (manual filter only).
+ * USC (United States Code) spoke.
  *
  * Per brief #3, USC is paradigmatically a reference-lookup corpus: the
  * user navigates the title → chapter → section hierarchy, or asks "what
  * does §X say?" and gets the authoritative text. All three flagships are
  * co-equal (retrieval, filtering, analytical).
  *
- * v1 alpha (this PR): keyword + metadata filtering only — FTS, title,
- * citation, heading, positive-law, status. AI modes (legality / authority
- * / topical synthesis per brief #3 §3), the curated scopes library, the
- * definitional layer, and cross-corpus joins all land in follow-up PRs.
+ * Surfaces:
+ * - Manual filter: keyword + metadata filtering (FTS, title, citation,
+ *   heading, positive-law, status).
+ * - claude_ama (PR 4s): three flagships (Legality / Authority / Topical
+ *   synthesis), all served through one mode whose planner picks
+ *   output_mode per question shape ("no query-architecture buttons").
+ * - Summarize-one-section (PR 4s): an action on the section detail
+ *   sheet, not a mode in the selector.
  *
- * Status flipped to 'active' here so the hub links into the spoke and
- * SpokeShell mounts the USC chassis rather than the coming-soon landing.
+ * v1 ships single-corpus AI. The curated scopes library, the definitional
+ * layer, the cross-corpus joins (USC ↔ CFR / OLC / litigation), and
+ * historical versioning per brief #3 §6 are deferred — the planner
+ * surfaces the Authority-synthesis cross-corpus limitation in a candor
+ * note when the user asks a "Can the President do X" type question.
  */
 export const uscSpoke: CorpusSpoke = {
   slug: 'usc',
@@ -39,7 +46,9 @@ export const uscSpoke: CorpusSpoke = {
         lastUpdated: f.release_point,
         knownGaps: [
           'Historical versions (older release points) are not loaded; we track only the current release.',
-          'AI modes (legality / authority / topical synthesis), the curated scopes library, the definitional layer, and cross-corpus joins all land in follow-up PRs.',
+          'Curated scopes library (UCMJ / Internal Revenue Code / INA / etc. as one-click entry points) and the definitional layer (parsed defined-terms table) are deferred to follow-up PRs.',
+          'Cross-corpus joins (USC ↔ CFR for implementing regs, USC ↔ litigation for cases citing a section, USC ↔ OLC for executive interpretation) are deferred pending pipeline ingest work — the AMA flags this when the question would benefit.',
+          'Semantic retrieval (pgvector) deferred to Phase 2; keyword underperforms for principle/concept queries like "what laws enshrine due-process principles".',
         ],
       }
     } catch {
@@ -53,7 +62,7 @@ export const uscSpoke: CorpusSpoke = {
     }
   },
 
-  queryModes: ['manual_filter'],
+  queryModes: ['manual_filter', 'claude_ama'],
   flagships: {
     present: ['retrieval', 'filtering', 'analytical'],
     paradigmatic: null,

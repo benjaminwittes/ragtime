@@ -213,6 +213,15 @@ export default {
       if (path === "/corpus/usc/section" && request.method === "POST") {
         return await corpusUscSectionHandler(request, env, ctx);
       }
+      if (path === "/corpus/usc/plan" && request.method === "POST") {
+        return await corpusUscPlanHandler(request, env, ctx);
+      }
+      if (path === "/corpus/usc/execute" && request.method === "POST") {
+        return await corpusUscExecuteHandler(request, env, ctx);
+      }
+      if (path === "/corpus/usc/summarize-section" && request.method === "POST") {
+        return await corpusUscSummarizeHandler(request, env, ctx);
+      }
       if (path === "/corpus/cfr/facets" && request.method === "POST") {
         return await corpusCfrFacetsHandler(request, env, ctx);
       }
@@ -1923,6 +1932,513 @@ async function corpusUscSectionHandler(request, env, ctx) {
     return json({ error: { message: "Section not found", code: "not_found" } }, 404);
   }
   return json({ section: rows[0] }, 200);
+}
+
+// ── USC AI modes (PR 4s) ────────────────────────────────────────────────────
+// Brief #3 §3 names three co-equal flagships (A Legality / B Authority /
+// C Topical synthesis) plus read-a-section + analytical-with-method, all
+// served via ONE claude_ama mode whose planner picks output_mode per
+// question shape ("no query-architecture buttons"). Plus a per-section
+// summarize action on the detail panel.
+//
+// v1 ships single-corpus AI. The cross-corpus joins (USC↔CFR/OLC/litigation)
+// and the definitional layer per brief #3 §6 are pipeline-side dependencies
+// — they need join tables + a parsed usc_definitions table that don't exist
+// yet. They land in follow-up PRs.
+
+var USC_SCOPE_LITERAL_LIMIT = 25000;
+
+function normalizeUscScope(s) {
+  s = s || {};
+  let ids = Array.isArray(s.section_ids)
+    ? s.section_ids.filter((x) => x != null).map(Number).filter(Number.isFinite)
+    : null;
+  if (ids && ids.length === 0) ids = null;
+  return {
+    section_ids: ids,
+    is_full_db: !ids,
+    count: Number(s.count) || (ids ? ids.length : 0),
+    description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : ""
+  };
+}
+
+var USC_AMA_SCHEMA_DOC = [
+  "TABLE: usc_sections — one row per USC section (60,416 sections; all 53 titles; release point 119-93, single point in time).",
+  "  id (bigint, PK)               — section id; use this in citations.",
+  "  title_num (smallint)          — Title number (1–54; 53 occupied; missing numbers reserved/repealed at the title level).",
+  "  title_name (text)             — Title name (e.g. 'Crimes and Criminal Procedure' for Title 18).",
+  "  subtitle (text)               — Subtitle (Title 26 has 'A'..'K', most titles have none).",
+  "  chapter (text)                — Chapter identifier within title (often numeric, sometimes alphanumeric).",
+  "  subchapter (text)             — Subchapter.",
+  "  part (text)                   — Part.",
+  "  structure_path (text)         — Slash-delimited hierarchy path (e.g. '18/I/63/1112').",
+  "  section_num (text)            — Section number, often complex (e.g. '101', '1010-1', '2000bb-1').",
+  "  section_identifier (text)     — Machine-friendly identifier.",
+  "  citation (text)               — Canonical citation form (e.g. '18 U.S.C. § 1112').",
+  "  heading (text)                — Section heading.",
+  "  text_content (text)           — Full section text; LARGE for some long sections — DO NOT pull in planned queries.",
+  "  text_length (int)             — Character count.",
+  "  is_positive_law (boolean)     — True for positive-law titles (Title 18 etc.); for non-positive titles (Title 26 / Internal Revenue Code, Title 50 / War and National Defense) the codified text is an ORGANIZED RESTATEMENT of the underlying Statutes at Large — surface this when a non-positive-title section drives the answer.",
+  "  status (text)                 — Section status ('active', 'repealed', 'omitted', etc.). Repealed sections are INCLUDED in the corpus with a status flag, not filtered out.",
+  "  source_credit (text)          — The 'Pub. L. 85-768, § 1, 72 Stat. 921' legislative-history footer.",
+  "  notes (text)                  — Editorial notes from the Office of Law Revision Counsel (drafter-curated, not commentary).",
+  "  release_point (text)          — Currency marker (currently '119-93' across the corpus). Surface as 'as of [release_point]; changes since not reflected' in every answer.",
+  "  fts (tsvector, generated)     — to_tsvector('english', heading || ' ' || text_content) — use for topical search.",
+  "",
+  "NOTES:",
+  "- Topical/conceptual search: WHERE fts @@ websearch_to_tsquery('english', 'your search'). Note: USC is dense legalese; sparse queries underperform. Use OR generously.",
+  "- Citation lookup: 'What does 8 U.S.C. § 1225 say?' → WHERE citation = '8 U.S.C. § 1225' (exact match). The defining USC interaction.",
+  "- Title scope: 'tax law' → title_num = 26 OR title_num = 11. 'criminal law' → title_num = 18.",
+  "- Hierarchy browse: filter by structure_path ILIKE 'TITLE/CHAPTER/%' to scope to a chapter.",
+  "- ANALYTICAL COUNTS. Always include the denominator and the matching pattern in candor_notes. Example: 'Pattern-matched on imprison|fine of not more than|punishable by across all 60,416 sections; 12,478 matched. Counts sections containing penalty language, not crimes; some matches are procedural.'",
+  "- POSITIVE-LAW CAVEAT. When an answer leans on a NON-positive-law title section (is_positive_law=false), surface this in candor_notes: 'The relevant text is in Title 26, a non-positive-law title — the codified text here is an organized restatement of the underlying Statutes at Large. The Statutes at Large are the legally binding source.'",
+  "- RELEASE-POINT CAVEAT. Every answer carries the release-point currency marker; analytical answers and synthesis must both include it.",
+  "- CONSTITUTION GAP. When the answer turns substantially on Article II / Bill of Rights, surface this transparently in candor_notes: 'The answer turns substantially on [Article II / Amendment N], which is outside USC's scope. RAGtime does not yet hold the constitutional text; see [pointer in synthesis].'",
+  "- Read-only: only SELECT statements; cap planned queries at LIMIT 500."
+].join("\n");
+
+function buildUscPlanningSystem() {
+  return [
+    "You are the planner for an agentic legal-research tool over the United States Code — the codified federal statutes (60,416 sections, all 53 titles, release point 119-93). USC sections are the binding text of federal law; treat with the highest authoritative status of anything in this system.",
+    "",
+    "You have access to a Postgres database (read-only) via SELECT queries. Schema:",
+    "",
+    USC_AMA_SCHEMA_DOC,
+    "",
+    "Output a single JSON object with these keys (no prose, no code fences):",
+    "{",
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    "       // list = the question wants a refined set of sections (the field will be narrowed).",
+    "       // narrative = the question wants a legal-analysis answer; the field is unchanged.",
+    "       // hybrid = both — a synthesis + the supporting sections (most flagship questions).",
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats — release-point currency, non-positive-law restatement, constitution gap, denominator for analytical counts, narrowed-keyword recall risk"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ... FROM usc_sections WHERE ... LIMIT 200"},',
+    "    ...",
+    "  ],",
+    '  "estimated_cost_cents": <integer>,',
+    "       // your estimate of the synthesis call cost in cents (the planning call is already paid).",
+    "       // Synthesis input ≈ all query results in JSON; output ≈ 800-2000 tokens.",
+    "       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.",
+    '  "wants_synthesis": true',
+    "}",
+    "",
+    "Rules:",
+    "- Question shape → output_mode mapping (three flagships recognized internally, no separate UI modes):",
+    "    * 'Is it lawful for X to do Y' → output_mode='hybrid' (Flagship A: Legality synthesis). Pull the relevant sections + write the legal analysis.",
+    "    * 'Can the President / [agency] do X' → output_mode='hybrid' (Flagship B: Authority synthesis). Pull statutory authorities from USC. Add a candor_note that v1 does not yet cross-reference CFR (implementing regs), OLC (executive interpretation), or litigation (challenges) — those are deferred to a follow-up.",
+    "    * 'Summarize federal law on [domain]' / 'What does the UCMJ say about X' → output_mode='hybrid' (Flagship C: Topical synthesis). Scope by title_num (e.g. UCMJ = title_num=10 AND chapter='47'). Synthesis writes a structured narrative.",
+    "    * 'What does 8 U.S.C. § 1225 say' → output_mode='list' (read-a-section). Citation lookup + synthesis renders the section.",
+    "    * 'Show me laws that involve X' / 'Is there any law forbidding X' → output_mode='list' (retrieval/coverage).",
+    "    * 'How many laws contain criminal penalties' / 'How many sections do Y' → output_mode='narrative' (analytical) with denominator + methodology in candor_notes.",
+    "- PULL METADATA, NOT FULL TEXT. Planned queries should select id, citation, heading, title_num, structure_path, is_positive_law, status — NEVER text_content. Synthesis works from headings + citations; the user reads full text via the detail sheet.",
+    "- USE CITATION LOOKUP when the question names a specific citation. WHERE citation = '8 U.S.C. § 1225' is faster + more reliable than FTS.",
+    "- USE TITLE SCOPE when the question targets a known title or chapter. 'tax' → title_num IN (26, 11). 'criminal' → title_num=18. 'UCMJ' → title_num=10 AND chapter='47'.",
+    "- KEYWORD UNDERPERFORMS for conceptual queries ('what laws enshrine due-process principles?'). Use OR generously; flag in candor_notes that keyword search may under-recall concepts and semantic retrieval (pgvector) is Phase 2.",
+    "- ANALYTICAL COUNTS. Always surface the denominator and the matching pattern: 'Pattern-matched on [terms] across all 60,416 sections; N matched. Counts X, not Y.'",
+    "- CONSTITUTION GAP. When an answer turns substantially on Article II or the Bill of Rights, add a candor_note that RAGtime does not hold the constitutional text yet (post-launch acquisition).",
+    "- NEVER editorialize. USC sections are binding text; describe what they say, do not opine on policy or interpretation beyond what's textually grounded.",
+    "- WHEN THE CURRENT SCOPE IS NARROWED (section_ids list provided): use the name \"scoped_usc_sections\" instead of \"usc_sections\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. WHEN SCOPE IS THE FULL CORPUS: use \"usc_sections\".",
+    "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
+  ].join("\n");
+}
+
+function buildUscPlanningUser(question, scope) {
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "CURRENT SCOPE:",
+    scope.description || (scope.is_full_db
+      ? "The full USC corpus — all 60,416 sections across 53 titles, release point 119-93."
+      : fmtIntJs(scope.count) + " sections (narrowed)."),
+    scope.is_full_db
+      ? "(no section_id constraint — your queries run against the full corpus; use the table name \"usc_sections\")"
+      : "(narrowed to " + fmtIntJs(scope.count) + " section_ids; the runner will substitute scoped_usc_sections with an inline subquery filtered to the scope — use THAT name in your queries)",
+    "",
+    "Return the JSON plan now."
+  ].join("\n");
+}
+
+function parseUscPlan(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error("JSON.parse error: " + pe2.message); }
+    } else {
+      throw new Error("could not find a JSON object in the response.");
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (["list", "narrative", "hybrid"].indexOf(v.output_mode) < 0) throw new Error("output_mode must be list, narrative, or hybrid.");
+  if (!Array.isArray(v.queries)) throw new Error("queries must be an array.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || "").trim();
+  return v;
+}
+
+async function executeUscPlan(env, plan, scope) {
+  let scopedBody = null;
+  if (scope.section_ids && scope.section_ids.length > 0) {
+    if (scope.section_ids.length > USC_SCOPE_LITERAL_LIMIT) {
+      throw new Error("Scope is " + fmtIntJs(scope.section_ids.length) + " sections — too large to inline (cap " + fmtIntJs(USC_SCOPE_LITERAL_LIMIT) + "). Narrow further with the filter before running synthesis.");
+    }
+    const idsSubquery = "SELECT unnest('{" + scope.section_ids.join(",") + "}'::bigint[]) AS id";
+    scopedBody = "(SELECT s.* FROM usc_sections s WHERE s.id IN (" + idsSubquery + "))";
+  }
+
+  const results = [];
+  for (let i = 0; i < plan.queries.length; i++) {
+    const q = plan.queries[i];
+    let sql = String(q.sql || "").trim().replace(/;\s*$/, "").trim();
+    if (!sql) continue;
+    let execSql = sql;
+    if (scopedBody) {
+      execSql = substituteScoped(execSql, "scoped_usc_sections", scopedBody);
+    }
+    if (!/^\s*SELECT\b/i.test(execSql)) execSql = "SELECT * FROM (" + execSql + ") AS usc_q";
+    let rows;
+    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
+    catch (err) { throw new Error('Query "' + (q.label || ("query " + (i + 1))) + '" failed: ' + err.message); }
+    const truncated = (rows.length > 200) ? rows.slice(0, 200) : rows;
+    results.push({ label: q.label || ("query " + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 200 });
+  }
+  return results;
+}
+
+function buildUscSynthesisSystem(outputMode) {
+  const listClause = (outputMode === "list" || outputMode === "hybrid")
+    ? '"section_ids": [<bigint>, ...]   // the section ids the user should see; pulled from your query results.'
+    : '"section_ids": null';
+  return [
+    "You are the synthesis step for an agentic legal-research tool over the United States Code. The planner has run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "answer_markdown": "...",  // markdown narrative; embed [usc-ref:SECTION_ID] tokens to cite specific sections.',
+    "  " + listClause + ",",
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    "}",
+    "",
+    "Rules:",
+    "- USC sections are BINDING federal law. Describe what the text says; never opine on policy correctness, never invent interpretation that isn't textually grounded.",
+    "- CITE EVERY CLAIM. Each substantive sentence must be cited to a specific section via [usc-ref:SECTION_ID]. The UI replaces this with a click-through. Weave the canonical citation into prose when natural ('Under 8 U.S.C. § 1225 [usc-ref:12345], an alien arriving at the border…').",
+    "- RELEASE-POINT CURRENCY. Every answer that turns on specific section text must include the currency caveat in candor_notes: 'Current as of release 119-93; changes since not reflected.'",
+    "- NON-POSITIVE-LAW. When the answer leans on a non-positive-law title section (is_positive_law=false on that row), surface this in candor_notes: 'The relevant section is in [Title N], a non-positive-law title — the codified text here is an organized restatement of the underlying Statutes at Large.' This is especially load-bearing for Title 26 (Internal Revenue Code) and Title 50 (War and National Defense).",
+    "- CONSTITUTION GAP. If the answer turns substantially on Article II / Bill of Rights, lead with that limitation: 'The answer turns substantially on [Article II § N / the Nth Amendment], which is outside USC's scope (RAGtime does not yet hold the constitutional text). Within USC, [the analysis follows].'",
+    "- AUTHORITY SYNTHESIS (Flagship B) note. If the question asks 'Can the President / [agency] do X', surface in candor_notes that v1 does not yet cross-reference CFR (implementing regulations), OLC (executive interpretation), or litigation (challenges) — those are deferred. The USC answer is the statutory-authority piece only.",
+    "- ANALYTICAL ANSWERS. Surface the denominator and the matching pattern in answer_markdown itself, not just candor_notes: 'Of 60,416 sections, N matched the pattern [pattern].'",
+    "- For list/hybrid output_modes, section_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable sections, downgrade to narrative and explain.",
+    "- Be tight. The user wants the legal answer, not a methodology essay. Keep candor_notes for caveats.",
+    "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes ("") for direct quotation, or single quotes (\'\' or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
+  ].join("\n");
+}
+
+function buildUscSynthesisUser(question, plan, results) {
+  const resultsForModel = results.map(function (r) {
+    return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated, rows: r.rows };
+  });
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "YOUR PLAN (from the planning step):",
+    plan.approach_summary,
+    "",
+    "PLANNED OUTPUT MODE: " + plan.output_mode,
+    "",
+    "CANDOR NOTES FROM PLANNING:",
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function (n) { return "- " + n; }).join("\n") : "(none)",
+    "",
+    "QUERY RESULTS (JSON):",
+    JSON.stringify(resultsForModel, null, 2),
+    "",
+    "Return the synthesis JSON now."
+  ].join("\n");
+}
+
+function parseUscSynthesis(raw, outputMode) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = repairAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
+          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+        }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.answer_markdown !== "string" || !v.answer_markdown.trim()) throw new Error("answer_markdown is empty.");
+  if (outputMode === "list" || outputMode === "hybrid") {
+    if (!Array.isArray(v.section_ids) || v.section_ids.length === 0) {
+      v.section_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(["Output mode requested a section list but synthesis returned none — showing narrative only."]);
+    } else {
+      v.section_ids = v.section_ids
+        .filter(function (x) { return x != null; })
+        .map(function (x) { return Number(x); })
+        .filter(function (x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.section_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusUscPlanHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const question = String((body && body.question) || "").trim();
+  if (!question) return json({ error: { message: "Missing question" } }, 400);
+  const scope = normalizeUscScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildUscPlanningSystem(),
+      messages: [{ role: "user", content: buildUscPlanningUser(question, scope) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Planning step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let plan;
+  try { plan = parseUscPlan(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse plan: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("usc-plan:" + token, JSON.stringify({
+    plan, scope, question, provider, model, userId: auth.userId, authMode: auth.authMode
+  }), { expirationTtl: 900 });
+
+  return json({
+    token,
+    output_mode: plan.output_mode,
+    approach_summary: plan.approach_summary,
+    candor_notes: plan.candor_notes,
+    queries: plan.queries.map(function (q) { return { label: q.label, sql: q.sql }; }),
+    estimated_cost_cents: plan.estimated_cost_cents,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+async function corpusUscExecuteHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const token = body && body.token;
+  if (!token || typeof token !== "string") return json({ error: { message: "Missing plan token" } }, 400);
+  const stored = await env.QUOTA.get("usc-plan:" + token);
+  if (!stored) return json({ error: { message: "Plan expired or not found — re-run the question.", code: "plan_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored plan is corrupt — re-run the question." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider, body);
+  if (auth instanceof Response) return auth;
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This plan belongs to a different session. Re-run the question." } }, 403);
+  }
+  ctx.waitUntil(env.QUOTA.delete("usc-plan:" + token));
+
+  let results;
+  try { results = await executeUscPlan(env, blob.plan, blob.scope); }
+  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider: blob.provider, model: blob.model,
+      system: buildUscSynthesisSystem(blob.plan.output_mode),
+      messages: [{ role: "user", content: buildUscSynthesisUser(blob.question, blob.plan, results) }],
+      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+    });
+  } catch (e) {
+    return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let synth;
+  try { synth = parseUscSynthesis(res.text, blob.plan.output_mode); }
+  catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    answer_markdown: synth.answer_markdown,
+    section_ids: synth.section_ids,
+    candor_notes: synth.candor_notes,
+    output_mode: blob.plan.output_mode,
+    query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── USC: summarize one section ──────────────────────────────────────────────
+// Brief #3 §3 "plus" — read-a-section. Single billed call against one
+// section's text_content. USC-specific structured headings (What it does /
+// Scope / Key terms / Cross-references / Notes on currency).
+
+var USC_SUMMARIZE_TEXT_CAP = 150000;
+
+function buildUscSummarizeSystem() {
+  return [
+    "You are summarizing one section of the United States Code for a researcher. USC sections are the binding text of federal law; treat with the highest authoritative weight. Your job: a structured, attribution-forward summary, never editorialize.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "summary_markdown": "...",  // markdown summary, 4-8 short paragraphs.',
+    '  "candor_notes": ["caveats — release-point currency, non-positive-law restatement, repealed status, truncation"]',
+    "}",
+    "",
+    "Structure the summary_markdown around these headings (omit any that don't apply):",
+    "- **What it does** — the operative rule in plain English, 1-3 sentences.",
+    "- **Scope** — to whom / what / when it applies; preserving the textual exceptions, definitions, time-bounds the section itself includes.",
+    "- **Key terms** — defined terms or terms-of-art the section uses; if the section incorporates a definition by reference (\"as defined in section X\"), note that without inventing the definition.",
+    "- **Cross-references** — sections, statutes, and code provisions the text explicitly cites. (Inline-only — do not import related-but-unmentioned sections.)",
+    "- **Notes on currency** — surface the release-point caveat; surface non-positive-law status when applicable; surface repealed status when applicable.",
+    "",
+    "Rules:",
+    "- Describe what the section says. Do not opine on policy, do not invent legislative intent beyond what the section itself states.",
+    "- Quote sparingly; use curly quotes (“”) for direct quotation. Straight double quotes break JSON parsing.",
+    "- If the text was truncated before reaching you, note that in candor_notes (\"Summary based on the first N characters of the section; later subsections not seen.\").",
+    "- If this is a non-positive-law title section (is_positive_law=false in the metadata), surface in candor_notes: 'This is a [Title N] section — a non-positive-law title. The codified text is an organized restatement of the underlying Statutes at Large; for binding-text questions, the Statutes at Large are the authoritative source.'",
+    "- If the section status is 'repealed' or 'omitted', lead with that.",
+    "- Output strict JSON only. No markdown outside summary_markdown. No code fences."
+  ].join("\n");
+}
+
+function buildUscSummarizeUser(section, wasTruncated) {
+  const parts = [
+    "SECTION METADATA:",
+    "- Citation: " + (section.citation || "(no citation)"),
+    "- Title: " + (section.title_num != null ? section.title_num + " — " + (section.title_name || "") : "(no title)"),
+    "- Hierarchy path: " + (section.structure_path || "(no path)"),
+    "- Heading: " + (section.heading || "(no heading)"),
+    "- Status: " + (section.status || "(unknown)"),
+    "- Positive law: " + (section.is_positive_law ? "yes" : "no") + (section.is_positive_law ? "" : " (codified text is a restatement of the underlying Statutes at Large)"),
+    "- Release point: " + (section.release_point || "(unknown)"),
+  ];
+  if (section.source_credit) {
+    parts.push("- Source credit: " + section.source_credit);
+  }
+  parts.push("");
+  parts.push("SECTION TEXT" + (wasTruncated ? " (TRUNCATED to " + fmtIntJs(USC_SUMMARIZE_TEXT_CAP) + " characters — flag this in candor_notes):" : ":"));
+  const text = String(section.text_content || "");
+  parts.push(wasTruncated ? text.slice(0, USC_SUMMARIZE_TEXT_CAP) : text);
+  if (section.notes) {
+    parts.push("");
+    parts.push("EDITORIAL NOTES (from the Office of Law Revision Counsel; not commentary):");
+    parts.push(String(section.notes).slice(0, 10000));
+  }
+  parts.push("");
+  parts.push("Return the summary JSON now.");
+  return parts.join("\n");
+}
+
+function parseUscSummary(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = cleaned.replace(/"answer_markdown"/g, '"summary_markdown"');
+      const rep2 = repairAnswerMarkdownQuotes(repaired.replace(/"summary_markdown"/g, '"answer_markdown"'))
+        .replace(/"answer_markdown"/g, '"summary_markdown"');
+      v = JSON.parse(rep2);
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) { throw new Error("JSON.parse error: " + pe3.message); }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.summary_markdown !== "string" || !v.summary_markdown.trim()) throw new Error("summary_markdown is empty.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusUscSummarizeHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  const sql = "SELECT id, title_num, title_name, structure_path, citation, heading, " +
+    "text_content, status, is_positive_law, source_credit, notes, release_point " +
+    "FROM usc_sections WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Section fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Section not found", code: "not_found" } }, 404);
+  }
+  const section = rows[0];
+  const text = String(section.text_content || "");
+  if (!text.trim()) {
+    return json({ error: { message: "This section has no text content to summarize.", code: "no_text" } }, 400);
+  }
+  const wasTruncated = text.length > USC_SUMMARIZE_TEXT_CAP;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildUscSummarizeSystem(),
+      messages: [{ role: "user", content: buildUscSummarizeUser(section, wasTruncated) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Summarize step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parseUscSummary(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse summary: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    summary_markdown: parsed.summary_markdown,
+    candor_notes: parsed.candor_notes,
+    was_truncated: wasTruncated,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
 }
 
 // ============================================================================
@@ -4442,5 +4958,14 @@ export {
   buildFrusSummarizeUser,
   executeFrusPlan,
   FRUS_SUMMARIZE_TEXT_CAP,
-  FRUS_SCOPE_LITERAL_LIMIT
+  FRUS_SCOPE_LITERAL_LIMIT,
+  normalizeUscScope,
+  parseUscPlan,
+  parseUscSynthesis,
+  parseUscSummary,
+  buildUscPlanningUser,
+  buildUscSummarizeUser,
+  executeUscPlan,
+  USC_SUMMARIZE_TEXT_CAP,
+  USC_SCOPE_LITERAL_LIMIT
 };

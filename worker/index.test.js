@@ -37,7 +37,16 @@ import {
   buildFrusSummarizeUser,
   executeFrusPlan,
   FRUS_SUMMARIZE_TEXT_CAP,
-  FRUS_SCOPE_LITERAL_LIMIT
+  FRUS_SCOPE_LITERAL_LIMIT,
+  normalizeUscScope,
+  parseUscPlan,
+  parseUscSynthesis,
+  parseUscSummary,
+  buildUscPlanningUser,
+  buildUscSummarizeUser,
+  executeUscPlan,
+  USC_SUMMARIZE_TEXT_CAP,
+  USC_SCOPE_LITERAL_LIMIT
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -1087,6 +1096,225 @@ describe("executeFrusPlan scope cap", () => {
     const plan = { queries: [{ label: "x", sql: "SELECT 1 FROM scoped_frus_documents" }] };
     // env is unused — the cap check fires before any DB call.
     await expect(executeFrusPlan({}, plan, scope)).rejects.toThrow(/too large to inline/);
+  });
+});
+
+// ============================================================================
+// USC AI modes (PR 4s) — three flagships (legality / authority / topical) +
+// read-a-section, served through one claude_ama mode whose planner picks
+// output_mode per question shape. Validators mirror OLC/FRUS discipline.
+// ============================================================================
+
+describe("normalizeUscScope", () => {
+  it("treats missing scope as full-corpus", () => {
+    const s = normalizeUscScope(undefined);
+    expect(s.is_full_db).toBe(true);
+    expect(s.section_ids).toBe(null);
+  });
+
+  it("treats empty section_ids as full-corpus", () => {
+    const s = normalizeUscScope({ section_ids: [] });
+    expect(s.is_full_db).toBe(true);
+    expect(s.section_ids).toBe(null);
+  });
+
+  it("keeps a valid numeric section_ids list", () => {
+    const s = normalizeUscScope({ section_ids: [101, 202, 303] });
+    expect(s.is_full_db).toBe(false);
+    expect(s.section_ids).toEqual([101, 202, 303]);
+    expect(s.count).toBe(3);
+  });
+
+  it("drops nullish + non-finite values", () => {
+    const s = normalizeUscScope({ section_ids: [1, null, "x", 2, undefined, NaN, "3"] });
+    expect(s.section_ids).toEqual([1, 2, 3]);
+  });
+});
+
+describe("parseUscPlan", () => {
+  const validPlan = JSON.stringify({
+    output_mode: "hybrid",
+    approach_summary: "Pull Title 18 sections about whistleblower retaliation.",
+    candor_notes: ["Title 18 is positive-law; current as of release 119-93."],
+    queries: [{
+      label: "whistleblower retaliation sections",
+      sql: "SELECT id, citation, heading FROM usc_sections WHERE title_num = 18 AND fts @@ websearch_to_tsquery('english', 'whistleblower retaliation') LIMIT 100"
+    }],
+    estimated_cost_cents: 9,
+    wants_synthesis: true
+  });
+
+  it("accepts a well-formed plan", () => {
+    const p = parseUscPlan(validPlan);
+    expect(p.output_mode).toBe("hybrid");
+  });
+
+  it("strips code fences", () => {
+    const fenced = "```json\n" + validPlan + "\n```";
+    expect(parseUscPlan(fenced).output_mode).toBe("hybrid");
+  });
+
+  it("rejects an unknown output_mode", () => {
+    const bad = JSON.stringify({ output_mode: "outline", queries: [] });
+    expect(() => parseUscPlan(bad)).toThrow(/output_mode/);
+  });
+
+  it("rejects non-array queries", () => {
+    const bad = JSON.stringify({ output_mode: "list", queries: "SELECT 1" });
+    expect(() => parseUscPlan(bad)).toThrow(/queries must be an array/);
+  });
+
+  it("coerces negative estimated_cost_cents to 0", () => {
+    const negative = JSON.stringify({ output_mode: "narrative", queries: [], estimated_cost_cents: -25 });
+    expect(parseUscPlan(negative).estimated_cost_cents).toBe(0);
+  });
+});
+
+describe("parseUscSynthesis", () => {
+  it("accepts a hybrid synthesis with section_ids", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Under [usc-ref:42] the rule is X.",
+      section_ids: [42, 73],
+      candor_notes: []
+    });
+    const s = parseUscSynthesis(raw, "hybrid");
+    expect(s.section_ids).toEqual([42, 73]);
+    expect(s.answer_markdown).toMatch(/usc-ref:42/);
+  });
+
+  it("forces section_ids = null for narrative mode regardless of model output", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Narrative analytical answer.",
+      section_ids: [1, 2, 3], // model returned ids even though mode is narrative
+      candor_notes: []
+    });
+    const s = parseUscSynthesis(raw, "narrative");
+    expect(s.section_ids).toBe(null);
+  });
+
+  it("downgrades empty list/hybrid to narrative with a candor note", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "No matching sections.",
+      section_ids: [],
+      candor_notes: []
+    });
+    const s = parseUscSynthesis(raw, "list");
+    expect(s.section_ids).toEqual([]);
+    expect(s.candor_notes.join(" ")).toMatch(/returned none/);
+  });
+
+  it("drops nullish ids before Number conversion", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "x",
+      section_ids: ["42", null, 7, undefined, "not-a-number"],
+      candor_notes: []
+    });
+    const s = parseUscSynthesis(raw, "list");
+    expect(s.section_ids).toEqual([42, 7]);
+  });
+
+  it("rejects empty answer_markdown", () => {
+    const raw = JSON.stringify({ answer_markdown: "  ", section_ids: [] });
+    expect(() => parseUscSynthesis(raw, "narrative")).toThrow(/answer_markdown is empty/);
+  });
+});
+
+describe("buildUscPlanningUser", () => {
+  it("describes the full-corpus scope and uses usc_sections", () => {
+    const msg = buildUscPlanningUser("Is it lawful to retaliate against whistleblowers?", normalizeUscScope(undefined));
+    expect(msg).toMatch(/full USC corpus/);
+    expect(msg).toMatch(/usc_sections/);
+    expect(msg).not.toMatch(/scoped_usc_sections/);
+  });
+
+  it("describes a narrowed scope and uses scoped_usc_sections", () => {
+    const msg = buildUscPlanningUser(
+      "Within these sections, which require notice?",
+      normalizeUscScope({ section_ids: [1, 2, 3], count: 3 })
+    );
+    expect(msg).toMatch(/3 section_ids/);
+    expect(msg).toMatch(/scoped_usc_sections/);
+  });
+});
+
+describe("buildUscSummarizeUser", () => {
+  const section = {
+    citation: "18 U.S.C. § 1112",
+    title_num: 18,
+    title_name: "Crimes and Criminal Procedure",
+    structure_path: "18/I/51/1112",
+    heading: "Manslaughter",
+    status: "active",
+    is_positive_law: true,
+    release_point: "119-93",
+    source_credit: "Pub. L. 85-768, § 1, 72 Stat. 921.",
+    text_content: "(a) Manslaughter is the unlawful killing of a human being without malice. It is of two kinds — voluntary and involuntary."
+  };
+
+  it("surfaces citation + hierarchy + status + positive-law in the prompt", () => {
+    const u = buildUscSummarizeUser(section, false);
+    expect(u).toMatch(/18 U\.S\.C\. § 1112/);
+    expect(u).toMatch(/Crimes and Criminal Procedure/);
+    expect(u).toMatch(/Manslaughter/);
+    expect(u).toMatch(/Positive law: yes/);
+    expect(u).toMatch(/119-93/);
+    expect(u).toMatch(/72 Stat\. 921/);
+    expect(u).not.toMatch(/TRUNCATED/);
+  });
+
+  it("annotates non-positive-law titles with the restatement caveat", () => {
+    const nonPositive = { ...section, title_num: 26, title_name: "Internal Revenue Code", is_positive_law: false };
+    const u = buildUscSummarizeUser(nonPositive, false);
+    expect(u).toMatch(/Positive law: no/);
+    expect(u).toMatch(/restatement of the underlying Statutes at Large/);
+  });
+
+  it("flags + truncates oversize text", () => {
+    // No `notes` on the fixture — `notes` may contain "text" letters that
+    // perturb the x-count assertion. Truncation-of-text_content is what's
+    // being pinned.
+    const huge = { ...section, notes: null, text_content: "x".repeat(USC_SUMMARIZE_TEXT_CAP + 1000) };
+    const u = buildUscSummarizeUser(huge, true);
+    expect(u).toMatch(/TRUNCATED to/);
+    const textStart = u.indexOf("SECTION TEXT");
+    const textBlock = u.slice(textStart);
+    const xCount = (textBlock.match(/x/g) || []).length;
+    expect(xCount).toBe(USC_SUMMARIZE_TEXT_CAP);
+  });
+});
+
+describe("parseUscSummary", () => {
+  it("accepts a well-formed summary", () => {
+    const raw = JSON.stringify({
+      summary_markdown: "**What it does.** ...",
+      candor_notes: []
+    });
+    const s = parseUscSummary(raw);
+    expect(s.summary_markdown).toMatch(/What it does/);
+  });
+
+  it("rejects empty summary_markdown", () => {
+    const raw = JSON.stringify({ summary_markdown: " ", candor_notes: [] });
+    expect(() => parseUscSummary(raw)).toThrow(/summary_markdown is empty/);
+  });
+
+  it("strips code fences", () => {
+    const fenced = "```json\n" + JSON.stringify({ summary_markdown: "x", candor_notes: [] }) + "\n```";
+    expect(parseUscSummary(fenced).summary_markdown).toBe("x");
+  });
+
+  it("defaults candor_notes to []", () => {
+    const raw = JSON.stringify({ summary_markdown: "x" });
+    expect(parseUscSummary(raw).candor_notes).toEqual([]);
+  });
+});
+
+describe("executeUscPlan scope cap", () => {
+  it("refuses scopes above USC_SCOPE_LITERAL_LIMIT with a clear error", async () => {
+    const oversize = Array.from({ length: USC_SCOPE_LITERAL_LIMIT + 1 }, (_, i) => i + 1);
+    const scope = normalizeUscScope({ section_ids: oversize });
+    const plan = { queries: [{ label: "x", sql: "SELECT 1 FROM scoped_usc_sections" }] };
+    await expect(executeUscPlan({}, plan, scope)).rejects.toThrow(/too large to inline/);
   });
 });
 
