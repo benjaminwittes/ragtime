@@ -698,6 +698,132 @@ export async function fetchCfrSection(id: number): Promise<CfrSectionDetail> {
 }
 
 /* ----------------------------------------------------------------------------
+ * CFR AI modes (PR 4t) — three flagships (compliance / authority / framework
+ * synthesis) served via one claude_ama mode + summarize-one-section action
+ * on the section detail.
+ * ------------------------------------------------------------------------- */
+
+export type CfrAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type CfrAmaSynthesis = {
+  answer_markdown: string
+  section_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type CfrAmaScope = {
+  section_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runCfrPlan(
+  question: string,
+  scope: CfrAmaScope,
+  auth: AuthArg,
+): Promise<CfrAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/cfr/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `CFR plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CfrAmaPlan
+}
+
+export async function runCfrExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<CfrAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/cfr/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `CFR execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CfrAmaSynthesis
+}
+
+export type CfrSectionSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizeCfrSection(
+  id: number,
+  auth: AuthArg,
+): Promise<CfrSectionSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/cfr/summarize-section`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `CFR summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CfrSectionSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/olc/* — OLC (DOJ Office of Legal Counsel opinions) spoke
  *
  * Third reference-style spoke. Atomic unit is an opinion (not a section);

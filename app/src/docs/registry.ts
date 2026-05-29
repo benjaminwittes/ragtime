@@ -1,4 +1,6 @@
 import type { DocsContext, DocsEntry } from './types'
+import { cfrAiSynthesisEntry } from './content/cfr-ai-synthesis'
+import { cfrSectionSummaryEntry } from './content/cfr-section-summary'
 import { frusDocumentSummaryEntry } from './content/frus-document-summary'
 import { frusNarrativeSynthesisEntry } from './content/frus-narrative-synthesis'
 import { olcNarrativeSynthesisEntry } from './content/olc-narrative-synthesis'
@@ -27,6 +29,8 @@ export const docsEntries: readonly DocsEntry[] = [
   frusDocumentSummaryEntry,
   uscAiSynthesisEntry,
   uscSectionSummaryEntry,
+  cfrAiSynthesisEntry,
+  cfrSectionSummaryEntry,
 ]
 
 /**

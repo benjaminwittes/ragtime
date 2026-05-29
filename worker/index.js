@@ -231,6 +231,15 @@ export default {
       if (path === "/corpus/cfr/section" && request.method === "POST") {
         return await corpusCfrSectionHandler(request, env, ctx);
       }
+      if (path === "/corpus/cfr/plan" && request.method === "POST") {
+        return await corpusCfrPlanHandler(request, env, ctx);
+      }
+      if (path === "/corpus/cfr/execute" && request.method === "POST") {
+        return await corpusCfrExecuteHandler(request, env, ctx);
+      }
+      if (path === "/corpus/cfr/summarize-section" && request.method === "POST") {
+        return await corpusCfrSummarizeHandler(request, env, ctx);
+      }
       if (path === "/corpus/olc/facets" && request.method === "POST") {
         return await corpusOlcFacetsHandler(request, env, ctx);
       }
@@ -2584,6 +2593,511 @@ async function corpusCfrSectionHandler(request, env, ctx) {
     return json({ error: { message: "Section not found", code: "not_found" } }, 404);
   }
   return json({ section: rows[0] }, 200);
+}
+
+// ── CFR AI modes (PR 4t) ────────────────────────────────────────────────────
+// Brief #4 §3 names three co-equal flagships (A Compliance / B Authority /
+// C Framework synthesis) + read-a-section + analytical-with-method, all
+// served via ONE claude_ama mode whose planner picks output_mode per
+// question shape ("no query-architecture buttons"). Plus a per-section
+// summarize action on the detail panel.
+//
+// v1 ships single-corpus AI. Cross-corpus joins (USC↔CFR / CFR↔OLC /
+// CFR↔litigation / CFR↔FR), the definitional layer, the curated scopes
+// library, and the agency-derived browse axis per brief #4 §6 all defer
+// to follow-ups — the planner surfaces cross-corpus and definitional-
+// layer limitations in candor_notes when the user asks Authority or
+// definitional questions.
+
+var CFR_SCOPE_LITERAL_LIMIT = 25000;
+
+function normalizeCfrScope(s) {
+  s = s || {};
+  let ids = Array.isArray(s.section_ids)
+    ? s.section_ids.filter((x) => x != null).map(Number).filter(Number.isFinite)
+    : null;
+  if (ids && ids.length === 0) ids = null;
+  return {
+    section_ids: ids,
+    is_full_db: !ids,
+    count: Number(s.count) || (ids ? ids.length : 0),
+    description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : ""
+  };
+}
+
+var CFR_AMA_SCHEMA_DOC = [
+  "TABLE: cfr_sections — one row per CFR section (227,554 sections; all 49 titles; up_to_date_as_of is per-section, not monolithic).",
+  "  id (bigint, PK)               — section id; use this in citations.",
+  "  title_num (smallint)          — Title number (1–50; 50 occupied; CFR uses 'Title' for the top level, distinct from USC numbering).",
+  "  title_name (text)             — Title name (e.g. 'Aeronautics and Space' for Title 14, 'Banks and Banking' for Title 12).",
+  "  chapter (text)                — Chapter identifier within title. In CFR, chapter typically maps to an AGENCY (Title 12 ch. II = Federal Reserve; Title 14 ch. III = Commercial Space Transportation, FAA). Agency can be derived from (title_name, chapter) — there is no separate agency column.",
+  "  subchapter (text)             — Subchapter.",
+  "  part (text)                   — Part. THIS IS THE KEY REGULATORY GROUPING. 'HIPAA Privacy Rule' = 45 CFR Parts 160 & 164; 'Regulation Z' = 12 CFR Part 1026.",
+  "  subpart (text)                — Subpart (between part and section; absent from USC).",
+  "  structure_path (text)         — Slash-delimited hierarchy path (e.g. '45/A/164/E/164.502').",
+  "  section_identifier (text)     — Machine-friendly identifier ('164.502').",
+  "  citation (text)               — Canonical citation form ('45 CFR § 164.502').",
+  "  heading (text)                — Section heading.",
+  "  text_content (text)           — Full section text; can be very long for complex regs — DO NOT pull in planned queries.",
+  "  text_length (int)             — Character count.",
+  "  reserved (boolean)            — True for reserved placeholder sections (no operative text). Filter out for most analytical queries: WHERE NOT reserved.",
+  "  source (text)                 — Provenance ('eCFR' for the daily-updated view; check during implementation if other values appear).",
+  "  up_to_date_as_of (date)       — PER-SECTION currency marker. Different sections refresh on different cadences. Surface this in every answer that turns on specific section text.",
+  "  latest_amended_on (date)      — When this section was last amended in the Federal Register.",
+  "  fts (tsvector, generated)     — to_tsvector('english', heading || ' ' || text_content) — use for topical search.",
+  "",
+  "NOTES:",
+  "- Topical/conceptual search: WHERE fts @@ websearch_to_tsquery('english', 'your search'). Dense regulatory prose; use OR generously.",
+  "- Citation lookup: '45 CFR § 164.502' → WHERE citation = '45 CFR § 164.502' (exact match).",
+  "- Agency scope: there is no separate agency column. Derive from (title_num, chapter). Examples:",
+  "    * FDA: title_num=21 (mostly).",
+  "    * Federal Reserve: title_num=12 AND chapter='II'.",
+  "    * EPA: title_num=40.",
+  "    * FAA: title_num=14 AND chapter='I'.",
+  "  When the planner targets a specific agency, prefer a (title_num, chapter) filter over an FTS keyword search for the agency name.",
+  "- Part scope: rule packages live at the part level. HIPAA Privacy Rule = title_num=45 AND part IN ('160', '164'). Reg Z = title_num=12 AND part='1026'.",
+  "- Reserved sections: WHERE NOT reserved unless the question explicitly asks about placeholders. They have no operative text.",
+  "- ANALYTICAL COUNTS. Always include denominator AND matching pattern in candor_notes. Example: 'Across 227,554 sections, pattern-matched on latest_amended_on >= now() - interval \\'30 days\\'; 1,247 matched. Counts amendments in the last 30 days; some are minor technical edits.'",
+  "- CROSS-CORPUS LIMITATION (v1). Questions like 'Can agency X do Y' that would benefit from USC (statutory authority) + OLC (executive interpretation) + litigation (challenges) cross-references receive a candor_note: 'v1 does not yet cross-reference USC, OLC, or litigation. The answer is the regulatory-text piece only.'",
+  "- DEFINITIONAL LAYER LIMITATION (v1). Questions like 'How does federal regulation define X' work via FTS for v1; the parsed cfr_definitions table (with scope_note) is deferred to a follow-up. Surface this in candor_notes when applicable.",
+  "- Read-only: only SELECT statements; cap planned queries at LIMIT 500."
+].join("\n");
+
+function buildCfrPlanningSystem() {
+  return [
+    "You are the planner for an agentic regulatory-research tool over the Code of Federal Regulations — the codified rules issued by federal executive-branch agencies (227,554 sections, all 49 titles). CFR sections are the binding regulatory text, second only to the underlying statutes; treat with very high authoritative weight.",
+    "",
+    "You have access to a Postgres database (read-only) via SELECT queries. Schema:",
+    "",
+    CFR_AMA_SCHEMA_DOC,
+    "",
+    "Output a single JSON object with these keys (no prose, no code fences):",
+    "{",
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    "       // list = the question wants a refined set of sections.",
+    "       // narrative = the question wants a regulatory-analysis answer; the field is unchanged.",
+    "       // hybrid = both — a synthesis + the supporting sections (most flagship questions).",
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats — per-section currency, cross-corpus deferral on authority questions, definitional-layer deferral, denominator for analytical counts, reserved-section exclusion"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ... FROM cfr_sections WHERE NOT reserved AND ... LIMIT 200"},',
+    "    ...",
+    "  ],",
+    '  "estimated_cost_cents": <integer>,',
+    "       // your estimate of the synthesis call cost in cents (the planning call is already paid).",
+    "       // Synthesis input ≈ all query results in JSON; output ≈ 800-2000 tokens.",
+    "       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.",
+    '  "wants_synthesis": true',
+    "}",
+    "",
+    "Rules:",
+    "- Question shape → output_mode mapping (three flagships recognized internally):",
+    "    * 'What regs apply to [actor] doing [activity]' → output_mode='hybrid' (Flagship A: Compliance synthesis). State the assumed actor + activity explicitly in the synthesis output.",
+    "    * 'What does agency X have authority to regulate' → output_mode='hybrid' (Flagship B: Authority synthesis). Pull issued regs grouped by part. Add a candor_note that v1 does not cross-reference USC (statutory authority), OLC (executive interpretation), or litigation (challenges) — that piece is deferred.",
+    "    * 'Describe the regulatory framework for [X]' → output_mode='hybrid' (Flagship C: Framework synthesis). Often scope-routed via title/agency/part.",
+    "    * 'What regulations implement [USC citation]' → output_mode='list' or 'hybrid'. v1 limitation: the eCFR authorities join is deferred. Use FTS on the USC citation pattern in text_content as a best-effort proxy; surface this approximation in candor_notes.",
+    "    * 'What does 45 CFR § 164.502 say' → output_mode='list' (read-a-section). Citation lookup + synthesis renders the section.",
+    "    * 'Is there a regulation forbidding X' / 'Show me regs about X' → output_mode='list'.",
+    "    * 'How many CFR sections were amended in the last 30 days' / 'How many regs do Y' → output_mode='narrative' (analytical) with denominator + matching pattern in candor_notes AND the answer itself.",
+    "- PULL METADATA, NOT FULL TEXT. Planned queries should select id, citation, heading, title_num, chapter, part, subpart, structure_path, up_to_date_as_of, latest_amended_on — NEVER text_content.",
+    "- EXCLUDE RESERVED. Default to WHERE NOT reserved unless the question explicitly asks about reserved/placeholder sections.",
+    "- AGENCY ROUTING. When the question targets a specific agency, derive a (title_num, chapter) filter rather than FTS-matching on the agency name. FDA → title_num=21. EPA → title_num=40. Fed → title_num=12 AND chapter='II'.",
+    "- PART SCOPE for known rule packages. HIPAA Privacy → title_num=45 AND part IN ('160','164'). Reg Z → title_num=12 AND part='1026'. NEPA EIS → title_num=40 AND part BETWEEN '1500' AND '1508'.",
+    "- USC↔CFR IMPLEMENTS QUERIES. v1 uses FTS proxy ('5 U.S.C. § 552' citation pattern in text_content). The eCFR-authorities join table is deferred; surface this approximation in candor_notes.",
+    "- ANALYTICAL COUNTS. Surface denominator AND pattern: 'Across 227,554 sections, pattern-matched on [pattern]; N matched.'",
+    "- WHEN THE CURRENT SCOPE IS NARROWED (section_ids list provided): use the name \"scoped_cfr_sections\" instead of \"cfr_sections\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. WHEN SCOPE IS THE FULL CORPUS: use \"cfr_sections\".",
+    "- NEVER editorialize. CFR sections are binding regulatory text; describe what they say, do not opine on compliance burden or regulatory policy.",
+    "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
+  ].join("\n");
+}
+
+function buildCfrPlanningUser(question, scope) {
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "CURRENT SCOPE:",
+    scope.description || (scope.is_full_db
+      ? "The full CFR corpus — all 227,554 sections across 49 titles, currency varies per section."
+      : fmtIntJs(scope.count) + " sections (narrowed)."),
+    scope.is_full_db
+      ? "(no section_id constraint — your queries run against the full corpus; use the table name \"cfr_sections\")"
+      : "(narrowed to " + fmtIntJs(scope.count) + " section_ids; the runner will substitute scoped_cfr_sections with an inline subquery filtered to the scope — use THAT name in your queries)",
+    "",
+    "Return the JSON plan now."
+  ].join("\n");
+}
+
+function parseCfrPlan(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error("JSON.parse error: " + pe2.message); }
+    } else {
+      throw new Error("could not find a JSON object in the response.");
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (["list", "narrative", "hybrid"].indexOf(v.output_mode) < 0) throw new Error("output_mode must be list, narrative, or hybrid.");
+  if (!Array.isArray(v.queries)) throw new Error("queries must be an array.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || "").trim();
+  return v;
+}
+
+async function executeCfrPlan(env, plan, scope) {
+  let scopedBody = null;
+  if (scope.section_ids && scope.section_ids.length > 0) {
+    if (scope.section_ids.length > CFR_SCOPE_LITERAL_LIMIT) {
+      throw new Error("Scope is " + fmtIntJs(scope.section_ids.length) + " sections — too large to inline (cap " + fmtIntJs(CFR_SCOPE_LITERAL_LIMIT) + "). Narrow further with the filter before running synthesis.");
+    }
+    const idsSubquery = "SELECT unnest('{" + scope.section_ids.join(",") + "}'::bigint[]) AS id";
+    scopedBody = "(SELECT s.* FROM cfr_sections s WHERE s.id IN (" + idsSubquery + "))";
+  }
+
+  const results = [];
+  for (let i = 0; i < plan.queries.length; i++) {
+    const q = plan.queries[i];
+    let sql = String(q.sql || "").trim().replace(/;\s*$/, "").trim();
+    if (!sql) continue;
+    let execSql = sql;
+    if (scopedBody) {
+      execSql = substituteScoped(execSql, "scoped_cfr_sections", scopedBody);
+    }
+    if (!/^\s*SELECT\b/i.test(execSql)) execSql = "SELECT * FROM (" + execSql + ") AS cfr_q";
+    let rows;
+    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
+    catch (err) { throw new Error('Query "' + (q.label || ("query " + (i + 1))) + '" failed: ' + err.message); }
+    const truncated = (rows.length > 200) ? rows.slice(0, 200) : rows;
+    results.push({ label: q.label || ("query " + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 200 });
+  }
+  return results;
+}
+
+function buildCfrSynthesisSystem(outputMode) {
+  const listClause = (outputMode === "list" || outputMode === "hybrid")
+    ? '"section_ids": [<bigint>, ...]   // the section ids the user should see; pulled from your query results.'
+    : '"section_ids": null';
+  return [
+    "You are the synthesis step for an agentic regulatory-research tool over the Code of Federal Regulations. The planner has run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "answer_markdown": "...",  // markdown narrative; embed [cfr-ref:SECTION_ID] tokens to cite specific sections.',
+    "  " + listClause + ",",
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    "}",
+    "",
+    "Rules:",
+    "- CFR sections are BINDING federal regulatory text. Describe what they say; never opine on compliance burden or policy.",
+    "- CITE EVERY CLAIM. Each substantive sentence must be cited to a specific section via [cfr-ref:SECTION_ID]. Weave the canonical citation into prose ('45 CFR § 164.502 [cfr-ref:N] permits…').",
+    "- PER-SECTION CURRENCY. CFR currency is per-section, not monolithic. When the answer turns on a specific section, surface its up_to_date_as_of date inline or in candor_notes: 'Current as of [section's up_to_date_as_of]; later amendments not reflected.'",
+    "- COMPLIANCE SYNTHESIS (Flagship A). For 'What regs apply to X doing Y' questions, lead with an explicit ASSUMPTIONS block: state the actor type, activity, and any other facts the synthesis assumed. Researchers need to know what scope was modeled.",
+    "- AUTHORITY SYNTHESIS (Flagship B). For 'What does agency X have authority to regulate' questions, surface the cross-corpus limitation in candor_notes: 'v1 does not yet cross-reference USC (statutory authority), OLC (executive interpretation), or litigation (challenges to agency authority). The answer is the regulatory-text piece only — to know whether an agency *has* the authority it claims, the statutory and litigation pieces matter.'",
+    "- USC↔CFR FTS PROXY. When the question asked 'what regulations implement [USC citation]', surface in candor_notes: 'v1 uses an FTS match on the citation text as a proxy; the structured eCFR-authorities join is deferred to a follow-up. False negatives are possible where the implementing reg cites a parent provision rather than the specific section.'",
+    "- DEFINITIONAL LAYER. For 'how do federal regs define X' questions, surface in candor_notes: 'v1 uses FTS to find definitional language; the parsed cfr_definitions table with scope_note is deferred to a follow-up. The same term may be defined differently across subparts.'",
+    "- ANALYTICAL ANSWERS. Surface the denominator and matching pattern in answer_markdown itself: 'Across 227,554 sections, N matched [pattern].'",
+    "- For list/hybrid output_modes, section_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable sections, downgrade to narrative and explain.",
+    "- Be tight. The user wants the regulatory answer, not a methodology essay. Keep candor_notes for caveats.",
+    "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes ("") for direct quotation, or single quotes (\'\' or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
+  ].join("\n");
+}
+
+function buildCfrSynthesisUser(question, plan, results) {
+  const resultsForModel = results.map(function (r) {
+    return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated, rows: r.rows };
+  });
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "YOUR PLAN (from the planning step):",
+    plan.approach_summary,
+    "",
+    "PLANNED OUTPUT MODE: " + plan.output_mode,
+    "",
+    "CANDOR NOTES FROM PLANNING:",
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function (n) { return "- " + n; }).join("\n") : "(none)",
+    "",
+    "QUERY RESULTS (JSON):",
+    JSON.stringify(resultsForModel, null, 2),
+    "",
+    "Return the synthesis JSON now."
+  ].join("\n");
+}
+
+function parseCfrSynthesis(raw, outputMode) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = repairAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
+          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+        }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.answer_markdown !== "string" || !v.answer_markdown.trim()) throw new Error("answer_markdown is empty.");
+  if (outputMode === "list" || outputMode === "hybrid") {
+    if (!Array.isArray(v.section_ids) || v.section_ids.length === 0) {
+      v.section_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(["Output mode requested a section list but synthesis returned none — showing narrative only."]);
+    } else {
+      v.section_ids = v.section_ids
+        .filter(function (x) { return x != null; })
+        .map(function (x) { return Number(x); })
+        .filter(function (x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.section_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusCfrPlanHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const question = String((body && body.question) || "").trim();
+  if (!question) return json({ error: { message: "Missing question" } }, 400);
+  const scope = normalizeCfrScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildCfrPlanningSystem(),
+      messages: [{ role: "user", content: buildCfrPlanningUser(question, scope) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Planning step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let plan;
+  try { plan = parseCfrPlan(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse plan: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("cfr-plan:" + token, JSON.stringify({
+    plan, scope, question, provider, model, userId: auth.userId, authMode: auth.authMode
+  }), { expirationTtl: 900 });
+
+  return json({
+    token,
+    output_mode: plan.output_mode,
+    approach_summary: plan.approach_summary,
+    candor_notes: plan.candor_notes,
+    queries: plan.queries.map(function (q) { return { label: q.label, sql: q.sql }; }),
+    estimated_cost_cents: plan.estimated_cost_cents,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+async function corpusCfrExecuteHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const token = body && body.token;
+  if (!token || typeof token !== "string") return json({ error: { message: "Missing plan token" } }, 400);
+  const stored = await env.QUOTA.get("cfr-plan:" + token);
+  if (!stored) return json({ error: { message: "Plan expired or not found — re-run the question.", code: "plan_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored plan is corrupt — re-run the question." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider, body);
+  if (auth instanceof Response) return auth;
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This plan belongs to a different session. Re-run the question." } }, 403);
+  }
+  ctx.waitUntil(env.QUOTA.delete("cfr-plan:" + token));
+
+  let results;
+  try { results = await executeCfrPlan(env, blob.plan, blob.scope); }
+  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider: blob.provider, model: blob.model,
+      system: buildCfrSynthesisSystem(blob.plan.output_mode),
+      messages: [{ role: "user", content: buildCfrSynthesisUser(blob.question, blob.plan, results) }],
+      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+    });
+  } catch (e) {
+    return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let synth;
+  try { synth = parseCfrSynthesis(res.text, blob.plan.output_mode); }
+  catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    answer_markdown: synth.answer_markdown,
+    section_ids: synth.section_ids,
+    candor_notes: synth.candor_notes,
+    output_mode: blob.plan.output_mode,
+    query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── CFR: summarize one section ──────────────────────────────────────────────
+var CFR_SUMMARIZE_TEXT_CAP = 150000;
+
+function buildCfrSummarizeSystem() {
+  return [
+    "You are summarizing one section of the Code of Federal Regulations for a researcher. CFR sections are binding regulatory text issued by federal agencies. Your job: a structured, attribution-forward summary, never editorialize on compliance burden or policy.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "summary_markdown": "...",  // markdown summary, 4-8 short paragraphs.',
+    '  "candor_notes": ["caveats — per-section currency, reserved-flag, truncation, definitions-by-reference"]',
+    "}",
+    "",
+    "Structure the summary_markdown around these headings (omit any that don't apply):",
+    "- **What it does** — the operative regulatory rule in plain English, 1-3 sentences.",
+    "- **To whom it applies** — the regulated party / actor / activity scope. This is often as load-bearing as the operative rule itself.",
+    "- **Key terms** — defined terms or terms-of-art the section uses; note when a definition is incorporated by reference (\"as defined in §164.103\") without inventing the definition.",
+    "- **Cross-references** — sections, statutory authorities, and CFR provisions the text explicitly cites. Inline-only — do not import related-but-unmentioned regulations.",
+    "- **Currency** — surface the per-section up_to_date_as_of and the latest_amended_on date. Researchers need to know how fresh this text is.",
+    "",
+    "Rules:",
+    "- Describe what the section says. Do not opine on whether the regulation is well-designed or unduly burdensome.",
+    "- Quote sparingly; use curly quotes (“”) for direct quotation. Straight double quotes break JSON parsing.",
+    "- If the text was truncated before reaching you, note that in candor_notes (\"Summary based on the first N characters of the section; later subsections not seen.\").",
+    "- If `reserved` is true, lead with that — there's no operative text to summarize.",
+    "- Per-section currency goes in both the Currency heading and candor_notes.",
+    "- Output strict JSON only. No markdown outside summary_markdown. No code fences."
+  ].join("\n");
+}
+
+function buildCfrSummarizeUser(section, wasTruncated) {
+  const parts = [
+    "SECTION METADATA:",
+    "- Citation: " + (section.citation || "(no citation)"),
+    "- Title: " + (section.title_num != null ? section.title_num + " — " + (section.title_name || "") : "(no title)"),
+    "- Hierarchy path: " + (section.structure_path || "(no path)"),
+    "- Heading: " + (section.heading || "(no heading)"),
+    "- Reserved: " + (section.reserved ? "yes (placeholder; no operative text)" : "no"),
+    "- Source: " + (section.source || "(unknown)"),
+    "- Up to date as of: " + (section.up_to_date_as_of || "(unknown)"),
+    "- Latest amended on: " + (section.latest_amended_on || "(unknown)")
+  ];
+  parts.push("");
+  parts.push("SECTION TEXT" + (wasTruncated ? " (TRUNCATED to " + fmtIntJs(CFR_SUMMARIZE_TEXT_CAP) + " characters — flag this in candor_notes):" : ":"));
+  const text = String(section.text_content || "");
+  parts.push(wasTruncated ? text.slice(0, CFR_SUMMARIZE_TEXT_CAP) : text);
+  parts.push("");
+  parts.push("Return the summary JSON now.");
+  return parts.join("\n");
+}
+
+function parseCfrSummary(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = cleaned.replace(/"answer_markdown"/g, '"summary_markdown"');
+      const rep2 = repairAnswerMarkdownQuotes(repaired.replace(/"summary_markdown"/g, '"answer_markdown"'))
+        .replace(/"answer_markdown"/g, '"summary_markdown"');
+      v = JSON.parse(rep2);
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) { throw new Error("JSON.parse error: " + pe3.message); }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.summary_markdown !== "string" || !v.summary_markdown.trim()) throw new Error("summary_markdown is empty.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusCfrSummarizeHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  const sql = "SELECT id, title_num, title_name, structure_path, citation, heading, " +
+    "text_content, reserved, source, " +
+    "up_to_date_as_of::text AS up_to_date_as_of, " +
+    "latest_amended_on::text AS latest_amended_on " +
+    "FROM cfr_sections WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Section fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Section not found", code: "not_found" } }, 404);
+  }
+  const section = rows[0];
+  const text = String(section.text_content || "");
+  if (!text.trim()) {
+    return json({ error: { message: "This section has no text content to summarize. (It may be a reserved placeholder.)", code: "no_text" } }, 400);
+  }
+  const wasTruncated = text.length > CFR_SUMMARIZE_TEXT_CAP;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildCfrSummarizeSystem(),
+      messages: [{ role: "user", content: buildCfrSummarizeUser(section, wasTruncated) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Summarize step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parseCfrSummary(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse summary: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    summary_markdown: parsed.summary_markdown,
+    candor_notes: parsed.candor_notes,
+    was_truncated: wasTruncated,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
 }
 
 // ============================================================================
@@ -4967,5 +5481,14 @@ export {
   buildUscSummarizeUser,
   executeUscPlan,
   USC_SUMMARIZE_TEXT_CAP,
-  USC_SCOPE_LITERAL_LIMIT
+  USC_SCOPE_LITERAL_LIMIT,
+  normalizeCfrScope,
+  parseCfrPlan,
+  parseCfrSynthesis,
+  parseCfrSummary,
+  buildCfrPlanningUser,
+  buildCfrSummarizeUser,
+  executeCfrPlan,
+  CFR_SUMMARIZE_TEXT_CAP,
+  CFR_SCOPE_LITERAL_LIMIT
 };
