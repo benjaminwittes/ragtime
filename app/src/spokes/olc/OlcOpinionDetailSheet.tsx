@@ -118,15 +118,32 @@ function OlcOpinionDetailBody({ row }: { row: OlcOpinionDisplayRow }) {
 
   const title = detail?.title ?? row.title ?? '(no title)'
   const source = detail?.source ?? row.source
+  // PR 4v: surface the canonical source link prominently. DOJ canonical
+  // URL wins; falls back to Knight FOIA URL when DOJ is null. Available
+  // from the row before the detail fetch resolves.
+  const sourceUrl = detail?.source_url_doj ?? row.source_url_doj ?? detail?.source_url_knight ?? row.source_url_knight
+  const sourceUrlLabel =
+    (detail?.source_url_doj ?? row.source_url_doj) ? '↗ justice.gov' : '↗ Knight FOIA'
 
   return (
     <>
       <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-serif text-base font-semibold leading-snug">
             {title}
           </SheetTitle>
           {source && <SourceBadge value={source} />}
+          {sourceUrl && (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open the canonical source for this opinion in a new tab"
+              className="ml-auto inline-flex items-baseline gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10"
+            >
+              {sourceUrlLabel}
+            </a>
+          )}
         </div>
         {detail && (
           <SheetDescription className="text-xs text-muted-foreground">

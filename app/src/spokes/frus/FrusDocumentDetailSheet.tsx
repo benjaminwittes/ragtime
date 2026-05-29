@@ -114,15 +114,32 @@ function FrusDocumentDetailBody({ row }: { row: FrusDocumentDisplayRow }) {
 
   const title = detail?.title ?? row.title ?? '(no title)'
   const classification = detail?.classification ?? row.classification
+  // PR 4v: surface the canonical source link prominently at the top of the
+  // panel (previously buried at the bottom). The audit-link is available
+  // from the row's `source_url` even before the detail fetch resolves, so
+  // it renders immediately. Brief #1 §4b: every view that mentions a
+  // document carries a one-click path to the canonical primary source.
+  const sourceUrl = detail?.source_url ?? row.source_url
 
   return (
     <>
       <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-serif text-base font-semibold leading-snug">
             {title}
           </SheetTitle>
           {classification && <ClassificationBadge value={classification} />}
+          {sourceUrl && (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open this document on history.state.gov in a new tab"
+              className="ml-auto inline-flex items-baseline gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10"
+            >
+              ↗ history.state.gov
+            </a>
+          )}
         </div>
         {detail && (
           <SheetDescription className="text-xs text-muted-foreground">
@@ -198,21 +215,9 @@ function FrusDocumentDetailBody({ row }: { row: FrusDocumentDisplayRow }) {
               )}
             </section>
 
-            {detail.source_url && (
-              <section>
-                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Source URL
-                </h3>
-                <a
-                  href={detail.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-block text-xs text-primary hover:underline"
-                >
-                  {detail.source_url}
-                </a>
-              </section>
-            )}
+            {/* Source URL surfacing moved to the panel header (PR 4v) —
+                the audit link now sits next to the title + classification
+                badge instead of below the long document text. */}
           </div>
         )}
       </div>

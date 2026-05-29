@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { OlcAmaPlan, OlcAmaSynthesis } from '@/lib/worker-client'
+import {
+  type OlcAmaPlan,
+  type OlcAmaSynthesis,
+  type OlcOpinionDisplayRow,
+  fetchOlcItemsByIds,
+} from '@/lib/worker-client'
+import { OlcOpinionRowsTable } from './OlcResultsList'
 
 /**
  * AMA result panel for the OLC spoke. Renders the narrative + plan
@@ -30,7 +35,12 @@ export function OlcAmaResult({
   plan: OlcAmaPlan | null
   loading: boolean
   error: string | undefined
-  onOpenOpinion: (id: number) => void
+  /** Open an opinion in the detail panel. PR 4v changed the contract from
+   *  id-only to full row so the cited list can render with the same
+   *  metadata-rich table the manual filter uses; the detail sheet still
+   *  fetches the full opinion on mount, so the row data is initial-render
+   *  context, not authoritative. */
+  onOpenOpinion: (row: OlcOpinionDisplayRow) => void
 }) {
   if (loading && !synthesis) {
     return (
@@ -72,9 +82,76 @@ export function OlcAmaResult({
       </article>
       {synthesis.opinion_ids && synthesis.opinion_ids.length > 0 && (
         <CitedOpinions
+          // Remount on ids change so state initializes to defaults rather
+          // than reset-in-effect — eliminates the cascading render the
+          // react-hooks/set-state-in-effect lint rule warns about.
+          key={synthesis.opinion_ids.join(',')}
           ids={synthesis.opinion_ids}
-          onOpen={onOpenOpinion}
+          onOpenOpinion={onOpenOpinion}
         />
+      )}
+    </section>
+  )
+}
+
+/**
+ * Cited-opinions panel. PR 4v: fetches metadata for the synthesis-returned
+ * opinion ids and renders them with the same `OlcOpinionRowsTable` the
+ * manual filter uses. Cited rows now match filter rows exactly: title,
+ * date, author, source badge, page count, and the ↗ link to the canonical
+ * primary source.
+ */
+function CitedOpinions({
+  ids,
+  onOpenOpinion,
+}: {
+  ids: readonly number[]
+  onOpenOpinion: (row: OlcOpinionDisplayRow) => void
+}) {
+  const [rows, setRows] = useState<OlcOpinionDisplayRow[] | null>(null)
+  const [rowsError, setRowsError] = useState<string | null>(null)
+  // Loading is derived: still loading until either rows or an error arrives.
+  // No setState-in-effect for the reset — the parent remounts via `key` when
+  // ids change, so state initializes to defaults naturally.
+  const rowsLoading = rows === null && rowsError === null
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const fetched = await fetchOlcItemsByIds(ids as number[])
+        if (cancelled) return
+        setRows(fetched)
+      } catch (e) {
+        if (cancelled) return
+        setRowsError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [ids])
+
+  return (
+    <section className="mt-6 border-t border-border pt-4">
+      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Cited opinions ({ids.length.toLocaleString()})
+      </h3>
+      {rowsLoading && (
+        <p className="text-xs text-muted-foreground">Loading cited opinions…</p>
+      )}
+      {rowsError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Couldn&apos;t load cited opinions: {rowsError}
+        </p>
+      )}
+      {rows && rows.length > 0 && (
+        <OlcOpinionRowsTable rows={rows} onOpenOpinion={onOpenOpinion} />
+      )}
+      {rows && rows.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          (No matching opinions found for the cited ids.)
+        </p>
       )}
     </section>
   )
@@ -130,37 +207,6 @@ function CandorNotes({ notes }: { notes: readonly string[] }) {
         ))}
       </ul>
     </aside>
-  )
-}
-
-function CitedOpinions({
-  ids,
-  onOpen,
-}: {
-  ids: readonly number[]
-  onOpen: (id: number) => void
-}) {
-  return (
-    <section className="mt-6 border-t border-border pt-4">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Cited opinions ({ids.length.toLocaleString()})
-      </h3>
-      <ul className="mt-2 flex flex-wrap gap-2">
-        {ids.map((id) => (
-          <li key={id}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs font-mono"
-              onClick={() => onOpen(id)}
-            >
-              Opinion #{id}
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }
 

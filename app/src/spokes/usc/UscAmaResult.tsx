@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { UscAmaPlan, UscAmaSynthesis } from '@/lib/worker-client'
+import {
+  type UscAmaPlan,
+  type UscAmaSynthesis,
+  type UscSectionDisplayRow,
+  fetchUscItemsByIds,
+} from '@/lib/worker-client'
+import { UscSectionRowsTable } from './UscResultsList'
 
 /**
  * AMA result panel for the USC spoke. Brief #3 §5 — neutral, attribution-
@@ -29,7 +34,10 @@ export function UscAmaResult({
   plan: UscAmaPlan | null
   loading: boolean
   error: string | undefined
-  onOpenSection: (id: number) => void
+  /** Open a section in the detail panel. PR 4v: contract changed from
+   *  id-only to full row so the cited list renders with the same
+   *  metadata-rich table the manual filter uses. */
+  onOpenSection: (row: UscSectionDisplayRow) => void
 }) {
   if (loading && !synthesis) {
     return (
@@ -71,9 +79,72 @@ export function UscAmaResult({
       </article>
       {synthesis.section_ids && synthesis.section_ids.length > 0 && (
         <CitedSections
+          // Remount on ids change so state initializes to defaults rather
+          // than reset-in-effect (react-hooks/set-state-in-effect lint rule).
+          key={synthesis.section_ids.join(',')}
           ids={synthesis.section_ids}
-          onOpen={onOpenSection}
+          onOpenSection={onOpenSection}
         />
+      )}
+    </section>
+  )
+}
+
+/**
+ * Cited-sections panel. PR 4v: fetches metadata for the synthesis-returned
+ * section ids and renders them with the same `UscSectionRowsTable` the
+ * manual filter uses (Citation · Heading · Title · Status, with
+ * positive-law badge inline on the citation).
+ */
+function CitedSections({
+  ids,
+  onOpenSection,
+}: {
+  ids: readonly number[]
+  onOpenSection: (row: UscSectionDisplayRow) => void
+}) {
+  const [rows, setRows] = useState<UscSectionDisplayRow[] | null>(null)
+  const [rowsError, setRowsError] = useState<string | null>(null)
+  // Loading derived; parent remounts via `key` when ids change.
+  const rowsLoading = rows === null && rowsError === null
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const fetched = await fetchUscItemsByIds(ids as number[])
+        if (cancelled) return
+        setRows(fetched)
+      } catch (e) {
+        if (cancelled) return
+        setRowsError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [ids])
+
+  return (
+    <section className="mt-6 border-t border-border pt-4">
+      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Cited sections ({ids.length.toLocaleString()})
+      </h3>
+      {rowsLoading && (
+        <p className="text-xs text-muted-foreground">Loading cited sections…</p>
+      )}
+      {rowsError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Couldn&apos;t load cited sections: {rowsError}
+        </p>
+      )}
+      {rows && rows.length > 0 && (
+        <UscSectionRowsTable rows={rows} onOpenSection={onOpenSection} />
+      )}
+      {rows && rows.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          (No matching sections found for the cited ids.)
+        </p>
       )}
     </section>
   )
@@ -129,37 +200,6 @@ function CandorNotes({ notes }: { notes: readonly string[] }) {
         ))}
       </ul>
     </aside>
-  )
-}
-
-function CitedSections({
-  ids,
-  onOpen,
-}: {
-  ids: readonly number[]
-  onOpen: (id: number) => void
-}) {
-  return (
-    <section className="mt-6 border-t border-border pt-4">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Cited sections ({ids.length.toLocaleString()})
-      </h3>
-      <ul className="mt-2 flex flex-wrap gap-2">
-        {ids.map((id) => (
-          <li key={id}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs font-mono"
-              onClick={() => onOpen(id)}
-            >
-              §{id}
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }
 

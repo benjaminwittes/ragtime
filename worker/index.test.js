@@ -62,7 +62,10 @@ import {
   buildHubQueriesUsc,
   buildHubQueriesCfr,
   buildHubQueriesOlc,
-  buildHubQueriesFrus
+  buildHubQueriesFrus,
+  ITEMS_BY_IDS_CAP,
+  parseItemsByIdsRequest,
+  buildItemsByIdsSql
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -1647,6 +1650,66 @@ describe("buildHubQueriesFrus", () => {
   it("falls back to volume_id when place_name is null (context axis)", () => {
     const { rowsSql } = buildHubQueriesFrus("x", 5);
     expect(rowsSql).toMatch(/COALESCE\(place_name, volume_id\)/);
+  });
+});
+
+// ============================================================================
+// items-by-ids (PR 4v) — the AMA cited-result polish. AMA synthesis returns
+// a list of <doc>_ids; the result panel hits items-by-ids to get metadata-
+// rich display rows for each. parseItemsByIdsRequest is the shared input
+// validator; buildItemsByIdsSql preserves caller order via array_position.
+// ============================================================================
+
+describe("parseItemsByIdsRequest", () => {
+  it("rejects undefined / null with a clear error", () => {
+    expect(parseItemsByIdsRequest(undefined)).toEqual({ error: "Missing ids" });
+    expect(parseItemsByIdsRequest(null)).toEqual({ error: "Missing ids" });
+  });
+  it("rejects non-array input", () => {
+    expect(parseItemsByIdsRequest("not an array")).toEqual({ error: "ids must be an array" });
+    expect(parseItemsByIdsRequest(42)).toEqual({ error: "ids must be an array" });
+    expect(parseItemsByIdsRequest({ ids: [1, 2] })).toEqual({ error: "ids must be an array" });
+  });
+  it("accepts empty array (handler short-circuits to [])", () => {
+    expect(parseItemsByIdsRequest([])).toEqual({ ids: [] });
+  });
+  it("rejects oversize lists with the cap surfaced in the error", () => {
+    const oversize = Array.from({ length: ITEMS_BY_IDS_CAP + 1 }, (_, i) => i + 1);
+    const result = parseItemsByIdsRequest(oversize);
+    expect(result.error).toMatch(/too large/);
+    expect(result.error).toMatch(String(ITEMS_BY_IDS_CAP));
+  });
+  it("keeps valid positive integers and drops everything else", () => {
+    const result = parseItemsByIdsRequest([1, 2, 3, null, undefined, NaN, -5, 0, "x", "7", 4.9, 5.0]);
+    // Kept: 1, 2, 3, "7"→7, 4.9→4 (Math.floor), 5.0→5
+    // Dropped: null/undefined (pre-Number filter), NaN/-5/0/"x" (post-Number filter — 0 is dropped because we require > 0)
+    expect(result.ids).toEqual([1, 2, 3, 7, 4, 5]);
+  });
+  it("preserves caller order (the planner's ranking is meaningful)", () => {
+    const result = parseItemsByIdsRequest([99, 1, 50, 3]);
+    expect(result.ids).toEqual([99, 1, 50, 3]);
+  });
+});
+
+describe("buildItemsByIdsSql", () => {
+  it("uses the provided display columns and table", () => {
+    const sql = buildItemsByIdsSql("id, title, foo", "my_table", [1, 2, 3]);
+    expect(sql).toMatch(/SELECT id, title, foo FROM my_table/);
+  });
+  it("inlines ids as a bigint[] array literal (twice — once for WHERE, once for ORDER BY)", () => {
+    const sql = buildItemsByIdsSql("id", "t", [10, 20, 30]);
+    const arrayLiteral = "'{10,20,30}'::bigint[]";
+    // Both occurrences must be present — WHERE uses it via unnest, ORDER BY
+    // uses it via array_position to preserve caller order.
+    const occurrences = sql.split(arrayLiteral).length - 1;
+    expect(occurrences).toBe(2);
+    expect(sql).toMatch(/WHERE id IN \(SELECT unnest\('\{10,20,30\}'::bigint\[\]\)\)/);
+    expect(sql).toMatch(/ORDER BY array_position\('\{10,20,30\}'::bigint\[\], id\)/);
+  });
+  it("produces a single-statement SQL with no trailing semicolon", () => {
+    const sql = buildItemsByIdsSql("id", "t", [1]);
+    // Worker's corpusRunQuery doesn't accept multi-statement input; no semicolon.
+    expect(sql).not.toMatch(/;/);
   });
 });
 

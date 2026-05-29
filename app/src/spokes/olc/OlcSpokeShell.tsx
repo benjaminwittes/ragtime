@@ -143,28 +143,14 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     null,
   )
 
+  /** Open an opinion in the detail panel. Used by both the manual-filter
+   *  results list AND the AMA cited list — PR 4v unified both to pass full
+   *  rows (previously the AMA list passed id-only and the handler synthesized
+   *  a placeholder row, since cited items were rendered as "Opinion #N"
+   *  stubs without metadata; now they're metadata-rich rows from
+   *  items-by-ids and the handler receives the real row). */
   function handleOpenOpinion(row: OlcOpinionDisplayRow) {
     setOpenOpinion(row)
-    setDetailOpen(true)
-  }
-
-  /** Open the detail sheet for an opinion-id citation from the AMA result.
-   *  The detail sheet takes a display row; for citations we have only the id
-   *  + (optionally) a title, so synthesize a minimal display row. The detail
-   *  panel re-fetches the full opinion from the server on mount, so the
-   *  partial row is just a placeholder. */
-  function handleOpenOpinionById(id: number) {
-    const placeholder: OlcOpinionDisplayRow = {
-      id,
-      title: null,
-      author: null,
-      date_issued: null,
-      source: null,
-      page_count: null,
-      text_length: null,
-      ocr_quality: null,
-    }
-    setOpenOpinion(placeholder)
     setDetailOpen(true)
   }
 
@@ -331,7 +317,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           plan={amaResultPlan}
           loading={amaLoading}
           error={amaError}
-          onOpenOpinion={handleOpenOpinionById}
+          onOpenOpinion={handleOpenOpinion}
         />
       )}
 
