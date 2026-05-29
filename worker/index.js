@@ -222,6 +222,15 @@ export default {
       if (path === "/corpus/cfr/section" && request.method === "POST") {
         return await corpusCfrSectionHandler(request, env, ctx);
       }
+      if (path === "/corpus/olc/facets" && request.method === "POST") {
+        return await corpusOlcFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/olc/filter" && request.method === "POST") {
+        return await corpusOlcFilterHandler(request, env, ctx);
+      }
+      if (path === "/corpus/olc/opinion" && request.method === "POST") {
+        return await corpusOlcOpinionHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -2034,6 +2043,160 @@ async function corpusCfrSectionHandler(request, env, ctx) {
   return json({ section: rows[0] }, 200);
 }
 
+// ============================================================================
+// OLC opinions corpus — v1 alpha
+//
+// Third reference-style spoke after USC/CFR. The atomic unit is an opinion
+// (not a section); the corpus is small (2,145) and flat (no hierarchy
+// chain). Per brief #2 OLC is paradigmatically analytical/narrative — AI
+// synthesis is the flagship — but manual filter + opinion detail still
+// gives meaningful research: title browse, date-range, source filtering
+// (DOJ-published vs Knight FOIA net-new), OCR-quality filter (~200
+// degraded scans worth filtering out for serious work).
+//
+// Display columns are the list-table fields. text_content is omitted to
+// keep payloads cheap; the detail handler returns everything.
+// ============================================================================
+
+var OLC_DISPLAY_COLS = "id, title, author, date_issued::text AS date_issued, source, page_count, text_length, ocr_quality";
+
+/**
+ * Build the WHERE clause for /corpus/olc/filter. Same single-quote
+ * escaping discipline as the USC and CFR builders.
+ *
+ * Supported axes:
+ *   search       FTS over fts (text_content + title)
+ *   title        substring (ILIKE %title%) on opinion title — many records
+ *                have null author so title is the primary text axis
+ *   author       substring (ILIKE %author%)
+ *   source       exact match — 'doj-published' (1,439) or 'knight-foia' (706)
+ *   from / to    ISO YYYY-MM-DD bounds on date_issued
+ *   ocrQuality   exact match — 'clean' (1,857), 'degraded' (197),
+ *                'normalized' (91) so users can exclude degraded scans
+ *                for serious research
+ */
+function buildOlcFilterWhere(fields) {
+  var parts = [];
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var q = fields.search.trim().replace(/'/g, "''");
+    parts.push("fts @@ websearch_to_tsquery('english', '" + q + "')");
+  }
+  if (fields.title && typeof fields.title === 'string' && fields.title.trim()) {
+    var t = fields.title.trim().replace(/'/g, "''");
+    parts.push("title ILIKE '%" + t + "%'");
+  }
+  if (fields.author && typeof fields.author === 'string' && fields.author.trim()) {
+    var a = fields.author.trim().replace(/'/g, "''");
+    parts.push("author ILIKE '%" + a + "%'");
+  }
+  if (fields.source && typeof fields.source === 'string' && fields.source.trim()) {
+    var s = fields.source.trim().replace(/'/g, "''");
+    parts.push("source = '" + s + "'");
+  }
+  if (fields.from && typeof fields.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.from)) {
+    parts.push("date_issued >= '" + fields.from + "'");
+  }
+  if (fields.to && typeof fields.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.to)) {
+    parts.push("date_issued <= '" + fields.to + "'");
+  }
+  if (fields.ocrQuality && typeof fields.ocrQuality === 'string' && fields.ocrQuality.trim()) {
+    var o = fields.ocrQuality.trim().replace(/'/g, "''");
+    parts.push("ocr_quality = '" + o + "'");
+  }
+  return parts.length ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusOlcFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    // Small corpus (~2,145) — COUNT(*) is cheap. Exact counts here
+    // rather than the reltuples estimate USC/CFR rely on for their
+    // multi-hundred-thousand-row tables.
+    const stats = await corpusRunQuery(env,
+      "SELECT count(*)::bigint AS opinion_count, " +
+      "MIN(date_issued)::text AS earliest, " +
+      "MAX(date_issued)::text AS latest " +
+      "FROM olc_opinions");
+    const sources = await corpusRunQuery(env,
+      "SELECT source AS v, count(*)::bigint AS n FROM olc_opinions " +
+      "WHERE source IS NOT NULL AND source <> '' GROUP BY source ORDER BY n DESC");
+    const ocrQualities = await corpusRunQuery(env,
+      "SELECT ocr_quality AS v, count(*)::bigint AS n FROM olc_opinions " +
+      "WHERE ocr_quality IS NOT NULL AND ocr_quality <> '' GROUP BY ocr_quality ORDER BY n DESC");
+    const s = stats[0] || {};
+    return json({
+      opinion_count: s.opinion_count,
+      earliest: s.earliest,
+      latest: s.latest,
+      sources: sources.map((r) => ({ value: r.v, count: r.n })),
+      ocr_qualities: ocrQualities.map((r) => ({ value: r.v, count: r.n }))
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "OLC facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+async function corpusOlcFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const where = buildOlcFilterWhere(fields);
+  const idsSql = "SELECT id FROM olc_opinions" + where;
+  // Order by date_issued desc — most recent first. Matches brief #2's
+  // typical interaction (research starts from current state, walks back).
+  const rowsSql = "SELECT " + OLC_DISPLAY_COLS + " FROM olc_opinions" + where +
+    " ORDER BY date_issued DESC NULLS LAST LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "OLC filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const ids = idRows.map((r) => r.id).filter((x) => x != null);
+  return json({
+    ids,
+    display_rows: rows,
+    count: ids.length,
+    generated_sql: rowsSql,
+    executed_sql: idsSql
+  }, 200);
+}
+
+/**
+ * Single-opinion detail for the OLC opinion panel. Includes the full
+ * text_content plus the provenance fields (DOJ + Knight URLs, doj
+ * download path, Knight doc id, release date, summary). Surfaces the
+ * dual-provenance story per brief #2 — many opinions in the corpus came
+ * from the Knight FOIA dataset that DOJ never published, and the user
+ * deserves to see which path a given opinion arrived through.
+ */
+async function corpusOlcOpinionHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+  const sql = "SELECT id, title, author, recipient, president, date_issued::text AS date_issued, " +
+    "release_date::text AS release_date, summary, summary_source, " +
+    "source, source_url_doj, source_url_knight, doj_dl_path, knight_doc_id, " +
+    "volume, page, page_count, text_length, text_content, ocr_quality, dedup_key " +
+    "FROM olc_opinions WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Opinion fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Opinion not found", code: "not_found" } }, 404);
+  }
+  return json({ opinion: rows[0] }, 200);
+}
+
 // Docket entries for one case (the case-detail view).
 async function corpusEntriesHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
@@ -3022,6 +3185,7 @@ export {
   pickCheckoutReturnOrigin,
   buildUscFilterWhere,
   buildCfrFilterWhere,
+  buildOlcFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
