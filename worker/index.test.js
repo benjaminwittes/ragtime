@@ -28,7 +28,16 @@ import {
   parseOlcSummary,
   buildOlcPlanningUser,
   buildOlcSummarizeUser,
-  OLC_SUMMARIZE_TEXT_CAP
+  OLC_SUMMARIZE_TEXT_CAP,
+  normalizeFrusScope,
+  parseFrusPlan,
+  parseFrusSynthesis,
+  parseFrusSummary,
+  buildFrusPlanningUser,
+  buildFrusSummarizeUser,
+  executeFrusPlan,
+  FRUS_SUMMARIZE_TEXT_CAP,
+  FRUS_SCOPE_LITERAL_LIMIT
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -830,6 +839,254 @@ describe("parseOlcSummary", () => {
 
   it("rejects a top-level array", () => {
     expect(() => parseOlcSummary("[1,2,3]")).toThrow(/top-level value is not an object/);
+  });
+});
+
+// ============================================================================
+// FRUS AI modes (PR 4r) — narrative synthesis (plan/execute, with hybrid +
+// list output modes covering the three asymmetric flagships) + summarize-one.
+//
+// Same validator discipline as OLC. The FRUS-distinctive surface area:
+//   - executor enforces FRUS_SCOPE_LITERAL_LIMIT (corpus is 314K so scope
+//     can plausibly exceed the inline cap; OLC's 2K corpus can't);
+//   - summarize builder folds in volume metadata, classification, persons,
+//     and FRUS editorial footnotes — none of which OLC has.
+// ============================================================================
+
+describe("normalizeFrusScope", () => {
+  it("treats missing scope as full-corpus", () => {
+    const s = normalizeFrusScope(undefined);
+    expect(s.is_full_db).toBe(true);
+    expect(s.document_ids).toBe(null);
+  });
+
+  it("treats empty document_ids as full-corpus", () => {
+    const s = normalizeFrusScope({ document_ids: [] });
+    expect(s.is_full_db).toBe(true);
+    expect(s.document_ids).toBe(null);
+  });
+
+  it("keeps a valid numeric document_ids list", () => {
+    const s = normalizeFrusScope({ document_ids: [10, 20, 30] });
+    expect(s.is_full_db).toBe(false);
+    expect(s.document_ids).toEqual([10, 20, 30]);
+    expect(s.count).toBe(3);
+  });
+
+  it("drops nullish + non-finite values", () => {
+    const s = normalizeFrusScope({ document_ids: [1, null, "x", 2, undefined, NaN, "3"] });
+    expect(s.document_ids).toEqual([1, 2, 3]);
+  });
+});
+
+describe("parseFrusPlan", () => {
+  const validPlan = JSON.stringify({
+    output_mode: "narrative",
+    approach_summary: "Pull docs about the Cuban Missile Crisis chronologically.",
+    candor_notes: ["Date range 1962-09 through 1962-12; persons jsonb queried for Kennedy and Khrushchev."],
+    queries: [{
+      label: "missile crisis docs by date",
+      sql: "SELECT id, title, doc_date, place_name, classification FROM frus_documents WHERE fts @@ websearch_to_tsquery('english', 'Cuba missile') AND doc_date BETWEEN '1962-09-01' AND '1962-12-31' ORDER BY doc_date ASC LIMIT 200"
+    }],
+    estimated_cost_cents: 12,
+    wants_synthesis: true
+  });
+
+  it("accepts a well-formed plan", () => {
+    const p = parseFrusPlan(validPlan);
+    expect(p.output_mode).toBe("narrative");
+    expect(p.queries).toHaveLength(1);
+  });
+
+  it("strips code fences", () => {
+    const fenced = "```json\n" + validPlan + "\n```";
+    expect(parseFrusPlan(fenced).output_mode).toBe("narrative");
+  });
+
+  it("rejects an unknown output_mode", () => {
+    const bad = JSON.stringify({ output_mode: "timeline", queries: [] });
+    expect(() => parseFrusPlan(bad)).toThrow(/output_mode/);
+  });
+
+  it("rejects non-array queries", () => {
+    const bad = JSON.stringify({ output_mode: "hybrid", queries: "SELECT 1" });
+    expect(() => parseFrusPlan(bad)).toThrow(/queries must be an array/);
+  });
+
+  it("coerces estimated_cost_cents to non-negative", () => {
+    const negative = JSON.stringify({ output_mode: "list", queries: [], estimated_cost_cents: -10 });
+    expect(parseFrusPlan(negative).estimated_cost_cents).toBe(0);
+  });
+});
+
+describe("parseFrusSynthesis", () => {
+  it("accepts a hybrid synthesis with document_ids and citations", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Yes — see the [frus-ref:101] cable.",
+      document_ids: [101, 202],
+      candor_notes: []
+    });
+    const s = parseFrusSynthesis(raw, "hybrid");
+    expect(s.document_ids).toEqual([101, 202]);
+    expect(s.answer_markdown).toMatch(/frus-ref:101/);
+  });
+
+  it("forces document_ids = null for narrative mode regardless of model output", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Narrative answer.",
+      document_ids: [1, 2, 3], // model returned ids even though mode is narrative
+      candor_notes: []
+    });
+    const s = parseFrusSynthesis(raw, "narrative");
+    expect(s.document_ids).toBe(null);
+  });
+
+  it("downgrades empty list/hybrid to narrative with a candor note", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "No matching documents.",
+      document_ids: [],
+      candor_notes: []
+    });
+    const s = parseFrusSynthesis(raw, "list");
+    expect(s.document_ids).toEqual([]);
+    expect(s.candor_notes.join(" ")).toMatch(/returned none/);
+  });
+
+  it("drops nullish ids before Number conversion", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "x",
+      document_ids: ["42", null, 7, undefined, "not-a-number"],
+      candor_notes: []
+    });
+    const s = parseFrusSynthesis(raw, "list");
+    expect(s.document_ids).toEqual([42, 7]);
+  });
+
+  it("rejects empty answer_markdown", () => {
+    const raw = JSON.stringify({ answer_markdown: "  ", document_ids: [] });
+    expect(() => parseFrusSynthesis(raw, "narrative")).toThrow(/answer_markdown is empty/);
+  });
+});
+
+describe("buildFrusPlanningUser", () => {
+  it("describes the full-corpus scope and uses frus_documents", () => {
+    const msg = buildFrusPlanningUser("Has the US ever invaded Iran?", normalizeFrusScope(undefined));
+    expect(msg).toMatch(/full corpus/i);
+    expect(msg).toMatch(/frus_documents/);
+    expect(msg).not.toMatch(/scoped_frus_documents/);
+  });
+
+  it("describes a narrowed scope and uses scoped_frus_documents", () => {
+    const msg = buildFrusPlanningUser(
+      "Within these docs, what was said about Berlin?",
+      normalizeFrusScope({ document_ids: [1, 2, 3], count: 3 })
+    );
+    expect(msg).toMatch(/3 document_ids/);
+    expect(msg).toMatch(/scoped_frus_documents/);
+    expect(msg).toMatch(/frus_volumes is still available/);
+  });
+});
+
+describe("buildFrusSummarizeUser", () => {
+  const doc = {
+    title: "Memorandum of Conversation, Acheson and Lloyd",
+    doc_date: "1958-10-17",
+    place_name: "London",
+    classification: "Secret",
+    volume_title: "FRUS 1958-1960, Vol. XV",
+    doc_number: "138",
+    persons: [{ name: "Acheson" }, { name: "Lloyd" }, { name: "Eisenhower" }],
+    text_content: "I. The Secretary opened by noting...",
+    footnotes: [{ ref: "n1", text: "Source: NARA RG 59." }]
+  };
+
+  it("surfaces volume + classification + persons + footnotes in the prompt", () => {
+    const u = buildFrusSummarizeUser(doc, false);
+    expect(u).toMatch(/Memorandum of Conversation/);
+    expect(u).toMatch(/1958-10-17/);
+    expect(u).toMatch(/London/);
+    expect(u).toMatch(/Secret/);
+    expect(u).toMatch(/Vol\. XV/);
+    expect(u).toMatch(/Acheson, Lloyd, Eisenhower/);
+    expect(u).toMatch(/NARA RG 59/);
+    expect(u).not.toMatch(/TRUNCATED/);
+  });
+
+  it("flags + truncates oversize text", () => {
+    // No footnotes on this fixture — the footnotes JSON contains literal
+    // `"text":` keys, which would inflate the x-count and make the cap
+    // assertion brittle. Truncation-of-text_content is what's being pinned.
+    const huge = { ...doc, footnotes: null, text_content: "x".repeat(FRUS_SUMMARIZE_TEXT_CAP + 1000) };
+    const u = buildFrusSummarizeUser(huge, true);
+    expect(u).toMatch(/TRUNCATED to/);
+    const textStart = u.indexOf("DOCUMENT TEXT");
+    const textBlock = u.slice(textStart);
+    const xCount = (textBlock.match(/x/g) || []).length;
+    expect(xCount).toBe(FRUS_SUMMARIZE_TEXT_CAP);
+  });
+
+  it("caps persons list and indicates overflow", () => {
+    const many = { ...doc, persons: Array.from({ length: 50 }, (_, i) => ({ name: `Person${i}` })) };
+    const u = buildFrusSummarizeUser(many, false);
+    expect(u).toMatch(/Person0/);
+    expect(u).toMatch(/Person39/);
+    expect(u).toMatch(/\+10 more/);
+  });
+
+  it("handles missing optional metadata gracefully", () => {
+    const sparse = {
+      title: null,
+      doc_date: null,
+      place_name: null,
+      classification: null,
+      volume_title: null,
+      volume_id: "frus1958-60v15",
+      doc_number: null,
+      persons: null,
+      text_content: "Body.",
+      footnotes: null
+    };
+    const u = buildFrusSummarizeUser(sparse, false);
+    expect(u).toMatch(/no title/);
+    expect(u).toMatch(/frus1958-60v15/);
+    expect(u).not.toMatch(/Persons \(TEI-extracted\)/);
+    expect(u).not.toMatch(/FOOTNOTES/);
+  });
+});
+
+describe("parseFrusSummary", () => {
+  it("accepts a well-formed summary", () => {
+    const raw = JSON.stringify({
+      summary_markdown: "**Provenance.** ...",
+      candor_notes: []
+    });
+    const s = parseFrusSummary(raw);
+    expect(s.summary_markdown).toMatch(/Provenance/);
+  });
+
+  it("rejects empty summary_markdown", () => {
+    const raw = JSON.stringify({ summary_markdown: " ", candor_notes: [] });
+    expect(() => parseFrusSummary(raw)).toThrow(/summary_markdown is empty/);
+  });
+
+  it("defaults candor_notes to []", () => {
+    const raw = JSON.stringify({ summary_markdown: "x" });
+    expect(parseFrusSummary(raw).candor_notes).toEqual([]);
+  });
+
+  it("strips code fences", () => {
+    const fenced = "```json\n" + JSON.stringify({ summary_markdown: "x", candor_notes: [] }) + "\n```";
+    expect(parseFrusSummary(fenced).summary_markdown).toBe("x");
+  });
+});
+
+describe("executeFrusPlan scope cap", () => {
+  it("refuses scopes above FRUS_SCOPE_LITERAL_LIMIT with a clear error", async () => {
+    const oversize = Array.from({ length: FRUS_SCOPE_LITERAL_LIMIT + 1 }, (_, i) => i + 1);
+    const scope = normalizeFrusScope({ document_ids: oversize });
+    const plan = { queries: [{ label: "x", sql: "SELECT 1 FROM scoped_frus_documents" }] };
+    // env is unused — the cap check fires before any DB call.
+    await expect(executeFrusPlan({}, plan, scope)).rejects.toThrow(/too large to inline/);
   });
 });
 

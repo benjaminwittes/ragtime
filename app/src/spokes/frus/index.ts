@@ -2,14 +2,22 @@ import type { CorpusSpoke } from '../types'
 import { fetchFrusFacets } from '@/lib/worker-client'
 
 /**
- * FRUS (Foreign Relations of the United States) spoke — v1 alpha
- * (manual filter + document detail).
+ * FRUS (Foreign Relations of the United States) spoke.
  *
- * Per brief #5, FRUS is paradigmatically analytical/narrative-synthesis —
- * users ask "Tell me about US-Iran relations in 1979" and the system
- * pulls the relevant documents from the State Department's documentary
- * history series and synthesizes. That analytical flagship surface
- * lands in a follow-up PR; v1 alpha is the metadata-floor base.
+ * Per brief #5, FRUS is paradigmatically narrative-synthesis — users ask
+ * "Tell me about US-Iran relations in 1979" and the system pulls the
+ * relevant documents from the State Department's documentary history
+ * series and synthesizes chronologically.
+ *
+ * Surfaces:
+ * - Manual filter: keyword + metadata + scopes (FTS, date range, place,
+ *   classification, volume, sub-series).
+ * - claude_ama (PR 4r): the three asymmetric flagships — narrative
+ *   synthesis (paradigmatic) + coverage/existence + specific-document
+ *   retrieval — all served through one mode whose planner picks the
+ *   output_mode per question shape (no query-architecture buttons).
+ * - Summarize-one-document (PR 4r): an action on the document detail
+ *   sheet, not a mode in the selector.
  *
  * Counts: 314,483 documents across 694 volumes (552 with docs loaded;
  * the remaining 142 are placeholders for the lagging-publication tail).
@@ -39,7 +47,7 @@ export const frusSpoke: CorpusSpoke = {
         knownGaps: [
           'FRUS publication is a lagging series — post-1991 volumes are released gradually as declassification clears.',
           `${(f.volume_count - f.volumes_with_docs).toLocaleString()} volumes are placeholder metadata (no documents loaded yet).`,
-          'AI modes (the "Tell me about…" analytical flagship per brief #5) land in a follow-up PR.',
+          'Semantic retrieval (pgvector) deferred to Phase 2; v1 keyword search underperforms most on questions about concepts (containment, deterrence) versus events (Berlin Airlift, Bay of Pigs).',
         ],
       }
     } catch {
@@ -51,7 +59,7 @@ export const frusSpoke: CorpusSpoke = {
     }
   },
 
-  queryModes: ['manual_filter'],
+  queryModes: ['manual_filter', 'claude_ama'],
   flagships: {
     present: ['retrieval', 'filtering', 'analytical'],
     paradigmatic: 'analytical',

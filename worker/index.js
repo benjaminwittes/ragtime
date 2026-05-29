@@ -249,6 +249,15 @@ export default {
       if (path === "/corpus/frus/document" && request.method === "POST") {
         return await corpusFrusDocumentHandler(request, env, ctx);
       }
+      if (path === "/corpus/frus/plan" && request.method === "POST") {
+        return await corpusFrusPlanHandler(request, env, ctx);
+      }
+      if (path === "/corpus/frus/execute" && request.method === "POST") {
+        return await corpusFrusExecuteHandler(request, env, ctx);
+      }
+      if (path === "/corpus/frus/summarize-document" && request.method === "POST") {
+        return await corpusFrusSummarizeHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -2885,6 +2894,536 @@ async function corpusFrusDocumentHandler(request, env, ctx) {
   return json({ document: rows[0] }, 200);
 }
 
+// ── FRUS AI modes (PR 4r) ───────────────────────────────────────────────────
+// Brief #5 §3 names three flagships, asymmetric: C (narrative synthesis) is
+// paradigmatic; A (documentary coverage) and B (specific document retrieval)
+// are secondary; plus a B-analytical secondary (auditable counts). All four
+// shapes are served by ONE claude_ama mode whose planner picks output_mode
+// per question shape — the "no query-architecture buttons" principle. The
+// "summarize this document" surface lives on the detail sheet, not in the
+// mode selector.
+
+// FRUS scope cap. The corpus is 314,483 documents — large enough that a
+// loose filter could produce six-figure scopes. The executor inlines
+// document_ids; over this cap the SQL becomes unwieldy and we refuse with
+// a clear "narrow further" error.
+var FRUS_SCOPE_LITERAL_LIMIT = 25000;
+
+function normalizeFrusScope(s) {
+  s = s || {};
+  let ids = Array.isArray(s.document_ids)
+    ? s.document_ids.filter((x) => x != null).map(Number).filter(Number.isFinite)
+    : null;
+  if (ids && ids.length === 0) ids = null;
+  return {
+    document_ids: ids,
+    is_full_db: !ids,
+    count: Number(s.count) || (ids ? ids.length : 0),
+    description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : ""
+  };
+}
+
+var FRUS_AMA_SCHEMA_DOC = [
+  "TABLE: frus_documents — one row per FRUS document (314,483 across 694 volumes; 1620 → 1991).",
+  "  id (bigint, PK)                — document id; use this in citations.",
+  "  volume_id (text)               — FK to frus_volumes; e.g. 'frus1958-60v15'.",
+  "  doc_number (text)              — within-volume document number.",
+  "  title (text)                   — document title; FTS-indexed.",
+  "  doc_date (date)                — primary chronological axis; populated on ~99% of rows.",
+  "  doc_datetime_min (date)        — start of date range when the document spans multiple dates (rare).",
+  "  doc_datetime_max (date)        — end of date range.",
+  "  place_name (text)              — where the document was sent from / written at (TEI-extracted).",
+  "  source_note (text)             — original archival source note.",
+  "  classification (text)          — original classification level: 'Secret' / 'Top Secret' / 'Confidential' / 'Limited Official Use' / 'Official Use Only' / 'Unclassified' / 'Restricted'.",
+  "  text_content (text)            — full document text; LARGE for some documents (do not return raw in planned queries — pull title/date/place/classification and let synthesis cite).",
+  "  text_length (int)              — character count.",
+  "  persons (jsonb)                — TEI-extracted persons mentioned in the document. Shape: array of objects each with at minimum a 'name' string. Filter: persons @> '[{\"name\": \"Stalin\"}]'::jsonb or similar.",
+  "  glossary (jsonb)               — TEI-extracted glossary terms.",
+  "  footnotes (jsonb)              — original FRUS editorial footnotes; scholarship, not noise.",
+  "  source_url (text)              — canonical history.state.gov URL.",
+  "  fts (tsvector, generated)      — to_tsvector('english', title || ' ' || text_content) — use for topical search.",
+  "",
+  "TABLE: frus_volumes — one row per FRUS volume (694 total; 552 with docs + 142 forthcoming placeholders).",
+  "  volume_id (text, PK)           — e.g. 'frus1958-60v15'.",
+  "  title (text)                   — short volume title.",
+  "  title_complete (text)          — fully-qualified title with administration + region (e.g. 'Foreign Relations of the United States, 1958–1960, South and Southeast Asia').",
+  "  sub_series (text)              — major series grouping; ~100 distinct values.",
+  "  volume_number (text)           — Roman or arabic numeral within the series.",
+  "  publication_date (date)        — when State published this volume.",
+  "  content_date_min (date)        — earliest document date in the volume.",
+  "  content_date_max (date)        — latest document date in the volume.",
+  "  editors (text)                 — volume editors.",
+  "  doc_count (int)                — count of frus_documents rows with this volume_id (552 nonzero, 142 are forthcoming placeholders with doc_count=0).",
+  "",
+  "NOTES:",
+  "- Topical/conceptual search: WHERE fts @@ websearch_to_tsquery('english', 'your search') — supports OR and quoted phrases.",
+  "- Date axis is reliable. For era questions, filter by doc_date or date range.",
+  "- Person search uses jsonb containment. To find docs mentioning Stalin: persons @> '[{\"name\": \"Stalin\"}]'::jsonb. To enumerate persons mentioned in a result set: SELECT p->>'name' FROM frus_documents, jsonb_array_elements(persons) AS p WHERE ... GROUP BY 1 ORDER BY count(*) DESC.",
+  "- Place search uses ILIKE on place_name (free-text strings).",
+  "- Classification is preserved verbatim — use it as historical-interest signal, not as a current security marking (these are 30+ years old).",
+  "- Cite documents with the FULL chain when synthesizing — volume + doc_number + title + date + place + classification. The UI replaces [frus-ref:DOC_ID] tokens with click-throughs.",
+  "- COVERAGE/EXISTENCE QUESTIONS ('Has the US ever...'). For 'no' answers especially, surface the SEARCH DATASET in candor_notes so the user can interrogate the formulation ('Searched fts for X OR Y OR Z; returned 0 matches across 314K documents.').",
+  "- ANALYTICAL COUNTS. Surface the denominator (e.g. 'Of 314,483 documents, 437 mention Stalin between 1948 and 1955') in candor_notes.",
+  "- Read-only: only SELECT statements are accepted; cap planned queries at LIMIT 500 (text_content is large; bigger pulls blow up synthesis input)."
+].join("\n");
+
+function buildFrusPlanningSystem() {
+  return [
+    "You are the planner for an agentic narrative-synthesis tool over the FRUS (Foreign Relations of the United States) corpus — the State Department's official documentary history of U.S. foreign policy: diplomatic cables, memoranda of conversation, briefing papers, presidential decision memos, intelligence assessments, exchanges with foreign governments. Politically charged terrain at times (covert operations, regime-change involvement); never editorialize.",
+    "",
+    "You have access to a Postgres database (read-only) via SELECT queries. Schema:",
+    "",
+    FRUS_AMA_SCHEMA_DOC,
+    "",
+    "Output a single JSON object with these keys (no prose, no code fences):",
+    "{",
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    "       // list = the question wants a refined set of documents (Flagship B: specific document retrieval).",
+    "       // narrative = the question wants a prose answer (Flagship C: narrative synthesis — paradigmatic).",
+    "       // hybrid = both — synthesized answer + refined document list (Flagship A: coverage/existence with supporting docs).",
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats — the search dataset for coverage answers, denominator for analytical counts, dates the planner had to guess at, persons / places that proved ambiguous"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ... FROM frus_documents WHERE ... LIMIT 500"},',
+    "    ...",
+    "  ],",
+    '  "estimated_cost_cents": <integer>,',
+    "       // your estimate of the synthesis call cost in cents (the planning call is already paid).",
+    "       // Synthesis input ≈ all query results in JSON; output ≈ 800-2000 tokens.",
+    "       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.",
+    '  "wants_synthesis": true',
+    "}",
+    "",
+    "Rules:",
+    "- Question shape → output_mode mapping (the three flagships are recognized internally, not as separate UI modes):",
+    "    * 'Tell me about [event/era/person/policy]' → output_mode='narrative'. Pull documents chronologically; synthesis writes prose.",
+    "    * 'Has the U.S. ever [X]' / 'Did [administration] do [X]' → output_mode='hybrid'. Search for evidence; synthesis writes a yes/no verdict + supporting documents list.",
+    "    * 'Show me [docs about X]' / 'Find the cables on [Y]' → output_mode='list'. Retrieval; synthesis narrows.",
+    "    * 'How many documents / which administration most / what year produced' → output_mode='narrative' with analytical answer + denominator in candor_notes.",
+    "- PULL METADATA, NOT TEXT. Planned queries should select id, title, doc_date, place_name, classification, volume_id, doc_number, persons — NEVER text_content. Synthesis works from metadata; the user reads full text via the detail sheet.",
+    "- CHRONOLOGICAL ORDER. For narrative questions, ORDER BY doc_date ASC. The synthesis renders chronologically by default.",
+    "- CAP QUERIES at LIMIT 500. The corpus is large; bigger pulls blow up synthesis input.",
+    "- USE THE VOLUMES TABLE as scope hint. If the question targets a known volume (era + region), the volume_id filter is faster than FTS. 'Eisenhower Suez' → look for volumes with content_date around 1956-1957 + 'Suez' or 'Near East' in title_complete.",
+    "- PERSON QUERIES. Use jsonb containment: persons @> '[{\"name\": \"Stalin\"}]'::jsonb. Names can be partial — fall back to text search on text_content if the jsonb lookup returns nothing.",
+    "- COVERAGE/EXISTENCE. For 'has the US ever' questions, include the SEARCH DATASET (the FTS terms you tried) in candor_notes regardless of whether anything matched — for 'no' answers, this is required content.",
+    "- ANALYTICAL COUNTS. Always include the denominator (corpus size or the relevant subset) in candor_notes.",
+    "- WHEN THE CURRENT SCOPE IS NARROWED (document_ids list provided): use the name \"scoped_frus_documents\" instead of \"frus_documents\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_frus_documents WHERE classification = 'Secret'\" (good), not \"FROM scoped_frus_documents d WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"frus_documents\".",
+    "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
+  ].join("\n");
+}
+
+function buildFrusPlanningUser(question, scope) {
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "CURRENT SCOPE:",
+    scope.description || (scope.is_full_db
+      ? "The full corpus — all 314,483 FRUS documents across 694 volumes (1620 → 1991)."
+      : fmtIntJs(scope.count) + " documents (narrowed)."),
+    scope.is_full_db
+      ? "(no document_id constraint — your queries run against the full corpus; use the table names \"frus_documents\" and \"frus_volumes\")"
+      : "(narrowed to " + fmtIntJs(scope.count) + " document_ids; the runner will substitute scoped_frus_documents with an inline subquery filtered to the scope — use THAT name in your queries. frus_volumes is still available unaltered.)",
+    "",
+    "Return the JSON plan now."
+  ].join("\n");
+}
+
+function parseFrusPlan(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error("JSON.parse error: " + pe2.message); }
+    } else {
+      throw new Error("could not find a JSON object in the response.");
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (["list", "narrative", "hybrid"].indexOf(v.output_mode) < 0) throw new Error("output_mode must be list, narrative, or hybrid.");
+  if (!Array.isArray(v.queries)) throw new Error("queries must be an array.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || "").trim();
+  return v;
+}
+
+async function executeFrusPlan(env, plan, scope) {
+  let scopedBody = null;
+  if (scope.document_ids && scope.document_ids.length > 0) {
+    if (scope.document_ids.length > FRUS_SCOPE_LITERAL_LIMIT) {
+      throw new Error("Scope is " + fmtIntJs(scope.document_ids.length) + " documents — too large to inline (cap " + fmtIntJs(FRUS_SCOPE_LITERAL_LIMIT) + "). Narrow further with the filter before running narrative synthesis.");
+    }
+    const idsSubquery = "SELECT unnest('{" + scope.document_ids.join(",") + "}'::bigint[]) AS id";
+    scopedBody = "(SELECT d.* FROM frus_documents d WHERE d.id IN (" + idsSubquery + "))";
+  }
+
+  const results = [];
+  for (let i = 0; i < plan.queries.length; i++) {
+    const q = plan.queries[i];
+    let sql = String(q.sql || "").trim().replace(/;\s*$/, "").trim();
+    if (!sql) continue;
+    let execSql = sql;
+    if (scopedBody) {
+      execSql = substituteScoped(execSql, "scoped_frus_documents", scopedBody);
+    }
+    if (!/^\s*SELECT\b/i.test(execSql)) execSql = "SELECT * FROM (" + execSql + ") AS frus_q";
+    let rows;
+    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
+    catch (err) { throw new Error('Query "' + (q.label || ("query " + (i + 1))) + '" failed: ' + err.message); }
+    const truncated = (rows.length > 500) ? rows.slice(0, 500) : rows;
+    results.push({ label: q.label || ("query " + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 500 });
+  }
+  return results;
+}
+
+function buildFrusSynthesisSystem(outputMode) {
+  const listClause = (outputMode === "list" || outputMode === "hybrid")
+    ? '"document_ids": [<bigint>, ...]   // the document ids the user should see; pulled from your query results.'
+    : '"document_ids": null';
+  return [
+    "You are the synthesis step for an agentic narrative-synthesis tool over the FRUS (Foreign Relations of the United States) corpus — the State Department's official documentary history of U.S. foreign policy. The planner has run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "answer_markdown": "...",  // markdown narrative; embed [frus-ref:DOC_ID] tokens to cite specific documents.',
+    "  " + listClause + ",",
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    "}",
+    "",
+    "Rules:",
+    "- CHRONOLOGICAL by default for narrative output. Order events by date; surface transitions explicitly ('In May 1961…', 'Three months later…').",
+    "- ATTRIBUTION-FORWARD. Name persons explicitly when the document attribution is clear (who said what to whom, when). The persons jsonb field gives you this for free where TEI extraction succeeded.",
+    "- CITE EVERY CLAIM. Each substantive sentence about events / positions / decisions must be cited to a specific document via [frus-ref:DOC_ID]. The UI replaces this with a click-through. Where the row has title + date + place + classification, weave them into the prose ('A May 14, 1961 cable from London marked SECRET [frus-ref:12345] reports that…').",
+    "- CLASSIFICATION IS HISTORICAL-INTEREST SIGNAL. When citing a document, surface its original classification level when it's interesting (e.g., a document marked TOP SECRET at the time, or — for the inverse signal — a document marked UNCLASSIFIED on a sensitive topic).",
+    "- COVERAGE/EXISTENCE answers (output_mode = hybrid in response to 'has the US ever' questions): lead with a clean yes/no verdict; back it with the document list. For 'no' answers, the search dataset (which FTS terms / date ranges / classification filters the planner tried) MUST be surfaced in candor_notes so the user can interrogate the formulation.",
+    "- ANALYTICAL answers (output_mode = narrative for counting questions): surface the denominator and the methodology explicitly. 'Of 314,483 documents in the corpus, 437 mention Stalin between 1948 and 1955' — never just '437 documents mention Stalin'.",
+    "- DO NOT EDITORIALIZE on contested historical interpretations. FRUS terrain includes covert operations, regime-change involvement, contested intelligence judgments — describe and cite, never opine.",
+    "- For list and hybrid output_modes, document_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable documents, downgrade to narrative mode and explain.",
+    "- Be tight. Keep candor_notes for caveats. The user wants the answer, not a methodology essay.",
+    "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes ("") for direct quotation, or single quotes (\'\' or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
+  ].join("\n");
+}
+
+function buildFrusSynthesisUser(question, plan, results) {
+  const resultsForModel = results.map(function (r) {
+    return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated, rows: r.rows };
+  });
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "YOUR PLAN (from the planning step):",
+    plan.approach_summary,
+    "",
+    "PLANNED OUTPUT MODE: " + plan.output_mode,
+    "",
+    "CANDOR NOTES FROM PLANNING:",
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function (n) { return "- " + n; }).join("\n") : "(none)",
+    "",
+    "QUERY RESULTS (JSON):",
+    JSON.stringify(resultsForModel, null, 2),
+    "",
+    "Return the synthesis JSON now."
+  ].join("\n");
+}
+
+function parseFrusSynthesis(raw, outputMode) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = repairAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
+          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+        }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.answer_markdown !== "string" || !v.answer_markdown.trim()) throw new Error("answer_markdown is empty.");
+  if (outputMode === "list" || outputMode === "hybrid") {
+    if (!Array.isArray(v.document_ids) || v.document_ids.length === 0) {
+      v.document_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(["Output mode requested a document list but synthesis returned none — showing narrative only."]);
+    } else {
+      v.document_ids = v.document_ids
+        .filter(function (x) { return x != null; })
+        .map(function (x) { return Number(x); })
+        .filter(function (x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.document_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusFrusPlanHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const question = String((body && body.question) || "").trim();
+  if (!question) return json({ error: { message: "Missing question" } }, 400);
+  const scope = normalizeFrusScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildFrusPlanningSystem(),
+      messages: [{ role: "user", content: buildFrusPlanningUser(question, scope) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Planning step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let plan;
+  try { plan = parseFrusPlan(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse plan: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("frus-plan:" + token, JSON.stringify({
+    plan, scope, question, provider, model, userId: auth.userId, authMode: auth.authMode
+  }), { expirationTtl: 900 });
+
+  return json({
+    token,
+    output_mode: plan.output_mode,
+    approach_summary: plan.approach_summary,
+    candor_notes: plan.candor_notes,
+    queries: plan.queries.map(function (q) { return { label: q.label, sql: q.sql }; }),
+    estimated_cost_cents: plan.estimated_cost_cents,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+async function corpusFrusExecuteHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const token = body && body.token;
+  if (!token || typeof token !== "string") return json({ error: { message: "Missing plan token" } }, 400);
+  const stored = await env.QUOTA.get("frus-plan:" + token);
+  if (!stored) return json({ error: { message: "Plan expired or not found — re-run the question.", code: "plan_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored plan is corrupt — re-run the question." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider, body);
+  if (auth instanceof Response) return auth;
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This plan belongs to a different session. Re-run the question." } }, 403);
+  }
+  ctx.waitUntil(env.QUOTA.delete("frus-plan:" + token));
+
+  let results;
+  try { results = await executeFrusPlan(env, blob.plan, blob.scope); }
+  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider: blob.provider, model: blob.model,
+      system: buildFrusSynthesisSystem(blob.plan.output_mode),
+      messages: [{ role: "user", content: buildFrusSynthesisUser(blob.question, blob.plan, results) }],
+      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+    });
+  } catch (e) {
+    return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let synth;
+  try { synth = parseFrusSynthesis(res.text, blob.plan.output_mode); }
+  catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    answer_markdown: synth.answer_markdown,
+    document_ids: synth.document_ids,
+    candor_notes: synth.candor_notes,
+    output_mode: blob.plan.output_mode,
+    query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── FRUS: summarize one document ────────────────────────────────────────────
+// Mirrors OLC summarize-opinion. FRUS-specific: provenance includes volume
+// metadata + classification + place; the summary structure leans on
+// diplomatic-document conventions (setting / substance / persons /
+// footnotes-as-scholarship) rather than OLC's question-presented /
+// conclusion / reasoning headings.
+
+var FRUS_SUMMARIZE_TEXT_CAP = 150000; // chars (~37K tokens); FRUS docs are mostly shorter than OLC opinions.
+
+function buildFrusSummarizeSystem() {
+  return [
+    "You are summarizing one FRUS (Foreign Relations of the United States) document for a researcher. FRUS documents are the State Department's working diplomatic record — cables, memoranda, briefing papers, conversation memcons. Your job: attribution-forward summary, never editorialize on contested historical interpretations.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "summary_markdown": "...",  // markdown summary, 3-8 short paragraphs.',
+    '  "candor_notes": ["caveats — truncation, missing date, ambiguous attribution, scanned-but-unclear passages"]',
+    "}",
+    "",
+    "Structure the summary_markdown around these headings (omit any that don't apply):",
+    "- **Provenance** — the document's place in the diplomatic record (sender, recipient, place, date, classification at the time).",
+    "- **Setting** — what was happening around the document (the moment it intervenes in, in 1-2 sentences). Stay grounded in the document itself; don't import outside historical context.",
+    "- **Substance** — what the document says, in its own framing. The bulk of the summary.",
+    "- **Key persons** — named individuals whose views or actions the document attributes (only those the document itself names).",
+    "- **Notable footnotes / glossary** — when the original FRUS editorial footnotes carry historical context that materially aids understanding, briefly mention them (these are scholarship, not noise).",
+    "",
+    "Rules:",
+    "- Describe what the document says. Do not say whether the U.S. was right or wrong; do not add modern context.",
+    "- Quote sparingly; use curly quotes (“”) for direct quotation. Straight double quotes break JSON parsing.",
+    "- If the text appears garbled (rare; FRUS texts are generally clean), surface that in candor_notes.",
+    "- If the text was truncated before reaching you, note that in candor_notes (\"Summary based on the first N characters of the document; later sections not seen.\").",
+    "- Surface classification explicitly when it's interesting (e.g., \"Marked SECRET at the time.\").",
+    "- Output strict JSON only. No markdown outside summary_markdown. No code fences."
+  ].join("\n");
+}
+
+function buildFrusSummarizeUser(doc, wasTruncated) {
+  const parts = [
+    "DOCUMENT METADATA:",
+    "- Title: " + (doc.title || "(no title)"),
+    "- Date: " + (doc.doc_date || "(no date)"),
+    "- Place: " + (doc.place_name || "(no place)"),
+    "- Classification: " + (doc.classification || "(not specified)"),
+    "- Volume: " + (doc.volume_title || doc.volume_id || "(no volume)"),
+    "- Document number in volume: " + (doc.doc_number || "(no number)")
+  ];
+  if (doc.persons && Array.isArray(doc.persons) && doc.persons.length > 0) {
+    const names = doc.persons.map(function (p) { return (p && p.name) ? p.name : null; }).filter(Boolean);
+    if (names.length > 0) {
+      parts.push("- Persons (TEI-extracted): " + names.slice(0, 40).join(", ") + (names.length > 40 ? " (+" + (names.length - 40) + " more)" : ""));
+    }
+  }
+  parts.push("");
+  parts.push("DOCUMENT TEXT" + (wasTruncated ? " (TRUNCATED to " + fmtIntJs(FRUS_SUMMARIZE_TEXT_CAP) + " characters — flag this in candor_notes):" : ":"));
+  const text = String(doc.text_content || "");
+  parts.push(wasTruncated ? text.slice(0, FRUS_SUMMARIZE_TEXT_CAP) : text);
+  if (doc.footnotes) {
+    try {
+      const fn = typeof doc.footnotes === "string" ? JSON.parse(doc.footnotes) : doc.footnotes;
+      if (Array.isArray(fn) && fn.length > 0) {
+        parts.push("");
+        parts.push("ORIGINAL FRUS EDITORIAL FOOTNOTES (JSON, scholarship):");
+        parts.push(JSON.stringify(fn).slice(0, 20000));
+      }
+    } catch { /* ignore parse errors; footnotes is optional content */ }
+  }
+  parts.push("");
+  parts.push("Return the summary JSON now.");
+  return parts.join("\n");
+}
+
+function parseFrusSummary(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      // Reuse the answer_markdown quote-repair, retargeted at summary_markdown.
+      const repaired = cleaned.replace(/"answer_markdown"/g, '"summary_markdown"');
+      const rep2 = repairAnswerMarkdownQuotes(repaired.replace(/"summary_markdown"/g, '"answer_markdown"'))
+        .replace(/"answer_markdown"/g, '"summary_markdown"');
+      v = JSON.parse(rep2);
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) { throw new Error("JSON.parse error: " + pe3.message); }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.summary_markdown !== "string" || !v.summary_markdown.trim()) throw new Error("summary_markdown is empty.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusFrusSummarizeHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  // Same SELECT shape as /corpus/frus/document so we hand the model the
+  // same context the UI shows the user.
+  const sql = "SELECT d.id, d.volume_id, d.doc_number, d.title, " +
+    "d.doc_date::text AS doc_date, d.place_name, d.classification, " +
+    "d.text_content, d.persons, d.footnotes, " +
+    "v.title AS volume_title " +
+    "FROM frus_documents d LEFT JOIN frus_volumes v ON v.volume_id = d.volume_id " +
+    "WHERE d.id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Document fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Document not found", code: "not_found" } }, 404);
+  }
+  const doc = rows[0];
+  const text = String(doc.text_content || "");
+  if (!text.trim()) {
+    return json({ error: { message: "This document has no text content to summarize.", code: "no_text" } }, 400);
+  }
+  const wasTruncated = text.length > FRUS_SUMMARIZE_TEXT_CAP;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildFrusSummarizeSystem(),
+      messages: [{ role: "user", content: buildFrusSummarizeUser(doc, wasTruncated) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Summarize step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parseFrusSummary(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse summary: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    summary_markdown: parsed.summary_markdown,
+    candor_notes: parsed.candor_notes,
+    was_truncated: wasTruncated,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
 // Docket entries for one case (the case-detail view).
 async function corpusEntriesHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
@@ -3894,5 +4433,14 @@ export {
   parseOlcSummary,
   buildOlcPlanningUser,
   buildOlcSummarizeUser,
-  OLC_SUMMARIZE_TEXT_CAP
+  OLC_SUMMARIZE_TEXT_CAP,
+  normalizeFrusScope,
+  parseFrusPlan,
+  parseFrusSynthesis,
+  parseFrusSummary,
+  buildFrusPlanningUser,
+  buildFrusSummarizeUser,
+  executeFrusPlan,
+  FRUS_SUMMARIZE_TEXT_CAP,
+  FRUS_SCOPE_LITERAL_LIMIT
 };

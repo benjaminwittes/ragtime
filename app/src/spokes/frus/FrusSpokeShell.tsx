@@ -1,32 +1,52 @@
 import { useEffect, useState } from 'react'
 import {
+  AMA_CONFIRM_THRESHOLD_CENTS,
+  type FrusAmaPlan,
+  type FrusAmaScope,
+  type FrusAmaSynthesis,
   type FrusDocumentDisplayRow,
   type FrusFacets,
   type FrusFilterFields,
   type FrusFilterResult,
   fetchFrusFacets,
+  runFrusExecute,
   runFrusFilter,
+  runFrusPlan,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
-import type { CorpusHoldings, CorpusSpoke } from '../types'
+import { usePaid } from '@/auth/use-paid'
+import { useAuth } from '@/lib/use-auth'
+import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
+import { AmaPreflight } from '../components/AmaPreflight'
+import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
+import { ModeRow } from '../components/ModeRow'
+import { FrusAmaResult } from './FrusAmaResult'
 import { FrusDocumentDetailSheet } from './FrusDocumentDetailSheet'
 import { FrusFilterForm } from './FrusFilterForm'
 import { FrusResultsList } from './FrusResultsList'
 
 /**
- * FRUS spoke v1 alpha — manual filter + document detail. Parallels USC /
- * CFR / OLC. The "Tell me about [event] in [period]" analytical flagship
- * (brief #5's paradigmatic mode) lands in a follow-up.
+ * FRUS spoke shell. Two query modes per brief #5 §3:
+ *  - manual_filter: structured filter + document detail.
+ *  - claude_ama: the asymmetric three-flagship surface — narrative synthesis
+ *    (paradigmatic) + coverage/existence + specific-document retrieval, all
+ *    served through one mode whose planner picks output_mode per question
+ *    shape ("no query-architecture buttons" — feedback memory 2026-05-28).
  *
- * Holdings band surfaces both the document count and the volume tally so
- * users get a sense of the corpus's two-tier structure (552 volumes with
- * docs out of 694 total — the 142 placeholder volumes are the lagging
- * publication tail).
+ * The summarize-this-document action lives on the detail sheet, not in the
+ * mode selector.
+ *
+ * Scope handling: when filter rows have been produced, the AMA call passes
+ * those document ids as scope. The Worker caps inline scope at 25K; over
+ * that the executor refuses and asks the user to narrow further.
  */
 export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const { setActiveSpokeSlug } = useDocs()
+  const auth = useAuth()
+  const paid = usePaid()
+
   useEffect(() => {
     setActiveSpokeSlug(spoke.slug)
     return () => setActiveSpokeSlug(undefined)
@@ -67,12 +87,52 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }, [])
 
+  // Filter state.
   const [rows, setRows] = useState<FrusDocumentDisplayRow[] | undefined>(undefined)
   const [count, setCount] = useState<number | undefined>(undefined)
+  // All matching ids (separate from `rows`, which is capped at 10K). Used
+  // as scope when the user runs AMA against the filter result.
+  const [filterIds, setFilterIds] = useState<number[]>([])
   const [executedSql, setExecutedSql] = useState<string | undefined>(undefined)
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+
+  // AMA state.
+  const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
+  const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
+  const [pendingPlan, setPendingPlan] = useState<{
+    plan: FrusAmaPlan
+    question: string
+  } | null>(null)
+  const [amaSynthesis, setAmaSynthesis] = useState<FrusAmaSynthesis | null>(null)
+  const [amaError, setAmaError] = useState<string | undefined>(undefined)
+  const [amaLoading, setAmaLoading] = useState(false)
+  const [amaResultPlan, setAmaResultPlan] = useState<FrusAmaPlan | null>(null)
+
+  const enabledModes: QueryMode[] = ['manual_filter']
+  if (auth.hasAuth) enabledModes.push('claude_ama')
+
+  function appendLog(line: AmaLogLine) {
+    setAmaLog((prev) => [...prev, line])
+  }
+
+  function buildAmaScope(): FrusAmaScope {
+    if (filterIds.length === 0) {
+      const total = facets?.document_count ?? 314483
+      return {
+        is_full_db: true,
+        count: total,
+        description: `The full FRUS corpus (${total.toLocaleString()} documents across ${(facets?.volumes_with_docs ?? 552).toLocaleString()} volumes).`,
+      }
+    }
+    return {
+      document_ids: filterIds,
+      is_full_db: false,
+      count: filterIds.length,
+      description: `${filterIds.length.toLocaleString()} documents from the current filter.`,
+    }
+  }
 
   const [detailOpen, setDetailOpen] = useState(false)
   const [openDocument, setOpenDocument] = useState<FrusDocumentDisplayRow | null>(
@@ -84,6 +144,23 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setDetailOpen(true)
   }
 
+  /** Open the detail sheet for a document-id citation from the AMA result.
+   *  The detail sheet re-fetches the full document; the placeholder row is
+   *  just enough to drive remount. */
+  function handleOpenDocumentById(id: number) {
+    const placeholder: FrusDocumentDisplayRow = {
+      id,
+      title: null,
+      doc_date: null,
+      volume_id: null,
+      place_name: null,
+      classification: null,
+      text_length: null,
+    }
+    setOpenDocument(placeholder)
+    setDetailOpen(true)
+  }
+
   async function handleSubmit(fields: FrusFilterFields) {
     setQueryLoading(true)
     setQueryError(undefined)
@@ -92,15 +169,110 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       const r: FrusFilterResult = await runFrusFilter(fields)
       setRows(r.display_rows)
       setCount(r.count)
+      setFilterIds(r.ids)
       setExecutedSql(r.executed_sql)
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
       setRows([])
       setCount(0)
+      setFilterIds([])
       setExecutedSql(undefined)
     } finally {
       setQueryLoading(false)
     }
+  }
+
+  async function handleClaudeAmaSubmit(question: string) {
+    if (!auth.auth) {
+      setAmaError('Configure AI access (header, top right) first.')
+      return
+    }
+    setAmaLoading(true)
+    setAmaError(undefined)
+    setAmaLog([])
+    setAmaSynthesis(null)
+    setAmaResultPlan(null)
+    appendLog({ label: 'Step 1/3.', message: 'Planning the query…' })
+    const scope = buildAmaScope()
+    let plan: FrusAmaPlan
+    try {
+      plan = await runFrusPlan(question, scope, auth.auth)
+      if (typeof plan._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(plan._balance_cents)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      appendLog({ label: 'Plan failed.', message: msg, status: 'error' })
+      setAmaError(msg)
+      setAmaLoading(false)
+      return
+    }
+    appendLog({
+      label: 'Plan.',
+      message: `${plan.output_mode} · ${plan.queries.length} quer${plan.queries.length === 1 ? 'y' : 'ies'} · est. ${fmtCents(plan.estimated_cost_cents)}`,
+      status: 'done',
+    })
+
+    if (plan.estimated_cost_cents > AMA_CONFIRM_THRESHOLD_CENTS) {
+      setPendingPlan({ plan, question })
+      return
+    }
+    await runAmaExecute(plan)
+  }
+
+  async function runAmaExecute(plan: FrusAmaPlan) {
+    if (!auth.auth) return
+    appendLog({
+      label: 'Step 2/3.',
+      message: 'Executing planned queries…',
+    })
+    try {
+      const synth = await runFrusExecute(plan.token, auth.auth)
+      if (typeof synth._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(synth._balance_cents)
+      }
+      appendLog({
+        label: 'Step 3/3.',
+        message: 'Synthesized the answer.',
+        status: 'done',
+      })
+      setAmaSynthesis(synth)
+      setAmaResultPlan(plan)
+      const total = (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0)
+      if (total > 0) {
+        appendLog({
+          label: 'Done.',
+          message: `Total spent: ${fmtCents(total)}`,
+          status: 'done',
+        })
+      } else {
+        appendLog({ label: 'Done.', message: '', status: 'done' })
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      appendLog({ label: 'Execute failed.', message: msg, status: 'error' })
+      setAmaError(msg)
+    } finally {
+      setAmaLoading(false)
+    }
+  }
+
+  async function handleAmaProceed() {
+    if (!pendingPlan) return
+    const { plan } = pendingPlan
+    setPendingPlan(null)
+    await runAmaExecute(plan)
+  }
+
+  function handleAmaCancel() {
+    if (!pendingPlan) return
+    appendLog({
+      label: 'Cancelled.',
+      message: 'User cancelled at pre-flight.',
+      status: 'error',
+    })
+    setPendingPlan(null)
+    setAmaLoading(false)
   }
 
   return (
@@ -111,25 +283,60 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={facetsLoading}
         error={facetsError}
       />
-      <FrusFilterForm
-        subSeries={facets?.sub_series ?? []}
-        classifications={facets?.classifications ?? []}
-        loading={queryLoading}
-        onSubmit={handleSubmit}
+      <ModeRow
+        modes={spoke.queryModes}
+        activeMode={activeMode}
+        enabledModes={enabledModes}
+        onSelect={setActiveMode}
       />
-      <FrusResultsList
-        rows={rows}
-        count={count}
-        loading={queryLoading}
-        error={queryError}
-        hasRun={hasRun}
-        executedSql={executedSql}
-        onOpenDocument={handleOpenDocument}
-      />
+      {activeMode === 'manual_filter' && (
+        <FrusFilterForm
+          subSeries={facets?.sub_series ?? []}
+          classifications={facets?.classifications ?? []}
+          loading={queryLoading}
+          onSubmit={handleSubmit}
+        />
+      )}
+      {activeMode === 'claude_ama' && (
+        <ClaudeAmaForm
+          loading={amaLoading}
+          byokConfigured={auth.hasAuth}
+          scopeSize={filterIds.length}
+          log={amaLog}
+          onSubmit={handleClaudeAmaSubmit}
+        />
+      )}
+      {activeMode === 'manual_filter' && (
+        <FrusResultsList
+          rows={rows}
+          count={count}
+          loading={queryLoading}
+          error={queryError}
+          hasRun={hasRun}
+          executedSql={executedSql}
+          onOpenDocument={handleOpenDocument}
+        />
+      )}
+      {activeMode === 'claude_ama' && (
+        <FrusAmaResult
+          synthesis={amaSynthesis}
+          plan={amaResultPlan}
+          loading={amaLoading}
+          error={amaError}
+          onOpenDocument={handleOpenDocumentById}
+        />
+      )}
       <FrusDocumentDetailSheet
         row={openDocument}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+      />
+      <AmaPreflight
+        plan={pendingPlan?.plan ?? null}
+        open={!!pendingPlan}
+        onProceed={handleAmaProceed}
+        onCancel={handleAmaCancel}
+        paidAccount={auth.isPaid ? paid.account : null}
       />
     </div>
   )
@@ -215,4 +422,10 @@ function HoldingTile({
       </p>
     </div>
   )
+}
+
+function fmtCents(c: number | undefined): string {
+  if (c == null || !Number.isFinite(c)) return '—'
+  if (c < 100) return `${c.toFixed(1)}¢`
+  return `$${(c / 100).toFixed(2)}`
 }
