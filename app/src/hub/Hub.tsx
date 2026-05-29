@@ -4,6 +4,7 @@ import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { spokes } from '@/spokes/registry'
 import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
+import { HubKeywordSearch } from './HubKeywordSearch'
 
 /**
  * Hub landing surface — brief #1 (general AMA hub).
@@ -13,10 +14,11 @@ import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
  * each active card linking into its spoke and each coming-soon card
  * showing the holdings disclosure but no link.
  *
- * v1 (this PR): cards + holdings + status. The cross-corpus keyword AMA
- * (brief #1 §1) is a "coming soon" placeholder — it needs Worker endpoints
- * that span corpora, which lands after at least one additional spoke
- * (USC) is built so there's a meaningful cross-corpus path to surface.
+ * The cross-corpus keyword search (brief #1 §3 free tier) sits above the
+ * spoke grid: a single plain-language input fires parallel FTS queries
+ * across all 5 corpora and surfaces grouped-by-corpus results inline.
+ * The paid AI synthesis layer (brief #1 Phase 2) lands later — needs
+ * pgvector to provide a single comparable relevance score across tables.
  */
 export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
@@ -24,7 +26,7 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
       <HubHeader />
       <div className="mx-auto max-w-5xl px-6 pb-16">
         <HubHero />
-        <HubKeywordSearchPlaceholder />
+        <HubKeywordSearch onNavigate={onNavigate} />
         <SpokeGrid onNavigate={onNavigate} />
         <AboutPanel />
       </div>
@@ -79,28 +81,6 @@ function HubHero() {
  * so cross-corpus has nothing to cross to. The UI affordance is here so
  * the user understands what's coming.
  */
-function HubKeywordSearchPlaceholder() {
-  return (
-    <section className="py-8">
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-5">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 className="font-serif text-lg font-semibold">
-            Cross-corpus keyword search
-          </h2>
-          <span className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            coming soon
-          </span>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Search across all loaded corpora at once. Available once at least
-          one additional spoke ships so cross-corpus has somewhere to cross
-          to.
-        </p>
-      </div>
-    </section>
-  )
-}
-
 function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
     <section className="space-y-3 py-2">

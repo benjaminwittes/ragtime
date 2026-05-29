@@ -3,6 +3,7 @@ import { cfrAiSynthesisEntry } from './content/cfr-ai-synthesis'
 import { cfrSectionSummaryEntry } from './content/cfr-section-summary'
 import { frusDocumentSummaryEntry } from './content/frus-document-summary'
 import { frusNarrativeSynthesisEntry } from './content/frus-narrative-synthesis'
+import { hubKeywordSearchEntry } from './content/hub-keyword-search'
 import { olcNarrativeSynthesisEntry } from './content/olc-narrative-synthesis'
 import { olcOpinionSummaryEntry } from './content/olc-opinion-summary'
 import { uscAiSynthesisEntry } from './content/usc-ai-synthesis'
@@ -23,6 +24,7 @@ import { uscSectionSummaryEntry } from './content/usc-section-summary'
  *   modes differ here, demo queries.
  */
 export const docsEntries: readonly DocsEntry[] = [
+  hubKeywordSearchEntry,
   olcNarrativeSynthesisEntry,
   olcOpinionSummaryEntry,
   frusNarrativeSynthesisEntry,

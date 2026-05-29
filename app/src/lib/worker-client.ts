@@ -18,10 +18,72 @@
  */
 
 import { type AuthArg, authBody, authHeaders } from '@/lib/auth-arg'
+import type { CorpusSlug } from '@/spokes/types'
 
 const WORKER_URL =
   (import.meta.env.VITE_WORKER_URL as string | undefined) ||
   'https://ragtimeproxy.benjamin-wittes.workers.dev'
+
+/* ----------------------------------------------------------------------------
+ * /corpus/hub/keyword (PR 4u) — free cross-corpus keyword search
+ *
+ * Brief #1's headline free surface. Five parallel FTS queries (one per
+ * corpus) returning a top-K display set + total count per corpus. No
+ * auth; IP-rate-limited.
+ *
+ * Per-corpus failures don't fail the whole request — the corpus's slot
+ * carries an `error` string and other corpora's results still render.
+ * ------------------------------------------------------------------------- */
+
+export type HubCorpusSlug = CorpusSlug
+
+export type HubKeywordResultItem = {
+  /** Corpus-native primary key, serialized as text so JS doesn't lose
+   *  precision on bigint litigation cl_ids. The detail-sheet open path
+   *  parses it back to a number. */
+  id: string
+  /** Display title — citation for USC/CFR, document title for OLC/FRUS,
+   *  case name for litigation. Falls back to "(no title)" server-side. */
+  title: string
+  /** Secondary line — court code for litigation, source for OLC,
+   *  place_name for FRUS, title_name for USC/CFR. Null when absent. */
+  context: string | null
+  /** YYYY-MM-DD where applicable. Null for USC (release-point only). */
+  date: string | null
+}
+
+export type HubKeywordCorpusBlock = {
+  /** Total matching items across the corpus. May exceed results.length. */
+  count: number
+  /** Top-K display rows (K = 5 server-side). */
+  results: HubKeywordResultItem[]
+  /** Set when this corpus's query failed — other corpora still rendered. */
+  error?: string
+}
+
+export type HubKeywordResponse = {
+  query: string
+  per_corpus: Partial<Record<HubCorpusSlug, HubKeywordCorpusBlock>>
+}
+
+export async function runHubKeyword(
+  query: string,
+  corpora?: readonly HubCorpusSlug[],
+): Promise<HubKeywordResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/hub/keyword`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      ...(corpora && corpora.length > 0 ? { corpora } : {}),
+    }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/hub/keyword failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as HubKeywordResponse
+}
 
 /* ----------------------------------------------------------------------------
  * /corpus/facets
