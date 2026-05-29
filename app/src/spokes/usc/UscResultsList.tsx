@@ -220,7 +220,7 @@ function Th({
   children,
   className,
 }: {
-  children: React.ReactNode
+  children?: React.ReactNode
   className?: string
 }) {
   return (
