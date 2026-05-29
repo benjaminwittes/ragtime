@@ -4,6 +4,7 @@ import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
 import { SpokeShell } from '@/spokes/SpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
+import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
@@ -91,6 +92,7 @@ function App() {
 function activeSpokeShell(spoke: CorpusSpoke) {
   if (spoke.slug === 'usc') return <UscSpokeShell spoke={spoke} />
   if (spoke.slug === 'cfr') return <CfrSpokeShell spoke={spoke} />
+  if (spoke.slug === 'olc') return <OlcSpokeShell spoke={spoke} />
   return <SpokeShell spoke={spoke} />
 }
 

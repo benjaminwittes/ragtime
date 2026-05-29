@@ -7,6 +7,7 @@ import {
   pickCheckoutReturnOrigin,
   buildUscFilterWhere,
   buildCfrFilterWhere,
+  buildOlcFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -413,6 +414,86 @@ describe("buildCfrFilterWhere", () => {
     expect(where).toContain("reserved = false");
     // Four predicates separated by three ANDs.
     expect((where.match(/ AND /g) || []).length).toBe(3);
+  });
+});
+
+// ============================================================================
+// buildOlcFilterWhere — OLC opinions filter. Axes are corpus-shaped:
+// title/author substrings (since records often have null author), source
+// (DOJ-published vs Knight FOIA), date range, OCR quality. The date-range
+// surface is the first one in any spoke that takes ISO YYYY-MM-DD bounds,
+// so tests cover the validation regex too.
+// ============================================================================
+describe("buildOlcFilterWhere", () => {
+  it("returns an empty string when no fields are provided", () => {
+    expect(buildOlcFilterWhere({})).toBe("");
+  });
+
+  it("supports FTS with single-quote escaping", () => {
+    expect(buildOlcFilterWhere({ search: "executive privilege" })).toContain(
+      "websearch_to_tsquery('english', 'executive privilege')",
+    );
+    expect(buildOlcFilterWhere({ search: "O'Brien" })).toContain(
+      "websearch_to_tsquery('english', 'O''Brien')",
+    );
+  });
+
+  it("uses ILIKE substring search for title and author", () => {
+    expect(buildOlcFilterWhere({ title: "Constitutionality" })).toContain(
+      "title ILIKE '%Constitutionality%'",
+    );
+    expect(buildOlcFilterWhere({ author: "Olson" })).toContain(
+      "author ILIKE '%Olson%'",
+    );
+  });
+
+  it("filters by source with exact match", () => {
+    expect(buildOlcFilterWhere({ source: "doj-published" })).toContain(
+      "source = 'doj-published'",
+    );
+    expect(buildOlcFilterWhere({ source: "knight-foia" })).toContain(
+      "source = 'knight-foia'",
+    );
+  });
+
+  it("accepts ISO YYYY-MM-DD date bounds", () => {
+    const w = buildOlcFilterWhere({ from: "2020-01-01", to: "2025-12-31" });
+    expect(w).toContain("date_issued >= '2020-01-01'");
+    expect(w).toContain("date_issued <= '2025-12-31'");
+  });
+
+  it("rejects malformed dates silently", () => {
+    // Without strict validation this would land in the SQL and either error
+    // or — worse — open an injection vector.
+    expect(buildOlcFilterWhere({ from: "not-a-date" })).toBe("");
+    expect(buildOlcFilterWhere({ from: "2025/01/01" })).toBe("");
+    expect(buildOlcFilterWhere({ from: "2025-1-1" })).toBe("");
+    expect(buildOlcFilterWhere({ to: "2025-01" })).toBe("");
+  });
+
+  it("filters by OCR quality with exact match", () => {
+    expect(buildOlcFilterWhere({ ocrQuality: "clean" })).toContain(
+      "ocr_quality = 'clean'",
+    );
+    expect(buildOlcFilterWhere({ ocrQuality: "degraded" })).toContain(
+      "ocr_quality = 'degraded'",
+    );
+  });
+
+  it("AND-joins multiple axes (FTS + source + date range + ocr_quality)", () => {
+    const w = buildOlcFilterWhere({
+      search: "habeas",
+      source: "doj-published",
+      from: "2010-01-01",
+      ocrQuality: "clean",
+    });
+    expect(w.startsWith(" WHERE ")).toBe(true);
+    expect(w).toContain("fts @@");
+    expect(w).toContain("source = 'doj-published'");
+    expect(w).toContain("date_issued >= '2010-01-01'");
+    expect(w).toContain("ocr_quality = 'clean'");
+    // Four predicates separated by three ANDs.
+    expect((w.match(/ AND /g) || []).length).toBe(3);
   });
 });
 

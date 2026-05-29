@@ -571,6 +571,134 @@ export async function fetchCfrSection(id: number): Promise<CfrSectionDetail> {
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/olc/* — OLC (DOJ Office of Legal Counsel opinions) spoke
+ *
+ * Third reference-style spoke. Atomic unit is an opinion (not a section);
+ * the corpus is small (2,145) and flat — no hierarchy chain. Per brief #2
+ * OLC is paradigmatically analytical/narrative; v1 alpha is the metadata
+ * floor (title / author / source / date range / OCR quality + FTS).
+ * ------------------------------------------------------------------------- */
+
+/** Tuple of (value, count) used for source + OCR quality dropdowns. */
+export type OlcFacetCount = {
+  value: string
+  count: number
+}
+
+export type OlcFacets = {
+  opinion_count: number
+  /** Earliest date_issued across the corpus (YYYY-MM-DD). */
+  earliest: string
+  /** Most recent date_issued (YYYY-MM-DD). */
+  latest: string
+  /** ['doj-published', 'knight-foia'] with counts. */
+  sources: OlcFacetCount[]
+  /** ['clean', 'degraded', 'normalized'] with counts. */
+  ocr_qualities: OlcFacetCount[]
+}
+
+export async function fetchOlcFacets(): Promise<OlcFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/olc/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/olc/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as OlcFacets
+}
+
+export type OlcOpinionDisplayRow = {
+  id: number
+  title: string | null
+  author: string | null
+  date_issued: string | null
+  source: string | null
+  page_count: number | null
+  text_length: number | null
+  ocr_quality: string | null
+}
+
+export type OlcFilterFields = {
+  search?: string
+  /** Substring (ILIKE %title%) on opinion title. */
+  title?: string
+  /** Substring on author. */
+  author?: string
+  /** Exact match — 'doj-published' or 'knight-foia'. */
+  source?: string
+  /** ISO YYYY-MM-DD lower bound on date_issued. */
+  from?: string
+  /** ISO YYYY-MM-DD upper bound. */
+  to?: string
+  /** Exact match on ocr_quality. */
+  ocrQuality?: string
+}
+
+export type OlcFilterResult = {
+  ids: number[]
+  display_rows: OlcOpinionDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runOlcFilter(
+  fields: OlcFilterFields,
+): Promise<OlcFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/olc/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/olc/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as OlcFilterResult
+}
+
+export type OlcOpinionDetail = {
+  id: number
+  title: string | null
+  author: string | null
+  recipient: string | null
+  president: string | null
+  date_issued: string | null
+  release_date: string | null
+  summary: string | null
+  summary_source: string | null
+  source: string | null
+  source_url_doj: string | null
+  source_url_knight: string | null
+  doj_dl_path: string | null
+  knight_doc_id: string | null
+  volume: string | null
+  page: string | null
+  page_count: number | null
+  text_length: number | null
+  text_content: string | null
+  ocr_quality: string | null
+  dedup_key: string | null
+}
+
+export async function fetchOlcOpinion(id: number): Promise<OlcOpinionDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/olc/opinion`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/olc/opinion failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { opinion: OlcOpinionDetail }
+  return body.opinion
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/plan + /corpus/execute — agentic AMA ("claude_ama" mode)
  *
  * Two-pass surface. Phase 1 (plan) runs a planning LLM call against question +
