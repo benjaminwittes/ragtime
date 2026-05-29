@@ -213,6 +213,15 @@ export default {
       if (path === "/corpus/usc/section" && request.method === "POST") {
         return await corpusUscSectionHandler(request, env, ctx);
       }
+      if (path === "/corpus/cfr/facets" && request.method === "POST") {
+        return await corpusCfrFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/cfr/filter" && request.method === "POST") {
+        return await corpusCfrFilterHandler(request, env, ctx);
+      }
+      if (path === "/corpus/cfr/section" && request.method === "POST") {
+        return await corpusCfrSectionHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -1880,6 +1889,151 @@ async function corpusUscSectionHandler(request, env, ctx) {
   return json({ section: rows[0] }, 200);
 }
 
+// ============================================================================
+// CFR (Code of Federal Regulations) corpus — v1 alpha
+//
+// Second non-litigation spoke. Schema parallels USC closely (id, title_num,
+// title_name, hierarchy chain, citation, heading, text_content, fts) but
+// regulations have their own concepts: `reserved` placeholder sections (no
+// "positive law" idea), `up_to_date_as_of` date currency per section, a
+// `latest_amended_on` per-section amendment date, and a shallower hierarchy
+// (no subtitle, but a `subpart` between part and section).
+//
+// Display columns: enough for the filter results table — id, title_num,
+// title_name, citation, heading, section_identifier, reserved, source,
+// text_length, up_to_date_as_of. Full text_content lands in the section
+// detail endpoint, same split as USC.
+//
+// AI modes (brief #4's three flagships: compliance / authority / framework
+// synthesis), the curated scopes library (rule packages + agency-derived),
+// the definitional layer, and cross-corpus joins all defer to follow-ups —
+// v1 alpha is keyword + metadata filtering plus section view.
+// ============================================================================
+
+var CFR_DISPLAY_COLS = "id, title_num, title_name, citation, heading, section_identifier, reserved, source, text_length, up_to_date_as_of::text AS up_to_date_as_of";
+
+/**
+ * Build the WHERE clause for /corpus/cfr/filter. Same single-quote escaping
+ * + integer coercion conventions as buildUscFilterWhere; specific axes per
+ * brief #4's v1 free-tier metadata floor.
+ *
+ * Supported axes:
+ *   search    FTS over fts (text_content + heading)
+ *   title     integer title number; exact match
+ *   citation  e.g. "45 CFR § 164.502" — exact match on canonical citation
+ *   heading   substring (ILIKE %heading%) on the section heading
+ *   part      exact match on the `part` field (e.g. "164")
+ *   reserved  boolean — true to include only reserved, false to exclude
+ *             reserved (the common case — placeholder sections aren't
+ *             useful for most queries), undefined to include both
+ */
+function buildCfrFilterWhere(fields) {
+  var parts = [];
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var q = fields.search.trim().replace(/'/g, "''");
+    parts.push("fts @@ websearch_to_tsquery('english', '" + q + "')");
+  }
+  if (fields.title != null) {
+    var t = Number(fields.title);
+    if (Number.isFinite(t)) parts.push("title_num = " + Math.floor(t));
+  }
+  if (fields.citation && typeof fields.citation === 'string' && fields.citation.trim()) {
+    var c = fields.citation.trim().replace(/'/g, "''");
+    parts.push("citation = '" + c + "'");
+  }
+  if (fields.heading && typeof fields.heading === 'string' && fields.heading.trim()) {
+    var h = fields.heading.trim().replace(/'/g, "''");
+    parts.push("heading ILIKE '%" + h + "%'");
+  }
+  if (fields.part && typeof fields.part === 'string' && fields.part.trim()) {
+    var p = fields.part.trim().replace(/'/g, "''");
+    parts.push("part = '" + p + "'");
+  }
+  if (fields.reserved === true) parts.push("reserved = true");
+  if (fields.reserved === false) parts.push("reserved = false");
+  return parts.length ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusCfrFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    const stats = await corpusRunQuery(env,
+      "SELECT (SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.cfr_sections'::regclass) AS section_count, " +
+      "(SELECT MAX(up_to_date_as_of)::text FROM cfr_sections) AS up_to_date_as_of, " +
+      "(SELECT count(*) FROM cfr_sections WHERE reserved) AS reserved_count");
+    const titles = await corpusRunQuery(env,
+      "SELECT title_num, title_name FROM (" +
+      "SELECT DISTINCT title_num, title_name FROM cfr_sections WHERE title_num IS NOT NULL" +
+      ") z ORDER BY title_num");
+    const s = stats[0] || {};
+    return json({
+      section_count: s.section_count,
+      up_to_date_as_of: s.up_to_date_as_of,
+      reserved_count: s.reserved_count,
+      titles: titles.map((r) => ({ num: r.title_num, name: r.title_name }))
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "CFR facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+async function corpusCfrFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const where = buildCfrFilterWhere(fields);
+  const idsSql = "SELECT id FROM cfr_sections" + where;
+  const rowsSql = "SELECT " + CFR_DISPLAY_COLS + " FROM cfr_sections" + where +
+    " ORDER BY title_num NULLS LAST, part NULLS LAST, section_identifier NULLS LAST LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "CFR filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const ids = idRows.map((r) => r.id).filter((x) => x != null);
+  return json({
+    ids,
+    display_rows: rows,
+    count: ids.length,
+    generated_sql: rowsSql,
+    executed_sql: idsSql
+  }, 200);
+}
+
+/**
+ * Single-section detail for the CFR section panel. Mirrors the USC
+ * pattern — list endpoint omits text_content, this endpoint returns it
+ * along with the full hierarchy + currency metadata (latest_amended_on
+ * is regulation-specific, absent in USC).
+ */
+async function corpusCfrSectionHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+  const sql = "SELECT id, title_num, title_name, chapter, part, subpart, " +
+    "structure_path, section_identifier, citation, heading, text_content, " +
+    "text_length, reserved, source, up_to_date_as_of::text AS up_to_date_as_of, " +
+    "latest_amended_on::text AS latest_amended_on " +
+    "FROM cfr_sections WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Section fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Section not found", code: "not_found" } }, 404);
+  }
+  return json({ section: rows[0] }, 200);
+}
+
 // Docket entries for one case (the case-detail view).
 async function corpusEntriesHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
@@ -2867,6 +3021,7 @@ export {
   checkPaidBudget,
   pickCheckoutReturnOrigin,
   buildUscFilterWhere,
+  buildCfrFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
