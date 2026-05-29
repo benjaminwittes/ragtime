@@ -699,6 +699,152 @@ export async function fetchOlcOpinion(id: number): Promise<OlcOpinionDetail> {
 }
 
 /* ----------------------------------------------------------------------------
+ * OLC AI modes (PR 4q) — narrative synthesis + summarize-one-opinion
+ *
+ * Brief #2 §3 names two AI surfaces:
+ *   1. Narrative synthesis (the flagship). Plan + execute against
+ *      olc_opinions, paralleling litigation's /corpus/{plan,execute}. The
+ *      worker stores the plan under a one-shot KV token; execute resolves it.
+ *   2. Summarize one opinion. Invoked from the opinion detail panel — not a
+ *      mode. Single billed call against one opinion's text_content.
+ *
+ * Both endpoints reuse the existing pre-flight cost-disclosure pattern from
+ * litigation's AMA (AMA_CONFIRM_THRESHOLD_CENTS).
+ * ------------------------------------------------------------------------- */
+
+/** OLC plan returned by /corpus/olc/plan. Same shape as litigation's AmaPlan;
+ *  the citation idiom is OLC-specific ([olc-ref:OPINION_ID]). */
+export type OlcAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** OLC synthesis returned by /corpus/olc/execute. `opinion_ids` (not
+ *  `cl_ids`) for list/hybrid modes. */
+export type OlcAmaSynthesis = {
+  answer_markdown: string
+  opinion_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Scope payload accepted by /corpus/olc/plan. `opinion_ids` for a narrowed
+ *  scope; otherwise the full corpus. (No scope_sql analog — OLC is small
+ *  enough to always inline.) */
+export type OlcAmaScope = {
+  opinion_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runOlcPlan(
+  question: string,
+  scope: OlcAmaScope,
+  auth: AuthArg,
+): Promise<OlcAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/olc/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `OLC plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as OlcAmaPlan
+}
+
+export async function runOlcExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<OlcAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/olc/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `OLC execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as OlcAmaSynthesis
+}
+
+/** Summary returned by /corpus/olc/summarize-opinion. `was_truncated` is true
+ *  when the opinion's text exceeded the worker's input cap and only the head
+ *  was sent to the model. */
+export type OlcOpinionSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizeOlcOpinion(
+  id: number,
+  auth: AuthArg,
+): Promise<OlcOpinionSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/olc/summarize-opinion`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    // Reuse WorkerAmaError so the spoke UI can surface error.code (e.g.
+    // 'no_text' for opinions with empty text_content) uniformly.
+    throw new WorkerAmaError(
+      body.error?.message ?? `OLC summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as OlcOpinionSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/frus/* — FRUS (Foreign Relations of the United States) spoke
  *
  * Final v1 spoke. Two tables in the corpus: frus_documents (314K docs) +

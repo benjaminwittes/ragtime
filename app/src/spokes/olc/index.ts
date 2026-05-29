@@ -2,17 +2,23 @@ import type { CorpusSpoke } from '../types'
 import { fetchOlcFacets } from '@/lib/worker-client'
 
 /**
- * OLC opinions spoke — v1 alpha (manual filter + opinion detail).
+ * OLC opinions spoke.
  *
  * Per brief #2 (OLC), the OLC corpus is paradigmatically analytical /
  * narrative — the user asks "what's the OLC position on X?" and the
  * system retrieves + synthesizes from a body of formally-published,
- * often-long opinions. The "Tell me about…" AI flagship surface lands
- * in a follow-up PR.
+ * often-long opinions.
  *
- * v1 alpha (this PR): keyword + metadata filtering + opinion detail.
- * Axes: title / author substring, FTS, source (DOJ-published vs Knight
- * FOIA), date range, OCR quality.
+ * Surfaces:
+ * - Manual filter: keyword + metadata filtering + opinion detail.
+ *   Axes: title / author substring, FTS, source (DOJ-published vs Knight
+ *   FOIA), date range, OCR quality.
+ * - claude_ama (PR 4q): the brief's flagship — narrative synthesis across
+ *   opinions ("what has OLC said about X across administrations"). Uses
+ *   the same plan + execute pattern litigation does, with OLC-specific
+ *   prompts and [olc-ref:OPINION_ID] citation syntax.
+ * - Summarize-one-opinion (PR 4q): brief #2 §3's "plus" — an action on
+ *   the opinion detail panel, not a mode in the selector.
  *
  * Counts: 2,145 total = 1,439 DOJ-published archive + 706 Knight FOIA
  * net-new. Per-section live counts come from /corpus/olc/facets.
@@ -45,7 +51,7 @@ export const olcSpoke: CorpusSpoke = {
         knownGaps: [
           '~199 Knight FOIA opinions are degraded scans — LLM-assisted text cleanup deferred to a later sprint.',
           'OLC index/catalog documents (the transparency-catalog metadata) deferred.',
-          'AI modes (the "Tell me about…" flagship analytical surface) land in a follow-up PR.',
+          'Author, recipient, and president are not yet populated on the metadata — surfaced only where the opinion text itself names them.',
         ],
       }
     } catch {
@@ -58,7 +64,7 @@ export const olcSpoke: CorpusSpoke = {
     }
   },
 
-  queryModes: ['manual_filter'],
+  queryModes: ['manual_filter', 'claude_ama'],
   flagships: {
     present: ['retrieval', 'filtering', 'analytical'],
     paradigmatic: 'analytical',

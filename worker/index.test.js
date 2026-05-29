@@ -21,7 +21,14 @@ import {
   withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,
-  pipelineStaleness
+  pipelineStaleness,
+  normalizeOlcScope,
+  parseOlcPlan,
+  parseOlcSynthesis,
+  parseOlcSummary,
+  buildOlcPlanningUser,
+  buildOlcSummarizeUser,
+  OLC_SUMMARIZE_TEXT_CAP
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -572,6 +579,257 @@ describe("buildFrusFilterWhere", () => {
     expect(w).toContain("doc_date >= '1962-01-01'");
     // Four predicates separated by three ANDs.
     expect((w.match(/ AND /g) || []).length).toBe(3);
+  });
+});
+
+// ============================================================================
+// OLC AI modes (PR 4q) — narrative synthesis (plan/execute) + summarize-one.
+//
+// The worker passes LLM-generated JSON through validators before letting it
+// drive billing or downstream queries. These tests pin the validators so a
+// malformed model response can't bypass the schema (e.g. forge an
+// estimated_cost_cents that bypasses pre-flight, or claim opinion ids that
+// were never returned).
+// ============================================================================
+
+describe("normalizeOlcScope", () => {
+  it("treats missing / undefined scope as full-corpus", () => {
+    const s = normalizeOlcScope(undefined);
+    expect(s.is_full_db).toBe(true);
+    expect(s.opinion_ids).toBe(null);
+    expect(s.count).toBe(0);
+  });
+
+  it("treats empty opinion_ids as full-corpus (so the executor doesn't IN ())", () => {
+    const s = normalizeOlcScope({ opinion_ids: [] });
+    expect(s.is_full_db).toBe(true);
+    expect(s.opinion_ids).toBe(null);
+  });
+
+  it("keeps a valid numeric opinion_ids list and computes count", () => {
+    const s = normalizeOlcScope({ opinion_ids: [1, 2, 3] });
+    expect(s.is_full_db).toBe(false);
+    expect(s.opinion_ids).toEqual([1, 2, 3]);
+    expect(s.count).toBe(3);
+  });
+
+  it("drops non-finite values from opinion_ids without throwing", () => {
+    const s = normalizeOlcScope({ opinion_ids: [1, "x", null, 2, NaN, "3"] });
+    // Number("x") = NaN (dropped), Number("3") = 3 (kept). Belt-and-suspenders.
+    expect(s.opinion_ids).toEqual([1, 2, 3]);
+  });
+
+  it("honors caller-supplied count + description", () => {
+    const s = normalizeOlcScope({
+      opinion_ids: [1, 2, 3],
+      count: 3,
+      description: "3 Obama-era opinions"
+    });
+    expect(s.description).toBe("3 Obama-era opinions");
+  });
+});
+
+describe("parseOlcPlan", () => {
+  const validPlan = JSON.stringify({
+    output_mode: "narrative",
+    approach_summary: "Pull OLC opinions on X by date.",
+    candor_notes: ["author/recipient/president are not populated."],
+    queries: [{ label: "by date", sql: "SELECT id, title FROM olc_opinions WHERE fts @@ websearch_to_tsquery('english', 'X')" }],
+    estimated_cost_cents: 8,
+    wants_synthesis: true
+  });
+
+  it("accepts a well-formed plan", () => {
+    const p = parseOlcPlan(validPlan);
+    expect(p.output_mode).toBe("narrative");
+    expect(p.queries).toHaveLength(1);
+    expect(p.estimated_cost_cents).toBe(8);
+  });
+
+  it("strips code fences before parsing", () => {
+    const fenced = "```json\n" + validPlan + "\n```";
+    expect(parseOlcPlan(fenced).output_mode).toBe("narrative");
+  });
+
+  it("rejects an unknown output_mode", () => {
+    const bad = JSON.stringify({ output_mode: "graph", queries: [] });
+    expect(() => parseOlcPlan(bad)).toThrow(/output_mode/);
+  });
+
+  it("rejects non-array queries", () => {
+    const bad = JSON.stringify({ output_mode: "narrative", queries: "SELECT 1" });
+    expect(() => parseOlcPlan(bad)).toThrow(/queries must be an array/);
+  });
+
+  it("rejects a top-level array (only objects allowed)", () => {
+    expect(() => parseOlcPlan("[1,2,3]")).toThrow(/top-level value is not an object/);
+  });
+
+  it("coerces estimated_cost_cents to a non-negative integer", () => {
+    const negative = JSON.stringify({
+      output_mode: "narrative",
+      queries: [],
+      estimated_cost_cents: -50
+    });
+    expect(parseOlcPlan(negative).estimated_cost_cents).toBe(0);
+  });
+
+  it("defaults candor_notes to [] when missing", () => {
+    const noNotes = JSON.stringify({ output_mode: "narrative", queries: [] });
+    expect(parseOlcPlan(noNotes).candor_notes).toEqual([]);
+  });
+});
+
+describe("parseOlcSynthesis", () => {
+  it("accepts a list-mode synthesis with valid opinion_ids", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "OLC has opined on X in [olc-ref:42].",
+      opinion_ids: [42, 73],
+      candor_notes: []
+    });
+    const s = parseOlcSynthesis(raw, "list");
+    expect(s.opinion_ids).toEqual([42, 73]);
+    expect(s.answer_markdown).toMatch(/olc-ref:42/);
+  });
+
+  it("rejects empty answer_markdown", () => {
+    const raw = JSON.stringify({ answer_markdown: "  ", opinion_ids: [] });
+    expect(() => parseOlcSynthesis(raw, "narrative")).toThrow(/answer_markdown is empty/);
+  });
+
+  it("downgrades to narrative + candor note when list mode returns no opinion_ids", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "No opinions matched the criterion.",
+      opinion_ids: [],
+      candor_notes: []
+    });
+    const s = parseOlcSynthesis(raw, "list");
+    expect(s.opinion_ids).toEqual([]);
+    expect(s.candor_notes.join(" ")).toMatch(/returned none/);
+  });
+
+  it("forces opinion_ids = null on narrative output_mode regardless of model output", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Narrative-only answer.",
+      opinion_ids: [1, 2, 3], // model returned ids even though mode is narrative
+      candor_notes: []
+    });
+    const s = parseOlcSynthesis(raw, "narrative");
+    expect(s.opinion_ids).toBe(null);
+  });
+
+  it("coerces opinion_ids strings to numbers and drops non-finite values", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "x",
+      opinion_ids: ["42", 7, "not-a-number", null, 11.5],
+      candor_notes: []
+    });
+    const s = parseOlcSynthesis(raw, "list");
+    // 11.5 is finite — kept (the model shouldn't emit decimal ids, but parse
+    // should not silently truncate; reality is the DB query will return nothing
+    // and the UI will surface the empty page).
+    expect(s.opinion_ids).toEqual([42, 7, 11.5]);
+  });
+});
+
+describe("buildOlcPlanningUser", () => {
+  it("describes the full-corpus scope and tells the planner to use olc_opinions", () => {
+    const msg = buildOlcPlanningUser("Has OLC opined on X?", normalizeOlcScope(undefined));
+    expect(msg).toMatch(/full corpus/i);
+    expect(msg).toMatch(/olc_opinions/);
+    expect(msg).not.toMatch(/scoped_olc_opinions/);
+  });
+
+  it("describes a narrowed scope and tells the planner to use scoped_olc_opinions", () => {
+    const msg = buildOlcPlanningUser(
+      "Across these opinions, what does OLC say about X?",
+      normalizeOlcScope({ opinion_ids: [1, 2, 3], count: 3 })
+    );
+    expect(msg).toMatch(/3 opinion_ids/);
+    expect(msg).toMatch(/scoped_olc_opinions/);
+  });
+});
+
+describe("buildOlcSummarizeUser", () => {
+  const opinion = {
+    title: "Authority of the President to Recess-Appoint X",
+    date_issued: "1987-03-15",
+    author: null,
+    recipient: null,
+    source: "doj-published",
+    ocr_quality: "clean",
+    summary: "OLC concluded the President may make such appointments.",
+    text_content: "I. Introduction. The question presented is whether..."
+  };
+
+  it("includes metadata and full text when not truncated", () => {
+    const u = buildOlcSummarizeUser(opinion, false);
+    expect(u).toMatch(/Authority of the President/);
+    expect(u).toMatch(/1987-03-15/);
+    expect(u).toMatch(/EDITORIAL SUMMARY/);
+    expect(u).toMatch(/I\. Introduction\./);
+    expect(u).not.toMatch(/TRUNCATED/);
+  });
+
+  it("truncates text and flags it when wasTruncated=true", () => {
+    const huge = { ...opinion, text_content: "x".repeat(OLC_SUMMARIZE_TEXT_CAP + 1000) };
+    const u = buildOlcSummarizeUser(huge, true);
+    expect(u).toMatch(/TRUNCATED to/);
+    // The truncated payload should be exactly the cap (plus the surrounding
+    // header/footer text) — verify the appended text section length is the cap.
+    const textStart = u.indexOf("OPINION TEXT");
+    const textBlock = u.slice(textStart);
+    // textBlock contains the header line + newline + truncated content + footer.
+    // The number of "x" characters in it should equal OLC_SUMMARIZE_TEXT_CAP.
+    const xCount = (textBlock.match(/x/g) || []).length;
+    expect(xCount).toBe(OLC_SUMMARIZE_TEXT_CAP);
+  });
+
+  it("handles null author/recipient/summary gracefully (the OLC v1 reality)", () => {
+    const sparse = {
+      title: "Untitled OLC Memo",
+      date_issued: null,
+      author: null,
+      recipient: null,
+      source: null,
+      ocr_quality: null,
+      summary: null,
+      text_content: "Body."
+    };
+    const u = buildOlcSummarizeUser(sparse, false);
+    expect(u).toMatch(/not populated/);
+    expect(u).not.toMatch(/EDITORIAL SUMMARY/);
+  });
+});
+
+describe("parseOlcSummary", () => {
+  it("accepts a well-formed summary", () => {
+    const raw = JSON.stringify({
+      summary_markdown: "**Question presented.** ...",
+      candor_notes: []
+    });
+    const s = parseOlcSummary(raw);
+    expect(s.summary_markdown).toMatch(/Question presented/);
+    expect(s.candor_notes).toEqual([]);
+  });
+
+  it("rejects empty summary_markdown", () => {
+    const raw = JSON.stringify({ summary_markdown: "  ", candor_notes: [] });
+    expect(() => parseOlcSummary(raw)).toThrow(/summary_markdown is empty/);
+  });
+
+  it("strips code fences before parsing", () => {
+    const fenced = "```json\n" + JSON.stringify({ summary_markdown: "x", candor_notes: [] }) + "\n```";
+    expect(parseOlcSummary(fenced).summary_markdown).toBe("x");
+  });
+
+  it("defaults candor_notes to [] when missing", () => {
+    const raw = JSON.stringify({ summary_markdown: "x" });
+    expect(parseOlcSummary(raw).candor_notes).toEqual([]);
+  });
+
+  it("rejects a top-level array", () => {
+    expect(() => parseOlcSummary("[1,2,3]")).toThrow(/top-level value is not an object/);
   });
 });
 

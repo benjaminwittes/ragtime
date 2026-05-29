@@ -231,6 +231,15 @@ export default {
       if (path === "/corpus/olc/opinion" && request.method === "POST") {
         return await corpusOlcOpinionHandler(request, env, ctx);
       }
+      if (path === "/corpus/olc/plan" && request.method === "POST") {
+        return await corpusOlcPlanHandler(request, env, ctx);
+      }
+      if (path === "/corpus/olc/execute" && request.method === "POST") {
+        return await corpusOlcExecuteHandler(request, env, ctx);
+      }
+      if (path === "/corpus/olc/summarize-opinion" && request.method === "POST") {
+        return await corpusOlcSummarizeHandler(request, env, ctx);
+      }
       if (path === "/corpus/frus/facets" && request.method === "POST") {
         return await corpusFrusFacetsHandler(request, env, ctx);
       }
@@ -2206,6 +2215,501 @@ async function corpusOlcOpinionHandler(request, env, ctx) {
   return json({ opinion: rows[0] }, 200);
 }
 
+// ── OLC AI modes (PR 4q) ────────────────────────────────────────────────────
+// Two surfaces per brief #2 §3:
+//   1. Narrative synthesis (claude_ama-shaped) — "what has OLC said about X
+//      across administrations" — plan + execute against olc_opinions.
+//   2. Summarize-one-opinion — invoked from the opinion detail panel; not a
+//      mode in the selector. Single Anthropic call on one opinion's text.
+//
+// Mirrors the litigation /corpus/plan + /corpus/execute shape (so the React
+// pre-flight modal pattern carries across), but with OLC-specific schema,
+// citation syntax ([olc-ref:OPINION_ID]), and editorial guardrails (the
+// released-vs-issued caveat, DOJ-vs-Knight-FOIA provenance, degraded-OCR
+// flag, NEVER editorializing on contested doctrine).
+
+// Scope normalization for OLC. Litigation's normalizeScope handles cl_ids +
+// scope_sql; OLC is small (2,145 opinions max) so we only support an inline
+// opinion_ids list. No scope_sql path needed — full-DB inlining covers the
+// "narrowed scope is too big" edge case litigation worries about.
+function normalizeOlcScope(s) {
+  s = s || {};
+  let ids = Array.isArray(s.opinion_ids)
+    ? s.opinion_ids.filter((x) => x != null).map(Number).filter(Number.isFinite)
+    : null;
+  if (ids && ids.length === 0) ids = null;
+  return {
+    opinion_ids: ids,
+    is_full_db: !ids,
+    count: Number(s.count) || (ids ? ids.length : 0),
+    description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : ""
+  };
+}
+
+var OLC_AMA_SCHEMA_DOC = [
+  "TABLE: olc_opinions — one row per OLC opinion (2,145 total).",
+  "  id (bigint, PK)               — opinion id; use this when you need to identify an opinion in your output.",
+  "  title (text)                  — opinion title; FTS-indexed in column \"fts\" alongside text_content.",
+  "  author (text)                 — signing OLC lawyer; NULL on 100% of rows today — DO NOT filter on this.",
+  "  recipient (text)              — addressee agency/official; NULL on 100% of rows today — DO NOT filter on this.",
+  "  president (text)              — administration; NULL on 100% of rows today — DO NOT filter on this.",
+  "  date_issued (date)            — opinion date; populated on 100% of rows; this is your temporal axis.",
+  "  release_date (date)           — when OLC released the opinion publicly (may differ from issue date).",
+  "  summary (text)                — short editorial summary, where available; check IS NOT NULL before relying on it.",
+  "  source (text)                 — 'doj-published' (1,439) or 'knight-foia' (706 — Knight FOIA net-new, opinions DOJ never published).",
+  "  page_count (int)              — opinion length in pages.",
+  "  text_length (int)             — opinion length in characters.",
+  "  text_content (text)           — full opinion text; LARGE (do not return in raw form — pull title/summary/date_issued and let synthesis cite).",
+  "  ocr_quality (text)            — 'clean' (1,857), 'degraded' (197 — flag in candor_notes if any of your results have this), 'normalized' (91).",
+  "  fts (tsvector, generated)     — to_tsvector('english', title || ' ' || text_content) — use this for topical search.",
+  "",
+  "NOTES:",
+  "- Topical/conceptual search: WHERE fts @@ websearch_to_tsquery('english', 'your search') — supports OR and quoted phrases.",
+  "- Date axis is reliable; populated on 100% of rows. \"What has OLC said in the last decade\" → date_issued >= now() - interval '10 years'.",
+  "- Provenance filter: source = 'doj-published' OR source = 'knight-foia'. The Knight set is older/suppressed memos DOJ never published — a real completeness differentiator.",
+  "- DEGRADED-OCR DISCLOSURE: any result rows with ocr_quality = 'degraded' should be called out in candor_notes (their text may be garbled and synthesis from them is lower-confidence).",
+  "- RELEASED-vs-ISSUED CAVEAT: counts of opinions by year reflect *released* opinions, NOT OLC's true output (most opinions are never released). The early-1980s peak (1981 = 164) is the Knight FOIA *Francis v. DOJ* release window. ANY query that reports counts by year/era MUST surface this in candor_notes.",
+  "- SUPERSESSION/WITHDRAWAL CAVEAT: no structured field exists. A raw text search for 'withdraw|overrule|supersede' matches 458/2,145 but is mostly noise (an opinion withdrawing *troops*; a *superseded statute*). \"What opinions have been withdrawn\" questions MUST surface this noise caveat in candor_notes.",
+  "- Read-only: only SELECT statements are accepted; LIMIT yourself to ≤ 500 rows per query (the corpus is small; full-set retrieval rarely needed)."
+].join("\n");
+
+function buildOlcPlanningSystem() {
+  return [
+    "You are the planner for an agentic narrative-synthesis tool over the OLC (DOJ Office of Legal Counsel) opinion corpus. OLC opinions are the executive branch's authoritative legal interpretations of what the law permits it to do — contested, politically charged terrain. Your job is to look at a user question and the current scope, then return a JSON plan describing how you would answer it.",
+    "",
+    "You have access to a Postgres database (read-only) via SELECT queries. Schema:",
+    "",
+    OLC_AMA_SCHEMA_DOC,
+    "",
+    "Output a single JSON object with these keys (no prose, no code fences):",
+    "{",
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    "       // list = the question wants a refined set of opinions (the field will be narrowed).",
+    "       // narrative = the question wants an analytical answer; the field is unchanged.",
+    "       // hybrid = both — narrative summary plus a refined list (most synthesis questions).",
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats the user should see — e.g. the released-vs-issued caveat for year counts, the supersession-noise caveat for withdrawal questions, degraded-OCR rows in your set, missing facets you would have used if populated"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ... FROM olc_opinions WHERE ... LIMIT 200"},',
+    "    ...",
+    "  ],",
+    '  "estimated_cost_cents": <integer>,',
+    "       // your estimate of the synthesis call cost in cents (the planning call is already paid).",
+    "       // Synthesis input ≈ all query results in JSON; output ≈ 800-2000 tokens.",
+    "       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.",
+    '  "wants_synthesis": true',
+    "}",
+    "",
+    "Rules:",
+    "- Be ruthlessly economical with queries. Pull metadata (id, title, date_issued, summary, source, ocr_quality) — NEVER text_content in a planned query. The synthesis step works from titles + dates + summaries; per-opinion deep reads are a separate mode.",
+    "- For trend questions, prefer ONE query that groups by year (or decade) over many narrow queries. Per the released-vs-issued caveat, ANY year-count query must add the caveat to candor_notes.",
+    "- For narrative questions over a topic ('how has OLC's view of X evolved'), order by date_issued ASC and cap at 200 opinions per query — that's plenty of evidence for the synthesis step.",
+    "- author / recipient / president are NULL on every row today. Do NOT plan queries that filter or group on them. If the question really wants administration analysis, add candor_notes: 'Administration field is not populated yet; v1 surfaces opinions by date_issued, not by administration.'",
+    "- For 'what's been overturned/withdrawn' questions, surface the supersession-noise caveat in candor_notes and run an honest text search (fts @@ websearch_to_tsquery('english', 'withdraw OR overrule OR supersede')) without claiming the result list is authoritative.",
+    "- WHEN THE CURRENT SCOPE IS NARROWED (opinion_ids list provided): use the name \"scoped_olc_opinions\" instead of \"olc_opinions\". The runner substitutes this with an inline subquery already filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_olc_opinions WHERE date_issued > '2010-01-01'\" (good), not \"FROM scoped_olc_opinions o WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"olc_opinions\".",
+    "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
+  ].join("\n");
+}
+
+function buildOlcPlanningUser(question, scope) {
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "CURRENT SCOPE:",
+    scope.description || (scope.is_full_db
+      ? "The full corpus — all 2,145 OLC opinions (DOJ-published + Knight FOIA)."
+      : fmtIntJs(scope.count) + " opinions (narrowed)."),
+    scope.is_full_db
+      ? "(no opinion_id constraint — your queries run against the full corpus; use the table name \"olc_opinions\")"
+      : "(narrowed to " + fmtIntJs(scope.count) + " opinion_ids; the runner will substitute scoped_olc_opinions with an inline subquery filtered to the scope — use THAT name in your queries)",
+    "",
+    "Return the JSON plan now."
+  ].join("\n");
+}
+
+function parseOlcPlan(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error("JSON.parse error: " + pe2.message); }
+    } else {
+      throw new Error("could not find a JSON object in the response.");
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (["list", "narrative", "hybrid"].indexOf(v.output_mode) < 0) throw new Error("output_mode must be list, narrative, or hybrid.");
+  if (!Array.isArray(v.queries)) throw new Error("queries must be an array.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || "").trim();
+  return v;
+}
+
+async function executeOlcPlan(env, plan, scope) {
+  // 2,145 opinions max — always inlineable, no scope_sql path needed.
+  let scopedBody = null;
+  if (scope.opinion_ids && scope.opinion_ids.length > 0) {
+    const idsSubquery = "SELECT unnest('{" + scope.opinion_ids.join(",") + "}'::bigint[]) AS id";
+    scopedBody = "(SELECT o.* FROM olc_opinions o WHERE o.id IN (" + idsSubquery + "))";
+  }
+
+  const results = [];
+  for (let i = 0; i < plan.queries.length; i++) {
+    const q = plan.queries[i];
+    let sql = String(q.sql || "").trim().replace(/;\s*$/, "").trim();
+    if (!sql) continue;
+    let execSql = sql;
+    if (scopedBody) {
+      execSql = substituteScoped(execSql, "scoped_olc_opinions", scopedBody);
+    }
+    if (!/^\s*SELECT\b/i.test(execSql)) execSql = "SELECT * FROM (" + execSql + ") AS olc_q";
+    let rows;
+    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
+    catch (err) { throw new Error('Query "' + (q.label || ("query " + (i + 1))) + '" failed: ' + err.message); }
+    const truncated = (rows.length > 200) ? rows.slice(0, 200) : rows;
+    results.push({ label: q.label || ("query " + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 200 });
+  }
+  return results;
+}
+
+function buildOlcSynthesisSystem(outputMode) {
+  const listClause = (outputMode === "list" || outputMode === "hybrid")
+    ? '"opinion_ids": [<bigint>, ...]   // the opinion ids the user should see; pulled from your query results.'
+    : '"opinion_ids": null';
+  return [
+    "You are the synthesis step for an agentic narrative-synthesis tool over the OLC opinion corpus. The planner has already run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "answer_markdown": "...",  // markdown narrative; embed [olc-ref:OPINION_ID] tokens to cite specific opinions.',
+    "  " + listClause + ",",
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    "}",
+    "",
+    "Rules:",
+    "- ATTRIBUTION-FORWARD. OLC is the executive's authoritative legal *position*, not a court's holding. Describe what OLC has said; never editorialize on whether it is correct.",
+    "- CITE EVERY POSITION. Each claim about what OLC believes about X must be cited to a specific opinion via [olc-ref:OPINION_ID]. The UI replaces this with a clickable link. Where the row has a title or date, surface them inline ('OLC's 1987 opinion on X [olc-ref:42]').",
+    "- PROVENANCE WHEN MEANINGFUL. If your set includes Knight-FOIA opinions DOJ never published, mention that — it's a completeness signal for the user.",
+    "- DEGRADED OCR. If any row has ocr_quality = 'degraded', surface that in candor_notes — synthesis from those rows is lower-confidence.",
+    "- RELEASED-vs-ISSUED CAVEAT. Any count-by-year statement must include the caveat that counts reflect released opinions only, not OLC's true annual output.",
+    "- For list and hybrid output_modes, opinion_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable opinions, downgrade to narrative mode and explain.",
+    "- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.",
+    "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes ("") for direct quotation, or single quotes (\'\' or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
+  ].join("\n");
+}
+
+function buildOlcSynthesisUser(question, plan, results) {
+  const resultsForModel = results.map(function (r) {
+    return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated, rows: r.rows };
+  });
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "YOUR PLAN (from the planning step):",
+    plan.approach_summary,
+    "",
+    "PLANNED OUTPUT MODE: " + plan.output_mode,
+    "",
+    "CANDOR NOTES FROM PLANNING:",
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function (n) { return "- " + n; }).join("\n") : "(none)",
+    "",
+    "QUERY RESULTS (JSON):",
+    JSON.stringify(resultsForModel, null, 2),
+    "",
+    "Return the synthesis JSON now."
+  ].join("\n");
+}
+
+function parseOlcSynthesis(raw, outputMode) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = repairAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
+          catch (pe4) { throw new Error("JSON.parse error: " + pe4.message); }
+        }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.answer_markdown !== "string" || !v.answer_markdown.trim()) throw new Error("answer_markdown is empty.");
+  if (outputMode === "list" || outputMode === "hybrid") {
+    if (!Array.isArray(v.opinion_ids) || v.opinion_ids.length === 0) {
+      v.opinion_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(["Output mode requested an opinion list but synthesis returned none — showing narrative only."]);
+    } else {
+      v.opinion_ids = v.opinion_ids
+        .filter(function (x) { return x != null; })
+        .map(function (x) { return Number(x); })
+        .filter(function (x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.opinion_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusOlcPlanHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const question = String((body && body.question) || "").trim();
+  if (!question) return json({ error: { message: "Missing question" } }, 400);
+  const scope = normalizeOlcScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildOlcPlanningSystem(),
+      messages: [{ role: "user", content: buildOlcPlanningUser(question, scope) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Planning step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let plan;
+  try { plan = parseOlcPlan(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse plan: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("olc-plan:" + token, JSON.stringify({
+    plan, scope, question, provider, model, userId: auth.userId, authMode: auth.authMode
+  }), { expirationTtl: 900 });
+
+  return json({
+    token,
+    output_mode: plan.output_mode,
+    approach_summary: plan.approach_summary,
+    candor_notes: plan.candor_notes,
+    queries: plan.queries.map(function (q) { return { label: q.label, sql: q.sql }; }),
+    estimated_cost_cents: plan.estimated_cost_cents,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+async function corpusOlcExecuteHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const token = body && body.token;
+  if (!token || typeof token !== "string") return json({ error: { message: "Missing plan token" } }, 400);
+  const stored = await env.QUOTA.get("olc-plan:" + token);
+  if (!stored) return json({ error: { message: "Plan expired or not found — re-run the question.", code: "plan_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored plan is corrupt — re-run the question." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider, body);
+  if (auth instanceof Response) return auth;
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This plan belongs to a different session. Re-run the question." } }, 403);
+  }
+  ctx.waitUntil(env.QUOTA.delete("olc-plan:" + token));
+
+  let results;
+  try { results = await executeOlcPlan(env, blob.plan, blob.scope); }
+  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider: blob.provider, model: blob.model,
+      system: buildOlcSynthesisSystem(blob.plan.output_mode),
+      messages: [{ role: "user", content: buildOlcSynthesisUser(blob.question, blob.plan, results) }],
+      max_tokens: blob.plan.output_mode === "narrative" ? 4000 : 6000
+    });
+  } catch (e) {
+    return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let synth;
+  try { synth = parseOlcSynthesis(res.text, blob.plan.output_mode); }
+  catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    answer_markdown: synth.answer_markdown,
+    opinion_ids: synth.opinion_ids,
+    candor_notes: synth.candor_notes,
+    output_mode: blob.plan.output_mode,
+    query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── OLC: summarize one opinion ──────────────────────────────────────────────
+// Invoked from the opinion detail panel. Pulls the opinion's text_content +
+// metadata, sends a single Anthropic call with an attribution-forward
+// summarize prompt, returns a markdown summary. One billed call; no plan/
+// execute split (the work is bounded by the single opinion's length).
+//
+// Brief #2 §1: "Walk me through / summarize this opinion." Brief #2 §5:
+// attribution-forward, never editorialize, flag degraded OCR.
+
+// Cap on text_content sent to the model. The longest OLC opinions are well
+// under this; the cap protects us from a single runaway opinion pinning the
+// model call to its max-input limit. Truncate with a visible note in the
+// result, so synthesis doesn't claim coverage of text it never saw.
+var OLC_SUMMARIZE_TEXT_CAP = 200000; // chars (~50K tokens)
+
+function buildOlcSummarizeSystem() {
+  return [
+    "You are summarizing one OLC (DOJ Office of Legal Counsel) opinion for a researcher. OLC opinions are the executive branch's authoritative legal interpretations — contested, politically charged terrain. Your job: attribution-forward summary, never editorialize.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "summary_markdown": "...",  // markdown summary, 4-10 short paragraphs.',
+    '  "candor_notes": ["caveats — degraded OCR, truncation, gaps in the text you were shown"]',
+    "}",
+    "",
+    "Structure the summary_markdown around these headings (omit any that don't apply):",
+    "- **Question presented** — what OLC was asked.",
+    "- **Conclusion** — OLC's bottom line (one or two sentences).",
+    "- **Reasoning** — the steps of the argument, in OLC's framing.",
+    "- **Authorities cited** — major statutes, prior OLC opinions, court cases the opinion relies on (list, where identifiable).",
+    "- **Notable caveats / limits** — anything OLC explicitly disclaimed or confined.",
+    "",
+    "Rules:",
+    "- Describe what the opinion says. Do not say whether it is right or wrong, nor add modern context the opinion itself does not contain.",
+    "- Quote sparingly; use curly quotes (“”) for direct quotation. Straight double quotes break JSON parsing.",
+    "- If the text appears degraded (garbled OCR, missing sentences), surface that in candor_notes and lower-confidence the rest of your summary accordingly.",
+    "- If the text was truncated before reaching you, note that in candor_notes (\"Summary based on the first N characters of the opinion; later sections not seen.\").",
+    "- Output strict JSON only. No markdown outside summary_markdown. No code fences."
+  ].join("\n");
+}
+
+function buildOlcSummarizeUser(opinion, wasTruncated) {
+  const parts = [
+    "OPINION METADATA:",
+    "- Title: " + (opinion.title || "(no title)"),
+    "- Date issued: " + (opinion.date_issued || "(no date)"),
+    "- Author: " + (opinion.author || "(not populated)"),
+    "- Recipient: " + (opinion.recipient || "(not populated)"),
+    "- Source: " + (opinion.source || "(unknown)"),
+    "- OCR quality: " + (opinion.ocr_quality || "(unknown)")
+  ];
+  if (opinion.summary) {
+    parts.push("");
+    parts.push("EDITORIAL SUMMARY (from the corpus, where present):");
+    parts.push(opinion.summary);
+  }
+  parts.push("");
+  parts.push("OPINION TEXT" + (wasTruncated ? " (TRUNCATED to " + fmtIntJs(OLC_SUMMARIZE_TEXT_CAP) + " characters — flag this in candor_notes):" : ":"));
+  const text = String(opinion.text_content || "");
+  parts.push(wasTruncated ? text.slice(0, OLC_SUMMARIZE_TEXT_CAP) : text);
+  parts.push("");
+  parts.push("Return the summary JSON now.");
+  return parts.join("\n");
+}
+
+function parseOlcSummary(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      // Reuse the answer_markdown quote-repair, retargeted at summary_markdown.
+      const repaired = cleaned.replace(/"answer_markdown"/g, '"summary_markdown"');
+      const rep2 = repairAnswerMarkdownQuotes(repaired.replace(/"summary_markdown"/g, '"answer_markdown"'))
+        .replace(/"answer_markdown"/g, '"summary_markdown"');
+      v = JSON.parse(rep2);
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) { throw new Error("JSON.parse error: " + pe3.message); }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.summary_markdown !== "string" || !v.summary_markdown.trim()) throw new Error("summary_markdown is empty.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusOlcSummarizeHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  // Pull the opinion. Same SELECT shape as /corpus/olc/opinion so the
+  // handler returns useful context to the model.
+  const sql = "SELECT id, title, author, recipient, date_issued::text AS date_issued, " +
+    "summary, source, text_content, ocr_quality " +
+    "FROM olc_opinions WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Opinion fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Opinion not found", code: "not_found" } }, 404);
+  }
+  const opinion = rows[0];
+  const text = String(opinion.text_content || "");
+  if (!text.trim()) {
+    return json({ error: { message: "This opinion has no text content to summarize. (Likely a Knight FOIA entry with zero-text OCR; the corpus knows it exists but holds no text.)", code: "no_text" } }, 400);
+  }
+  const wasTruncated = text.length > OLC_SUMMARIZE_TEXT_CAP;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildOlcSummarizeSystem(),
+      messages: [{ role: "user", content: buildOlcSummarizeUser(opinion, wasTruncated) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Summarize step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parseOlcSummary(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse summary: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    summary_markdown: parsed.summary_markdown,
+    candor_notes: parsed.candor_notes,
+    was_truncated: wasTruncated,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
 // ============================================================================
 // FRUS (Foreign Relations of the United States) corpus — v1 alpha
 //
@@ -3383,5 +3887,12 @@ export {
   withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,
-  pipelineStaleness
+  pipelineStaleness,
+  normalizeOlcScope,
+  parseOlcPlan,
+  parseOlcSynthesis,
+  parseOlcSummary,
+  buildOlcPlanningUser,
+  buildOlcSummarizeUser,
+  OLC_SUMMARIZE_TEXT_CAP
 };
