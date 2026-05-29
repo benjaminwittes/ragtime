@@ -31,7 +31,7 @@ const MODE_TIPS: Record<QueryMode, string> = {
   claude_analysis:
     'AI analyzes the full case list and produces narrative + annotations.',
   claude_ama:
-    'Ask anything about the current case list. AI plans, runs queries, and answers.',
+    'Ask anything about the current result set. AI plans, runs queries, and answers.',
   advisory_retrieval:
     'Bring a fact pattern; the system returns the theories from the corpus that match.',
 }

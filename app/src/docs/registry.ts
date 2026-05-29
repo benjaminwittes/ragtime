@@ -1,14 +1,11 @@
 import type { DocsContext, DocsEntry } from './types'
+import { olcNarrativeSynthesisEntry } from './content/olc-narrative-synthesis'
+import { olcOpinionSummaryEntry } from './content/olc-opinion-summary'
 
 /**
  * Central docs registry.
  *
- * v1 = empty. Content is editorial work pending (PR 4b — likely
- * landing alongside the litigation spoke port in PR 5, so the first
- * spoke's docs are written against the real surface, not a stub).
- *
- * To add an entry: import its `DocsEntry`-typed object from a per-topic
- * file (probably `./content/<slug>.ts`) and add it to the array below.
+ * Entries live in `./content/<slug>.ts` and are aggregated here.
  *
  * Editorial intent (per brief #6 §6, brief #6 decisions 9b cross-reference):
  * - Global entries cover cross-cutting principles users should know once:
@@ -19,7 +16,10 @@ import type { DocsContext, DocsEntry } from './types'
  *   the surface is for, what's in the corpus and what's not, how the
  *   modes differ here, demo queries.
  */
-export const docsEntries: readonly DocsEntry[] = []
+export const docsEntries: readonly DocsEntry[] = [
+  olcNarrativeSynthesisEntry,
+  olcOpinionSummaryEntry,
+]
 
 /**
  * Selector — returns the entries that should show in the overlay given

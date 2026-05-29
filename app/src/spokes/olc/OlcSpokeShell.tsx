@@ -1,30 +1,50 @@
 import { useEffect, useState } from 'react'
 import {
+  AMA_CONFIRM_THRESHOLD_CENTS,
+  type OlcAmaPlan,
+  type OlcAmaScope,
+  type OlcAmaSynthesis,
   type OlcFacets,
   type OlcFilterFields,
   type OlcFilterResult,
   type OlcOpinionDisplayRow,
   fetchOlcFacets,
+  runOlcExecute,
   runOlcFilter,
+  runOlcPlan,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
-import type { CorpusHoldings, CorpusSpoke } from '../types'
+import { usePaid } from '@/auth/use-paid'
+import { useAuth } from '@/lib/use-auth'
+import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
+import { AmaPreflight } from '../components/AmaPreflight'
+import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
+import { ModeRow } from '../components/ModeRow'
+import { OlcAmaResult } from './OlcAmaResult'
 import { OlcFilterForm } from './OlcFilterForm'
 import { OlcOpinionDetailSheet } from './OlcOpinionDetailSheet'
 import { OlcResultsList } from './OlcResultsList'
 
 /**
- * OLC spoke v1 alpha — manual filter + opinion detail. Parallels
- * UscSpokeShell and CfrSpokeShell.
+ * OLC spoke shell. Two query modes per brief #2 §3:
+ *  - manual_filter: structured filter + opinion detail (v1 alpha).
+ *  - claude_ama: narrative-synthesis flagship (PR 4q). Plan/execute over
+ *    olc_opinions; output is prose + cited opinion ids.
  *
- * Holdings band surfaces the dual-provenance counts (DOJ-published +
- * Knight FOIA) per brief #2 — the Knight FOIA net-new is a real part
- * of the OLC story and the user deserves to see it up top.
+ * The "summarize this opinion" surface lives on the detail sheet, not in
+ * the mode selector (brief #2 §3 calls it the "plus", not a co-equal mode).
+ *
+ * Scope for AMA: when filter rows have been produced, the AMA call passes
+ * those opinion ids as scope so synthesis runs over the narrowed set;
+ * otherwise scope is the full 2,145-opinion corpus.
  */
 export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const { setActiveSpokeSlug } = useDocs()
+  const auth = useAuth()
+  const paid = usePaid()
+
   useEffect(() => {
     setActiveSpokeSlug(spoke.slug)
     return () => setActiveSpokeSlug(undefined)
@@ -69,12 +89,54 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }, [])
 
+  // Filter state.
   const [rows, setRows] = useState<OlcOpinionDisplayRow[] | undefined>(undefined)
   const [count, setCount] = useState<number | undefined>(undefined)
+  // All matching ids (separate from `rows`, which is capped to 10K for
+  // display). Used as scope when the user runs AMA against the filter result.
+  const [filterIds, setFilterIds] = useState<number[]>([])
   const [executedSql, setExecutedSql] = useState<string | undefined>(undefined)
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+
+  // AMA state.
+  const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
+  const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
+  const [pendingPlan, setPendingPlan] = useState<{
+    plan: OlcAmaPlan
+    question: string
+  } | null>(null)
+  const [amaSynthesis, setAmaSynthesis] = useState<OlcAmaSynthesis | null>(null)
+  const [amaError, setAmaError] = useState<string | undefined>(undefined)
+  const [amaLoading, setAmaLoading] = useState(false)
+  // Snapshot of the plan that produced the current synthesis. Used for the
+  // result panel's "approach" + candor disclosure (brief #2 §5 auditability).
+  const [amaResultPlan, setAmaResultPlan] = useState<OlcAmaPlan | null>(null)
+
+  const enabledModes: QueryMode[] = ['manual_filter']
+  if (auth.hasAuth) enabledModes.push('claude_ama')
+
+  function appendLog(line: AmaLogLine) {
+    setAmaLog((prev) => [...prev, line])
+  }
+
+  function buildAmaScope(): OlcAmaScope {
+    if (filterIds.length === 0) {
+      const total = facets?.opinion_count ?? 2145
+      return {
+        is_full_db: true,
+        count: total,
+        description: `The full OLC corpus (${total.toLocaleString()} opinions).`,
+      }
+    }
+    return {
+      opinion_ids: filterIds,
+      is_full_db: false,
+      count: filterIds.length,
+      description: `${filterIds.length.toLocaleString()} opinions from the current filter.`,
+    }
+  }
 
   const [detailOpen, setDetailOpen] = useState(false)
   const [openOpinion, setOpenOpinion] = useState<OlcOpinionDisplayRow | null>(
@@ -86,6 +148,26 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setDetailOpen(true)
   }
 
+  /** Open the detail sheet for an opinion-id citation from the AMA result.
+   *  The detail sheet takes a display row; for citations we have only the id
+   *  + (optionally) a title, so synthesize a minimal display row. The detail
+   *  panel re-fetches the full opinion from the server on mount, so the
+   *  partial row is just a placeholder. */
+  function handleOpenOpinionById(id: number) {
+    const placeholder: OlcOpinionDisplayRow = {
+      id,
+      title: null,
+      author: null,
+      date_issued: null,
+      source: null,
+      page_count: null,
+      text_length: null,
+      ocr_quality: null,
+    }
+    setOpenOpinion(placeholder)
+    setDetailOpen(true)
+  }
+
   async function handleSubmit(fields: OlcFilterFields) {
     setQueryLoading(true)
     setQueryError(undefined)
@@ -94,15 +176,110 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       const r: OlcFilterResult = await runOlcFilter(fields)
       setRows(r.display_rows)
       setCount(r.count)
+      setFilterIds(r.ids)
       setExecutedSql(r.executed_sql)
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
       setRows([])
       setCount(0)
+      setFilterIds([])
       setExecutedSql(undefined)
     } finally {
       setQueryLoading(false)
     }
+  }
+
+  async function handleClaudeAmaSubmit(question: string) {
+    if (!auth.auth) {
+      setAmaError('Configure AI access (header, top right) first.')
+      return
+    }
+    setAmaLoading(true)
+    setAmaError(undefined)
+    setAmaLog([])
+    setAmaSynthesis(null)
+    setAmaResultPlan(null)
+    appendLog({ label: 'Step 1/3.', message: 'Planning the query…' })
+    const scope = buildAmaScope()
+    let plan: OlcAmaPlan
+    try {
+      plan = await runOlcPlan(question, scope, auth.auth)
+      if (typeof plan._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(plan._balance_cents)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      appendLog({ label: 'Plan failed.', message: msg, status: 'error' })
+      setAmaError(msg)
+      setAmaLoading(false)
+      return
+    }
+    appendLog({
+      label: 'Plan.',
+      message: `${plan.output_mode} · ${plan.queries.length} quer${plan.queries.length === 1 ? 'y' : 'ies'} · est. ${fmtCents(plan.estimated_cost_cents)}`,
+      status: 'done',
+    })
+
+    if (plan.estimated_cost_cents > AMA_CONFIRM_THRESHOLD_CENTS) {
+      setPendingPlan({ plan, question })
+      return
+    }
+    await runAmaExecute(plan)
+  }
+
+  async function runAmaExecute(plan: OlcAmaPlan) {
+    if (!auth.auth) return
+    appendLog({
+      label: 'Step 2/3.',
+      message: 'Executing planned queries…',
+    })
+    try {
+      const synth = await runOlcExecute(plan.token, auth.auth)
+      if (typeof synth._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(synth._balance_cents)
+      }
+      appendLog({
+        label: 'Step 3/3.',
+        message: 'Synthesized the answer.',
+        status: 'done',
+      })
+      setAmaSynthesis(synth)
+      setAmaResultPlan(plan)
+      const total = (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0)
+      if (total > 0) {
+        appendLog({
+          label: 'Done.',
+          message: `Total spent: ${fmtCents(total)}`,
+          status: 'done',
+        })
+      } else {
+        appendLog({ label: 'Done.', message: '', status: 'done' })
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      appendLog({ label: 'Execute failed.', message: msg, status: 'error' })
+      setAmaError(msg)
+    } finally {
+      setAmaLoading(false)
+    }
+  }
+
+  async function handleAmaProceed() {
+    if (!pendingPlan) return
+    const { plan } = pendingPlan
+    setPendingPlan(null)
+    await runAmaExecute(plan)
+  }
+
+  function handleAmaCancel() {
+    if (!pendingPlan) return
+    appendLog({
+      label: 'Cancelled.',
+      message: 'User cancelled at pre-flight.',
+      status: 'error',
+    })
+    setPendingPlan(null)
+    setAmaLoading(false)
   }
 
   return (
@@ -113,25 +290,62 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={facetsLoading}
         error={facetsError}
       />
-      <OlcFilterForm
-        sources={facets?.sources ?? []}
-        ocrQualities={facets?.ocr_qualities ?? []}
-        loading={queryLoading}
-        onSubmit={handleSubmit}
+      <ModeRow
+        modes={spoke.queryModes}
+        activeMode={activeMode}
+        enabledModes={enabledModes}
+        onSelect={setActiveMode}
       />
-      <OlcResultsList
-        rows={rows}
-        count={count}
-        loading={queryLoading}
-        error={queryError}
-        hasRun={hasRun}
-        executedSql={executedSql}
-        onOpenOpinion={handleOpenOpinion}
-      />
+      {activeMode === 'manual_filter' && (
+        <OlcFilterForm
+          sources={facets?.sources ?? []}
+          ocrQualities={facets?.ocr_qualities ?? []}
+          loading={queryLoading}
+          onSubmit={handleSubmit}
+        />
+      )}
+      {activeMode === 'claude_ama' && (
+        <ClaudeAmaForm
+          loading={amaLoading}
+          byokConfigured={auth.hasAuth}
+          scopeSize={filterIds.length}
+          log={amaLog}
+          onSubmit={handleClaudeAmaSubmit}
+        />
+      )}
+
+      {activeMode === 'manual_filter' && (
+        <OlcResultsList
+          rows={rows}
+          count={count}
+          loading={queryLoading}
+          error={queryError}
+          hasRun={hasRun}
+          executedSql={executedSql}
+          onOpenOpinion={handleOpenOpinion}
+        />
+      )}
+      {activeMode === 'claude_ama' && (
+        <OlcAmaResult
+          synthesis={amaSynthesis}
+          plan={amaResultPlan}
+          loading={amaLoading}
+          error={amaError}
+          onOpenOpinion={handleOpenOpinionById}
+        />
+      )}
+
       <OlcOpinionDetailSheet
         row={openOpinion}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+      />
+      <AmaPreflight
+        plan={pendingPlan?.plan ?? null}
+        open={!!pendingPlan}
+        onProceed={handleAmaProceed}
+        onCancel={handleAmaCancel}
+        paidAccount={auth.isPaid ? paid.account : null}
       />
     </div>
   )
@@ -212,4 +426,10 @@ function HoldingTile({
       </p>
     </div>
   )
+}
+
+function fmtCents(c: number | undefined): string {
+  if (c == null || !Number.isFinite(c)) return '—'
+  if (c < 100) return `${c.toFixed(1)}¢`
+  return `$${(c / 100).toFixed(2)}`
 }
