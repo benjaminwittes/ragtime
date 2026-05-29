@@ -1,23 +1,29 @@
+import { useState } from 'react'
 import { Dialog } from 'radix-ui'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { setAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import { cn } from '@/lib/utils'
 import type { AmaPlan } from '@/lib/worker-client'
 
 /**
- * Pre-flight modal shown between AMA planning and execution when the
- * estimated cost exceeds AMA_CONFIRM_THRESHOLD_CENTS. Surfaces the agent's
- * plan and asks for confirmation before the synthesis step is charged.
+ * Pre-flight modal shown between AMA planning and execution. PR 4w fires
+ * the modal on EVERY query (the previous AMA_CONFIRM_THRESHOLD_CENTS=25¢
+ * gate is gone — too easy to miss a sub-threshold spend by reflex).
+ * Surfaces the agent's plan, estimated cost, balance/cap (paid mode), and
+ * lets the user opt out of future modals via "Don't show this again".
  *
- * Brief #6 §0 decision 3 + legacy index.html v9.0.0: the modal exists to
- * give the user a chance to refine the question rather than absorb a large
- * spend by reflex.
+ * Brief #6 §0 decision 3 + Ben's testing pass: the modal makes cost
+ * visible BEFORE spending. Auditability principle in miniature.
  *
  * Paid-mode extras (PR 4j): when `paidAccount` is non-null, the modal also
  * shows the user's current balance and per-query cap, and warns when the
  * estimate exceeds either. The Proceed button's copy adjusts to
  * "Proceed (override cap)" when the user is choosing to spend above their
- * own cap. Mirrors the legacy `showAmaPreflight()` cap/warning logic.
+ * own cap.
+ *
+ * Skip preference (PR 4w): the "Don't show this again" checkbox writes
+ * to localStorage; the AccessSettings dropdown is the re-enable surface.
  */
 export function AmaPreflight({
   plan,
@@ -37,6 +43,12 @@ export function AmaPreflight({
     per_query_cap_cents: number
   } | null
 }) {
+  const [dontShowAgain, setDontShowAgain] = useState(false)
+
+  function handleProceed() {
+    if (dontShowAgain) setAmaPreflightSkipped(true)
+    onProceed()
+  }
   if (!plan) return null
 
   const modeLabel =
@@ -196,13 +208,29 @@ export function AmaPreflight({
             narrow scope.
           </p>
 
-          <div className="mt-5 flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={onProceed}>
-              {proceedLabel}
-            </Button>
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={dontShowAgain}
+                onChange={(e) => setDontShowAgain(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-border accent-primary"
+              />
+              <span>
+                Don&apos;t show this again
+                <span className="ml-1 text-muted-foreground/60">
+                  (re-enable in AI access)
+                </span>
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" onClick={onCancel}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleProceed}>
+                {proceedLabel}
+              </Button>
+            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

@@ -8,6 +8,8 @@ import {
   type UscSectionDisplayRow,
   fetchUscItemsByIds,
 } from '@/lib/worker-client'
+import { TruncationBanner } from '../components/TruncationBanner'
+import { filterTruncationMarker } from '../components/truncation-marker'
 import { UscSectionRowsTable } from './UscResultsList'
 
 /**
@@ -63,12 +65,12 @@ export function UscAmaResult({
     )
   }
 
+  const normalCandor = filterTruncationMarker(synthesis.candor_notes)
   return (
     <section className="border-b border-border bg-background px-6 py-6">
       {plan && <PlanDisclosure plan={plan} />}
-      {synthesis.candor_notes.length > 0 && (
-        <CandorNotes notes={synthesis.candor_notes} />
-      )}
+      <TruncationBanner notes={synthesis.candor_notes} />
+      {normalCandor.length > 0 && <CandorNotes notes={normalCandor} />}
       <article className="mt-4 space-y-3 text-sm text-foreground">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}

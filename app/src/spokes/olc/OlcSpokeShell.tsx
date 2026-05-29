@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  AMA_CONFIRM_THRESHOLD_CENTS,
   type OlcAmaPlan,
   type OlcAmaScope,
   type OlcAmaSynthesis,
@@ -18,6 +17,7 @@ import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
+import { isAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
@@ -206,7 +206,13 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       status: 'done',
     })
 
-    if (plan.estimated_cost_cents > AMA_CONFIRM_THRESHOLD_CENTS) {
+    // PR 4w: pre-flight modal fires on every query by default. The
+    // 25¢ threshold gate is gone — too easy to miss a multi-cent spend
+    // (Ben's testing pass surfaced exactly this on a sub-threshold query).
+    // Users who find the modal noisy can opt out via its "Don't show
+    // this again" checkbox; the AccessSettings dropdown surfaces the
+    // re-enable toggle.
+    if (!isAmaPreflightSkipped()) {
       setPendingPlan({ plan, question })
       return
     }

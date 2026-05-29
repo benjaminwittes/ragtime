@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { LogOutIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,11 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/use-auth'
+import {
+  isAmaPreflightSkipped,
+  setAmaPreflightSkipped,
+  subscribeAmaPreflightSkip,
+} from '@/lib/ama-preflight-skip'
 import { TopupDialog } from '@/auth/TopupDialog'
 import { usePaid } from '@/auth/use-paid'
 import type { Provider } from './byok-context'
@@ -89,9 +94,56 @@ export function AccessSettings() {
           ) : (
             <ByokPanel onClose={() => setOpen(false)} />
           )}
+          <PreferencesPanel />
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+/**
+ * Preferences sub-panel inside the AccessSettings sheet (PR 4w). Surfaces
+ * controls that apply across paid + BYOK alike — currently just the AMA
+ * pre-flight modal toggle. The modal is the cost-visibility floor; this
+ * panel is where the user re-enables it after opting out via the modal's
+ * "Don't show this again" checkbox.
+ */
+function PreferencesPanel() {
+  const [skip, setSkipState] = useState(() => isAmaPreflightSkipped())
+
+  useEffect(() => {
+    return subscribeAmaPreflightSkip(() => setSkipState(isAmaPreflightSkipped()))
+  }, [])
+
+  function handleToggle(nextShow: boolean) {
+    setAmaPreflightSkipped(!nextShow)
+  }
+
+  return (
+    <section className="mt-8 border-t border-border pt-5">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Preferences
+      </h3>
+      <label className="mt-3 flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={!skip}
+          onChange={(e) => handleToggle(e.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+        />
+        <span className="space-y-0.5">
+          <span className="block text-sm font-medium text-foreground">
+            Show pre-flight modal before each AMA query
+          </span>
+          <span className="block text-[11px] leading-relaxed text-muted-foreground">
+            The modal shows the planner&apos;s estimated cost + plan summary
+            and asks for confirmation before the synthesis call fires.
+            Default on. Turn off if you want AMA queries to auto-execute
+            after planning.
+          </span>
+        </span>
+      </label>
+    </section>
   )
 }
 
