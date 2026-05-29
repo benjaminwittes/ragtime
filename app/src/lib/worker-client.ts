@@ -315,6 +315,97 @@ export async function runClaudeAnalysis(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/usc/* — USC (United States Code) spoke
+ *
+ * First non-litigation corpus. Different schema (sections, not cases),
+ * different ID column (`id` instead of `cl_id`), different facets (title +
+ * positive-law + status + citation lookup instead of court + judge + date
+ * range). v1 alpha is manual filter only.
+ * ------------------------------------------------------------------------- */
+
+export type UscTitle = {
+  /** Title number (1-54; 54 is reserved). */
+  num: number
+  /** Title name in ALL CAPS — matches the published USC. */
+  name: string
+}
+
+export type UscFacets = {
+  section_count: number
+  release_point: string
+  titles: UscTitle[]
+  /** Distinct `status` values (e.g. 'active', 'repealed', etc). */
+  statuses: string[]
+}
+
+export async function fetchUscFacets(): Promise<UscFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/usc/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/usc/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as UscFacets
+}
+
+/** Display row for the USC manual-filter results table. Mirrors the
+ *  Worker's USC_DISPLAY_COLS. */
+export type UscSectionDisplayRow = {
+  id: number
+  title_num: number | null
+  title_name: string | null
+  citation: string | null
+  heading: string | null
+  section_identifier: string | null
+  is_positive_law: boolean | null
+  status: string | null
+  text_length: number | null
+}
+
+/** Filter fields accepted by /corpus/usc/filter. Mirrors buildUscFilterWhere
+ *  in worker/index.js. Empty/undefined fields are dropped server-side. */
+export type UscFilterFields = {
+  /** FTS over usc_sections.fts (websearch_to_tsquery). */
+  search?: string
+  /** Exact match on title_num. */
+  title?: number
+  /** Exact match on canonical citation, e.g. "8 U.S.C. § 1225". */
+  citation?: string
+  /** ILIKE substring on heading. */
+  heading?: string
+  /** Filter to positive-law (true) / non-positive (false) / either (undefined). */
+  positiveLaw?: boolean
+  /** Exact match on status. */
+  status?: string
+}
+
+export type UscFilterResult = {
+  ids: number[]
+  display_rows: UscSectionDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runUscFilter(
+  fields: UscFilterFields,
+): Promise<UscFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/usc/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/usc/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as UscFilterResult
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/plan + /corpus/execute — agentic AMA ("claude_ama" mode)
  *
  * Two-pass surface. Phase 1 (plan) runs a planning LLM call against question +

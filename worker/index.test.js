@@ -5,6 +5,7 @@ import {
   estimateInputTokens,
   checkPaidBudget,
   pickCheckoutReturnOrigin,
+  buildUscFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -262,6 +263,84 @@ describe("pickCheckoutReturnOrigin", () => {
     expect(pickCheckoutReturnOrigin("http://localhost:5173/", prodEnv)).toBe(
       "http://localhost:5173",
     );
+  });
+});
+
+// ============================================================================
+// buildUscFilterWhere — the USC manual filter's WHERE-clause builder. Pure
+// function; covers the brief #3 §3 free-tier metadata axes (FTS, title,
+// citation, heading, positive-law, status). Tests confirm the SQL shape,
+// the empty-input no-op, and single-quote escaping that keeps user input
+// from breaking out of the literal.
+// ============================================================================
+describe("buildUscFilterWhere", () => {
+  it("returns an empty string when no fields are provided", () => {
+    expect(buildUscFilterWhere({})).toBe("");
+  });
+
+  it("produces an FTS predicate for `search`", () => {
+    const where = buildUscFilterWhere({ search: "habeas corpus" });
+    expect(where).toMatch(/^ WHERE /);
+    expect(where).toContain("fts @@ websearch_to_tsquery('english', 'habeas corpus')");
+  });
+
+  it("escapes single quotes in `search` so user input can't break out", () => {
+    // O'Brien — the canonical apostrophe test. SQL would otherwise misparse.
+    const where = buildUscFilterWhere({ search: "O'Brien" });
+    expect(where).toContain("websearch_to_tsquery('english', 'O''Brien')");
+  });
+
+  it("filters by exact title number", () => {
+    expect(buildUscFilterWhere({ title: 8 })).toBe(" WHERE title_num = 8");
+  });
+
+  it("rejects non-finite title values silently", () => {
+    expect(buildUscFilterWhere({ title: "not-a-number" })).toBe("");
+    expect(buildUscFilterWhere({ title: NaN })).toBe("");
+  });
+
+  it("supports the canonical-citation lookup path (the #1 USC entry)", () => {
+    const where = buildUscFilterWhere({ citation: "8 U.S.C. § 1225" });
+    expect(where).toBe(" WHERE citation = '8 U.S.C. § 1225'");
+  });
+
+  it("escapes single quotes in citation too", () => {
+    const where = buildUscFilterWhere({ citation: "a'b" });
+    expect(where).toContain("citation = 'a''b'");
+  });
+
+  it("uses ILIKE for heading substring search", () => {
+    const where = buildUscFilterWhere({ heading: "Inspection" });
+    expect(where).toContain("heading ILIKE '%Inspection%'");
+  });
+
+  it("filters by positive-law status when explicitly set", () => {
+    expect(buildUscFilterWhere({ positiveLaw: true })).toBe(" WHERE is_positive_law = true");
+    expect(buildUscFilterWhere({ positiveLaw: false })).toBe(" WHERE is_positive_law = false");
+  });
+
+  it("omits the positive-law clause when the field is undefined", () => {
+    // Distinguish "not selected" from "selected as false".
+    expect(buildUscFilterWhere({})).not.toContain("is_positive_law");
+  });
+
+  it("filters by status with quote escaping", () => {
+    expect(buildUscFilterWhere({ status: "active" })).toContain("status = 'active'");
+    expect(buildUscFilterWhere({ status: "a'b" })).toContain("status = 'a''b'");
+  });
+
+  it("AND-joins multiple axes (FTS + title + positive-law)", () => {
+    const where = buildUscFilterWhere({
+      search: "habeas",
+      title: 28,
+      positiveLaw: true,
+    });
+    expect(where.startsWith(" WHERE ")).toBe(true);
+    expect(where).toContain("fts @@");
+    expect(where).toContain("title_num = 28");
+    expect(where).toContain("is_positive_law = true");
+    // Three predicates separated by AND.
+    expect((where.match(/ AND /g) || []).length).toBe(2);
   });
 });
 
