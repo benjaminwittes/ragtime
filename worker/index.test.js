@@ -8,6 +8,7 @@ import {
   buildUscFilterWhere,
   buildCfrFilterWhere,
   buildOlcFilterWhere,
+  buildFrusFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -492,6 +493,83 @@ describe("buildOlcFilterWhere", () => {
     expect(w).toContain("source = 'doj-published'");
     expect(w).toContain("date_issued >= '2010-01-01'");
     expect(w).toContain("ocr_quality = 'clean'");
+    // Four predicates separated by three ANDs.
+    expect((w.match(/ AND /g) || []).length).toBe(3);
+  });
+});
+
+// ============================================================================
+// buildFrusFilterWhere — FRUS documents filter. Axes mostly parallel OLC's
+// (title/FTS/classification/date range/place substring) plus FRUS-specific
+// volume_id exact match and a sub_series join through frus_volumes. The
+// sub_series rendering as a subquery is the only structural delta from the
+// other filter builders.
+// ============================================================================
+describe("buildFrusFilterWhere", () => {
+  it("returns an empty string when no fields are provided", () => {
+    expect(buildFrusFilterWhere({})).toBe("");
+  });
+
+  it("supports FTS + ILIKE title with quote escaping", () => {
+    expect(buildFrusFilterWhere({ search: "Cuban missile" })).toContain(
+      "websearch_to_tsquery('english', 'Cuban missile')",
+    );
+    expect(buildFrusFilterWhere({ title: "Memorandum" })).toContain(
+      "title ILIKE '%Memorandum%'",
+    );
+    expect(buildFrusFilterWhere({ search: "O'Brien" })).toContain(
+      "websearch_to_tsquery('english', 'O''Brien')",
+    );
+  });
+
+  it("filters by exact volume_id", () => {
+    expect(buildFrusFilterWhere({ volumeId: "frus1969-76v01" })).toBe(
+      " WHERE volume_id = 'frus1969-76v01'",
+    );
+  });
+
+  it("joins frus_volumes for sub_series filtering", () => {
+    const w = buildFrusFilterWhere({ subSeries: "1969-1976" });
+    expect(w).toContain(
+      "volume_id IN (SELECT volume_id FROM frus_volumes WHERE sub_series = '1969-1976')",
+    );
+  });
+
+  it("filters by classification exact match", () => {
+    expect(buildFrusFilterWhere({ classification: "Top Secret" })).toContain(
+      "classification = 'Top Secret'",
+    );
+  });
+
+  it("accepts ISO YYYY-MM-DD date_date bounds", () => {
+    const w = buildFrusFilterWhere({ from: "1962-10-01", to: "1962-10-31" });
+    expect(w).toContain("doc_date >= '1962-10-01'");
+    expect(w).toContain("doc_date <= '1962-10-31'");
+  });
+
+  it("rejects malformed dates silently", () => {
+    expect(buildFrusFilterWhere({ from: "not-a-date" })).toBe("");
+    expect(buildFrusFilterWhere({ to: "1962/10/01" })).toBe("");
+  });
+
+  it("uses ILIKE substring for place_name", () => {
+    expect(buildFrusFilterWhere({ place: "Havana" })).toContain(
+      "place_name ILIKE '%Havana%'",
+    );
+  });
+
+  it("AND-joins multiple axes (FTS + sub_series + classification + date)", () => {
+    const w = buildFrusFilterWhere({
+      search: "Khrushchev",
+      subSeries: "1961-1963",
+      classification: "Secret",
+      from: "1962-01-01",
+    });
+    expect(w.startsWith(" WHERE ")).toBe(true);
+    expect(w).toContain("fts @@");
+    expect(w).toContain("volume_id IN (SELECT volume_id FROM frus_volumes WHERE sub_series = '1961-1963')");
+    expect(w).toContain("classification = 'Secret'");
+    expect(w).toContain("doc_date >= '1962-01-01'");
     // Four predicates separated by three ANDs.
     expect((w.match(/ AND /g) || []).length).toBe(3);
   });

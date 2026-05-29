@@ -699,6 +699,149 @@ export async function fetchOlcOpinion(id: number): Promise<OlcOpinionDetail> {
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/frus/* — FRUS (Foreign Relations of the United States) spoke
+ *
+ * Final v1 spoke. Two tables in the corpus: frus_documents (314K docs) +
+ * frus_volumes (694 volumes; 552 with docs loaded, 142 placeholder for the
+ * lagging-publication tail). Atomic unit is the document; the natural
+ * browse spine is the volume.
+ * ------------------------------------------------------------------------- */
+
+export type FrusClassificationCount = {
+  value: string
+  count: number
+}
+
+export type FrusFacets = {
+  document_count: number
+  volume_count: number
+  /** Volumes with at least one loaded document (552 of 694 today). */
+  volumes_with_docs: number
+  /** Earliest doc_date (YYYY-MM-DD). */
+  earliest: string
+  /** Most recent doc_date (YYYY-MM-DD). */
+  latest: string
+  /** ~102 distinct sub_series values, e.g. "1969-1976", "Truman". */
+  sub_series: string[]
+  /** Classification enum: Secret / Confidential / Top Secret / etc. */
+  classifications: FrusClassificationCount[]
+}
+
+export async function fetchFrusFacets(): Promise<FrusFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/frus/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/frus/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FrusFacets
+}
+
+export type FrusDocumentDisplayRow = {
+  id: number
+  title: string | null
+  doc_date: string | null
+  volume_id: string | null
+  place_name: string | null
+  classification: string | null
+  text_length: number | null
+}
+
+export type FrusFilterFields = {
+  search?: string
+  title?: string
+  /** Exact match on volume_id (e.g. "frus1969-76v01"). */
+  volumeId?: string
+  /** Exact match through frus_volumes JOIN. */
+  subSeries?: string
+  /** Exact match on classification. */
+  classification?: string
+  /** ISO YYYY-MM-DD lower bound on doc_date. */
+  from?: string
+  /** ISO YYYY-MM-DD upper bound. */
+  to?: string
+  /** Substring on place_name. */
+  place?: string
+}
+
+export type FrusFilterResult = {
+  ids: number[]
+  display_rows: FrusDocumentDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runFrusFilter(
+  fields: FrusFilterFields,
+): Promise<FrusFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/frus/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/frus/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FrusFilterResult
+}
+
+/** Persons jsonb field — one entry per person mentioned/involved. The
+ *  exact shape varies across volumes (the corpus is historical XML).
+ *  Render as best-effort: prefer canonical fields, fall back to JSON
+ *  stringification for unfamiliar shapes. */
+export type FrusPerson = {
+  id?: string
+  name?: string
+  role?: string
+  [k: string]: unknown
+}
+
+export type FrusDocumentDetail = {
+  id: number
+  volume_id: string | null
+  element_id: string | null
+  doc_number: string | null
+  title: string | null
+  doc_date: string | null
+  doc_datetime_min: string | null
+  doc_datetime_max: string | null
+  place_name: string | null
+  source_note: string | null
+  classification: string | null
+  text_content: string | null
+  text_length: number | null
+  persons: FrusPerson[] | null
+  glossary: unknown
+  footnotes: unknown
+  source_url: string | null
+  /** From the JOINed frus_volumes row. */
+  volume_title: string | null
+  sub_series: string | null
+  volume_number: string | null
+  volume_content_date_min: string | null
+  volume_content_date_max: string | null
+}
+
+export async function fetchFrusDocument(id: number): Promise<FrusDocumentDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/frus/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/frus/document failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { document: FrusDocumentDetail }
+  return body.document
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/plan + /corpus/execute — agentic AMA ("claude_ama" mode)
  *
  * Two-pass surface. Phase 1 (plan) runs a planning LLM call against question +

@@ -231,6 +231,15 @@ export default {
       if (path === "/corpus/olc/opinion" && request.method === "POST") {
         return await corpusOlcOpinionHandler(request, env, ctx);
       }
+      if (path === "/corpus/frus/facets" && request.method === "POST") {
+        return await corpusFrusFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/frus/filter" && request.method === "POST") {
+        return await corpusFrusFilterHandler(request, env, ctx);
+      }
+      if (path === "/corpus/frus/document" && request.method === "POST") {
+        return await corpusFrusDocumentHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -2197,6 +2206,181 @@ async function corpusOlcOpinionHandler(request, env, ctx) {
   return json({ opinion: rows[0] }, 200);
 }
 
+// ============================================================================
+// FRUS (Foreign Relations of the United States) corpus — v1 alpha
+//
+// Fifth and final v1 spoke. The corpus has two tables:
+//   frus_documents — 314,483 documents across 552 volumes-with-docs
+//   frus_volumes — 694 volume metadata rows (552 with docs, 142 placeholders
+//                  for the lagging-publication tail of the series)
+//
+// Per brief #5 FRUS is paradigmatically analytical/narrative — the user
+// asks "Tell me about US-Iran relations in 1979" and the system
+// synthesizes from the relevant cluster of documents. v1 alpha is the
+// metadata-floor surface: keyword + structured filtering plus a
+// document detail panel.
+//
+// Display columns omit text_content (loaded on detail); the FRUS-specific
+// addition is `volume_id` so the user can see which volume each doc came
+// from inline (the natural browse spine).
+// ============================================================================
+
+var FRUS_DISPLAY_COLS = "id, title, doc_date::text AS doc_date, volume_id, place_name, classification, text_length";
+
+/**
+ * Build the WHERE clause for /corpus/frus/filter. Same single-quote
+ * escaping discipline as USC/CFR/OLC.
+ *
+ * Supported axes:
+ *   search          FTS over fts (text_content + title)
+ *   title           substring (ILIKE %title%)
+ *   volumeId        exact match on volume_id (e.g. "frus1969-76v01")
+ *   subSeries       exact match (joined through frus_volumes)
+ *   classification  exact match — 'Secret', 'Confidential', 'Top Secret',
+ *                   'Limited Official Use', 'Official Use Only',
+ *                   'Unclassified', 'Restricted'
+ *   from / to       ISO YYYY-MM-DD bounds on doc_date
+ *   place           substring on place_name (where the document originated)
+ */
+function buildFrusFilterWhere(fields) {
+  var parts = [];
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var q = fields.search.trim().replace(/'/g, "''");
+    parts.push("fts @@ websearch_to_tsquery('english', '" + q + "')");
+  }
+  if (fields.title && typeof fields.title === 'string' && fields.title.trim()) {
+    var t = fields.title.trim().replace(/'/g, "''");
+    parts.push("title ILIKE '%" + t + "%'");
+  }
+  if (fields.volumeId && typeof fields.volumeId === 'string' && fields.volumeId.trim()) {
+    var v = fields.volumeId.trim().replace(/'/g, "''");
+    parts.push("volume_id = '" + v + "'");
+  }
+  if (fields.subSeries && typeof fields.subSeries === 'string' && fields.subSeries.trim()) {
+    // sub_series lives on frus_volumes; join via subquery so we keep the
+    // build pure (no caller has to compose a JOIN clause).
+    var ss = fields.subSeries.trim().replace(/'/g, "''");
+    parts.push("volume_id IN (SELECT volume_id FROM frus_volumes WHERE sub_series = '" + ss + "')");
+  }
+  if (fields.classification && typeof fields.classification === 'string' && fields.classification.trim()) {
+    var c = fields.classification.trim().replace(/'/g, "''");
+    parts.push("classification = '" + c + "'");
+  }
+  if (fields.from && typeof fields.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.from)) {
+    parts.push("doc_date >= '" + fields.from + "'");
+  }
+  if (fields.to && typeof fields.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.to)) {
+    parts.push("doc_date <= '" + fields.to + "'");
+  }
+  if (fields.place && typeof fields.place === 'string' && fields.place.trim()) {
+    var p = fields.place.trim().replace(/'/g, "''");
+    parts.push("place_name ILIKE '%" + p + "%'");
+  }
+  return parts.length ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusFrusFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    // 314K docs — use reltuples for the doc count (like USC/CFR), exact
+    // counts for the smaller volume / sub_series / classification totals.
+    const stats = await corpusRunQuery(env,
+      "SELECT (SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.frus_documents'::regclass) AS document_count, " +
+      "(SELECT count(*)::bigint FROM frus_volumes) AS volume_count, " +
+      "(SELECT count(*)::bigint FROM frus_volumes WHERE doc_count > 0) AS volumes_with_docs, " +
+      "(SELECT MIN(doc_date)::text FROM frus_documents) AS earliest, " +
+      "(SELECT MAX(doc_date)::text FROM frus_documents) AS latest");
+    // Sub-series list (~102) for the filter dropdown.
+    const subSeriesList = await corpusRunQuery(env,
+      "SELECT v FROM (SELECT DISTINCT sub_series AS v FROM frus_volumes " +
+      "WHERE sub_series IS NOT NULL AND sub_series <> '') z ORDER BY v");
+    // Classification list — small enum, 7 values. Order by count.
+    const classifications = await corpusRunQuery(env,
+      "SELECT classification AS v, count(*)::bigint AS n FROM frus_documents " +
+      "WHERE classification IS NOT NULL AND classification <> '' " +
+      "GROUP BY classification ORDER BY n DESC");
+    const s = stats[0] || {};
+    return json({
+      document_count: s.document_count,
+      volume_count: s.volume_count,
+      volumes_with_docs: s.volumes_with_docs,
+      earliest: s.earliest,
+      latest: s.latest,
+      sub_series: subSeriesList.map((r) => r.v),
+      classifications: classifications.map((r) => ({ value: r.v, count: r.n }))
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "FRUS facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+async function corpusFrusFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const where = buildFrusFilterWhere(fields);
+  const idsSql = "SELECT id FROM frus_documents" + where;
+  // Order by doc_date asc — chronological matches the historical-research
+  // mental model (start at the beginning of the period, walk forward).
+  const rowsSql = "SELECT " + FRUS_DISPLAY_COLS + " FROM frus_documents" + where +
+    " ORDER BY doc_date ASC NULLS LAST, id ASC LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "FRUS filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const ids = idRows.map((r) => r.id).filter((x) => x != null);
+  return json({
+    ids,
+    display_rows: rows,
+    count: ids.length,
+    generated_sql: rowsSql,
+    executed_sql: idsSql
+  }, 200);
+}
+
+/**
+ * Single-document detail for the FRUS document panel. Includes the full
+ * text_content plus the volume context (title, sub_series) via a JOIN
+ * with frus_volumes — users coming in via FTS need to see which volume
+ * the document came from to evaluate the historical context. The jsonb
+ * fields (persons, glossary, footnotes) are returned as-is for the UI
+ * to render; v1 alpha surfaces persons inline and defers glossary/
+ * footnotes to a follow-up polish PR.
+ */
+async function corpusFrusDocumentHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+  const sql = "SELECT d.id, d.volume_id, d.element_id, d.doc_number, d.title, " +
+    "d.doc_date::text AS doc_date, d.doc_datetime_min::text AS doc_datetime_min, " +
+    "d.doc_datetime_max::text AS doc_datetime_max, " +
+    "d.place_name, d.source_note, d.classification, d.text_content, d.text_length, " +
+    "d.persons, d.glossary, d.footnotes, d.source_url, " +
+    "v.title AS volume_title, v.sub_series, v.volume_number, " +
+    "v.content_date_min::text AS volume_content_date_min, " +
+    "v.content_date_max::text AS volume_content_date_max " +
+    "FROM frus_documents d LEFT JOIN frus_volumes v ON v.volume_id = d.volume_id " +
+    "WHERE d.id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Document fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Document not found", code: "not_found" } }, 404);
+  }
+  return json({ document: rows[0] }, 200);
+}
+
 // Docket entries for one case (the case-detail view).
 async function corpusEntriesHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
@@ -3186,6 +3370,7 @@ export {
   buildUscFilterWhere,
   buildCfrFilterWhere,
   buildOlcFilterWhere,
+  buildFrusFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
