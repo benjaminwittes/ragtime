@@ -72,7 +72,9 @@ import {
   parseFrusSynthesis,
   parseUscSynthesis,
   parseCfrSynthesis,
-  parseSynthesis
+  parseSynthesis,
+  buildPlanningSystem,
+  buildReadSystem
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -2550,5 +2552,93 @@ describe("pipelineStaleness", () => {
     const r = pipelineStaleness("not-a-date", now, 120);
     expect(r.stale).toBe(true);
     expect(r.ageMinutes).toBeNull();
+  });
+});
+
+
+// ============================================================================
+// PR 4z — Litigation defense-motion vocabulary refinements. Regression-pinning
+// tests for the planner-prompt + Read-prompt language additions. These are
+// behavioral guards: a future "minor prompt tidy-up" must not silently strip
+// the vocabulary mappings that recovered the Comey/James/Broadview ground-
+// truth set from Ben's 2026-05-26 grand-jury-disclosure failing query.
+// ============================================================================
+
+describe("litigation planner — defense-motion vocabulary", () => {
+  const sys = buildPlanningSystem();
+
+  it("names the defense-motion vocabulary failure mode explicitly", () => {
+    expect(sys).toMatch(/Defense-motion vocabulary mismatch/);
+  });
+
+  it("maps prosecutorial-misconduct umbrella to specific doctrinal articulations", () => {
+    expect(sys).toMatch(/Vindictive and Selective Prosecution/);
+    expect(sys).toMatch(/Outrageous Government Conduct/);
+    expect(sys).toMatch(/Grand Jury Violations/);
+  });
+
+  it("maps grand-jury-materials umbrella to the noun variants counsel uses", () => {
+    // Counsel uses Records / Transcripts / Minutes; researchers usually say
+    // 'materials'. The mapping is what recovered James + Broadview.
+    expect(sys).toMatch(/Grand Jury Records/);
+    expect(sys).toMatch(/Grand Jury Transcripts/);
+    expect(sys).toMatch(/Grand Jury Minutes/);
+    expect(sys).toMatch(/in camera review/);
+  });
+
+  it("warns about Rule 6 vs Rule 6(e) — counsel cites Rule 6 broadly", () => {
+    expect(sys).toMatch(/counsel often cites Rule 6 broadly/i);
+  });
+
+  it("pins the Comey/James/Broadview worked example to the prompt", () => {
+    // These three case captions are the ground-truth recovery set for the
+    // 2026-05-26 failing query. Removing them would re-open the failure.
+    expect(sys).toMatch(/United States v\. Comey/);
+    expect(sys).toMatch(/United States v\. James/);
+    expect(sys).toMatch(/United States v\. Rabbitt/);
+  });
+
+  it("contrasts a good plan against a bad plan in the worked example", () => {
+    expect(sys).toMatch(/A good FTS plan/);
+    expect(sys).toMatch(/A BAD plan/);
+  });
+
+  it("includes adjacent defense-motion vocabularies (speedy trial, suppression) for transfer", () => {
+    // The point of the worked example is not just to memorize grand-jury;
+    // it's to teach the pattern. Speedy-trial and suppression-motion
+    // alternations are the test that the lesson generalizes.
+    expect(sys).toMatch(/Speedy Trial/);
+    expect(sys).toMatch(/Motion to Suppress|Fourth Amendment/);
+  });
+});
+
+describe("litigation Read — functional-equivalence matching", () => {
+  const sys = buildReadSystem(5);
+
+  it("instructs the model to match by function not by literal phrase", () => {
+    expect(sys).toMatch(/MATCH BY FUNCTION, NOT BY LITERAL PHRASE/);
+  });
+
+  it("explains the researcher-language vs lawyer-language gap explicitly", () => {
+    expect(sys).toMatch(/researcher-language/);
+    expect(sys).toMatch(/lawyer-language/);
+  });
+
+  it("pins the grand-jury-disclosure example so it can't silently drift", () => {
+    // The worked example is what tells the model that 'sought disclosure
+    // of grand jury materials due to prosecutorial misconduct' should match
+    // 'MOTION to Dismiss for Rule 6 and Grand Jury Violations'.
+    expect(sys).toMatch(/Rule 6 and Grand Jury Violations/);
+    expect(sys).toMatch(/Disclosure of Certain Grand Jury Records/);
+  });
+
+  it("maps prosecutorial-misconduct umbrella to the doctrinal vocabulary", () => {
+    expect(sys).toMatch(/Vindictive and Selective Prosecution/);
+    expect(sys).toMatch(/Outrageous Government Conduct/);
+    expect(sys).toMatch(/Brady violations|Brady/);
+  });
+
+  it("requires the reason field to name the specific docket-language match", () => {
+    expect(sys).toMatch(/the 'reason' should name the specific docket-language match/);
   });
 });
