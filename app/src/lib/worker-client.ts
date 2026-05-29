@@ -449,6 +449,133 @@ export async function fetchUscSection(id: number): Promise<UscSectionDetail> {
 }
 
 /* ----------------------------------------------------------------------------
+ * USC AI modes (PR 4s) — three flagships (legality / authority / topical)
+ * served via one claude_ama mode + summarize-one-section action on the
+ * section detail. v1 ships single-corpus AI; cross-corpus joins (USC↔CFR/
+ * OLC/litigation) per brief #3 §6 are deferred pending pipeline work.
+ * ------------------------------------------------------------------------- */
+
+export type UscAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type UscAmaSynthesis = {
+  answer_markdown: string
+  section_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type UscAmaScope = {
+  section_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runUscPlan(
+  question: string,
+  scope: UscAmaScope,
+  auth: AuthArg,
+): Promise<UscAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/usc/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `USC plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as UscAmaPlan
+}
+
+export async function runUscExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<UscAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/usc/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `USC execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as UscAmaSynthesis
+}
+
+export type UscSectionSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizeUscSection(
+  id: number,
+  auth: AuthArg,
+): Promise<UscSectionSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/usc/summarize-section`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `USC summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as UscSectionSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/cfr/* — CFR (Code of Federal Regulations) spoke
  *
  * Second non-litigation, second non-USC corpus. Schema parallels USC closely

@@ -3,6 +3,8 @@ import { frusDocumentSummaryEntry } from './content/frus-document-summary'
 import { frusNarrativeSynthesisEntry } from './content/frus-narrative-synthesis'
 import { olcNarrativeSynthesisEntry } from './content/olc-narrative-synthesis'
 import { olcOpinionSummaryEntry } from './content/olc-opinion-summary'
+import { uscAiSynthesisEntry } from './content/usc-ai-synthesis'
+import { uscSectionSummaryEntry } from './content/usc-section-summary'
 
 /**
  * Central docs registry.
@@ -23,6 +25,8 @@ export const docsEntries: readonly DocsEntry[] = [
   olcOpinionSummaryEntry,
   frusNarrativeSynthesisEntry,
   frusDocumentSummaryEntry,
+  uscAiSynthesisEntry,
+  uscSectionSummaryEntry,
 ]
 
 /**
