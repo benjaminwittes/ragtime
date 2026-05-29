@@ -6,6 +6,7 @@ import {
   checkPaidBudget,
   pickCheckoutReturnOrigin,
   buildUscFilterWhere,
+  buildCfrFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -341,6 +342,77 @@ describe("buildUscFilterWhere", () => {
     expect(where).toContain("is_positive_law = true");
     // Three predicates separated by AND.
     expect((where.match(/ AND /g) || []).length).toBe(2);
+  });
+});
+
+// ============================================================================
+// buildCfrFilterWhere — parallels the USC builder but for CFR regulations.
+// CFR has its own axes (reserved boolean replaces USC's positive-law toggle,
+// adds a `part` filter for the CFR hierarchy, drops the status enum), so
+// the test surface mirrors that.
+// ============================================================================
+describe("buildCfrFilterWhere", () => {
+  it("returns an empty string when no fields are provided", () => {
+    expect(buildCfrFilterWhere({})).toBe("");
+  });
+
+  it("produces an FTS predicate for `search` with single-quote escaping", () => {
+    const where = buildCfrFilterWhere({ search: "O'Brien" });
+    expect(where).toContain("websearch_to_tsquery('english', 'O''Brien')");
+  });
+
+  it("filters by exact title number and rejects non-finite values", () => {
+    expect(buildCfrFilterWhere({ title: 45 })).toBe(" WHERE title_num = 45");
+    expect(buildCfrFilterWhere({ title: NaN })).toBe("");
+    expect(buildCfrFilterWhere({ title: "not-a-number" })).toBe("");
+  });
+
+  it("supports the canonical-citation lookup path", () => {
+    expect(buildCfrFilterWhere({ citation: "45 CFR § 164.502" })).toBe(
+      " WHERE citation = '45 CFR § 164.502'",
+    );
+  });
+
+  it("escapes single quotes in citation", () => {
+    expect(buildCfrFilterWhere({ citation: "a'b" })).toContain(
+      "citation = 'a''b'",
+    );
+  });
+
+  it("uses ILIKE for heading substring search", () => {
+    expect(buildCfrFilterWhere({ heading: "Privacy" })).toContain(
+      "heading ILIKE '%Privacy%'",
+    );
+  });
+
+  it("filters by the CFR `part` field (exact match)", () => {
+    expect(buildCfrFilterWhere({ part: "164" })).toBe(" WHERE part = '164'");
+  });
+
+  it("filters by reserved status when explicitly set", () => {
+    expect(buildCfrFilterWhere({ reserved: true })).toBe(" WHERE reserved = true");
+    expect(buildCfrFilterWhere({ reserved: false })).toBe(" WHERE reserved = false");
+  });
+
+  it("omits the reserved clause when the field is undefined", () => {
+    // The default (no filter) includes both reserved + non-reserved.
+    expect(buildCfrFilterWhere({})).not.toContain("reserved");
+  });
+
+  it("AND-joins multiple axes (FTS + title + part + reserved)", () => {
+    const where = buildCfrFilterWhere({
+      search: "privacy",
+      title: 45,
+      part: "164",
+      reserved: false,
+    });
+    expect(where.startsWith(" WHERE ")).toBe(true);
+    expect(where).toContain("fts @@");
+    expect(where).toContain("title_num = 45");
+    expect(where).toContain("part = '164'");
+    expect(where).toContain("reserved = false");
+    // Four predicates separated by three ANDs.
+    expect((where.match(/ AND /g) || []).length).toBe(3);
   });
 });
 

@@ -449,6 +449,128 @@ export async function fetchUscSection(id: number): Promise<UscSectionDetail> {
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/cfr/* — CFR (Code of Federal Regulations) spoke
+ *
+ * Second non-litigation, second non-USC corpus. Schema parallels USC closely
+ * but with regulation-specific concepts: `reserved` placeholder sections (no
+ * positive-law idea), per-section `up_to_date_as_of` + `latest_amended_on`
+ * date currency, and a shallower hierarchy (chapter → part → subpart →
+ * section, no subtitle).
+ * ------------------------------------------------------------------------- */
+
+export type CfrTitle = {
+  num: number
+  name: string
+}
+
+export type CfrFacets = {
+  section_count: number
+  /** Latest `up_to_date_as_of` across the corpus (YYYY-MM-DD). */
+  up_to_date_as_of: string
+  /** Count of `reserved` placeholder sections — surfaced so the UI can
+   *  show "227,554 (incl. 6,949 reserved)" in the holdings band. */
+  reserved_count: number
+  titles: CfrTitle[]
+}
+
+export async function fetchCfrFacets(): Promise<CfrFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/cfr/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/cfr/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CfrFacets
+}
+
+export type CfrSectionDisplayRow = {
+  id: number
+  title_num: number | null
+  title_name: string | null
+  citation: string | null
+  heading: string | null
+  section_identifier: string | null
+  reserved: boolean | null
+  source: string | null
+  text_length: number | null
+  up_to_date_as_of: string | null
+}
+
+export type CfrFilterFields = {
+  search?: string
+  title?: number
+  /** Canonical citation, e.g. "45 CFR § 164.502". */
+  citation?: string
+  /** Heading substring (ILIKE %heading%). */
+  heading?: string
+  /** Exact match on the `part` field (e.g. "164"). */
+  part?: string
+  /** undefined = include both; true = reserved only; false = exclude reserved. */
+  reserved?: boolean
+}
+
+export type CfrFilterResult = {
+  ids: number[]
+  display_rows: CfrSectionDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runCfrFilter(
+  fields: CfrFilterFields,
+): Promise<CfrFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/cfr/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/cfr/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CfrFilterResult
+}
+
+export type CfrSectionDetail = {
+  id: number
+  title_num: number | null
+  title_name: string | null
+  chapter: string | null
+  part: string | null
+  subpart: string | null
+  structure_path: string | null
+  section_identifier: string | null
+  citation: string | null
+  heading: string | null
+  text_content: string | null
+  text_length: number | null
+  reserved: boolean | null
+  source: string | null
+  /** YYYY-MM-DD — latest corpus-wide ingest currency at section level. */
+  up_to_date_as_of: string | null
+  /** YYYY-MM-DD — when this section was last amended (regulation-specific). */
+  latest_amended_on: string | null
+}
+
+export async function fetchCfrSection(id: number): Promise<CfrSectionDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/cfr/section`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/cfr/section failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { section: CfrSectionDetail }
+  return body.section
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/plan + /corpus/execute — agentic AMA ("claude_ama" mode)
  *
  * Two-pass surface. Phase 1 (plan) runs a planning LLM call against question +
