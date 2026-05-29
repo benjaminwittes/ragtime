@@ -825,6 +825,11 @@ function buildPlanningSystem() {
     '- For trend questions, prefer one query that groups by year (or month) over many narrow queries.',
     '- For "are X up or down" questions, compare two periods in one query.',
     '- Do NOT plan to read docket-entry text in v9; if a question really needs it, say so in candor_notes ("would benefit from reading entries — not done in v9; consider Read mode after narrowing"). FTS over docket_entries.description is fine for identifying cases by topic.',
+    '- KEYWORD UNDERPERFORMS — FAN OUT WITH OR GENEROUSLY. The user\'s phrasing is rarely the way the docket entry phrases things. Single-term ANDed queries will under-recall. Specific failure modes you must guard against:',
+    '    * **Agency vs caption.** User says "ICE detention cases"; case captions typically name a person ("Doe v. Garland"), not the agency. ALWAYS search docket_entries.fts for agency questions, never cases.case_name. And fan agency names: "ICE" OR "Immigration and Customs Enforcement" OR "DHS" OR "Homeland Security" OR "Secretary of Homeland Security". Same pattern for any agency: include the umbrella department, the parent agency, the official position, and common shorthands.',
+    '    * **Doctrinal/procedural phrasings.** Court filings use formal terms. "TRO" → also "temporary restraining order"; "PI" → "preliminary injunction"; "stay" → "stay pending appeal" / "interim relief" / "emergency stay"; "habeas" → "section 2241" / "writ of habeas corpus"; "EO" → "executive order" / "Proclamation". Fan to common alternations.',
+    '    * **Conceptual / doctrinal queries.** "Standing", "preemption", "due process", "ripeness" — these doctrines may not appear as keyword phrases in dockets even when central to the case. Fan to common formulations + add a candor_note that keyword search may under-recall conceptual questions; semantic retrieval (pgvector) is Phase 2.',
+    '- NARRATIVE DISCIPLINE. For output_mode="narrative" or "hybrid", prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned FTS query with strong OR coverage is better than five literal-term queries.',
     '- PERFORMANCE for narrowed scopes (esp. > 100K cases): FTS-first patterns are dramatically faster. To find docket entries matching some text WITHIN a scope, write "SELECT cl_id FROM scoped_docket_entries WHERE fts @@ ..." rather than joining scoped_cases × scoped_docket_entries first. Postgres can use the FTS GIN index on docket_entries.fts directly; the scope filter then narrows the much smaller FTS result set. Avoid heavy joins of scoped_cases × scoped_docket_entries with an FTS predicate at the join level — those reliably hit the statement timeout on six-figure scopes.',
     '- WHEN THE CURRENT SCOPE IS NARROWED (cl_ids list provided): use the names "scoped_cases" instead of "cases" and "scoped_docket_entries" instead of "docket_entries". The runner substitutes these names with inline subqueries already filtered to the scope. CRITICAL: reference these names ONLY after FROM or JOIN keywords, and DO NOT alias them — write "FROM scoped_cases WHERE cause LIKE ..." (good), not "FROM scoped_cases sc WHERE sc.cause LIKE ..." (will break). To qualify a column, use the unaliased name: "scoped_cases.cl_id" works. WHEN SCOPE IS THE FULL DATABASE: use the regular table names "cases" and "docket_entries" (and you may alias them freely).',
     '- For sampling at top-of-stack, you can use "ORDER BY random()" but be aware that\'s expensive on huge tables; prefer "ORDER BY date_filed DESC" with a LIMIT if you want a recency-biased sample.',
@@ -958,7 +963,7 @@ function buildSynthesisSystem(outputMode) {
     '',
     'Output a single JSON object (no prose, no code fences) with these keys:',
     '{',
-    '  "answer_markdown": "...",  // markdown narrative; embed [case-ref:CL_ID] tokens to cite specific cases.',
+    '  "answer_markdown": "...",  // markdown narrative.',
     '  ' + listClause + ',',
     '  "candor_notes": ["any caveats discovered during synthesis"]',
     '}',
@@ -966,7 +971,8 @@ function buildSynthesisSystem(outputMode) {
     'Rules:',
     '- LEAD with caveats when your confidence is materially lower than the user might assume. “Of a sample of 500...” is a different sentence from “All cases in the system show...”',
     '- For list and hybrid output_modes, cl_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable cases, downgrade to narrative mode and explain.',
-    '- When citing a case, use the form [case-ref:12345] inline in the markdown — the UI replaces it with a clickable link.',
+    '- DO NOT embed inline citation tokens (no [case-ref:N], no [text](#case-N)). The UI renders the cited cases as a separate clickable rows panel below the narrative — write prose that reads naturally and let the panel do the citation work. If you need to refer to a specific case in prose, name it by short caption ("Doe v. Garland") not by id.',
+    '- ZERO-RESULT HONESTY. When the query results are empty (or near-empty) for what should be a non-trivial question, the answer_markdown MUST: (1) name the FTS terms tried in prose ("I searched docket entries for the phrases ..."), (2) acknowledge this may be a keyword recall failure — explain that case captions name people, not agencies, and docket text uses formal procedural language that may not match the question\'s phrasing, and (3) suggest one or two reformulations the user could try (different agency names, the umbrella department, procedural posture instead of topic). DO NOT just say "no cases found" — that\'s opaque about whether the corpus is genuinely silent or the keyword search missed. Also note that the corpus floor is 2025-01-20 if the question may be about earlier events.',
     '- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.',
     '- Output strict JSON only. No markdown outside answer_markdown. No code fences.',
     '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes (“”) for direct quotation, or single quotes (‘’ or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
@@ -1091,9 +1097,18 @@ function parseSynthesis(raw, outputMode) {
         try { v = JSON.parse(firstObj); }
         catch (pe3) {
           try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
-          catch (pe4) { throw new Error('JSON.parse error: ' + pe4.message); }
+          catch (pe4) {
+            // PR 4y: salvage truncated-mid-narrative synthesis (parity with
+            // the four spokes). Returns a degraded narrative with a candor
+            // note instead of a 502.
+            const salvaged = salvageTruncatedSynthesis(raw);
+            if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, 'cl_ids');
+            throw new Error('JSON.parse error: ' + pe4.message);
+          }
         }
       } else {
+        const salvaged = salvageTruncatedSynthesis(raw);
+        if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, 'cl_ids');
         throw new Error('could not find a JSON object.');
       }
     }
@@ -1105,7 +1120,10 @@ function parseSynthesis(raw, outputMode) {
       v.cl_ids = [];
       v.candor_notes = (v.candor_notes || []).concat(['Output mode requested a case list but synthesis returned none — showing narrative only.']);
     } else {
-      v.cl_ids = v.cl_ids.map(function (x) { return Number(x); }).filter(function (x) { return Number.isFinite(x); });
+      v.cl_ids = v.cl_ids
+        .filter(function (x) { return x != null; })
+        .map(function (x) { return Number(x); })
+        .filter(function (x) { return Number.isFinite(x); });
     }
   } else {
     v.cl_ids = null;
@@ -5921,5 +5939,6 @@ export {
   parseItemsByIdsRequest,
   buildItemsByIdsSql,
   salvageTruncatedSynthesis,
-  buildSalvagedSynthesis
+  buildSalvagedSynthesis,
+  parseSynthesis
 };
