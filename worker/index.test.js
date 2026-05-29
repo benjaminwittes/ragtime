@@ -46,7 +46,16 @@ import {
   buildUscSummarizeUser,
   executeUscPlan,
   USC_SUMMARIZE_TEXT_CAP,
-  USC_SCOPE_LITERAL_LIMIT
+  USC_SCOPE_LITERAL_LIMIT,
+  normalizeCfrScope,
+  parseCfrPlan,
+  parseCfrSynthesis,
+  parseCfrSummary,
+  buildCfrPlanningUser,
+  buildCfrSummarizeUser,
+  executeCfrPlan,
+  CFR_SUMMARIZE_TEXT_CAP,
+  CFR_SCOPE_LITERAL_LIMIT
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -1315,6 +1324,220 @@ describe("executeUscPlan scope cap", () => {
     const scope = normalizeUscScope({ section_ids: oversize });
     const plan = { queries: [{ label: "x", sql: "SELECT 1 FROM scoped_usc_sections" }] };
     await expect(executeUscPlan({}, plan, scope)).rejects.toThrow(/too large to inline/);
+  });
+});
+
+// ============================================================================
+// CFR AI modes (PR 4t) — three flagships (compliance / authority / framework
+// synthesis) + read-a-section, served through one claude_ama mode whose
+// planner picks output_mode per question shape.
+// ============================================================================
+
+describe("normalizeCfrScope", () => {
+  it("treats missing scope as full-corpus", () => {
+    const s = normalizeCfrScope(undefined);
+    expect(s.is_full_db).toBe(true);
+    expect(s.section_ids).toBe(null);
+  });
+
+  it("treats empty section_ids as full-corpus", () => {
+    const s = normalizeCfrScope({ section_ids: [] });
+    expect(s.is_full_db).toBe(true);
+    expect(s.section_ids).toBe(null);
+  });
+
+  it("keeps a valid numeric section_ids list", () => {
+    const s = normalizeCfrScope({ section_ids: [100, 200, 300] });
+    expect(s.section_ids).toEqual([100, 200, 300]);
+    expect(s.count).toBe(3);
+  });
+
+  it("drops nullish + non-finite values", () => {
+    const s = normalizeCfrScope({ section_ids: [1, null, "x", 2, undefined, NaN, "3"] });
+    expect(s.section_ids).toEqual([1, 2, 3]);
+  });
+});
+
+describe("parseCfrPlan", () => {
+  const validPlan = JSON.stringify({
+    output_mode: "hybrid",
+    approach_summary: "Pull HIPAA Privacy Rule sections (45 CFR Parts 160 & 164).",
+    candor_notes: ["Per-section currency varies; reserved sections excluded."],
+    queries: [{
+      label: "HIPAA Privacy Rule",
+      sql: "SELECT id, citation, heading, up_to_date_as_of FROM cfr_sections WHERE title_num = 45 AND part IN ('160','164') AND NOT reserved LIMIT 200"
+    }],
+    estimated_cost_cents: 11,
+    wants_synthesis: true
+  });
+
+  it("accepts a well-formed plan", () => {
+    const p = parseCfrPlan(validPlan);
+    expect(p.output_mode).toBe("hybrid");
+  });
+
+  it("strips code fences", () => {
+    const fenced = "```json\n" + validPlan + "\n```";
+    expect(parseCfrPlan(fenced).output_mode).toBe("hybrid");
+  });
+
+  it("rejects an unknown output_mode", () => {
+    const bad = JSON.stringify({ output_mode: "framework", queries: [] });
+    expect(() => parseCfrPlan(bad)).toThrow(/output_mode/);
+  });
+
+  it("rejects non-array queries", () => {
+    const bad = JSON.stringify({ output_mode: "list", queries: "SELECT 1" });
+    expect(() => parseCfrPlan(bad)).toThrow(/queries must be an array/);
+  });
+
+  it("coerces negative estimated_cost_cents to 0", () => {
+    const negative = JSON.stringify({ output_mode: "narrative", queries: [], estimated_cost_cents: -5 });
+    expect(parseCfrPlan(negative).estimated_cost_cents).toBe(0);
+  });
+});
+
+describe("parseCfrSynthesis", () => {
+  it("accepts a hybrid synthesis with section_ids", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Under [cfr-ref:42] the rule is X.",
+      section_ids: [42, 73],
+      candor_notes: []
+    });
+    const s = parseCfrSynthesis(raw, "hybrid");
+    expect(s.section_ids).toEqual([42, 73]);
+    expect(s.answer_markdown).toMatch(/cfr-ref:42/);
+  });
+
+  it("forces section_ids = null for narrative mode regardless of model output", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Narrative analytical answer.",
+      section_ids: [1, 2, 3],
+      candor_notes: []
+    });
+    const s = parseCfrSynthesis(raw, "narrative");
+    expect(s.section_ids).toBe(null);
+  });
+
+  it("downgrades empty list/hybrid to narrative with a candor note", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "No matching regs.",
+      section_ids: [],
+      candor_notes: []
+    });
+    const s = parseCfrSynthesis(raw, "list");
+    expect(s.section_ids).toEqual([]);
+    expect(s.candor_notes.join(" ")).toMatch(/returned none/);
+  });
+
+  it("drops nullish ids", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "x",
+      section_ids: ["42", null, 7, undefined, "not-a-number"],
+      candor_notes: []
+    });
+    const s = parseCfrSynthesis(raw, "list");
+    expect(s.section_ids).toEqual([42, 7]);
+  });
+
+  it("rejects empty answer_markdown", () => {
+    const raw = JSON.stringify({ answer_markdown: "  ", section_ids: [] });
+    expect(() => parseCfrSynthesis(raw, "narrative")).toThrow(/answer_markdown is empty/);
+  });
+});
+
+describe("buildCfrPlanningUser", () => {
+  it("describes the full-corpus scope and uses cfr_sections", () => {
+    const msg = buildCfrPlanningUser("What regs apply to a brewery startup?", normalizeCfrScope(undefined));
+    expect(msg).toMatch(/full CFR corpus/);
+    expect(msg).toMatch(/cfr_sections/);
+    expect(msg).not.toMatch(/scoped_cfr_sections/);
+  });
+
+  it("describes a narrowed scope and uses scoped_cfr_sections", () => {
+    const msg = buildCfrPlanningUser(
+      "Within these sections, which require notice?",
+      normalizeCfrScope({ section_ids: [1, 2, 3], count: 3 })
+    );
+    expect(msg).toMatch(/3 section_ids/);
+    expect(msg).toMatch(/scoped_cfr_sections/);
+  });
+});
+
+describe("buildCfrSummarizeUser", () => {
+  const section = {
+    citation: "45 CFR § 164.502",
+    title_num: 45,
+    title_name: "Public Welfare",
+    structure_path: "45/A/164/E/164.502",
+    heading: "Uses and disclosures of protected health information: general rules",
+    reserved: false,
+    source: "eCFR",
+    up_to_date_as_of: "2026-05-21",
+    latest_amended_on: "2024-04-26",
+    text_content: "(a) Standard. A covered entity or business associate may not use or disclose protected health information..."
+  };
+
+  it("surfaces citation + hierarchy + currency + amendment date in the prompt", () => {
+    const u = buildCfrSummarizeUser(section, false);
+    expect(u).toMatch(/45 CFR § 164\.502/);
+    expect(u).toMatch(/Public Welfare/);
+    expect(u).toMatch(/Reserved: no/);
+    expect(u).toMatch(/2026-05-21/);
+    expect(u).toMatch(/2024-04-26/);
+    expect(u).not.toMatch(/TRUNCATED/);
+  });
+
+  it("annotates reserved-placeholder sections", () => {
+    const reserved = { ...section, reserved: true, text_content: "" };
+    const u = buildCfrSummarizeUser(reserved, false);
+    expect(u).toMatch(/Reserved: yes/);
+    expect(u).toMatch(/placeholder; no operative text/);
+  });
+
+  it("flags + truncates oversize text", () => {
+    const huge = { ...section, text_content: "x".repeat(CFR_SUMMARIZE_TEXT_CAP + 1000) };
+    const u = buildCfrSummarizeUser(huge, true);
+    expect(u).toMatch(/TRUNCATED to/);
+    const textStart = u.indexOf("SECTION TEXT");
+    const textBlock = u.slice(textStart);
+    const xCount = (textBlock.match(/x/g) || []).length;
+    expect(xCount).toBe(CFR_SUMMARIZE_TEXT_CAP);
+  });
+});
+
+describe("parseCfrSummary", () => {
+  it("accepts a well-formed summary", () => {
+    const raw = JSON.stringify({
+      summary_markdown: "**What it does.** ...",
+      candor_notes: []
+    });
+    const s = parseCfrSummary(raw);
+    expect(s.summary_markdown).toMatch(/What it does/);
+  });
+
+  it("rejects empty summary_markdown", () => {
+    const raw = JSON.stringify({ summary_markdown: " ", candor_notes: [] });
+    expect(() => parseCfrSummary(raw)).toThrow(/summary_markdown is empty/);
+  });
+
+  it("strips code fences", () => {
+    const fenced = "```json\n" + JSON.stringify({ summary_markdown: "x", candor_notes: [] }) + "\n```";
+    expect(parseCfrSummary(fenced).summary_markdown).toBe("x");
+  });
+
+  it("defaults candor_notes to []", () => {
+    const raw = JSON.stringify({ summary_markdown: "x" });
+    expect(parseCfrSummary(raw).candor_notes).toEqual([]);
+  });
+});
+
+describe("executeCfrPlan scope cap", () => {
+  it("refuses scopes above CFR_SCOPE_LITERAL_LIMIT with a clear error", async () => {
+    const oversize = Array.from({ length: CFR_SCOPE_LITERAL_LIMIT + 1 }, (_, i) => i + 1);
+    const scope = normalizeCfrScope({ section_ids: oversize });
+    const plan = { queries: [{ label: "x", sql: "SELECT 1 FROM scoped_cfr_sections" }] };
+    await expect(executeCfrPlan({}, plan, scope)).rejects.toThrow(/too large to inline/);
   });
 });
 
