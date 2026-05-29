@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { usePaid } from '@/auth/use-paid'
+import { buildUscSourceUrl } from '@/lib/external-source-urls'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 import {
@@ -132,15 +133,34 @@ function UscSectionDetailBody({ row }: { row: UscSectionDisplayRow }) {
   const heading = detail?.heading ?? row.heading ?? '—'
   const isPositiveLaw = detail?.is_positive_law ?? row.is_positive_law ?? false
   const status = detail?.status ?? row.status
+  // PR 4x: canonical uscode.house.gov link constructed from title_num +
+  // section_identifier. Available from the row even before the detail
+  // fetch resolves.
+  const sourceUrl = buildUscSourceUrl({
+    title_num: detail?.title_num ?? row.title_num,
+    section_identifier:
+      detail?.section_identifier ?? row.section_identifier,
+  })
 
   return (
     <>
       <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-mono text-base font-semibold">
             {citation}
           </SheetTitle>
           {isPositiveLaw && <PositiveLawBadge />}
+          {sourceUrl && (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open this section on uscode.house.gov in a new tab"
+              className="ml-auto inline-flex items-baseline gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10"
+            >
+              ↗ uscode.house.gov
+            </a>
+          )}
         </div>
         <SheetDescription className="text-base font-medium text-foreground">
           {heading}
