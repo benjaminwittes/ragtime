@@ -204,6 +204,9 @@ export default {
       if (path === "/corpus/entries" && request.method === "POST") {
         return await corpusEntriesHandler(request, env, ctx);
       }
+      if (path === "/corpus/hub/keyword" && request.method === "POST") {
+        return await corpusHubKeywordHandler(request, env, ctx);
+      }
       if (path === "/corpus/usc/facets" && request.method === "POST") {
         return await corpusUscFacetsHandler(request, env, ctx);
       }
@@ -4455,6 +4458,181 @@ async function corpusFrusSummarizeHandler(request, env, ctx) {
 }
 
 // Docket entries for one case (the case-detail view).
+// ── Hub cross-corpus keyword search (PR 4u) ────────────────────────────────
+// Brief #1's free demo moment. Five parallel FTS queries (one per corpus)
+// returning a top-K display set + total count per corpus. No LLM; no auth.
+// Each corpus's relevance scores aren't comparable across tables — so
+// results are grouped by corpus (brief #1 §4b decision) rather than
+// merged into one ranked list. That changes when pgvector lands (Phase 2)
+// and provides a single comparable similarity score.
+
+var HUB_CORPORA = ["litigation", "usc", "cfr", "olc", "frus"];
+// Per-corpus top-K cap. The brief says the hub is "the shallow end" — five
+// results per card surface the result-set shape without overwhelming. Users
+// who want more click into the spoke.
+var HUB_RESULTS_PER_CORPUS = 5;
+
+// Per-corpus query builders. Each returns { rowsSql, countSql }. The hub
+// handler runs all of them in parallel via Promise.all. Display-row shape
+// is normalized: { id (bigint), title (string), context (string|null —
+// secondary line shown below the title), date (string|null — YYYY-MM-DD
+// where applicable) }.
+function buildHubQueriesLitigation(escapedQuery, limit) {
+  // Litigation's FTS spine is docket_entries.fts (per the existing filter
+  // builder); the topical workhorse. Display from cases. Count is distinct
+  // cl_ids matching the FTS — the meaningful "how many cases mention this"
+  // signal for hub users.
+  const ftsClause = "fts @@ websearch_to_tsquery('english', '" + escapedQuery + "')";
+  const rowsSql =
+    "SELECT c.cl_id::text AS id, " +
+    "  COALESCE(c.case_name, '(no name)') AS title, " +
+    "  c.court AS context, " +
+    "  c.date_filed::text AS date " +
+    "FROM cases c " +
+    "WHERE c.cl_id IN (" +
+    "  SELECT DISTINCT cl_id FROM docket_entries WHERE " + ftsClause +
+    "  LIMIT 10000" +
+    ") " +
+    "ORDER BY c.date_filed DESC NULLS LAST " +
+    "LIMIT " + limit;
+  const countSql =
+    "SELECT count(DISTINCT cl_id)::bigint AS n FROM docket_entries WHERE " + ftsClause;
+  return { rowsSql, countSql };
+}
+
+function buildHubQueriesUsc(escapedQuery, limit) {
+  const ftsClause = "fts @@ websearch_to_tsquery('english', '" + escapedQuery + "')";
+  const tsRank = "ts_rank(fts, websearch_to_tsquery('english', '" + escapedQuery + "'))";
+  const rowsSql =
+    "SELECT id::text AS id, " +
+    "  COALESCE(citation, heading, '(no title)') AS title, " +
+    "  COALESCE(heading, title_name) AS context, " +
+    "  NULL::text AS date " +
+    "FROM usc_sections WHERE " + ftsClause + " " +
+    "ORDER BY " + tsRank + " DESC LIMIT " + limit;
+  const countSql = "SELECT count(*)::bigint AS n FROM usc_sections WHERE " + ftsClause;
+  return { rowsSql, countSql };
+}
+
+function buildHubQueriesCfr(escapedQuery, limit) {
+  // Exclude reserved placeholders from hub results — they have no operative
+  // text and would be noise. The count also excludes them so the displayed
+  // "47 in CFR" is "47 substantive sections," matching what the user sees.
+  const ftsClause = "fts @@ websearch_to_tsquery('english', '" + escapedQuery + "')";
+  const where = "WHERE NOT reserved AND " + ftsClause;
+  const tsRank = "ts_rank(fts, websearch_to_tsquery('english', '" + escapedQuery + "'))";
+  const rowsSql =
+    "SELECT id::text AS id, " +
+    "  COALESCE(citation, heading, '(no title)') AS title, " +
+    "  COALESCE(heading, title_name) AS context, " +
+    "  up_to_date_as_of::text AS date " +
+    "FROM cfr_sections " + where + " " +
+    "ORDER BY " + tsRank + " DESC LIMIT " + limit;
+  const countSql = "SELECT count(*)::bigint AS n FROM cfr_sections " + where;
+  return { rowsSql, countSql };
+}
+
+function buildHubQueriesOlc(escapedQuery, limit) {
+  const ftsClause = "fts @@ websearch_to_tsquery('english', '" + escapedQuery + "')";
+  const rowsSql =
+    "SELECT id::text AS id, " +
+    "  COALESCE(title, '(no title)') AS title, " +
+    "  source AS context, " +
+    "  date_issued::text AS date " +
+    "FROM olc_opinions WHERE " + ftsClause + " " +
+    "ORDER BY date_issued DESC NULLS LAST LIMIT " + limit;
+  const countSql = "SELECT count(*)::bigint AS n FROM olc_opinions WHERE " + ftsClause;
+  return { rowsSql, countSql };
+}
+
+function buildHubQueriesFrus(escapedQuery, limit) {
+  const ftsClause = "fts @@ websearch_to_tsquery('english', '" + escapedQuery + "')";
+  const rowsSql =
+    "SELECT id::text AS id, " +
+    "  COALESCE(title, '(no title)') AS title, " +
+    "  COALESCE(place_name, volume_id) AS context, " +
+    "  doc_date::text AS date " +
+    "FROM frus_documents WHERE " + ftsClause + " " +
+    // FRUS doc_date is ASC by default in the spoke (chronological); the hub
+    // surfaces most-recent-first to match the other spokes' header rule of
+    // thumb. The full FRUS-internal chronological browse lives on the spoke.
+    "ORDER BY doc_date DESC NULLS LAST LIMIT " + limit;
+  const countSql = "SELECT count(*)::bigint AS n FROM frus_documents WHERE " + ftsClause;
+  return { rowsSql, countSql };
+}
+
+var HUB_QUERY_BUILDERS = {
+  litigation: buildHubQueriesLitigation,
+  usc: buildHubQueriesUsc,
+  cfr: buildHubQueriesCfr,
+  olc: buildHubQueriesOlc,
+  frus: buildHubQueriesFrus
+};
+
+async function runHubKeywordForCorpus(env, corpus, escapedQuery, limit) {
+  const builder = HUB_QUERY_BUILDERS[corpus];
+  if (!builder) throw new Error("Unknown corpus: " + corpus);
+  const { rowsSql, countSql } = builder(escapedQuery, limit);
+  // Run rows + count in parallel; both share the same FTS GIN scan.
+  const [rows, countRows] = await Promise.all([
+    corpusRunQuery(env, rowsSql),
+    corpusRunQuery(env, countSql)
+  ]);
+  return {
+    count: Number((countRows[0] && countRows[0].n) || 0),
+    results: rows.map(function (r) {
+      return {
+        id: r.id,
+        title: r.title || "(no title)",
+        context: r.context || null,
+        date: r.date || null
+      };
+    })
+  };
+}
+
+async function corpusHubKeywordHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const query = String((body && body.query) || "").trim();
+  if (!query) return json({ error: { message: "Missing query" } }, 400);
+  if (query.length > 200) {
+    return json({ error: { message: "Query too long (max 200 characters)" } }, 400);
+  }
+
+  // Per brief #1, all corpora are on by default. The caller can pass a
+  // subset to narrow ("just OLC + litigation"); empty/missing = all five.
+  const requested = Array.isArray(body && body.corpora)
+    ? body.corpora.filter(function (c) { return HUB_CORPORA.indexOf(c) >= 0; })
+    : null;
+  const corpora = (requested && requested.length > 0) ? requested : HUB_CORPORA.slice();
+
+  const escapedQuery = escSqlLit(query);
+
+  // Run all corpora in parallel. Per-corpus failures don't fail the whole
+  // request — the user sees grouped results for the corpora that returned
+  // plus an inline error chip for the one that didn't. This matches the
+  // brief's "result-set characterization" tone: tell the user what was
+  // searched and what came back.
+  const settled = await Promise.all(corpora.map(async function (corpus) {
+    try {
+      const out = await runHubKeywordForCorpus(env, corpus, escapedQuery, HUB_RESULTS_PER_CORPUS);
+      return [corpus, out];
+    } catch (e) {
+      return [corpus, { count: 0, results: [], error: e && e.message ? e.message : String(e) }];
+    }
+  }));
+
+  const per_corpus = {};
+  for (let i = 0; i < settled.length; i++) {
+    per_corpus[settled[i][0]] = settled[i][1];
+  }
+
+  return json({ query, per_corpus }, 200);
+}
+
 async function corpusEntriesHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
   if (rl) return rl;
@@ -5490,5 +5668,12 @@ export {
   buildCfrSummarizeUser,
   executeCfrPlan,
   CFR_SUMMARIZE_TEXT_CAP,
-  CFR_SCOPE_LITERAL_LIMIT
+  CFR_SCOPE_LITERAL_LIMIT,
+  HUB_CORPORA,
+  HUB_RESULTS_PER_CORPUS,
+  buildHubQueriesLitigation,
+  buildHubQueriesUsc,
+  buildHubQueriesCfr,
+  buildHubQueriesOlc,
+  buildHubQueriesFrus
 };

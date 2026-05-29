@@ -55,7 +55,14 @@ import {
   buildCfrSummarizeUser,
   executeCfrPlan,
   CFR_SUMMARIZE_TEXT_CAP,
-  CFR_SCOPE_LITERAL_LIMIT
+  CFR_SCOPE_LITERAL_LIMIT,
+  HUB_CORPORA,
+  HUB_RESULTS_PER_CORPUS,
+  buildHubQueriesLitigation,
+  buildHubQueriesUsc,
+  buildHubQueriesCfr,
+  buildHubQueriesOlc,
+  buildHubQueriesFrus
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -1538,6 +1545,108 @@ describe("executeCfrPlan scope cap", () => {
     const scope = normalizeCfrScope({ section_ids: oversize });
     const plan = { queries: [{ label: "x", sql: "SELECT 1 FROM scoped_cfr_sections" }] };
     await expect(executeCfrPlan({}, plan, scope)).rejects.toThrow(/too large to inline/);
+  });
+});
+
+// ============================================================================
+// Hub cross-corpus keyword search (PR 4u) — five parallel FTS queries.
+//
+// The handler itself touches the live DB so we test it integration-style
+// from the React app (and via the deploy pipeline's smoke check). Here we
+// pin the per-corpus query builders: they construct the FTS clause + ORDER
+// BY shape, escape single quotes correctly, exclude reserved CFR sections,
+// and target the right table per corpus.
+// ============================================================================
+
+describe("HUB_CORPORA", () => {
+  it("lists exactly the five loaded corpora", () => {
+    expect(HUB_CORPORA).toEqual(["litigation", "usc", "cfr", "olc", "frus"]);
+  });
+  it("declares a small results-per-corpus cap", () => {
+    expect(HUB_RESULTS_PER_CORPUS).toBeGreaterThanOrEqual(3);
+    expect(HUB_RESULTS_PER_CORPUS).toBeLessThanOrEqual(10);
+  });
+});
+
+describe("buildHubQueriesLitigation", () => {
+  it("targets the cases table via the docket_entries FTS spine", () => {
+    const { rowsSql, countSql } = buildHubQueriesLitigation("habeas", 5);
+    expect(rowsSql).toMatch(/FROM cases/);
+    expect(rowsSql).toMatch(/docket_entries WHERE fts/);
+    expect(rowsSql).toMatch(/websearch_to_tsquery\('english', 'habeas'\)/);
+    expect(rowsSql).toMatch(/LIMIT 5/);
+    expect(countSql).toMatch(/count\(DISTINCT cl_id\)/);
+    expect(countSql).toMatch(/FROM docket_entries WHERE fts/);
+  });
+  it("orders by date_filed DESC (most-recent-first matches the other spokes' hub-card convention)", () => {
+    const { rowsSql } = buildHubQueriesLitigation("x", 5);
+    expect(rowsSql).toMatch(/ORDER BY c\.date_filed DESC NULLS LAST/);
+  });
+  it("interpolates the caller-supplied (already-escaped) literal verbatim — the SQL-injection guard lives in the handler", () => {
+    // The handler runs escSqlLit BEFORE handing the literal to the builder
+    // (so single quotes arrive as ''). The builder trusts that contract and
+    // interpolates verbatim. We pin both halves: the builder must not
+    // double-escape, AND the literal must end up inside the websearch
+    // call body, not outside it.
+    const { rowsSql, countSql } = buildHubQueriesLitigation("o''reilly", 5);
+    expect(rowsSql).toMatch(/websearch_to_tsquery\('english', 'o''reilly'\)/);
+    expect(countSql).toMatch(/websearch_to_tsquery\('english', 'o''reilly'\)/);
+  });
+});
+
+describe("buildHubQueriesUsc", () => {
+  it("targets usc_sections + uses ts_rank ordering", () => {
+    const { rowsSql, countSql } = buildHubQueriesUsc("whistleblower", 5);
+    expect(rowsSql).toMatch(/FROM usc_sections WHERE/);
+    expect(rowsSql).toMatch(/ORDER BY ts_rank/);
+    expect(countSql).toMatch(/count\(\*\)::bigint AS n FROM usc_sections/);
+  });
+  it("falls back to heading when citation is null + carries title_name into context", () => {
+    const { rowsSql } = buildHubQueriesUsc("x", 5);
+    expect(rowsSql).toMatch(/COALESCE\(citation, heading, '\(no title\)'\)/);
+    expect(rowsSql).toMatch(/COALESCE\(heading, title_name\)/);
+  });
+});
+
+describe("buildHubQueriesCfr", () => {
+  it("targets cfr_sections AND excludes reserved placeholders", () => {
+    const { rowsSql, countSql } = buildHubQueriesCfr("HIPAA", 5);
+    expect(rowsSql).toMatch(/FROM cfr_sections WHERE NOT reserved AND/);
+    expect(countSql).toMatch(/FROM cfr_sections WHERE NOT reserved AND/);
+  });
+  it("surfaces up_to_date_as_of as the date axis", () => {
+    const { rowsSql } = buildHubQueriesCfr("x", 5);
+    expect(rowsSql).toMatch(/up_to_date_as_of::text AS date/);
+  });
+  it("orders by ts_rank — relevance-first for regulatory queries", () => {
+    const { rowsSql } = buildHubQueriesCfr("x", 5);
+    expect(rowsSql).toMatch(/ORDER BY ts_rank/);
+  });
+});
+
+describe("buildHubQueriesOlc", () => {
+  it("targets olc_opinions and orders by date_issued DESC", () => {
+    const { rowsSql, countSql } = buildHubQueriesOlc("executive privilege", 5);
+    expect(rowsSql).toMatch(/FROM olc_opinions WHERE/);
+    expect(rowsSql).toMatch(/ORDER BY date_issued DESC NULLS LAST/);
+    expect(countSql).toMatch(/FROM olc_opinions WHERE/);
+  });
+  it("carries source as the context axis (DOJ vs Knight FOIA differentiator)", () => {
+    const { rowsSql } = buildHubQueriesOlc("x", 5);
+    expect(rowsSql).toMatch(/source AS context/);
+  });
+});
+
+describe("buildHubQueriesFrus", () => {
+  it("targets frus_documents and orders by doc_date DESC", () => {
+    const { rowsSql, countSql } = buildHubQueriesFrus("Cuban missile", 5);
+    expect(rowsSql).toMatch(/FROM frus_documents WHERE/);
+    expect(rowsSql).toMatch(/ORDER BY doc_date DESC NULLS LAST/);
+    expect(countSql).toMatch(/FROM frus_documents WHERE/);
+  });
+  it("falls back to volume_id when place_name is null (context axis)", () => {
+    const { rowsSql } = buildHubQueriesFrus("x", 5);
+    expect(rowsSql).toMatch(/COALESCE\(place_name, volume_id\)/);
   });
 });
 
