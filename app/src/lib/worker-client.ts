@@ -988,6 +988,140 @@ export async function fetchFrusDocument(id: number): Promise<FrusDocumentDetail>
 }
 
 /* ----------------------------------------------------------------------------
+ * FRUS AI modes (PR 4r) — narrative synthesis + summarize-one-document
+ *
+ * Brief #5 §3 names three asymmetric flagships (narrative = paradigmatic;
+ * coverage/existence + specific document retrieval secondary). All three
+ * are served via ONE claude_ama mode whose `output_mode` discriminator
+ * (`narrative` / `hybrid` / `list`) maps to the flagships internally per
+ * the "no query-architecture buttons" principle.
+ * ------------------------------------------------------------------------- */
+
+export type FrusAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type FrusAmaSynthesis = {
+  answer_markdown: string
+  /** Non-null only for `list` / `hybrid` output modes. The FRUS-specific
+   *  field name; opinion_ids / cl_ids on other spokes. */
+  document_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** FRUS scope. The Worker caps the inline document_ids list at 25K; over
+ *  that the executor refuses with a "narrow further" error. */
+export type FrusAmaScope = {
+  document_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runFrusPlan(
+  question: string,
+  scope: FrusAmaScope,
+  auth: AuthArg,
+): Promise<FrusAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/frus/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FRUS plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FrusAmaPlan
+}
+
+export async function runFrusExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<FrusAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/frus/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FRUS execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FrusAmaSynthesis
+}
+
+export type FrusDocumentSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizeFrusDocument(
+  id: number,
+  auth: AuthArg,
+): Promise<FrusDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/frus/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FRUS summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FrusDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/plan + /corpus/execute — agentic AMA ("claude_ama" mode)
  *
  * Two-pass surface. Phase 1 (plan) runs a planning LLM call against question +

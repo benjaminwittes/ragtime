@@ -1,4 +1,6 @@
 import type { DocsContext, DocsEntry } from './types'
+import { frusDocumentSummaryEntry } from './content/frus-document-summary'
+import { frusNarrativeSynthesisEntry } from './content/frus-narrative-synthesis'
 import { olcNarrativeSynthesisEntry } from './content/olc-narrative-synthesis'
 import { olcOpinionSummaryEntry } from './content/olc-opinion-summary'
 
@@ -19,6 +21,8 @@ import { olcOpinionSummaryEntry } from './content/olc-opinion-summary'
 export const docsEntries: readonly DocsEntry[] = [
   olcNarrativeSynthesisEntry,
   olcOpinionSummaryEntry,
+  frusNarrativeSynthesisEntry,
+  frusDocumentSummaryEntry,
 ]
 
 /**

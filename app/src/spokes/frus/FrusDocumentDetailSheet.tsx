@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   Sheet,
   SheetContent,
@@ -6,11 +8,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Button } from '@/components/ui/button'
+import { usePaid } from '@/auth/use-paid'
+import { useAuth } from '@/lib/use-auth'
+import { cn } from '@/lib/utils'
 import {
   type FrusDocumentDetail,
   type FrusDocumentDisplayRow,
+  type FrusDocumentSummary,
   type FrusPerson,
   fetchFrusDocument,
+  summarizeFrusDocument,
 } from '@/lib/worker-client'
 
 /**
@@ -53,9 +61,17 @@ export function FrusDocumentDetailSheet({
 }
 
 function FrusDocumentDetailBody({ row }: { row: FrusDocumentDisplayRow }) {
+  const auth = useAuth()
+  const paid = usePaid()
   const [detail, setDetail] = useState<FrusDocumentDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Summary state (brief #5 §3 "plus" — summarize this document). Resets
+  // on the body's key change (row.id) so a new doc starts fresh.
+  const [summary, setSummary] = useState<FrusDocumentSummary | null>(null)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -75,6 +91,26 @@ function FrusDocumentDetailBody({ row }: { row: FrusDocumentDisplayRow }) {
       cancelled = true
     }
   }, [row.id])
+
+  async function handleSummarize() {
+    if (!auth.auth) {
+      setSummaryError('Configure AI access (header, top right) first.')
+      return
+    }
+    setSummaryLoading(true)
+    setSummaryError(null)
+    try {
+      const s = await summarizeFrusDocument(row.id, auth.auth)
+      if (typeof s._balance_cents === 'number') {
+        paid.applyBalanceFromWorker(s._balance_cents)
+      }
+      setSummary(s)
+    } catch (e) {
+      setSummaryError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
 
   const title = detail?.title ?? row.title ?? '(no title)'
   const classification = detail?.classification ?? row.classification
@@ -137,6 +173,15 @@ function FrusDocumentDetailBody({ row }: { row: FrusDocumentDisplayRow }) {
             )}
 
             <PersonsSection persons={detail.persons} />
+
+            <AiSummarySection
+              hasAuth={auth.hasAuth}
+              hasText={!!detail.text_content && detail.text_content.trim().length > 0}
+              summary={summary}
+              loading={summaryLoading}
+              error={summaryError}
+              onSummarize={handleSummarize}
+            />
 
             <section>
               <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -252,6 +297,147 @@ function PersonsSection({ persons }: { persons: FrusPerson[] | null }) {
       </ul>
     </section>
   )
+}
+
+/**
+ * AI summary block. Brief #5 §3 "plus" — summarize this document.
+ * BYOK-gated. When hasText is false the button is disabled with an
+ * explanation (rare for FRUS, but possible when the corpus has a
+ * metadata row without text_content).
+ *
+ * FRUS-specific structured headings the system prompt asks for:
+ * Provenance / Setting / Substance / Key persons / Notable footnotes.
+ */
+function AiSummarySection({
+  hasAuth,
+  hasText,
+  summary,
+  loading,
+  error,
+  onSummarize,
+}: {
+  hasAuth: boolean
+  hasText: boolean
+  summary: FrusDocumentSummary | null
+  loading: boolean
+  error: string | null
+  onSummarize: () => void
+}) {
+  const buttonDisabled = !hasAuth || !hasText || loading
+  const buttonHint = !hasAuth
+    ? 'Configure AI access (header, top right) to enable.'
+    : !hasText
+      ? 'No text content to summarize for this document.'
+      : loading
+        ? 'Summarizing…'
+        : ''
+
+  return (
+    <section className="rounded-md border border-border bg-card p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            AI summary
+          </h3>
+          <p className="mt-0.5 text-[11px] text-muted-foreground/80">
+            Attribution-forward summary of the document. Uses your configured
+            AI access; cost shows in your balance after.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={onSummarize}
+          disabled={buttonDisabled}
+          title={buttonHint || undefined}
+        >
+          {loading ? 'Working…' : summary ? 'Re-summarize' : 'Summarize'}
+        </Button>
+      </div>
+      {error && (
+        <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      {summary && (
+        <div className="mt-3 space-y-3">
+          {summary.was_truncated && (
+            <aside
+              className={cn(
+                'rounded-md border px-3 py-2 text-xs',
+                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+              )}
+            >
+              Document text was truncated before summarization. The few FRUS
+              documents that exceed the cap (mostly long multi-paper compilations)
+              have later sections that weren&apos;t seen.
+            </aside>
+          )}
+          {summary.candor_notes.length > 0 && (
+            <aside
+              className={cn(
+                'rounded-md border px-3 py-2 text-xs',
+                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+              )}
+            >
+              <h4 className="text-[10px] font-medium uppercase tracking-wider opacity-80">
+                Candor notes
+              </h4>
+              <ul className="mt-1 list-disc pl-5">
+                {summary.candor_notes.map((n, i) => (
+                  <li key={i} className="leading-relaxed">
+                    {n}
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          )}
+          <div className="space-y-2 text-sm text-foreground">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={SUMMARY_MARKDOWN_COMPONENTS}
+            >
+              {summary.summary_markdown}
+            </ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Compact markdown styling for the in-panel summary — mirrors OLC's. */
+const SUMMARY_MARKDOWN_COMPONENTS = {
+  h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h1 className="font-serif text-lg font-semibold mt-2 mb-1.5" {...props} />
+  ),
+  h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h2 className="font-serif text-base font-semibold mt-3 mb-1" {...props} />
+  ),
+  h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3 className="font-serif text-sm font-semibold mt-2 mb-1" {...props} />
+  ),
+  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p className="leading-relaxed text-foreground/90" {...props} />
+  ),
+  strong: (props: React.HTMLAttributes<HTMLElement>) => (
+    <strong className="font-semibold text-foreground" {...props} />
+  ),
+  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
+    <ul className="list-disc pl-5 space-y-0.5" {...props} />
+  ),
+  ol: (props: React.OlHTMLAttributes<HTMLOListElement>) => (
+    <ol className="list-decimal pl-5 space-y-0.5" {...props} />
+  ),
+  li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
+    <li className="leading-relaxed" {...props} />
+  ),
+  blockquote: (props: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
+    <blockquote
+      className="border-l-4 border-muted-foreground/30 pl-3 italic text-muted-foreground"
+      {...props}
+    />
+  ),
 }
 
 function ClassificationBadge({ value }: { value: string }) {
