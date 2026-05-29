@@ -17,6 +17,7 @@ export function UscResultsList({
   error,
   hasRun,
   executedSql,
+  onOpenSection,
 }: {
   rows: readonly UscSectionDisplayRow[] | undefined
   count: number | undefined
@@ -24,6 +25,8 @@ export function UscResultsList({
   error: string | undefined
   hasRun: boolean
   executedSql: string | undefined
+  /** Click handler — opens the section detail sheet. */
+  onOpenSection: (row: UscSectionDisplayRow) => void
 }) {
   if (!hasRun && !loading) {
     return (
@@ -83,7 +86,20 @@ export function UscResultsList({
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((r) => (
-              <tr key={r.id} className="hover:bg-muted/40">
+              <tr
+                key={r.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpenSection(r)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onOpenSection(r)
+                  }
+                }}
+                aria-label={`Open ${r.citation ?? 'section ' + r.id} in detail panel`}
+                className="cursor-pointer hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
+              >
                 <Td>
                   <div className="flex items-baseline gap-2">
                     <span className="font-mono text-xs font-medium text-foreground">

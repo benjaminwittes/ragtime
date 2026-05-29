@@ -405,6 +405,49 @@ export async function runUscFilter(
   return (await r.json()) as UscFilterResult
 }
 
+/**
+ * Full single-section detail used by the USC section panel. Includes the
+ * statutory `text_content` plus the full hierarchy chain (subtitle,
+ * chapter, subchapter, part) that the panel renders as a breadcrumb. The
+ * list endpoint omits `text_content` to keep the table payload small;
+ * this round-trip happens only when the user actually opens a section.
+ */
+export type UscSectionDetail = {
+  id: number
+  title_num: number | null
+  title_name: string | null
+  subtitle: string | null
+  chapter: string | null
+  subchapter: string | null
+  part: string | null
+  structure_path: string | null
+  section_identifier: string | null
+  section_num: string | null
+  citation: string | null
+  heading: string | null
+  text_content: string | null
+  text_length: number | null
+  source_credit: string | null
+  notes: string | null
+  status: string | null
+  is_positive_law: boolean | null
+  release_point: string | null
+}
+
+export async function fetchUscSection(id: number): Promise<UscSectionDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/usc/section`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/usc/section failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { section: UscSectionDetail }
+  return body.section
+}
+
 /* ----------------------------------------------------------------------------
  * /corpus/plan + /corpus/execute — agentic AMA ("claude_ama" mode)
  *

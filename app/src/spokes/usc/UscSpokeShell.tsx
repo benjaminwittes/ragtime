@@ -13,6 +13,7 @@ import { AccessSettings } from '@/llm/AccessSettings'
 import type { CorpusHoldings, CorpusSpoke } from '../types'
 import { UscFilterForm } from './UscFilterForm'
 import { UscResultsList } from './UscResultsList'
+import { UscSectionDetailSheet } from './UscSectionDetailSheet'
 
 /**
  * USC spoke v1 alpha — manual filter only.
@@ -79,6 +80,19 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
 
+  // Section-detail state — analogous to the litigation case-detail
+  // pattern. `openSection` lingers across the close animation so the
+  // panel doesn't flicker as it slides out.
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [openSection, setOpenSection] = useState<UscSectionDisplayRow | null>(
+    null,
+  )
+
+  function handleOpenSection(row: UscSectionDisplayRow) {
+    setOpenSection(row)
+    setDetailOpen(true)
+  }
+
   async function handleSubmit(fields: UscFilterFields) {
     setQueryLoading(true)
     setQueryError(undefined)
@@ -114,6 +128,12 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         error={queryError}
         hasRun={hasRun}
         executedSql={executedSql}
+        onOpenSection={handleOpenSection}
+      />
+      <UscSectionDetailSheet
+        row={openSection}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
       />
     </div>
   )

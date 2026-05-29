@@ -210,6 +210,9 @@ export default {
       if (path === "/corpus/usc/filter" && request.method === "POST") {
         return await corpusUscFilterHandler(request, env, ctx);
       }
+      if (path === "/corpus/usc/section" && request.method === "POST") {
+        return await corpusUscSectionHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -1841,6 +1844,40 @@ async function corpusUscFilterHandler(request, env, ctx) {
     generated_sql: rowsSql,
     executed_sql: idsSql
   }, 200);
+}
+
+/**
+ * Single-section detail for the USC section panel. Returns the row plus
+ * the full text_content (which the list endpoint omits to keep the table
+ * payload small). Used by the section detail sheet that opens on row
+ * click in the USC manual filter results.
+ *
+ * Fields returned: id + every column the panel surfaces (citation,
+ * heading, hierarchy chain, status, positive-law flag, release point,
+ * statutory text, source_credit, notes). text_length is included so the
+ * panel can quickly show "this is a 12,478-character section" without
+ * scanning the body.
+ */
+async function corpusUscSectionHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+  const sql = "SELECT id, title_num, title_name, subtitle, chapter, subchapter, part, " +
+    "structure_path, section_identifier, section_num, citation, heading, text_content, " +
+    "text_length, source_credit, notes, status, is_positive_law, release_point " +
+    "FROM usc_sections WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Section fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Section not found", code: "not_found" } }, 404);
+  }
+  return json({ section: rows[0] }, 200);
 }
 
 // Docket entries for one case (the case-detail view).
