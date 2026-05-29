@@ -1,3 +1,4 @@
+import { buildUscSourceUrl } from '@/lib/external-source-urls'
 import type { UscSectionDisplayRow } from '@/lib/worker-client'
 
 /**
@@ -102,6 +103,7 @@ export function UscSectionRowsTable({
             <Th>Heading</Th>
             <Th>Title</Th>
             <Th>Status</Th>
+            <Th className="text-right" aria-label="External link" />
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -152,11 +154,39 @@ export function UscSectionRowsTable({
                   '—'
                 )}
               </Td>
+              <Td className="text-right">
+                <SourceLink row={r} />
+              </Td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+/**
+ * "↗" affordance to uscode.house.gov (PR 4x). Brief #1 §4b auditability:
+ * every row that mentions a section carries a one-click path to the
+ * canonical primary source. USC has no source_url field; URL is
+ * constructed deterministically from (title_num, section_identifier).
+ * `stopPropagation` keeps the row's open-in-detail handler from firing.
+ */
+function SourceLink({ row }: { row: UscSectionDisplayRow }) {
+  const href = buildUscSourceUrl(row)
+  if (!href) return <span className="text-muted-foreground/50">—</span>
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title="Open this section on uscode.house.gov in a new tab"
+      aria-label={`Open canonical source for ${row.citation ?? 'section ' + row.id} in a new tab`}
+      className="inline-block text-primary hover:underline"
+    >
+      ↗
+    </a>
   )
 }
 
@@ -190,7 +220,7 @@ function Th({
   children,
   className,
 }: {
-  children: React.ReactNode
+  children?: React.ReactNode
   className?: string
 }) {
   return (

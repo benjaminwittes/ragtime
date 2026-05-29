@@ -1,3 +1,4 @@
+import { buildCfrSourceUrl } from '@/lib/external-source-urls'
 import type { CfrSectionDisplayRow } from '@/lib/worker-client'
 
 /**
@@ -101,6 +102,7 @@ export function CfrSectionRowsTable({
             <Th>Heading</Th>
             <Th>Title</Th>
             <Th>Up to date</Th>
+            <Th className="text-right" aria-label="External link" />
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -149,11 +151,36 @@ export function CfrSectionRowsTable({
                   '—'
                 )}
               </Td>
+              <Td className="text-right">
+                <SourceLink row={r} />
+              </Td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+/**
+ * "↗" affordance to eCFR.gov (PR 4x). CFR has no source_url field; URL
+ * is constructed deterministically from (title_num, section_identifier).
+ */
+function SourceLink({ row }: { row: CfrSectionDisplayRow }) {
+  const href = buildCfrSourceUrl(row)
+  if (!href) return <span className="text-muted-foreground/50">—</span>
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title="Open this section on eCFR.gov in a new tab"
+      aria-label={`Open canonical source for ${row.citation ?? 'section ' + row.id} in a new tab`}
+      className="inline-block text-primary hover:underline"
+    >
+      ↗
+    </a>
   )
 }
 
@@ -187,7 +214,7 @@ function Th({
   children,
   className,
 }: {
-  children: React.ReactNode
+  children?: React.ReactNode
   className?: string
 }) {
   return (

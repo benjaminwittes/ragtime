@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { usePaid } from '@/auth/use-paid'
+import { buildCfrSourceUrl } from '@/lib/external-source-urls'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 import {
@@ -113,15 +114,32 @@ function CfrSectionDetailBody({ row }: { row: CfrSectionDisplayRow }) {
   const citation = detail?.citation ?? row.citation ?? '—'
   const heading = detail?.heading ?? row.heading ?? '—'
   const isReserved = detail?.reserved ?? row.reserved ?? false
+  const sourceUrl = buildCfrSourceUrl({
+    title_num: detail?.title_num ?? row.title_num,
+    section_identifier:
+      detail?.section_identifier ?? row.section_identifier,
+  })
 
   return (
     <>
       <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-mono text-base font-semibold">
             {citation}
           </SheetTitle>
           {isReserved && <ReservedBadge />}
+          {sourceUrl && (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open this section on eCFR.gov in a new tab"
+              aria-label={`Open canonical source for ${citation} on eCFR.gov in a new tab`}
+              className="ml-auto inline-flex items-baseline gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10"
+            >
+              ↗ eCFR.gov
+            </a>
+          )}
         </div>
         <SheetDescription className="text-base font-medium text-foreground">
           {heading}
