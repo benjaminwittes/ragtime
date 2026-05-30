@@ -74,7 +74,8 @@ import {
   parseCfrSynthesis,
   parseSynthesis,
   buildPlanningSystem,
-  buildReadSystem
+  buildReadSystem,
+  buildSynthesisSystem
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -2640,5 +2641,93 @@ describe("litigation Read — functional-equivalence matching", () => {
 
   it("requires the reason field to name the specific docket-language match", () => {
     expect(sys).toMatch(/the 'reason' should name the specific docket-language match/);
+  });
+});
+
+// ============================================================================
+// PR 5a — Refinement series #2: motion→order chain queries. Pins the planner's
+// COURT-ACTION-ON-MOTION pattern guidance + the synthesis's motion-order pair
+// classification rule. Drives off the 2026-05-29 validation finding that PR 4z
+// fixed the planner's vocabulary fan-out but left the synthesis too literal
+// about "GRANTED" — Comey/James/Broadview (all with motion→order chains for
+// grand jury disclosure) didn't surface in the cited list.
+// ============================================================================
+
+describe("litigation planner — motion→order chain queries (PR 5a)", () => {
+  const sys = buildPlanningSystem();
+
+  it("names the court-action-on-motion question shape explicitly", () => {
+    expect(sys).toMatch(/COURT-ACTION-ON-MOTION/);
+  });
+
+  it("explains why a single-entry FTS can't answer chain questions", () => {
+    expect(sys).toMatch(/the order entry frequently references the motion only by entry number/);
+  });
+
+  it("provides a within-case chain CTE template (motion CTE × order CTE JOIN)", () => {
+    expect(sys).toMatch(/WITH gjmotions AS/);
+    expect(sys).toMatch(/gjorders/);
+    expect(sys).toMatch(/JOIN gjorders o USING \(cl_id\)/);
+    expect(sys).toMatch(/order_entry > m\.motion_entry/i);
+  });
+
+  it("warns about running the chain query at full-corpus scale without scope narrowing", () => {
+    expect(sys).toMatch(/Avoid this pattern over the FULL 1\.09M-case corpus/);
+  });
+
+  it("pins the empirically-validated recovery counts as the chain worked-example", () => {
+    // Comey 27×77, James 26×59, Rabbitt 3×9 are the live-corpus probe results
+    // that justify the chain pattern; if these numbers move materially the
+    // worked example should be re-validated, not silently edited.
+    expect(sys).toMatch(/Comey 27.{0,3}77/);
+    expect(sys).toMatch(/James 26.{0,3}59/);
+    expect(sys).toMatch(/Rabbitt 3.{0,3}9/);
+  });
+});
+
+describe("litigation synthesis — motion-order pair classification (PR 5a)", () => {
+  const sysHybrid = buildSynthesisSystem('hybrid');
+  const sysList = buildSynthesisSystem('list');
+  const sysNarrative = buildSynthesisSystem('narrative');
+
+  it("names the classification rule across all three output modes", () => {
+    [sysHybrid, sysList, sysNarrative].forEach((sys) => {
+      expect(sys).toMatch(/MOTION→ORDER CHAIN CLASSIFICATION/);
+    });
+  });
+
+  it("instructs the model to classify pairs by substance, not by literal 'GRANTED'", () => {
+    expect(sysHybrid).toMatch(/Don't over-narrow on the literal word "GRANTED"/);
+  });
+
+  it("names all six response patterns (full grant, in-camera-only, partial, denial, scheduling, unrelated)", () => {
+    // The taxonomy is what stops the model from dropping James-style
+    // in-camera-only orders + the Comey-style denial-on-different-grounds
+    // edge case. Tests pin each label so silent edits don't erode the
+    // coverage.
+    expect(sysHybrid).toMatch(/Granted in full/);
+    expect(sysHybrid).toMatch(/Granted for in camera review only/);
+    expect(sysHybrid).toMatch(/Granted in part \/ denied in part/);
+    expect(sysHybrid).toMatch(/\*\*Denied\*\*/);
+    expect(sysHybrid).toMatch(/\*\*Scheduling/);
+    expect(sysHybrid).toMatch(/\*\*Order on a different motion in the same case\*\*/);
+  });
+
+  it("specifically calls out the James pattern (in camera review IS a form of grant)", () => {
+    expect(sysHybrid).toMatch(/in camera/);
+    expect(sysHybrid).toMatch(/Government is directed to submit/);
+    expect(sysHybrid).toMatch(/the court overcame the presumption of grand jury secrecy/);
+  });
+
+  it("requires synthesis to surface the distribution of response types in the answer markdown", () => {
+    expect(sysHybrid).toMatch(/give the user a sense of the distribution/);
+    expect(sysHybrid).toMatch(/the in-camera-only count/);
+  });
+
+  it("excludes pure scheduling orders from the cited list (regression guard)", () => {
+    // A common failure mode would be padding cl_ids with cases that have
+    // only scheduling/extension orders matching the chain. The rule is
+    // explicit: don't pad. Tests pin the guidance.
+    expect(sysHybrid).toMatch(/NOT responsive on its own — don't pad the cited list/);
   });
 });
