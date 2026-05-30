@@ -77,7 +77,8 @@ import {
   parseSynthesis,
   buildPlanningSystem,
   buildReadSystem,
-  buildSynthesisSystem
+  buildSynthesisSystem,
+  parseUsageLogRequest
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -2771,5 +2772,79 @@ describe("litigation synthesis — motion-order pair classification (PR 5a)", ()
     // only scheduling/extension orders matching the chain. The rule is
     // explicit: don't pad. Tests pin the guidance.
     expect(sysHybrid).toMatch(/NOT responsive on its own — don't pad the cited list/);
+  });
+});
+
+// ============================================================================
+// parseUsageLogRequest — usage + annotation log (ragtime-usage-log-feedback).
+// Validates the client-assembled interaction record before the Worker upserts
+// it. interaction_id must be a uuid; strings are capped; rating is 1..5 or null.
+// ============================================================================
+describe("parseUsageLogRequest", () => {
+  const validId = "11111111-2222-4333-8444-555555555555";
+
+  it("rejects a missing/invalid interaction_id", () => {
+    expect(parseUsageLogRequest({}).ok).toBe(false);
+    expect(parseUsageLogRequest({ interaction_id: "nope" }).ok).toBe(false);
+    expect(parseUsageLogRequest(null).ok).toBe(false);
+  });
+
+  it("accepts a valid uuid and passes through the core trace fields", () => {
+    const r = parseUsageLogRequest({
+      interaction_id: validId,
+      surface: "cfr",
+      mode: "ama",
+      question: "Is projecting on the Washington Monument prosecutable?",
+      output_mode: "hybrid",
+      plan: { output_mode: "hybrid", queries: [{ label: "q", sql: "SELECT 1" }] },
+      query_summary: [{ label: "q", total_rows: 8, was_truncated: false }],
+      answer_markdown: "Yes — 36 CFR § 1.3 …",
+      cited_ids: [101, 102],
+      candor_notes: ["v1 does not cross-reference USC"],
+      cost_cents: 26,
+      provider: "anthropic",
+      model: "claude-sonnet-4-6"
+    });
+    expect(r.ok).toBe(true);
+    expect(r.value.surface).toBe("cfr");
+    expect(r.value.query_summary[0].total_rows).toBe(8);
+    expect(r.value.cited_ids).toEqual([101, 102]);
+    expect(r.value.cost_cents).toBe(26);
+    // un-annotated record has no rating/note
+    expect(r.value.rating).toBe(null);
+    expect(r.value.note).toBe(null);
+  });
+
+  it("keeps a 1..5 rating and drops out-of-range / non-integer ratings", () => {
+    expect(parseUsageLogRequest({ interaction_id: validId, rating: 3 }).value.rating).toBe(3);
+    expect(parseUsageLogRequest({ interaction_id: validId, rating: 0 }).value.rating).toBe(null);
+    expect(parseUsageLogRequest({ interaction_id: validId, rating: 6 }).value.rating).toBe(null);
+    expect(parseUsageLogRequest({ interaction_id: validId, rating: 2.5 }).value.rating).toBe(null);
+  });
+
+  it("preserves a free-text note (the human assessment)", () => {
+    const r = parseUsageLogRequest({ interaction_id: validId, note: "nailed §1.3 but the Part 7 candor note is wrong" });
+    expect(r.value.note).toContain("Part 7 candor note is wrong");
+  });
+
+  it("caps oversized strings so a logger can't blow up the row", () => {
+    const huge = "x".repeat(200000);
+    const r = parseUsageLogRequest({ interaction_id: validId, answer_markdown: huge, question: huge });
+    expect(r.value.answer_markdown.length).toBe(100000);
+    expect(r.value.question.length).toBe(8000);
+  });
+
+  it("coerces wrong-typed structured fields to null rather than trusting them", () => {
+    const r = parseUsageLogRequest({
+      interaction_id: validId,
+      plan: "not-an-object",
+      query_summary: "not-an-array",
+      cited_ids: { nope: 1 },
+      cost_cents: "free"
+    });
+    expect(r.value.plan).toBe(null);
+    expect(r.value.query_summary).toBe(null);
+    expect(r.value.cited_ids).toBe(null);
+    expect(r.value.cost_cents).toBe(null);
   });
 });

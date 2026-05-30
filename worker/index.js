@@ -207,6 +207,9 @@ export default {
       if (path === "/corpus/hub/keyword" && request.method === "POST") {
         return await corpusHubKeywordHandler(request, env, ctx);
       }
+      if (path === "/corpus/feedback/log" && request.method === "POST") {
+        return await corpusFeedbackLogHandler(request, env, ctx);
+      }
       if (path === "/corpus/usc/facets" && request.method === "POST") {
         return await corpusUscFacetsHandler(request, env, ctx);
       }
@@ -735,6 +738,100 @@ async function corpusModelCall(env, ctx, auth, params) {
   }
   const text = (normalized.content && normalized.content[0] && normalized.content[0].text) || "";
   return { text, costCents, balanceCents: auth.authMode === "paid" ? auth.account.balance_cents : null };
+}
+
+// ── Usage + annotation log (feature: ragtime-usage-log-feedback) ────────────
+// Client-side capture: the app already holds the full plan→execute→synthesize
+// trace, so it assembles the record + the logger's inline rating/note and
+// upserts it here (keyed by a client-generated interaction_id). v1 gate = a
+// private client toggle; this endpoint requires valid corpus credentials (any
+// auth mode) so it can't be spammed anonymously and records whatever identity
+// exists. Writes to the APP-project usage_log table via the service role.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseUsageLogRequest(body) {
+  if (!body || typeof body !== "object") return { ok: false, error: "missing body" };
+  const id = String(body.interaction_id || "").trim();
+  if (!UUID_RE.test(id)) return { ok: false, error: "invalid interaction_id (uuid required)" };
+  const str = (v, cap) => (typeof v === "string" && v.trim() ? v.slice(0, cap) : null);
+  const rating = (Number.isInteger(body.rating) && body.rating >= 1 && body.rating <= 5) ? body.rating : null;
+  return {
+    ok: true,
+    value: {
+      interaction_id: id,
+      client_ts: str(body.client_ts, 40),
+      surface: str(body.surface, 80),
+      mode: str(body.mode, 40),
+      question: str(body.question, 8000),
+      output_mode: str(body.output_mode, 40),
+      plan: (body.plan && typeof body.plan === "object") ? body.plan : null,
+      query_summary: Array.isArray(body.query_summary) ? body.query_summary : null,
+      answer_markdown: str(body.answer_markdown, 100000),
+      cited_ids: Array.isArray(body.cited_ids) ? body.cited_ids : null,
+      candor_notes: Array.isArray(body.candor_notes) ? body.candor_notes : null,
+      cost_cents: (typeof body.cost_cents === "number" && isFinite(body.cost_cents)) ? body.cost_cents : null,
+      provider: str(body.provider, 40),
+      model: str(body.model, 80),
+      logger_label: str(body.logger_label, 80),
+      rating,
+      note: str(body.note, 8000)
+    }
+  };
+}
+
+async function corpusFeedbackLogHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  // Require valid corpus credentials (paid JWT / demo password / BYOK key) —
+  // spam protection + server-trusted identity. Same gate as any /corpus call.
+  const auth = await resolveCorpusAuth(request, env, ctx, "anthropic", body);
+  if (auth instanceof Response) return auth;
+  const parsed = parseUsageLogRequest(body);
+  if (!parsed.ok) return json({ error: { message: "Usage log: " + parsed.error } }, 400);
+  const v = parsed.value;
+
+  // Server-trusted email from the JWT (paid sessions); never trust a client claim.
+  let userEmail = null;
+  const m = (request.headers.get("Authorization") || "").match(/^Bearer\s+(.+)$/i);
+  if (m) { const c = await verifyJwt(m[1], env); if (c && c.email) userEmail = String(c.email).toLowerCase(); }
+
+  const row = {
+    interaction_id: v.interaction_id,
+    client_ts: v.client_ts,
+    auth_mode: auth.authMode,
+    user_id: auth.userId,
+    user_email: userEmail,
+    logger_label: v.logger_label,
+    surface: v.surface,
+    mode: v.mode,
+    question: v.question,
+    output_mode: v.output_mode,
+    plan: v.plan,
+    query_summary: v.query_summary,
+    answer_markdown: v.answer_markdown,
+    cited_ids: v.cited_ids,
+    candor_notes: v.candor_notes,
+    cost_cents: v.cost_cents,
+    provider: v.provider,
+    model: v.model,
+    rating: v.rating,
+    note: v.note,
+    annotated_at: (v.rating != null || v.note != null) ? new Date().toISOString() : null
+  };
+  try {
+    const r = await supabaseFetch(env, "/rest/v1/usage_log?on_conflict=interaction_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(row)
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      return json({ error: { message: "usage_log write failed: " + r.status + " " + t.slice(0, 200) } }, 502);
+    }
+  } catch (e) {
+    return json({ error: { message: "usage_log write error: " + e.message } }, 502);
+  }
+  return json({ ok: true, interaction_id: v.interaction_id }, 200);
 }
 
 function fmtIntJs(n) { return Number(n || 0).toLocaleString("en-US"); }
@@ -5994,5 +6091,6 @@ export {
   parseSynthesis,
   buildPlanningSystem,
   buildReadSystem,
-  buildSynthesisSystem
+  buildSynthesisSystem,
+  parseUsageLogRequest
 };
