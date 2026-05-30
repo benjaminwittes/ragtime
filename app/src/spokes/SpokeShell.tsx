@@ -21,6 +21,7 @@ import {
 import { useDocs } from '@/docs/DocsContext'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
+import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AmaPreflight } from './components/AmaPreflight'
@@ -477,6 +478,32 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         ...(plan.candor_notes ?? []),
         ...(synth.candor_notes ?? []),
       ])
+
+      // Usage log (ragtime-usage-log-feedback): litigation auto-logs the
+      // trace. The inline rating/note affordance the spokes render below the
+      // answer needs a different anchor in litigation's stacked-page model —
+      // deferred to a follow-up; this captures the machine trace meanwhile.
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'litigation',
+          mode: 'ama',
+          question,
+          output_mode: synth.output_mode,
+          plan: {
+            output_mode: plan.output_mode,
+            approach_summary: plan.approach_summary,
+            queries: plan.queries,
+            estimated_cost_cents: plan.estimated_cost_cents,
+          },
+          query_summary: synth.query_summary,
+          answer_markdown: synth.answer_markdown,
+          cited_ids: synth.cl_ids,
+          candor_notes: allCandor,
+          cost_cents: (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0),
+        },
+        auth.auth,
+      )
 
       pushPage({
         operationType: 'claude_ama',

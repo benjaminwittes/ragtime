@@ -23,6 +23,8 @@ import { AmaPreflight } from '../components/AmaPreflight'
 import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ModeRow } from '../components/ModeRow'
+import { UsageLogAnnotation } from '../components/UsageLogAnnotation'
+import { newInteractionId } from '@/lib/usage-log'
 import { UscAmaResult } from './UscAmaResult'
 import { UscFilterForm } from './UscFilterForm'
 import { UscResultsList } from './UscResultsList'
@@ -106,6 +108,9 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [amaError, setAmaError] = useState<string | undefined>(undefined)
   const [amaLoading, setAmaLoading] = useState(false)
   const [amaResultPlan, setAmaResultPlan] = useState<UscAmaPlan | null>(null)
+  // Usage log (ragtime-usage-log-feedback).
+  const [amaInteractionId, setAmaInteractionId] = useState<string | null>(null)
+  const [amaQuestion, setAmaQuestion] = useState('')
 
   const enabledModes: QueryMode[] = ['manual_filter']
   if (auth.hasAuth) enabledModes.push('claude_ama')
@@ -204,10 +209,10 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       setPendingPlan({ plan, question })
       return
     }
-    await runAmaExecute(plan)
+    await runAmaExecute(plan, question)
   }
 
-  async function runAmaExecute(plan: UscAmaPlan) {
+  async function runAmaExecute(plan: UscAmaPlan, question: string) {
     if (!auth.auth) return
     appendLog({
       label: 'Step 2/3.',
@@ -225,6 +230,8 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       })
       setAmaSynthesis(synth)
       setAmaResultPlan(plan)
+      setAmaInteractionId(newInteractionId())
+      setAmaQuestion(question)
       const total = (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0)
       if (total > 0) {
         appendLog({
@@ -246,9 +253,9 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   async function handleAmaProceed() {
     if (!pendingPlan) return
-    const { plan } = pendingPlan
+    const { plan, question } = pendingPlan
     setPendingPlan(null)
-    await runAmaExecute(plan)
+    await runAmaExecute(plan, question)
   }
 
   function handleAmaCancel() {
@@ -306,6 +313,32 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           loading={amaLoading}
           error={amaError}
           onOpenSection={handleOpenSection}
+        />
+      )}
+      {activeMode === 'claude_ama' && amaSynthesis && amaInteractionId && (
+        <UsageLogAnnotation
+          auth={auth.auth}
+          record={{
+            interaction_id: amaInteractionId,
+            surface: 'usc',
+            mode: 'ama',
+            question: amaQuestion,
+            output_mode: amaSynthesis.output_mode,
+            plan: amaResultPlan
+              ? {
+                  output_mode: amaResultPlan.output_mode,
+                  approach_summary: amaResultPlan.approach_summary,
+                  queries: amaResultPlan.queries,
+                  estimated_cost_cents: amaResultPlan.estimated_cost_cents,
+                }
+              : null,
+            query_summary: amaSynthesis.query_summary,
+            answer_markdown: amaSynthesis.answer_markdown,
+            cited_ids: amaSynthesis.section_ids,
+            candor_notes: amaSynthesis.candor_notes,
+            cost_cents:
+              (amaResultPlan?._cost_cents ?? 0) + (amaSynthesis._cost_cents ?? 0),
+          }}
         />
       )}
       <UscSectionDetailSheet

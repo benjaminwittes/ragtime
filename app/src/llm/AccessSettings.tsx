@@ -19,6 +19,7 @@ import {
 import { TopupDialog } from '@/auth/TopupDialog'
 import { usePaid } from '@/auth/use-paid'
 import { getDemoPassword, setDemoPassword } from '@/lib/demo-access'
+import { setUsageLogEnabled, useUsageLogEnabled } from '@/lib/usage-log'
 import type { Provider } from './byok-context'
 import { useByok } from './use-byok'
 
@@ -111,6 +112,7 @@ export function AccessSettings() {
  */
 function PreferencesPanel() {
   const [skip, setSkipState] = useState(() => isAmaPreflightSkipped())
+  const usageLogOn = useUsageLogEnabled()
 
   useEffect(() => {
     return subscribeAmaPreflightSkip(() => setSkipState(isAmaPreflightSkipped()))
@@ -141,6 +143,24 @@ function PreferencesPanel() {
             and asks for confirmation before the synthesis call fires.
             Default on. Turn off if you want AMA queries to auto-execute
             after planning.
+          </span>
+        </span>
+      </label>
+      <label className="mt-4 flex items-start gap-3 opacity-80">
+        <input
+          type="checkbox"
+          checked={usageLogOn}
+          onChange={(e) => setUsageLogEnabled(e.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+        />
+        <span className="space-y-0.5">
+          <span className="block text-sm font-medium text-foreground">
+            Log my sessions for tuning
+          </span>
+          <span className="block text-[11px] leading-relaxed text-muted-foreground">
+            Records each AI answer you run — the query, the plan, what it
+            returned, and any rating/note you add — so the tool can be
+            refined from real use. Off by default. Your sessions only.
           </span>
         </span>
       </label>
