@@ -20,6 +20,7 @@ import { useAuth } from '@/lib/use-auth'
 import { isAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
+import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ModeRow } from '../components/ModeRow'
 import { OlcAmaResult } from './OlcAmaResult'
@@ -358,6 +359,7 @@ function OlcHeader({
   const knight = holdings?.provenance?.knight_foia
   return (
     <header className="border-b border-border bg-card px-6 py-5">
+      <BackToHubLink className="mb-3" />
       <div className="flex items-start justify-between gap-4">
         <div className="max-w-3xl">
           <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
