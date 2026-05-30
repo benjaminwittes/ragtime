@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
+import { toHref } from '@/lib/routing'
 import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
 
 /**
@@ -27,7 +28,7 @@ export function ComingSoonSpoke({
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3">
           <a
-            href="/"
+            href={toHref('/')}
             onClick={(e) => {
               if (
                 e.button === 0 &&
@@ -77,7 +78,7 @@ export function ComingSoonSpoke({
               their own PR.
             </p>
             <a
-              href="/"
+              href={toHref('/')}
               onClick={(e) => {
                 if (
                   e.button === 0 &&

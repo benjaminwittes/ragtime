@@ -1,6 +1,7 @@
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import type { CorpusHoldings, CorpusSpoke } from '../types'
+import { BackToHubLink } from './BackToHubLink'
 
 /**
  * The spoke's top band: title + plain-English disclosure (brief #6 decision
@@ -29,6 +30,7 @@ export function SpokeHeader({
   return (
     <header className="border-b border-border bg-card">
       <div className="mx-auto max-w-6xl px-6 py-6">
+        <BackToHubLink className="mb-3" />
         <div className="flex items-baseline justify-between gap-4">
           <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
             {spoke.title}
