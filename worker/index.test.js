@@ -44,6 +44,7 @@ import {
   parseUscSummary,
   buildUscPlanningUser,
   buildUscSummarizeUser,
+  buildUscPlanningSystem,
   executeUscPlan,
   USC_SUMMARIZE_TEXT_CAP,
   USC_SCOPE_LITERAL_LIMIT,
@@ -53,6 +54,7 @@ import {
   parseCfrSummary,
   buildCfrPlanningUser,
   buildCfrSummarizeUser,
+  buildCfrPlanningSystem,
   executeCfrPlan,
   CFR_SUMMARIZE_TEXT_CAP,
   CFR_SCOPE_LITERAL_LIMIT,
@@ -441,8 +443,12 @@ describe("buildCfrFilterWhere", () => {
     );
   });
 
-  it("filters by the CFR `part` field (exact match)", () => {
-    expect(buildCfrFilterWhere({ part: "164" })).toBe(" WHERE part = '164'");
+  it("filters by the CFR part via the normalized part_num column (punchlist #3)", () => {
+    // `part` is stored as a verbose label ("PART 164—…"), so a bare
+    // `part = '164'` always returned zero rows. Scoping must hit the
+    // generated part_num column instead.
+    expect(buildCfrFilterWhere({ part: "164" })).toBe(" WHERE part_num = '164'");
+    expect(buildCfrFilterWhere({ part: "164" })).not.toMatch(/\bpart = '/);
   });
 
   it("filters by reserved status when explicitly set", () => {
@@ -465,10 +471,46 @@ describe("buildCfrFilterWhere", () => {
     expect(where.startsWith(" WHERE ")).toBe(true);
     expect(where).toContain("fts @@");
     expect(where).toContain("title_num = 45");
-    expect(where).toContain("part = '164'");
+    expect(where).toContain("part_num = '164'");
     expect(where).toContain("reserved = false");
     // Four predicates separated by three ANDs.
     expect((where.match(/ AND /g) || []).length).toBe(3);
+  });
+});
+
+// ============================================================================
+// Structural-identifier scoping regression (punchlist #3).
+// part/chapter columns store VERBOSE LABELS ("PART 160—…", "CHAPTER II—…"),
+// so the planners must scope via the normalized generated part_num/chapter_num
+// columns — never bare part/chapter, which silently returned zero rows and
+// caused the model to emit a FALSE "corpus may be incomplete" candor note.
+// These guard the AMA-path fix (the manual-filter fix is covered above).
+// ============================================================================
+describe("structural-identifier scoping (punchlist #3)", () => {
+  const cfrSys = buildCfrPlanningSystem();
+  const uscSys = buildUscPlanningSystem();
+
+  it("CFR planner scopes parts via part_num (HIPAA + Reg Z examples)", () => {
+    expect(cfrSys).toMatch(/part_num IN \('160','164'\)/);
+    expect(cfrSys).toMatch(/part_num='1026'/);
+  });
+
+  it("CFR planner scopes the NEPA range via part_num BETWEEN", () => {
+    expect(cfrSys).toMatch(/part_num BETWEEN '1500' AND '1508'/);
+  });
+
+  it("CFR planner routes agencies via chapter_num (Fed example)", () => {
+    expect(cfrSys).toMatch(/chapter_num='II'/);
+  });
+
+  it("USC planner scopes the UCMJ chapter via chapter_num", () => {
+    expect(uscSys).toMatch(/chapter_num='47'/);
+  });
+
+  it("both planners document the normalized columns in their schema", () => {
+    expect(cfrSys).toContain("part_num");
+    expect(cfrSys).toContain("chapter_num");
+    expect(uscSys).toContain("chapter_num");
   });
 });
 
