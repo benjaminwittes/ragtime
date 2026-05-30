@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
+import { toHref } from '@/lib/routing'
 import { spokes } from '@/spokes/registry'
 import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
 import { HubKeywordSearch } from './HubKeywordSearch'
@@ -108,6 +109,7 @@ function SpokeCard({
 }) {
   const active = spoke.status === 'active'
   const href = `/corpus/${spoke.slug}`
+  const realHref = toHref(href)
 
   return (
     <Card
@@ -124,7 +126,7 @@ function SpokeCard({
         <HoldingsSummary spoke={spoke} />
         {active ? (
           <a
-            href={href}
+            href={realHref}
             onClick={(e) => {
               if (
                 e.button === 0 &&
@@ -143,7 +145,7 @@ function SpokeCard({
           </a>
         ) : (
           <a
-            href={href}
+            href={realHref}
             onClick={(e) => {
               if (
                 e.button === 0 &&

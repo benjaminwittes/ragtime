@@ -1,31 +1,36 @@
 name: Build App
 
-# Builds and validates the React app (`app/`) on PR + push.
+# Builds, validates, and (on push to main) deploys the React app (`app/`) to
+# GitHub Pages.
 #
 # Trigger behavior:
 #   - pull_request touching app/**  → install, lint, build (validates compile)
-#   - push to main touching app/**  → same (validates main stays buildable)
+#   - push to main touching app/**  → build + deploy the React build artifact
 #
-# This workflow does NOT deploy the app. The production site at
-# https://benjaminwittes.github.io/ragtime/ is still served from the legacy
-# single-file index.html at the repo root via GH Pages source = main:/.
-# A separate cutover PR will:
-#   (a) flip GH Pages to deploy the React build artifact (either via
-#       actions/deploy-pages with source = "GitHub Actions", or via a
-#       gh-pages branch pattern),
-#   (b) add the actual deploy step to this workflow,
-#   (c) coordinate the DNS/serving cutover so the live site doesn't blink.
-# Until then, this workflow is build-validation only.
+# Production cutover (2026-05-30): GitHub Pages now serves the React build at
+# https://benjaminwittes.github.io/ragtime/ instead of the legacy single-file
+# index.html. This requires the repo's Pages "Source" to be set to
+# "GitHub Actions" (Settings → Pages) — a one-time manual toggle.
+#
+# The build runs with Vite base = /ragtime/ (the project-site subpath). The
+# move to a custom domain (ragtime.lawfaremedia.org, served at origin root)
+# is a follow-up: set VITE_BASE=/ in the build step, add a CNAME, point DNS,
+# and update the Worker's APP_BASE_URL. See app/vite.config.ts.
+#
+# The legacy single-file app is preserved at /ragtime/legacy.html as a
+# transition safety net.
 
 on:
   pull_request:
     paths:
       - 'app/**'
+      - 'index.html'
       - '.github/workflows/build-app.yml'
   push:
     branches: [main]
     paths:
       - 'app/**'
+      - 'index.html'
       - '.github/workflows/build-app.yml'
   workflow_dispatch:
 
@@ -62,3 +67,33 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Preserve legacy single-file app at /legacy.html
+        run: cp ../index.html dist/legacy.html
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+
+  # Deploys the build artifact to GitHub Pages. Only on push to main /
+  # manual dispatch — PRs build-validate but never publish.
+  deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Serialize Pages deploys; don't cancel an in-flight publish.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

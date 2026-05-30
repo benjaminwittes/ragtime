@@ -8,6 +8,7 @@ import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
+import { toHref, toLogical } from '@/lib/routing'
 import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
 
 /**
@@ -43,21 +44,23 @@ function parseRoute(pathname: string): Route {
 
 function App() {
   const [route, setRoute] = useState<Route>(() =>
-    parseRoute(window.location.pathname),
+    parseRoute(toLogical(window.location.pathname)),
   )
 
   useEffect(() => {
     function onPopState() {
-      setRoute(parseRoute(window.location.pathname))
+      setRoute(parseRoute(toLogical(window.location.pathname)))
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  function navigate(pathname: string) {
-    if (pathname === window.location.pathname) return
-    window.history.pushState(null, '', pathname)
-    setRoute(parseRoute(pathname))
+  // `logicalPath` is base-relative (`/`, `/corpus/<slug>`); `toHref` adds the
+  // deploy mount prefix before it touches the History API / the address bar.
+  function navigate(logicalPath: string) {
+    if (toLogical(window.location.pathname) === logicalPath) return
+    window.history.pushState(null, '', toHref(logicalPath))
+    setRoute(parseRoute(logicalPath))
   }
 
   // The CheckoutReturnGate is rendered as a sibling next to every route so
@@ -113,7 +116,7 @@ function NotFound({
           No surface matches <code className="font-mono">{pathname}</code>.
         </p>
         <a
-          href="/"
+          href={toHref('/')}
           onClick={(e) => {
             if (
               e.button === 0 &&

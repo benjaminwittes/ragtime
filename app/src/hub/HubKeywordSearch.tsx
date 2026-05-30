@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { toHref } from '@/lib/routing'
 import {
   type HubCorpusSlug,
   type HubKeywordResponse,
@@ -240,7 +241,7 @@ function CorpusResultCard({
           </span>
         </h3>
         <a
-          href={href}
+          href={toHref(href)}
           onClick={(e) => {
             if (
               e.button === 0 &&
