@@ -17,7 +17,12 @@
  * `wrangler dev` instance.
  */
 
-import { type AuthArg, authBody, authHeaders } from '@/lib/auth-arg'
+import {
+  type AuthArg,
+  authBody,
+  authCredentialBody,
+  authHeaders,
+} from '@/lib/auth-arg'
 import type { CorpusSlug } from '@/spokes/types'
 
 const WORKER_URL =
@@ -586,7 +591,7 @@ export async function runUscExecute(
     headers: authHeaders(auth),
     body: JSON.stringify({
       token,
-      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+      ...authCredentialBody(auth),
     }),
   })
   if (!r.ok) {
@@ -834,7 +839,7 @@ export async function runCfrExecute(
     headers: authHeaders(auth),
     body: JSON.stringify({
       token,
-      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+      ...authCredentialBody(auth),
     }),
   })
   if (!r.ok) {
@@ -1109,7 +1114,7 @@ export async function runOlcExecute(
     headers: authHeaders(auth),
     body: JSON.stringify({
       token,
-      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+      ...authCredentialBody(auth),
     }),
   })
   if (!r.ok) {
@@ -1396,7 +1401,7 @@ export async function runFrusExecute(
     headers: authHeaders(auth),
     body: JSON.stringify({
       token,
-      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+      ...authCredentialBody(auth),
     }),
   })
   if (!r.ok) {
@@ -1570,7 +1575,7 @@ export async function runClaudeExecute(
       token,
       // BYOK still carries the api key in the body; paid mode adds nothing
       // here since the JWT is on the Authorization header.
-      ...(auth.mode === 'byok' ? { user_api_key: auth.apiKey } : {}),
+      ...authCredentialBody(auth),
     }),
   })
   if (!r.ok) {
