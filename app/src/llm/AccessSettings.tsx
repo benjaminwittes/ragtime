@@ -18,8 +18,11 @@ import {
 } from '@/lib/ama-preflight-skip'
 import { TopupDialog } from '@/auth/TopupDialog'
 import { usePaid } from '@/auth/use-paid'
+import { getDemoPassword, setDemoPassword } from '@/lib/demo-access'
 import type { Provider } from './byok-context'
 import { useByok } from './use-byok'
+
+type AccessTab = 'paid' | 'byok' | 'demo'
 
 /**
  * "AI access" header affordance — opens a sheet with two ways to authorize
@@ -45,22 +48,22 @@ export function AccessSettings() {
   // Default the active tab to whatever the user has configured (or paid
   // when neither, since paid is the recommended path). Persisted only for
   // the lifetime of the sheet open — re-opens restart from the default.
-  const [tab, setTab] = useState<'paid' | 'byok'>(
-    auth.isPaid ? 'paid' : auth.hasByok ? 'byok' : 'paid',
-  )
+  const [tab, setTab] = useState<AccessTab>(() => defaultTab(auth))
 
   const pipColor = auth.isPaid
     ? 'bg-primary'
     : auth.hasByok
       ? 'bg-emerald-500'
-      : 'bg-muted-foreground/40'
+      : auth.isDemo
+        ? 'bg-amber-500'
+        : 'bg-muted-foreground/40'
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <button
         type="button"
         onClick={() => {
-          setTab(auth.isPaid ? 'paid' : auth.hasByok ? 'byok' : 'paid')
+          setTab(defaultTab(auth))
           setOpen(true)
         }}
         aria-label="Configure AI access"
@@ -89,11 +92,9 @@ export function AccessSettings() {
           <TabRow tab={tab} setTab={setTab} />
         </div>
         <div className="flex-1 overflow-y-auto p-5">
-          {tab === 'paid' ? (
-            <PaidPanel onClose={() => setOpen(false)} />
-          ) : (
-            <ByokPanel onClose={() => setOpen(false)} />
-          )}
+          {tab === 'paid' && <PaidPanel onClose={() => setOpen(false)} />}
+          {tab === 'byok' && <ByokPanel onClose={() => setOpen(false)} />}
+          {tab === 'demo' && <DemoPanel onClose={() => setOpen(false)} />}
           <PreferencesPanel />
         </div>
       </SheetContent>
@@ -147,12 +148,23 @@ function PreferencesPanel() {
   )
 }
 
+function defaultTab(auth: {
+  isPaid: boolean
+  hasByok: boolean
+  isDemo: boolean
+}): AccessTab {
+  if (auth.isPaid) return 'paid'
+  if (auth.hasByok) return 'byok'
+  if (auth.isDemo) return 'demo'
+  return 'paid'
+}
+
 function TabRow({
   tab,
   setTab,
 }: {
-  tab: 'paid' | 'byok'
-  setTab: (t: 'paid' | 'byok') => void
+  tab: AccessTab
+  setTab: (t: AccessTab) => void
 }) {
   return (
     <div role="tablist" className="flex">
@@ -167,6 +179,12 @@ function TabRow({
         onClick={() => setTab('byok')}
         label="Bring your own key"
         sub="Anthropic only"
+      />
+      <TabButton
+        active={tab === 'demo'}
+        onClick={() => setTab('demo')}
+        label="Demo"
+        sub="Lawfare key"
       />
     </div>
   )
@@ -482,6 +500,62 @@ function ByokForm({
         </Button>
         {initial && (
           <Button type="button" variant="ghost" onClick={onClear}>
+            Clear
+          </Button>
+        )}
+      </div>
+    </form>
+  )
+}
+
+/**
+ * TEMPORARY pre-launch demo affordance. Lets a demoer paste the shared
+ * Lawfare demo password, which unlocks the Worker's demo auth mode
+ * (Lawfare-billed Anthropic, shared daily quota, no per-user balance).
+ * Not a launch tier — see src/lib/demo-access.ts. Remove with that module.
+ */
+function DemoPanel({ onClose }: { onClose: () => void }) {
+  const [password, setPassword] = useState(() => getDemoPassword() ?? '')
+  const saved = getDemoPassword()
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = password.trim()
+    if (!trimmed) return
+    setDemoPassword(trimmed)
+    onClose()
+  }
+
+  function handleClear() {
+    setDemoPassword(null)
+    setPassword('')
+    onClose()
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-foreground/90">
+        Internal demo access. Enter the shared Lawfare demo password to run AI
+        modes on Lawfare&apos;s key (shared daily quota, no balance). For
+        demos only — regular users use Lawfare-billed sign-in or their own
+        key.
+      </div>
+      <Field label="Demo password">
+        <Input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Demo password"
+        />
+      </Field>
+      <div className="flex items-center gap-2 pt-2">
+        <Button type="submit" disabled={!password.trim()}>
+          {saved ? 'Update' : 'Save'}
+        </Button>
+        {saved && (
+          <Button type="button" variant="ghost" onClick={handleClear}>
             Clear
           </Button>
         )}
