@@ -21,10 +21,11 @@ import {
 import { useDocs } from '@/docs/DocsContext'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
-import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { type UsageLogRecord } from '@/lib/usage-log'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AmaPreflight } from './components/AmaPreflight'
+import { UsageLogAnnotation } from './components/UsageLogAnnotation'
 import { Breadcrumb } from './components/Breadcrumb'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
 import { ClaudeAmaForm, type AmaLogLine } from './components/ClaudeAmaForm'
@@ -479,32 +480,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         ...(synth.candor_notes ?? []),
       ])
 
-      // Usage log (ragtime-usage-log-feedback): litigation auto-logs the
-      // trace. The inline rating/note affordance the spokes render below the
-      // answer needs a different anchor in litigation's stacked-page model —
-      // deferred to a follow-up; this captures the machine trace meanwhile.
-      void postUsageLog(
-        {
-          interaction_id: newInteractionId(),
-          surface: 'litigation',
-          mode: 'ama',
-          question,
-          output_mode: synth.output_mode,
-          plan: {
-            output_mode: plan.output_mode,
-            approach_summary: plan.approach_summary,
-            queries: plan.queries,
-            estimated_cost_cents: plan.estimated_cost_cents,
-          },
-          query_summary: synth.query_summary,
-          answer_markdown: synth.answer_markdown,
-          cited_ids: synth.cl_ids,
-          candor_notes: allCandor,
-          cost_cents: (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0),
-        },
-        auth.auth,
-      )
-
       pushPage({
         operationType: 'claude_ama',
         operationLabel: buildClaudeAmaLabel(question),
@@ -653,6 +628,12 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         source={viewingPage?.source}
         onOpenCase={handleOpenCase}
       />
+      {viewingPage && (
+        <UsageLogAnnotation
+          auth={auth.auth}
+          record={litigationRecordFromPage(viewingPage)}
+        />
+      )}
       <CaseDetailSheet
         case={openCase}
         open={detailOpen}
@@ -667,6 +648,58 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
     </div>
   )
+}
+
+/**
+ * Map a litigation stack page → usage-log record (INTERNAL logging tool, see
+ * @/lib/usage-log — strip before release). Reuses the page's stable id as the
+ * interaction id, so re-logging the same page upserts one row. Covers every
+ * litigation operation (filter / sql / read / analyze / ama).
+ */
+function litigationRecordFromPage(page: StackPage): UsageLogRecord {
+  const s = page.source
+  const base = {
+    interaction_id: page.id,
+    surface: 'litigation',
+    question: page.operationLabel,
+    cited_ids: page.rows.map((r) => r.cl_id),
+  }
+  switch (s.kind) {
+    case 'manual_filter':
+      return { ...base, mode: 'manual_filter', plan: { generated_sql: s.generatedSql } }
+    case 'claude_sql':
+      return {
+        ...base,
+        mode: 'sql',
+        question: s.prompt,
+        plan: { generated_sql: s.generatedSql, label: s.label },
+      }
+    case 'claude_read':
+      return {
+        ...base,
+        mode: 'read',
+        question: s.criterion,
+        plan: { incoming_count: s.incomingCount, kept_count: s.keptCount },
+      }
+    case 'claude_analysis':
+      return {
+        ...base,
+        mode: 'analyze',
+        question: s.prompt,
+        answer_markdown: s.markdown,
+      }
+    case 'claude_ama':
+      return {
+        ...base,
+        mode: 'ama',
+        question: s.question,
+        output_mode: s.outputMode,
+        answer_markdown: s.answerMarkdown,
+        candor_notes: s.candorNotes,
+        plan: { approach_summary: s.planSummary },
+      }
+  }
+  return { ...base, mode: 'manual_filter' } // unreachable; exhaustive above
 }
 
 /**
