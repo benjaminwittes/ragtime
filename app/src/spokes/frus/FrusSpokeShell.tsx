@@ -24,7 +24,7 @@ import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ModeRow } from '../components/ModeRow'
 import { UsageLogAnnotation } from '../components/UsageLogAnnotation'
-import { newInteractionId } from '@/lib/usage-log'
+import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { FrusAmaResult } from './FrusAmaResult'
 import { FrusDocumentDetailSheet } from './FrusDocumentDetailSheet'
 import { FrusFilterForm } from './FrusFilterForm'
@@ -164,6 +164,17 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       setCount(r.count)
       setFilterIds(r.ids)
       setExecutedSql(r.executed_sql)
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'frus',
+          mode: 'manual_filter',
+          question: fields.search ?? fields.title ?? fields.place ?? '(structured filter)',
+          plan: { fields, executed_sql: r.executed_sql },
+          cited_ids: r.ids,
+        },
+        auth.auth,
+      )
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
       setRows([])

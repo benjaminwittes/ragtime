@@ -21,6 +21,16 @@ import { type AuthArg, authCredentialBody, authHeaders } from '@/lib/auth-arg'
  * research flow, so postUsageLog swallows all errors.
  *
  * Storage: localStorage `ragtime_usage_log_v1` ('on' | absent).
+ *
+ * ⚠️ INTERNAL TOOL, NOT PRODUCT. This is part of the internal refinement
+ * process and is meant to be STRIPPED OUT or disabled before public release.
+ * It's off by default (the private toggle), so it's inert for release even if
+ * left in. To remove entirely: delete this file + UsageLogAnnotation.tsx,
+ * remove the "Log my sessions for tuning" toggle from AccessSettings
+ * (PreferencesPanel), and grep `usage-log` / `UsageLogAnnotation` to delete
+ * the one-line call sites in the spoke shells (plus the Worker's
+ * /corpus/feedback/log handler + the usage_log table). Same disposable
+ * posture as demo-access.ts.
  */
 
 const WORKER_URL =
@@ -82,7 +92,7 @@ export function newInteractionId(): string {
 export type UsageLogRecord = {
   interaction_id: string
   surface: string
-  mode: 'ama' | 'keyword' | 'manual_filter' | 'summarize'
+  mode: 'ama' | 'keyword' | 'manual_filter' | 'summarize' | 'sql' | 'read' | 'analyze'
   question?: string | null
   output_mode?: string | null
   plan?: unknown

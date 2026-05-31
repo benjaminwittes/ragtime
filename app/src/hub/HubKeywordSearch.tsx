@@ -9,6 +9,8 @@ import {
 } from '@/lib/worker-client'
 import { spokes } from '@/spokes/registry'
 import type { CorpusSlug } from '@/spokes/types'
+import { useAuth } from '@/lib/use-auth'
+import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 
 /**
  * Hub cross-corpus keyword search (PR 4u).
@@ -39,6 +41,7 @@ export function HubKeywordSearch({
 }: {
   onNavigate: (path: string) => void
 }) {
+  const auth = useAuth()
   const [query, setQuery] = useState('')
   const [activeCorpora, setActiveCorpora] = useState<Set<CorpusSlug>>(
     () => new Set(spokes.map((s) => s.slug)),
@@ -65,6 +68,21 @@ export function HubKeywordSearch({
     try {
       const r = await runHubKeyword(q, Array.from(activeCorpora) as HubCorpusSlug[])
       setResponse(r)
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'hub',
+          mode: 'keyword',
+          question: q,
+          plan: {
+            corpora: Array.from(activeCorpora),
+            per_corpus_counts: Object.fromEntries(
+              Object.entries(r.per_corpus).map(([k, v]) => [k, v?.count ?? 0]),
+            ),
+          },
+        },
+        auth.auth,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
