@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AMA_CONFIRM_THRESHOLD_CENTS,
   ANALYSIS_HARD_CAP,
@@ -19,6 +19,7 @@ import {
   runManualFilter,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
+import { readCarryoverQuery } from '@/lib/routing'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { type UsageLogRecord } from '@/lib/usage-log'
@@ -127,6 +128,11 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }, [spoke])
 
+  // Hub → workspace carryover (`?q=`). Read once on mount; auto-run a manual
+  // filter so we land on the responsive set, not the full corpus. The wired
+  // effect lives below, after handleFilterSubmit is in scope.
+  const carryover = useMemo(() => readCarryoverQuery(), [])
+
   // Mode selection. manual_filter is always functional; AI modes become
   // available once a BYOK is configured. claude_read / claude_analysis
   // additionally require a populated tip scope.
@@ -227,6 +233,23 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       setQueryLoading(false)
     }
   }
+
+  // Run the hub-carried keyword as a manual filter, once, on mount. Ref-guarded
+  // so React StrictMode's double-invoke (dev) doesn't push two pages.
+  const carriedOverRef = useRef(false)
+  useEffect(() => {
+    if (carriedOverRef.current || !carryover) return
+    carriedOverRef.current = true
+    // Mirror the filter form's defaults: all courts (omitting `allCourts`
+    // would scope to zero courts → zero rows) and the post-2025-01-20 floor.
+    void handleFilterSubmit({
+      search: carryover,
+      allCourts: true,
+      from: '2025-01-20',
+    })
+    // Mount-only: handleFilterSubmit + carryover are stable for this mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleClaudeSqlSubmit(prompt: string) {
     if (!canSubmit) return
@@ -588,6 +611,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           }
           loading={queryLoading}
           onSubmit={handleFilterSubmit}
+          initialSearch={carryover ?? undefined}
         />
       )}
       {canSubmit && activeMode === 'claude_sql' && (

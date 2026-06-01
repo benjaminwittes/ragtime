@@ -49,6 +49,11 @@ export function HubKeywordSearch({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [response, setResponse] = useState<HubKeywordResponse | null>(null)
+  // The query that produced `response` — carried into the spoke via `?q=` so
+  // "Open workspace →" lands on the responsive set, not the full corpus. Held
+  // separately from `query` (the live input) so editing the box post-search
+  // doesn't desync the carryover from the displayed results.
+  const [submittedQuery, setSubmittedQuery] = useState('')
 
   function toggleCorpus(slug: CorpusSlug) {
     setActiveCorpora((prev) => {
@@ -68,6 +73,7 @@ export function HubKeywordSearch({
     try {
       const r = await runHubKeyword(q, Array.from(activeCorpora) as HubCorpusSlug[])
       setResponse(r)
+      setSubmittedQuery(q)
       void postUsageLog(
         {
           interaction_id: newInteractionId(),
@@ -148,6 +154,7 @@ export function HubKeywordSearch({
       {response && (
         <HubKeywordResults
           response={response}
+          query={submittedQuery}
           loading={loading}
           onNavigate={onNavigate}
         />
@@ -188,10 +195,12 @@ function CorpusChip({
 
 function HubKeywordResults({
   response,
+  query,
   loading,
   onNavigate,
 }: {
   response: HubKeywordResponse
+  query: string
   loading: boolean
   onNavigate: (path: string) => void
 }) {
@@ -229,6 +238,7 @@ function HubKeywordResults({
               key={corpus}
               corpus={corpus}
               block={block}
+              query={query}
               onNavigate={onNavigate}
             />
           )
@@ -241,13 +251,16 @@ function HubKeywordResults({
 function CorpusResultCard({
   corpus,
   block,
+  query,
   onNavigate,
 }: {
   corpus: CorpusSlug
   block: NonNullable<HubKeywordResponse['per_corpus'][CorpusSlug]>
+  query: string
   onNavigate: (path: string) => void
 }) {
-  const href = `/corpus/${corpus}`
+  // Carry the keyword into the spoke so it lands on the responsive set.
+  const href = `/corpus/${corpus}?q=${encodeURIComponent(query)}`
   const more = Math.max(0, block.count - block.results.length)
   return (
     <article className="rounded-lg border border-border bg-card">

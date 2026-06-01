@@ -37,12 +37,15 @@ export function FilterForm({
   facetData,
   loading,
   onSubmit,
+  initialSearch,
 }: {
   facets: readonly FacetSpec[]
   facetData: FacetData | undefined
   /** Submit-in-flight flag — disables the apply button. */
   loading: boolean
   onSubmit: (fields: FilterFields) => void
+  /** Seed for the FTS field — set when carried over from the hub (`?q=`). */
+  initialSearch?: string
 }) {
   const facetById = useMemo(() => {
     const m = new Map<string, FacetSpec>()
@@ -52,7 +55,7 @@ export function FilterForm({
 
   // Field state. We treat fields as a flat record; the submit step packs
   // it into the FilterFields wire shape.
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch ?? '')
   const [name, setName] = useState('')
   const [judge, setJudge] = useState('')
   const [caseType, setCaseType] = useState<'' | 'cv' | 'cr' | 'mj' | 'mc'>('')

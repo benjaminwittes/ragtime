@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   type OlcAmaPlan,
   type OlcAmaScope,
@@ -13,6 +13,7 @@ import {
   runOlcPlan,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
+import { readCarryoverQuery } from '@/lib/routing'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
@@ -163,6 +164,18 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setOpenOpinion(row)
     setDetailOpen(true)
   }
+
+  // Hub → workspace carryover (`?q=`): seed the filter field + auto-run once
+  // on mount so we land on the responsive set, not the full corpus. Ref-guarded
+  // against StrictMode's dev double-invoke.
+  const carryover = useMemo(() => readCarryoverQuery(), [])
+  const carriedOverRef = useRef(false)
+  useEffect(() => {
+    if (carriedOverRef.current || !carryover) return
+    carriedOverRef.current = true
+    void handleSubmit({ search: carryover })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleSubmit(fields: OlcFilterFields) {
     setQueryLoading(true)
@@ -346,6 +359,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           ocrQualities={facets?.ocr_qualities ?? []}
           loading={queryLoading}
           onSubmit={handleSubmit}
+          initialSearch={carryover ?? undefined}
         />
       )}
       {activeMode === 'claude_ama' && (

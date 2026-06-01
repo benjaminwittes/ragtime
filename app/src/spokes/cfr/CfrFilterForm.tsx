@@ -22,12 +22,15 @@ export function CfrFilterForm({
   titles,
   loading,
   onSubmit,
+  initialSearch,
 }: {
   titles: readonly CfrTitle[]
   loading: boolean
   onSubmit: (fields: CfrFilterFields) => void
+  /** Seed for the full-text field — set when carried over from the hub (`?q=`). */
+  initialSearch?: string
 }) {
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch ?? '')
   const [title, setTitle] = useState<string>('')
   const [citation, setCitation] = useState('')
   const [heading, setHeading] = useState('')
