@@ -30,3 +30,14 @@ export function toLogical(pathname: string): string {
   }
   return pathname
 }
+
+/**
+ * The cross-corpus keyword carried into a spoke via `?q=` (hub → workspace
+ * carryover). A spoke reads this on mount to prefill its search field and
+ * auto-run its filter, so the hub's "Open workspace →" lands on the responsive
+ * documents rather than the full corpus. Returns null when absent/blank.
+ */
+export function readCarryoverQuery(): string | null {
+  const q = new URLSearchParams(window.location.search).get('q')
+  return q && q.trim() ? q.trim() : null
+}

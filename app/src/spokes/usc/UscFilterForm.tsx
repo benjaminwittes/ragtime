@@ -21,13 +21,16 @@ export function UscFilterForm({
   statuses,
   loading,
   onSubmit,
+  initialSearch,
 }: {
   titles: readonly UscTitle[]
   statuses: readonly string[]
   loading: boolean
   onSubmit: (fields: UscFilterFields) => void
+  /** Seed for the full-text field — set when carried over from the hub (`?q=`). */
+  initialSearch?: string
 }) {
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch ?? '')
   const [title, setTitle] = useState<string>('') // string for select value; coerced on submit
   const [citation, setCitation] = useState('')
   const [heading, setHeading] = useState('')

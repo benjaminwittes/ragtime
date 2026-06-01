@@ -26,14 +26,17 @@ export function OlcFilterForm({
   ocrQualities,
   loading,
   onSubmit,
+  initialSearch,
 }: {
   sources: readonly OlcFacetCount[]
   ocrQualities: readonly OlcFacetCount[]
   loading: boolean
   onSubmit: (fields: OlcFilterFields) => void
+  /** Seed for the full-text field — set when carried over from the hub (`?q=`). */
+  initialSearch?: string
 }) {
   const [title, setTitle] = useState('')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch ?? '')
   const [author, setAuthor] = useState('')
   const [source, setSource] = useState('')
   const [from, setFrom] = useState('')

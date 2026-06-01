@@ -33,6 +33,9 @@ type Route =
   | { kind: 'not-found'; pathname: string }
 
 function parseRoute(pathname: string): Route {
+  // Strip any query string / hash — routing is pathname-based; the `?q=`
+  // carryover is read separately by the spoke (see readCarryoverQuery).
+  pathname = pathname.split('?')[0].split('#')[0]
   if (pathname === '/' || pathname === '') return { kind: 'hub' }
   const m = pathname.match(/^\/corpus\/([^/]+)\/?$/)
   if (m) {

@@ -29,14 +29,17 @@ export function FrusFilterForm({
   classifications,
   loading,
   onSubmit,
+  initialSearch,
 }: {
   subSeries: readonly string[]
   classifications: readonly FrusClassificationCount[]
   loading: boolean
   onSubmit: (fields: FrusFilterFields) => void
+  /** Seed for the full-text field — set when carried over from the hub (`?q=`). */
+  initialSearch?: string
 }) {
   const [title, setTitle] = useState('')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch ?? '')
   const [selectedSubSeries, setSelectedSubSeries] = useState('')
   const [classification, setClassification] = useState('')
   const [volumeId, setVolumeId] = useState('')
