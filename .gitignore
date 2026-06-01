@@ -5,6 +5,9 @@ worker/.wrangler/
 # Node dev toolchain (installed globally / not committed)
 node_modules/
 
+# Stray root-level build output (legit app build is app/dist, ignored in app/.gitignore)
+/dist/
+
 # Local Claude Code + sandbox artifacts
 .claude/
 .sandbox-partial-pull/
