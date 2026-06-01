@@ -33,8 +33,9 @@ type AccessTab = 'paid' | 'byok' | 'demo'
  *      Signed-in users see their email, balance, and per-query cap, plus
  *      a sign-out button. Top-up (Stripe Checkout) is a follow-up PR.
  *
- *   2. Bring your own key — paste an Anthropic API key. The Worker forwards
- *      it to the provider on each call and discards.
+ *   2. Bring your own key — choose a provider (Anthropic / OpenAI / Google)
+ *      and paste its API key. The Worker forwards it to the provider on each
+ *      call and discards.
  *
  *   Both can be configured simultaneously; the spoke's `useAuth()` resolves
  *   to whichever is active (paid > BYOK precedence per the legacy app).
@@ -198,7 +199,7 @@ function TabRow({
         active={tab === 'byok'}
         onClick={() => setTab('byok')}
         label="Bring your own key"
-        sub="Anthropic only"
+        sub="Anthropic · OpenAI · Google"
       />
       <TabButton
         active={tab === 'demo'}
@@ -440,6 +441,12 @@ function ByokPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+const API_KEY_PLACEHOLDER: Record<Provider, string> = {
+  anthropic: 'sk-ant-...',
+  openai: 'sk-...',
+  google: 'AIza...',
+}
+
 function ByokForm({
   initial,
   defaultModelFor,
@@ -455,9 +462,19 @@ function ByokForm({
   }) => void
   onClear: () => void
 }) {
-  const provider: Provider = 'anthropic'
+  const [provider, setProvider] = useState<Provider>(
+    initial?.provider ?? 'anthropic',
+  )
   const [model, setModel] = useState(initial?.model ?? defaultModelFor(provider))
   const [apiKey, setApiKey] = useState(initial?.apiKey ?? '')
+
+  function handleProviderChange(next: Provider) {
+    setProvider(next)
+    // Re-default the model to the new provider's default. A model id is
+    // provider-specific (e.g. claude-… vs gpt-… vs gemini-…), so carrying
+    // the old one over would always be wrong.
+    setModel(defaultModelFor(next))
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -473,23 +490,20 @@ function ByokForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <p className="text-sm text-foreground/90">
-        Paste an Anthropic API key. The Worker forwards your prompt to the
-        provider using this key and discards it. Stored in your browser&apos;s
-        localStorage; cleared with the Clear button.
+        Choose a provider and paste an API key for it. The Worker forwards your
+        prompt to the provider using this key and discards it. Stored in your
+        browser&apos;s localStorage; cleared with the Clear button.
       </p>
       <Field label="Provider">
         <select
           value={provider}
-          disabled
-          aria-disabled="true"
-          className="flex h-9 w-full rounded-md border border-border bg-muted px-3 py-1 text-sm text-muted-foreground"
+          onChange={(e) => handleProviderChange(e.target.value as Provider)}
+          className="flex h-9 w-full rounded-md border border-border bg-background px-3 py-1 text-sm"
         >
-          <option value="anthropic">Anthropic</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="google">Google (Gemini)</option>
         </select>
-        <p className="mt-1 text-xs text-muted-foreground">
-          OpenAI and Google are accepted by the Worker but not yet surfaced
-          in this UI.
-        </p>
       </Field>
 
       <Field label="Model">
@@ -510,7 +524,7 @@ function ByokForm({
           spellCheck={false}
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="sk-ant-..."
+          placeholder={API_KEY_PLACEHOLDER[provider]}
         />
       </Field>
 
