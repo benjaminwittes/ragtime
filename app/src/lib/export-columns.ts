@@ -1,0 +1,80 @@
+/**
+ * Per-corpus CSV column maps for dataset export.
+ *
+ * Each map mirrors the columns the corresponding spoke's results table shows,
+ * plus the audit identifiers (ids, canonical source URLs) that make the export
+ * useful as a dataset. Litigation's dynamic annotation/verdict columns are
+ * appended at the call site (they depend on the operation that produced the
+ * page); the base columns live here.
+ */
+import type { CsvColumn } from './export-csv'
+import type {
+  CaseDisplayRow,
+  CfrSectionDisplayRow,
+  FrusDocumentDisplayRow,
+  OlcOpinionDisplayRow,
+  UscSectionDisplayRow,
+} from './worker-client'
+
+export const LITIGATION_BASE_COLUMNS: CsvColumn<CaseDisplayRow>[] = [
+  { header: 'cl_id', value: (r) => r.cl_id },
+  { header: 'case_name', value: (r) => r.case_name },
+  { header: 'docket_number', value: (r) => r.docket_number },
+  { header: 'court', value: (r) => r.court },
+  { header: 'date_filed', value: (r) => r.date_filed },
+  { header: 'date_terminated', value: (r) => r.date_terminated },
+  { header: 'judge', value: (r) => r.judge },
+  { header: 'nature_of_suit', value: (r) => r.nature_of_suit },
+  { header: 'cause', value: (r) => r.cause },
+  { header: 'entry_count', value: (r) => r.entry_count },
+  { header: 'courtlistener_url', value: (r) => r.cl_url },
+]
+
+export const USC_COLUMNS: CsvColumn<UscSectionDisplayRow>[] = [
+  { header: 'citation', value: (r) => r.citation },
+  { header: 'heading', value: (r) => r.heading },
+  { header: 'title_num', value: (r) => r.title_num },
+  { header: 'title_name', value: (r) => r.title_name },
+  { header: 'section_identifier', value: (r) => r.section_identifier },
+  { header: 'is_positive_law', value: (r) => r.is_positive_law },
+  { header: 'status', value: (r) => r.status },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const CFR_COLUMNS: CsvColumn<CfrSectionDisplayRow>[] = [
+  { header: 'citation', value: (r) => r.citation },
+  { header: 'heading', value: (r) => r.heading },
+  { header: 'title_num', value: (r) => r.title_num },
+  { header: 'title_name', value: (r) => r.title_name },
+  { header: 'section_identifier', value: (r) => r.section_identifier },
+  { header: 'reserved', value: (r) => r.reserved },
+  { header: 'source', value: (r) => r.source },
+  { header: 'up_to_date_as_of', value: (r) => r.up_to_date_as_of },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const OLC_COLUMNS: CsvColumn<OlcOpinionDisplayRow>[] = [
+  { header: 'title', value: (r) => r.title },
+  { header: 'author', value: (r) => r.author },
+  { header: 'date_issued', value: (r) => r.date_issued },
+  { header: 'source', value: (r) => r.source },
+  { header: 'source_url_doj', value: (r) => r.source_url_doj },
+  { header: 'source_url_knight', value: (r) => r.source_url_knight },
+  { header: 'page_count', value: (r) => r.page_count },
+  { header: 'ocr_quality', value: (r) => r.ocr_quality },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const FRUS_COLUMNS: CsvColumn<FrusDocumentDisplayRow>[] = [
+  { header: 'title', value: (r) => r.title },
+  { header: 'doc_date', value: (r) => r.doc_date },
+  { header: 'volume_id', value: (r) => r.volume_id },
+  { header: 'place_name', value: (r) => r.place_name },
+  { header: 'classification', value: (r) => r.classification },
+  { header: 'source_url', value: (r) => r.source_url },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]

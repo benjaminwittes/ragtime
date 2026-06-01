@@ -26,6 +26,10 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AmaPreflight } from './components/AmaPreflight'
 import { UsageLogAnnotation } from './components/UsageLogAnnotation'
+import { ExportBar } from './components/ExportBar'
+import { downloadCsv, fileSlug, type CsvColumn } from '@/lib/export-csv'
+import { downloadNarrativePdf } from '@/lib/export-pdf'
+import { LITIGATION_BASE_COLUMNS } from '@/lib/export-columns'
 import { Breadcrumb } from './components/Breadcrumb'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
 import { ClaudeAmaForm, type AmaLogLine } from './components/ClaudeAmaForm'
@@ -619,6 +623,20 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           onSubmit={handleClaudeAmaSubmit}
         />
       )}
+      {viewingPage && !queryLoading && (
+        <ExportBar
+          onCsv={
+            viewingPage.rows.length > 0
+              ? () => downloadLitigationCsv(viewingPage)
+              : undefined
+          }
+          onPdf={
+            litigationNarrative(viewingPage) != null
+              ? () => downloadLitigationPdf(viewingPage, spoke.title)
+              : undefined
+          }
+        />
+      )}
       <ResultsList
         rows={viewingPage?.rows}
         count={viewingPage?.count}
@@ -648,6 +666,111 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
     </div>
   )
+}
+
+/**
+ * The narrative markdown carried by a stack page, if any. Analysis pages carry
+ * `markdown`; AMA pages carry `answerMarkdown`. Other operations have none.
+ */
+function litigationNarrative(page: StackPage): string | null {
+  const s = page.source
+  if (s.kind === 'claude_analysis') return s.markdown || null
+  if (s.kind === 'claude_ama') return s.answerMarkdown || null
+  return null
+}
+
+/**
+ * Build the CSV column set for a litigation page. Base case columns, plus
+ * per-operation columns: the keep/drop verdict + reason for `claude_read`, and
+ * whichever of rank/score/category/label the model actually populated for
+ * `claude_analysis`. Mirrors the legacy `downloadCurrentPage()` behavior.
+ */
+function litigationCsvColumns(page: StackPage): CsvColumn<CaseDisplayRow>[] {
+  const s = page.source
+  const cols: CsvColumn<CaseDisplayRow>[] = [...LITIGATION_BASE_COLUMNS]
+  if (s.kind === 'claude_read') {
+    cols.push({ header: 'kept', value: (r) => (s.verdicts[r.cl_id]?.keep ? 'true' : 'false') })
+    cols.push({ header: 'ai_reason', value: (r) => s.verdicts[r.cl_id]?.reason ?? '' })
+  }
+  if (s.kind === 'claude_analysis') {
+    const ann = s.annotations
+    const has = (f: 'rank' | 'score' | 'category' | 'label') =>
+      page.rows.some((r) => ann[r.cl_id]?.[f] != null)
+    if (has('rank')) cols.push({ header: 'rank', value: (r) => ann[r.cl_id]?.rank })
+    if (has('score')) cols.push({ header: 'score', value: (r) => ann[r.cl_id]?.score })
+    if (has('category'))
+      cols.push({ header: 'category', value: (r) => ann[r.cl_id]?.category })
+    if (has('label')) cols.push({ header: 'label', value: (r) => ann[r.cl_id]?.label })
+  }
+  return cols
+}
+
+function litigationCsvMeta(page: StackPage): { key: string; value: unknown }[] {
+  const s = page.source
+  const meta: { key: string; value: unknown }[] = [
+    { key: 'operation', value: page.operationType },
+    { key: 'label', value: page.operationLabel },
+    { key: 'count', value: page.count },
+  ]
+  switch (s.kind) {
+    case 'manual_filter':
+      meta.push({ key: 'generated_sql', value: s.generatedSql })
+      break
+    case 'claude_sql':
+      meta.push({ key: 'prompt', value: s.prompt })
+      meta.push({ key: 'generated_sql', value: s.generatedSql })
+      break
+    case 'claude_read':
+      meta.push({ key: 'criterion', value: s.criterion })
+      meta.push({ key: 'incoming_count', value: s.incomingCount })
+      meta.push({ key: 'kept_count', value: s.keptCount })
+      break
+    case 'claude_analysis':
+      meta.push({ key: 'prompt', value: s.prompt })
+      break
+    case 'claude_ama':
+      meta.push({ key: 'question', value: s.question })
+      meta.push({ key: 'plan', value: s.planSummary })
+      break
+  }
+  return meta
+}
+
+function downloadLitigationCsv(page: StackPage): void {
+  downloadCsv<CaseDisplayRow>(`ragtime-litigation-${fileSlug(page.operationLabel)}.csv`, {
+    title: 'RAGtime — litigation export',
+    meta: litigationCsvMeta(page),
+    narrativeMarkdown: litigationNarrative(page) ?? undefined,
+    columns: litigationCsvColumns(page),
+    rows: page.rows,
+  })
+}
+
+function downloadLitigationPdf(page: StackPage, spokeTitle: string): void {
+  const markdown = litigationNarrative(page)
+  if (!markdown) return
+  const s = page.source
+  const prompt =
+    s.kind === 'claude_ama'
+      ? s.question
+      : s.kind === 'claude_analysis'
+        ? s.prompt
+        : '(no prompt recorded)'
+  const scopeCount =
+    s.kind === 'claude_ama'
+      ? s.incomingCount
+      : s.kind === 'claude_analysis'
+        ? s.analyzedCount
+        : page.count
+  downloadNarrativePdf({
+    title: 'RAGtime Analysis',
+    subtitle: spokeTitle,
+    metaRows: [
+      { key: 'Prompt', value: prompt },
+      { key: 'Scope', value: `${scopeCount.toLocaleString()} case${scopeCount === 1 ? '' : 's'} analyzed` },
+    ],
+    markdown,
+  })
 }
 
 /**

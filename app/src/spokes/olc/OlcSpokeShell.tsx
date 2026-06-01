@@ -22,8 +22,12 @@ import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
+import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
 import { UsageLogAnnotation } from '../components/UsageLogAnnotation'
+import { downloadCsv } from '@/lib/export-csv'
+import { downloadNarrativePdf } from '@/lib/export-pdf'
+import { OLC_COLUMNS } from '@/lib/export-columns'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { OlcAmaResult } from './OlcAmaResult'
 import { OlcFilterForm } from './OlcFilterForm'
@@ -293,6 +297,35 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setAmaLoading(false)
   }
 
+  function downloadFilterCsv() {
+    if (!rows || rows.length === 0) return
+    downloadCsv('ragtime-olc-results.csv', {
+      title: 'RAGtime — OLC export',
+      meta: [
+        { key: 'count', value: count },
+        { key: 'executed_sql', value: executedSql },
+      ],
+      columns: OLC_COLUMNS,
+      rows,
+    })
+  }
+
+  function downloadAmaPdf() {
+    if (!amaSynthesis?.answer_markdown) return
+    const cited = amaSynthesis.opinion_ids?.length
+    downloadNarrativePdf({
+      title: 'RAGtime Analysis',
+      subtitle: spoke.title,
+      metaRows: [
+        { key: 'Question', value: amaQuestion },
+        ...(cited != null
+          ? [{ key: 'Opinions cited', value: cited.toLocaleString() }]
+          : []),
+      ],
+      markdown: amaSynthesis.answer_markdown,
+    })
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <OlcHeader
@@ -326,24 +359,34 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       )}
 
       {activeMode === 'manual_filter' && (
-        <OlcResultsList
-          rows={rows}
-          count={count}
-          loading={queryLoading}
-          error={queryError}
-          hasRun={hasRun}
-          executedSql={executedSql}
-          onOpenOpinion={handleOpenOpinion}
-        />
+        <>
+          {rows && rows.length > 0 && !queryLoading && (
+            <ExportBar onCsv={downloadFilterCsv} />
+          )}
+          <OlcResultsList
+            rows={rows}
+            count={count}
+            loading={queryLoading}
+            error={queryError}
+            hasRun={hasRun}
+            executedSql={executedSql}
+            onOpenOpinion={handleOpenOpinion}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && (
-        <OlcAmaResult
-          synthesis={amaSynthesis}
-          plan={amaResultPlan}
-          loading={amaLoading}
-          error={amaError}
-          onOpenOpinion={handleOpenOpinion}
-        />
+        <>
+          {amaSynthesis?.answer_markdown && !amaLoading && (
+            <ExportBar onPdf={downloadAmaPdf} />
+          )}
+          <OlcAmaResult
+            synthesis={amaSynthesis}
+            plan={amaResultPlan}
+            loading={amaLoading}
+            error={amaError}
+            onOpenOpinion={handleOpenOpinion}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && amaSynthesis && amaInteractionId && (
         <UsageLogAnnotation
