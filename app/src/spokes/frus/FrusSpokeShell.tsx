@@ -22,9 +22,13 @@ import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
+import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
 import { UsageLogAnnotation } from '../components/UsageLogAnnotation'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { downloadCsv } from '@/lib/export-csv'
+import { downloadNarrativePdf } from '@/lib/export-pdf'
+import { FRUS_COLUMNS } from '@/lib/export-columns'
 import { FrusAmaResult } from './FrusAmaResult'
 import { FrusDocumentDetailSheet } from './FrusDocumentDetailSheet'
 import { FrusFilterForm } from './FrusFilterForm'
@@ -283,6 +287,35 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setAmaLoading(false)
   }
 
+  function downloadFilterCsv() {
+    if (!rows || rows.length === 0) return
+    downloadCsv('ragtime-frus-results.csv', {
+      title: 'RAGtime — FRUS export',
+      meta: [
+        { key: 'count', value: count },
+        { key: 'executed_sql', value: executedSql },
+      ],
+      columns: FRUS_COLUMNS,
+      rows,
+    })
+  }
+
+  function downloadAmaPdf() {
+    if (!amaSynthesis?.answer_markdown) return
+    const cited = amaSynthesis.document_ids?.length
+    downloadNarrativePdf({
+      title: 'RAGtime Analysis',
+      subtitle: spoke.title,
+      metaRows: [
+        { key: 'Question', value: amaQuestion },
+        ...(cited != null
+          ? [{ key: 'Documents cited', value: cited.toLocaleString() }]
+          : []),
+      ],
+      markdown: amaSynthesis.answer_markdown,
+    })
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <FrusHeader
@@ -315,24 +348,34 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         />
       )}
       {activeMode === 'manual_filter' && (
-        <FrusResultsList
-          rows={rows}
-          count={count}
-          loading={queryLoading}
-          error={queryError}
-          hasRun={hasRun}
-          executedSql={executedSql}
-          onOpenDocument={handleOpenDocument}
-        />
+        <>
+          {rows && rows.length > 0 && !queryLoading && (
+            <ExportBar onCsv={downloadFilterCsv} />
+          )}
+          <FrusResultsList
+            rows={rows}
+            count={count}
+            loading={queryLoading}
+            error={queryError}
+            hasRun={hasRun}
+            executedSql={executedSql}
+            onOpenDocument={handleOpenDocument}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && (
-        <FrusAmaResult
-          synthesis={amaSynthesis}
-          plan={amaResultPlan}
-          loading={amaLoading}
-          error={amaError}
-          onOpenDocument={handleOpenDocument}
-        />
+        <>
+          {amaSynthesis?.answer_markdown && !amaLoading && (
+            <ExportBar onPdf={downloadAmaPdf} />
+          )}
+          <FrusAmaResult
+            synthesis={amaSynthesis}
+            plan={amaResultPlan}
+            loading={amaLoading}
+            error={amaError}
+            onOpenDocument={handleOpenDocument}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && amaSynthesis && amaInteractionId && (
         <UsageLogAnnotation

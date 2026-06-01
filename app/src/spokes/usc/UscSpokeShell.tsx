@@ -22,9 +22,13 @@ import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
+import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
 import { UsageLogAnnotation } from '../components/UsageLogAnnotation'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { downloadCsv } from '@/lib/export-csv'
+import { downloadNarrativePdf } from '@/lib/export-pdf'
+import { USC_COLUMNS } from '@/lib/export-columns'
 import { UscAmaResult } from './UscAmaResult'
 import { UscFilterForm } from './UscFilterForm'
 import { UscResultsList } from './UscResultsList'
@@ -280,6 +284,35 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setAmaLoading(false)
   }
 
+  function downloadFilterCsv() {
+    if (!rows || rows.length === 0) return
+    downloadCsv('ragtime-usc-results.csv', {
+      title: 'RAGtime — USC export',
+      meta: [
+        { key: 'count', value: count },
+        { key: 'executed_sql', value: executedSql },
+      ],
+      columns: USC_COLUMNS,
+      rows,
+    })
+  }
+
+  function downloadAmaPdf() {
+    if (!amaSynthesis?.answer_markdown) return
+    const cited = amaSynthesis.section_ids?.length
+    downloadNarrativePdf({
+      title: 'RAGtime Analysis',
+      subtitle: spoke.title,
+      metaRows: [
+        { key: 'Question', value: amaQuestion },
+        ...(cited != null
+          ? [{ key: 'Sections cited', value: cited.toLocaleString() }]
+          : []),
+      ],
+      markdown: amaSynthesis.answer_markdown,
+    })
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <UscHeader spoke={spoke} holdings={holdings} loading={facetsLoading} error={facetsError} />
@@ -307,24 +340,34 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         />
       )}
       {activeMode === 'manual_filter' && (
-        <UscResultsList
-          rows={rows}
-          count={count}
-          loading={queryLoading}
-          error={queryError}
-          hasRun={hasRun}
-          executedSql={executedSql}
-          onOpenSection={handleOpenSection}
-        />
+        <>
+          {rows && rows.length > 0 && !queryLoading && (
+            <ExportBar onCsv={downloadFilterCsv} />
+          )}
+          <UscResultsList
+            rows={rows}
+            count={count}
+            loading={queryLoading}
+            error={queryError}
+            hasRun={hasRun}
+            executedSql={executedSql}
+            onOpenSection={handleOpenSection}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && (
-        <UscAmaResult
-          synthesis={amaSynthesis}
-          plan={amaResultPlan}
-          loading={amaLoading}
-          error={amaError}
-          onOpenSection={handleOpenSection}
-        />
+        <>
+          {amaSynthesis?.answer_markdown && !amaLoading && (
+            <ExportBar onPdf={downloadAmaPdf} />
+          )}
+          <UscAmaResult
+            synthesis={amaSynthesis}
+            plan={amaResultPlan}
+            loading={amaLoading}
+            error={amaError}
+            onOpenSection={handleOpenSection}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && amaSynthesis && amaInteractionId && (
         <UsageLogAnnotation
