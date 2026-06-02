@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
+import { SiteMasthead } from '@/components/SiteMasthead'
 import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
 import { SpokeShell } from '@/spokes/SpokeShell'
@@ -97,11 +98,26 @@ function App() {
  * Other spokes will add their own branches as they come online.
  */
 function activeSpokeShell(spoke: CorpusSpoke) {
-  if (spoke.slug === 'usc') return <UscSpokeShell spoke={spoke} />
-  if (spoke.slug === 'cfr') return <CfrSpokeShell spoke={spoke} />
-  if (spoke.slug === 'olc') return <OlcSpokeShell spoke={spoke} />
-  if (spoke.slug === 'frus') return <FrusSpokeShell spoke={spoke} />
-  return <SpokeShell spoke={spoke} />
+  const shell =
+    spoke.slug === 'usc' ? (
+      <UscSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'cfr' ? (
+      <CfrSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'olc' ? (
+      <OlcSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'frus' ? (
+      <FrusSpokeShell spoke={spoke} />
+    ) : (
+      <SpokeShell spoke={spoke} />
+    )
+  // The slim site masthead is injected once here so every spoke carries the
+  // RAGtime brand; each shell renders its own title/holdings band below it.
+  return (
+    <>
+      <SiteMasthead />
+      {shell}
+    </>
+  )
 }
 
 function NotFound({

@@ -45,7 +45,7 @@ export function SpokeHeader({
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{disclosure}</p>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <Stat
             label="Cases"
             value={formatStatValue(holdings?.counts.cases, loading, error)}
@@ -62,7 +62,6 @@ export function SpokeHeader({
             label="Updated"
             value={formatDateValue(holdings?.lastUpdated, loading, error)}
           />
-          <Stat label="Coverage" value={holdings?.coverage ? '—' : '—'} />
         </dl>
 
         {error && (
