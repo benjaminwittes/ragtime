@@ -21,10 +21,10 @@ crons = ["0 13 * * 1", "*/30 * * * *"]
 # Plain-text variables. Stripe live-mode price IDs, the public Supabase
 # project URL, and the frontend app base URL. None of these are sensitive
 # — the price IDs are product identifiers, the URLs are public endpoints.
-# When the frontend moves off `benjaminwittes.github.io/ragtime` to a
-# Lawfare-branded domain, update APP_BASE_URL here.
+# APP_BASE_URL is the Lawfare-branded custom domain (cutover 2026-06-02);
+# it anchors the Stripe-redirect return-origin allowlist in index.js.
 [vars]
-APP_BASE_URL = "https://benjaminwittes.github.io/ragtime"
+APP_BASE_URL = "https://ragtime.lawfaremedia.org"
 SUPABASE_URL = "https://aikdbjprndgksibbvcfs.supabase.co"
 STRIPE_PRICE_5_USD = "price_1TXoNIJS8oJAjJ8ojuPOv1la"
 STRIPE_PRICE_20_USD = "price_1TXoOxJS8oJAjJ8oqgWWK8B5"

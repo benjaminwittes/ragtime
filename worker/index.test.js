@@ -269,24 +269,24 @@ describe("checkPaidBudget", () => {
 // origins, malformed-input safety.
 // ============================================================================
 describe("pickCheckoutReturnOrigin", () => {
-  const prodEnv = { APP_BASE_URL: "https://benjaminwittes.github.io/ragtime" };
+  const prodEnv = { APP_BASE_URL: "https://ragtime.lawfaremedia.org" };
 
   it("falls back to APP_BASE_URL when no request is provided", () => {
     expect(pickCheckoutReturnOrigin(undefined, prodEnv)).toBe(
-      "https://benjaminwittes.github.io/ragtime",
+      "https://ragtime.lawfaremedia.org",
     );
     expect(pickCheckoutReturnOrigin("", prodEnv)).toBe(
-      "https://benjaminwittes.github.io/ragtime",
+      "https://ragtime.lawfaremedia.org",
     );
   });
 
   it("honors a request that matches the production origin (with path)", () => {
     expect(
       pickCheckoutReturnOrigin(
-        "https://benjaminwittes.github.io/ragtime/",
+        "https://ragtime.lawfaremedia.org/",
         prodEnv,
       ),
-    ).toBe("https://benjaminwittes.github.io/ragtime");
+    ).toBe("https://ragtime.lawfaremedia.org");
   });
 
   it("honors localhost dev origins (Vite default port)", () => {
@@ -302,18 +302,18 @@ describe("pickCheckoutReturnOrigin", () => {
     // A tampered request must not redirect the user post-checkout.
     expect(
       pickCheckoutReturnOrigin("https://evil.example.com/", prodEnv),
-    ).toBe("https://benjaminwittes.github.io/ragtime");
+    ).toBe("https://ragtime.lawfaremedia.org");
   });
 
   it("rejects non-allowlisted localhost ports (only :5173)", () => {
     expect(
       pickCheckoutReturnOrigin("http://localhost:3000/", prodEnv),
-    ).toBe("https://benjaminwittes.github.io/ragtime");
+    ).toBe("https://ragtime.lawfaremedia.org");
   });
 
   it("rejects malformed URLs", () => {
     expect(pickCheckoutReturnOrigin("not-a-url", prodEnv)).toBe(
-      "https://benjaminwittes.github.io/ragtime",
+      "https://ragtime.lawfaremedia.org",
     );
   });
 

@@ -79,7 +79,7 @@ var DEFAULT_PER_USER_PER_MIN = 30;
  * Pure function (no env mutation, no fetch) so it's testable in isolation.
  */
 function pickCheckoutReturnOrigin(requested, env) {
-  const fallback = env.APP_BASE_URL || "https://benjaminwittes.github.io/ragtime";
+  const fallback = env.APP_BASE_URL || "https://ragtime.lawfaremedia.org";
   if (typeof requested !== "string" || !requested) return fallback;
   let origin;
   try {
@@ -96,7 +96,7 @@ function pickCheckoutReturnOrigin(requested, env) {
   allowed.add("http://127.0.0.1:5173");
   if (!allowed.has(origin)) return fallback;
   // Preserve the requested URL's pathname if the user provided one
-  // (e.g. https://benjaminwittes.github.io/ragtime/), but trim any trailing
+  // (e.g. https://ragtime.lawfaremedia.org/), but trim any trailing
   // slash so success_url's "/?checkout=..." doesn't double up.
   try {
     const u = new URL(requested);

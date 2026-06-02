@@ -12,10 +12,11 @@ name: Build App
 # index.html. This requires the repo's Pages "Source" to be set to
 # "GitHub Actions" (Settings → Pages) — a one-time manual toggle.
 #
-# The build runs with Vite base = /ragtime/ (the project-site subpath). The
-# move to a custom domain (ragtime.lawfaremedia.org, served at origin root)
-# is a follow-up: set VITE_BASE=/ in the build step, add a CNAME, point DNS,
-# and update the Worker's APP_BASE_URL. See app/vite.config.ts.
+# Custom-domain cutover (2026-06-02): the app now serves at origin root on
+# https://ragtime.lawfaremedia.org. The build step sets VITE_BASE=/ (overriding
+# the /ragtime/ project-site default in app/vite.config.ts), app/public/CNAME
+# pins the domain in the published artifact, DNS is a grey-cloud CNAME in
+# Cloudflare, and the Worker's APP_BASE_URL points at the custom domain.
 #
 # The legacy single-file app is preserved at /ragtime/legacy.html as a
 # transition safety net.
@@ -66,7 +67,12 @@ jobs:
         run: npm run lint
 
       - name: Build
+        # Custom-domain cutover (2026-06-02): the app now serves from the
+        # origin root at https://ragtime.lawfaremedia.org, so the Vite base is
+        # `/` rather than the old project-site subpath `/ragtime/`.
         run: npm run build
+        env:
+          VITE_BASE: /
 
       - name: Preserve legacy single-file app at /legacy.html
         run: cp ../index.html dist/legacy.html
