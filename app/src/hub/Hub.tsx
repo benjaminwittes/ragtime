@@ -44,7 +44,7 @@ function HubHeader() {
             RAGtime
           </span>
           <span className="hidden font-serif text-[15px] italic text-lawfare-text-secondary sm:inline">
-            research the federal record
+            research across government
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -75,7 +75,7 @@ function HubHero() {
   return (
     <section className="pt-14 pb-2 text-center">
       <h1 className="mx-auto max-w-3xl font-serif text-[2.6rem] font-medium leading-[1.12] tracking-tight text-foreground">
-        One search across the law and the record that surrounds it.
+        The Hub: one search to rule them all
       </h1>
       <p className="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary">
         Statutes, regulations, executive-branch opinions, diplomatic history,
