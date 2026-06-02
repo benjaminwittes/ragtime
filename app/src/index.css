@@ -82,6 +82,13 @@
   --color-lawfare-teal-dark: #00535a;
   --color-lawfare-teal-bg: #e6f0f1;
 
+  /* Editorial surface tokens (the "blend" redesign — Direction 1 identity).
+   * `paper` is the warm off-white the magazine-style surfaces sit on (vs. the
+   * pure-white --card); `line` is the warm hairline rule used for editorial
+   * dividers (vs. the cooler --border #ddd). */
+  --color-lawfare-paper: #fbfaf7;
+  --color-lawfare-line: #e3e0d8;
+
   /* Lawfare-extra neutrals (legacy index.html uses these for secondary text +
    * subtle surface variants where shadcn's --muted doesn't quite fit) */
   --color-lawfare-text: #303030;

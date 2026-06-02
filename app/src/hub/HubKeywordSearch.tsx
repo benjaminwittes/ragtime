@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { toHref } from '@/lib/routing'
 import {
@@ -99,34 +98,39 @@ export function HubKeywordSearch({
   const canSubmit = !loading && query.trim().length > 0 && activeCorpora.size > 0
 
   return (
-    <section className="py-6">
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <label className="block">
-          <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Cross-corpus keyword search
-            <span className="ml-2 normal-case text-[10px] text-muted-foreground/70">
-              Free · searches all loaded corpora in parallel · results grouped
-              by corpus
-            </span>
-          </span>
+    <section className="pt-7 pb-2">
+      <form onSubmit={handleSubmit} className="mx-auto max-w-2xl">
+        <div className="relative">
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="e.g. executive privilege, recess appointment, HIPAA Privacy Rule, Cuban missile crisis"
+            placeholder="Search the law, the opinions, and the record…"
             disabled={loading}
             maxLength={200}
+            aria-label="Cross-corpus keyword search"
             className={cn(
-              'mt-1.5 block w-full rounded-md border border-border bg-background px-3 py-2.5 text-base shadow-xs',
-              'focus:outline-none focus:ring-2 focus:ring-primary/40',
+              'block w-full rounded-lg border-[1.5px] border-primary bg-card py-4 pl-5 pr-14 font-serif text-xl text-foreground shadow-sm',
+              'placeholder:text-lawfare-muted focus:outline-none focus:ring-2 focus:ring-primary/30',
               loading && 'cursor-not-allowed opacity-60',
             )}
           />
-        </label>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            aria-label="Search"
+            className={cn(
+              'absolute right-2 top-2 bottom-2 flex w-11 items-center justify-center rounded-md bg-primary text-lg text-primary-foreground transition',
+              canSubmit ? 'hover:opacity-90' : 'cursor-not-allowed opacity-40',
+            )}
+          >
+            {loading ? '…' : '→'}
+          </button>
+        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-            Search in:
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+          <span className="text-[11px] text-lawfare-muted">
+            Free cross-corpus keyword search — in:
           </span>
           {spokes.map((spoke) => (
             <CorpusChip
@@ -137,11 +141,6 @@ export function HubKeywordSearch({
               onToggle={() => toggleCorpus(spoke.slug)}
             />
           ))}
-          <div className="ml-auto flex items-center gap-2">
-            <Button type="submit" disabled={!canSubmit}>
-              {loading ? 'Searching…' : 'Search'}
-            </Button>
-          </div>
         </div>
       </form>
 

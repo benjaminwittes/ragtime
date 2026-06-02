@@ -23,7 +23,7 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  */
 export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen bg-lawfare-paper text-foreground">
       <HubHeader />
       <div className="mx-auto max-w-5xl px-6 pb-16">
         <HubHero />
@@ -37,17 +37,21 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
 
 function HubHeader() {
   return (
-    <header className="border-b border-border bg-card">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3">
+    <header className="border-b border-lawfare-line bg-lawfare-paper">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
         <div className="flex items-baseline gap-3">
-          <span className="font-serif text-2xl font-bold tracking-tight text-foreground">
+          <span className="font-serif text-3xl font-semibold tracking-tight text-foreground">
             RAGtime
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            a Lawfare research surface
+          <span className="hidden font-serif text-[15px] italic text-lawfare-text-secondary sm:inline">
+            research the federal record
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <span className="hidden text-xs text-lawfare-muted sm:inline">
+            a project of{' '}
+            <span className="font-bold text-lawfare-text-secondary">Lawfare</span>
+          </span>
           <DocsTrigger />
           <AccessSettings />
         </div>
@@ -56,19 +60,37 @@ function HubHeader() {
   )
 }
 
+/** The five loaded corpora as a quiet credibility strip under the hero.
+ * Rounded, impressionistic figures; the exact, sourced counts live on each
+ * corpus card below (and inside each spoke's holdings band). */
+const HUB_STATS: { num: string; label: string }[] = [
+  { num: '1.1M', label: 'court cases' },
+  { num: '60K', label: 'U.S. Code §§' },
+  { num: '228K', label: 'CFR §§' },
+  { num: '2,145', label: 'OLC opinions' },
+  { num: '314K', label: 'FRUS documents' },
+]
+
 function HubHero() {
   return (
-    <section className="border-b border-border py-10">
-      <h1 className="font-serif text-4xl font-bold tracking-tight text-foreground">
-        Research across federal-government records.
+    <section className="pt-14 pb-2 text-center">
+      <h1 className="mx-auto max-w-3xl font-serif text-[2.6rem] font-medium leading-[1.12] tracking-tight text-foreground">
+        One search across the law and the record that surrounds it.
       </h1>
-      <p className="mt-3 max-w-3xl text-base text-muted-foreground">
-        RAGtime is a queryable, AI-augmented research surface across federal
-        litigation, executive opinions, statutes, regulations, and diplomatic
-        history. Free keyword filtering on every corpus; bring-your-own-key
-        for AI features; paid prepaid blocks for Lawfare-billed access to
-        Anthropic models.
+      <p className="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary">
+        Statutes, regulations, executive-branch opinions, diplomatic history,
+        and the federal litigation that interprets them — together.
       </p>
+      <dl className="mx-auto mt-8 flex max-w-3xl flex-wrap items-baseline justify-center gap-x-7 gap-y-3">
+        {HUB_STATS.map((s) => (
+          <div key={s.label} className="flex items-baseline gap-1.5">
+            <dt className="font-serif text-2xl font-semibold text-lawfare-teal">
+              {s.num}
+            </dt>
+            <dd className="text-xs text-lawfare-muted">{s.label}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   )
 }
@@ -84,7 +106,7 @@ function HubHero() {
  */
 function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
-    <section className="space-y-3 py-2">
+    <section className="mt-10 space-y-3 border-t border-lawfare-line pt-8">
       <div className="flex items-baseline justify-between gap-4">
         <h2 className="font-serif text-xl font-semibold">Corpora</h2>
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -250,7 +272,7 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
 
 function AboutPanel() {
   return (
-    <section className="mt-12 border-t border-border pt-6">
+    <section className="mt-12 border-t border-lawfare-line pt-6">
       <h2 className="font-serif text-base font-semibold">About RAGtime</h2>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
         A Lawfare Institute research surface. Free tier covers structured
