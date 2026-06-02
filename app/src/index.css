@@ -143,8 +143,13 @@
   --primary-foreground: #ffffff;
   --ring: #006a72;
   --foreground: #303030;
-  --border: #dddddd;
-  --input: #dddddd;
+  /* Editorial redesign ("blend" Direction 1): the app sits on warm paper with
+   * warm hairline rules; white --card surfaces (forms, results, sheets) layer
+   * on top. Shifting these two tokens carries the identity across the hub and
+   * all five spokes without repainting each surface. */
+  --background: #fbfaf7;
+  --border: #e3e0d8;
+  --input: #e3e0d8;
 }
 
 .dark {
