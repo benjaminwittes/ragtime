@@ -1217,6 +1217,58 @@ function repairAnswerMarkdownQuotes(raw) {
   return s.slice(0, startIdx) + repaired + tail.slice(lastIdx);
 }
 
+// Analyze-path analogues of repairAnswerMarkdownQuotes / salvageTruncatedSynthesis
+// (Punchlist #6). The Analyze schema is { "markdown": "...", "annotations": [...] }
+// rather than the synthesis schema's { "answer_markdown", "cl_ids", "candor_notes" },
+// so these are keyed to the "markdown" field and its sole sibling "annotations".
+// Without them, an unescaped quote in (or a truncated tail of) the multi-thousand-
+// char analysis blew JSON.parse → a 502 with no salvage. Now parseAnalysis runs the
+// same five-layer recovery chain parseSynthesis uses.
+function repairAnalysisMarkdownQuotes(raw) {
+  const s = String(raw);
+  const startMatch = s.match(/"markdown"\s*:\s*"/);
+  if (!startMatch) return s;
+  const startIdx = startMatch.index + startMatch[0].length;
+  const tail = s.slice(startIdx);
+  // "markdown" is the FIRST field, so the real closer is the first separator to
+  // the next field ("annotations"); fall back to the last "} only if absent.
+  let boundary = tail.search(/"\s*,\s*"annotations"/);
+  if (boundary < 0) {
+    const endProbe = /"\s*\}/g;
+    let m;
+    while ((m = endProbe.exec(tail)) !== null) boundary = m.index;
+  }
+  if (boundary < 0) return s;
+  const content = tail.slice(0, boundary);
+  const repaired = content.replace(/(?<!\\)"/g, '\\"');
+  return s.slice(0, startIdx) + repaired + tail.slice(boundary);
+}
+
+function salvageTruncatedAnalysis(raw) {
+  const s = String(raw);
+  const startMatch = s.match(/"markdown"\s*:\s*"/);
+  if (!startMatch) return null;
+  const startIdx = startMatch.index + startMatch[0].length;
+  const tail = s.slice(startIdx);
+  // If the tail still contains the closing structure, it isn't truncated —
+  // let the normal parser handle whatever the real problem is.
+  if (/"(\s*,\s*"annotations"|\s*\})/.test(tail)) return null;
+  let markdown = tail
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\r/g, "\r")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\")
+    .replace(/\\$/, "")
+    .trimEnd();
+  if (markdown.length < 50) return null;
+  return {
+    markdown: markdown +
+      "\n\n*[Output was truncated — the model ran out of tokens before completing the analysis. Try re-running, or narrow the field (fewer cases) to bring the output under the token cap.]*",
+    annotations: {},
+  };
+}
+
 function parseSynthesis(raw, outputMode) {
   const cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   let v;
@@ -1495,14 +1547,52 @@ function buildSqlGenSystem(scope) {
     "Why it fails: ANDing a fragile metadata filter with FTS wipes out the FTS recall. Returns near-zero rows.\n\n" + schema;
 }
 
+// Repair unescaped double-quotes inside the "sql" field value (Punchlist #6).
+// The model is asked for {"sql":"...","label":"..."}; SQL frequently contains
+// double-quoted identifiers ("column"), which — if the model forgets to escape
+// them — break JSON.parse. Escape stray quotes between the sql value's opening
+// quote and the next closing structure ( ","label"  or  "} ).
+function repairSqlGenQuotes(raw) {
+  var s = String(raw);
+  var startMatch = s.match(/"sql"\s*:\s*"/);
+  if (!startMatch) return s;
+  var startIdx = startMatch.index + startMatch[0].length;
+  var tail = s.slice(startIdx);
+  // "sql" is the FIRST field, so the real closer is the first separator to the
+  // next field ("label"); fall back to the last "} only if absent.
+  var boundary = tail.search(/"\s*,\s*"label"/);
+  if (boundary < 0) {
+    var endProbe = /"\s*\}/g;
+    var m;
+    while ((m = endProbe.exec(tail)) !== null) boundary = m.index;
+  }
+  if (boundary < 0) return s;
+  var content = tail.slice(0, boundary);
+  var repaired = content.replace(/(?<!\\)"/g, '\\"');
+  return s.slice(0, startIdx) + repaired + tail.slice(boundary);
+}
+
 function parseSqlGen(raw) {
   var cleaned = String(raw).replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   var v;
   try { v = JSON.parse(cleaned); }
   catch (pe) {
-    var firstObj = extractFirstJsonObject(cleaned);
-    if (firstObj) v = JSON.parse(firstObj);
-    else throw new Error('did not return valid JSON (response may have been truncated).');
+    // Mirror the synthesis recovery chain (Punchlist #6): quote-repair →
+    // first-object-extract → repair-that. No truncation-salvage: a partial
+    // SQL string must never reach execution.
+    try {
+      var repaired = repairSqlGenQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      var firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) { v = JSON.parse(repairSqlGenQuotes(firstObj)); }
+      } else {
+        throw new Error('did not return valid JSON (response may have been truncated).');
+      }
+    }
   }
   if (typeof v !== 'object' || v === null) throw new Error('top-level value is not an object.');
   return v;
@@ -1825,9 +1915,30 @@ function parseAnalysis(raw) {
   let parsed;
   try { parsed = JSON.parse(cleaned); }
   catch (pe) {
-    const firstObj = extractFirstJsonObject(cleaned);
-    if (firstObj) parsed = JSON.parse(firstObj);
-    else throw new Error('did not return valid JSON (may be truncated).');
+    // Mirror parseSynthesis's recovery chain (Punchlist #6): quote-repair →
+    // first-object-extract → repair-that → truncation-salvage, before giving up.
+    try {
+      const repaired = repairAnalysisMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { parsed = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { parsed = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { parsed = JSON.parse(repairAnalysisMarkdownQuotes(firstObj)); }
+          catch (pe4) {
+            const salvaged = salvageTruncatedAnalysis(raw);
+            if (salvaged) return salvaged;
+            throw new Error('did not return valid JSON (may be truncated).');
+          }
+        }
+      } else {
+        const salvaged = salvageTruncatedAnalysis(raw);
+        if (salvaged) return salvaged;
+        throw new Error('did not return valid JSON (may be truncated).');
+      }
+    }
   }
   if (typeof parsed !== 'object' || parsed === null) throw new Error('response was not an object.');
   const markdown = String(parsed.markdown || '').trim();
@@ -6089,6 +6200,11 @@ export {
   salvageTruncatedSynthesis,
   buildSalvagedSynthesis,
   parseSynthesis,
+  parseAnalysis,
+  repairAnalysisMarkdownQuotes,
+  salvageTruncatedAnalysis,
+  parseSqlGen,
+  repairSqlGenQuotes,
   buildPlanningSystem,
   buildReadSystem,
   buildSynthesisSystem,

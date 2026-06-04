@@ -75,6 +75,11 @@ import {
   parseUscSynthesis,
   parseCfrSynthesis,
   parseSynthesis,
+  parseAnalysis,
+  repairAnalysisMarkdownQuotes,
+  salvageTruncatedAnalysis,
+  parseSqlGen,
+  repairSqlGenQuotes,
   buildPlanningSystem,
   buildReadSystem,
   buildSynthesisSystem,
@@ -2846,5 +2851,90 @@ describe("parseUsageLogRequest", () => {
     expect(r.value.query_summary).toBe(null);
     expect(r.value.cited_ids).toBe(null);
     expect(r.value.cost_cents).toBe(null);
+  });
+});
+
+// ── Punchlist #6: Analyze + AI-SQL parse hardening ──────────────────────────
+// Before this fix, parseAnalysis / parseSqlGen used a bare JSON.parse →
+// extractFirstJsonObject chain with no quote-repair or truncation-salvage, so
+// an unescaped quote in the analysis markdown (or a truncated tail) returned a
+// 502. These mirror the synthesis recovery chain onto both paths.
+describe("parseAnalysis — Punchlist #6 recovery chain", () => {
+  it("parses clean analyze JSON", () => {
+    const raw = JSON.stringify({
+      markdown: "## Findings\n\nThe government lost in most cases.",
+      annotations: [{ cl_id: 123, rank: 1, label: "lead case" }]
+    });
+    const r = parseAnalysis(raw);
+    expect(r.markdown).toContain("The government lost");
+    expect(r.annotations[123]).toEqual({ rank: 1, label: "lead case" });
+  });
+
+  it("strips ```json fences", () => {
+    const raw = '```json\n{"markdown":"# Title\\n\\nBody text here is long enough.","annotations":[]}\n```';
+    const r = parseAnalysis(raw);
+    expect(r.markdown).toContain("Body text here");
+  });
+
+  it("recovers when the markdown field has an unescaped double-quote", () => {
+    // The court called it a "vindictive" prosecution — raw quotes break JSON.parse.
+    const raw = '{"markdown":"The court called it a "vindictive" prosecution, citing bad faith throughout the record.","annotations":[]}';
+    const r = parseAnalysis(raw);
+    expect(r.markdown).toContain("vindictive");
+    expect(r.markdown).toContain("prosecution");
+  });
+
+  it("salvages a truncated analysis (cut off mid-markdown)", () => {
+    const longBody = "The government is not prevailing. ".repeat(20);
+    const raw = '{"markdown":"## Win/Loss Analysis\\n\\n' + longBody; // no closing quote/brace
+    const r = parseAnalysis(raw);
+    expect(r.markdown).toContain("Win/Loss Analysis");
+    expect(r.markdown).toContain("truncated");
+    expect(r.annotations).toEqual({});
+  });
+
+  it("still throws on genuinely unparseable garbage", () => {
+    expect(() => parseAnalysis("not json at all, no markdown field")).toThrow();
+  });
+
+  it("salvageTruncatedAnalysis returns null when not truncated", () => {
+    const raw = '{"markdown":"short and complete","annotations":[]}';
+    expect(salvageTruncatedAnalysis(raw)).toBe(null);
+  });
+
+  it("salvageTruncatedAnalysis returns null when too little content", () => {
+    const raw = '{"markdown":"tiny'; // < 50 chars, no closer
+    expect(salvageTruncatedAnalysis(raw)).toBe(null);
+  });
+
+  it("repairAnalysisMarkdownQuotes is a no-op without a markdown field", () => {
+    const s = '{"foo":"bar"}';
+    expect(repairAnalysisMarkdownQuotes(s)).toBe(s);
+  });
+});
+
+describe("parseSqlGen — Punchlist #6 quote repair", () => {
+  it("parses clean sql-gen JSON", () => {
+    const raw = '{"sql":"SELECT cl_id FROM cases WHERE court = \'dcd\'","label":"DC district cases"}';
+    const v = parseSqlGen(raw);
+    expect(v.sql).toContain("SELECT cl_id");
+    expect(v.label).toBe("DC district cases");
+  });
+
+  it("recovers when the sql field has an unescaped double-quoted identifier", () => {
+    // The model emitted a double-quoted identifier without escaping it.
+    const raw = '{"sql":"SELECT "cl_id" FROM cases","label":"all cases"}';
+    const v = parseSqlGen(raw);
+    expect(v.sql).toContain("cl_id");
+    expect(v.label).toBe("all cases");
+  });
+
+  it("does not fabricate sql from unparseable output", () => {
+    expect(() => parseSqlGen("totally not json")).toThrow();
+  });
+
+  it("repairSqlGenQuotes is a no-op without a sql field", () => {
+    const s = '{"label":"x"}';
+    expect(repairSqlGenQuotes(s)).toBe(s);
   });
 });
