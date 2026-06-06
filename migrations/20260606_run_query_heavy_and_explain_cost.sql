@@ -2,9 +2,9 @@
 -- Target: CORPUS Supabase project xsqdnuqyqyykkzuiqphr.
 -- Status: APPLIED to prod 2026-06-06 (via execute_sql; the restricted migration
 -- role lacks CREATE on public, so applied as postgres). Verified: both functions
--- owned by corpus_readonly; statement_timeout 90s / 15s; EXECUTE granted to
--- service_role + authenticated ONLY (no anon, no PUBLIC); explain_cost returns a
--- usable Total Cost on the reported heavy query (~157K wrapped).
+-- owned by corpus_readonly; statement_timeout 90s / 15s; explain_cost returns a
+-- usable Total Cost on the reported heavy query (~157K wrapped); the Worker's
+-- role (anon — see grants note) can call both end-to-end.
 --
 -- ── Why ──────────────────────────────────────────────────────────────────────
 -- Two new RPCs supporting the "broad AI search" hardening package (the AI-writes-
@@ -28,13 +28,22 @@
 --     side-effect-free. The Worker reads the root node's "Total Cost" to decide
 --     whether to offer the run-anyway path. 15s timeout (planning only).
 --
--- ── Grants (DELIBERATELY narrower than run_query) ────────────────────────────
--- run_query is granted to PUBLIC/anon/authenticated/service_role. These two are
--- NOT: the 90s budget must not be an anonymous DoS amplifier via the public
--- publishable (anon) key, and the cost guard is an internal Worker concern. Note
--- the Supabase footgun: ALTER DEFAULT PRIVILEGES auto-grants EXECUTE to anon on
--- new functions, so an explicit REVOKE FROM anon is required AFTER create — a bare
--- REVOKE FROM PUBLIC does not remove it.
+-- ── Grants (match run_query: anon-callable) ──────────────────────────────────
+-- IMPORTANT: the Worker authenticates to the corpus with the PUBLISHABLE (anon)
+-- key (see worker/wrangler.toml CORPUS_SUPABASE_KEY — a deliberate choice: the
+-- corpus is PII-free and run_query is SELECT-only). So these functions MUST be
+-- anon-callable or the Worker can't call them. We grant anon + authenticated +
+-- service_role (REVOKE PUBLIC first to drop the implicit grant, then name roles).
+--
+-- This means run_query_heavy is an anon-callable 90s compute surface via direct
+-- PostgREST — but that is the SAME CLASS as the EXISTING run_query (anon, 60s).
+-- An attacker with the public key can already flood 60s run_query calls directly
+-- (bypassing the Worker's heavy cap, which only governs the Worker-mediated
+-- path); a 90s ceiling is marginally longer, not a new class of exposure. An
+-- earlier draft of this migration blocked anon to avoid a "90s DoS amplifier",
+-- but that was both unachievable (anon IS the Worker's role) and moot (run_query
+-- already is the anon surface). If the corpus ever moves to a service_role key
+-- for the Worker, tighten these grants to match.
 --
 -- ── Ownership / CREATE-on-public quirk ───────────────────────────────────────
 -- Same as run_query: ALTER FUNCTION ... OWNER TO corpus_readonly requires the
@@ -73,8 +82,7 @@ END;
 $function$;
 ALTER FUNCTION public.run_query_heavy(text) OWNER TO corpus_readonly;
 REVOKE ALL ON FUNCTION public.run_query_heavy(text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.run_query_heavy(text) FROM anon;  -- default-privileges footgun
-GRANT EXECUTE ON FUNCTION public.run_query_heavy(text) TO service_role, authenticated;
+GRANT EXECUTE ON FUNCTION public.run_query_heavy(text) TO anon, authenticated, service_role;  -- anon = the Worker's role
 
 -- Pre-flight cost guard: plan-only, returns EXPLAIN (FORMAT JSON).
 CREATE OR REPLACE FUNCTION public.explain_cost(query_text text)
@@ -104,7 +112,6 @@ END;
 $function$;
 ALTER FUNCTION public.explain_cost(text) OWNER TO corpus_readonly;
 REVOKE ALL ON FUNCTION public.explain_cost(text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.explain_cost(text) FROM anon;  -- default-privileges footgun
-GRANT EXECUTE ON FUNCTION public.explain_cost(text) TO service_role, authenticated;
+GRANT EXECUTE ON FUNCTION public.explain_cost(text) TO anon, authenticated, service_role;  -- anon = the Worker's role
 
 REVOKE CREATE ON SCHEMA public FROM corpus_readonly;
