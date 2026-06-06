@@ -205,7 +205,8 @@ export function AmaPreflight({
             Estimate is from the agent&apos;s planning step and may be off;
             you&apos;ll see the actual running cost in the session log as the
             query executes. Cancel and refine the question if you want to
-            narrow scope.
+            narrow scope. Broad questions over a large scope can take up to a
+            minute or two to run.
           </p>
 
           <div className="mt-5 flex items-center justify-between gap-3">

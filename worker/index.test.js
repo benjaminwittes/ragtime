@@ -83,7 +83,10 @@ import {
   buildPlanningSystem,
   buildReadSystem,
   buildSynthesisSystem,
-  parseUsageLogRequest
+  parseUsageLogRequest,
+  is57014,
+  parseExplainTotalCost,
+  heavyCostThreshold
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -2936,5 +2939,56 @@ describe("parseSqlGen — Punchlist #6 quote repair", () => {
   it("repairSqlGenQuotes is a no-op without a sql field", () => {
     const s = '{"label":"x"}';
     expect(repairSqlGenQuotes(s)).toBe(s);
+  });
+});
+
+// ── Broad-AI-search hardening package (timeout guard + run-anyway) ───────────
+describe("is57014 (statement_timeout detection)", () => {
+  it("matches the Postgres 57014 code inside a run_query error body", () => {
+    expect(is57014(new Error('run_query 500: {"code":"57014","message":"canceling statement due to statement timeout"}'))).toBe(true);
+  });
+  it("matches heavy-runner errors (same prefix)", () => {
+    expect(is57014(new Error('run_query 400: {"code":"57014"}'))).toBe(true);
+  });
+  it("is false for unrelated errors", () => {
+    expect(is57014(new Error("run_query 400: syntax error at or near"))).toBe(false);
+    expect(is57014(null)).toBe(false);
+    expect(is57014(undefined)).toBe(false);
+  });
+});
+
+describe("parseExplainTotalCost", () => {
+  it("reads the root node Total Cost from EXPLAIN FORMAT JSON output", () => {
+    const plan = [{ Plan: { "Node Type": "Unique", "Total Cost": 157161.23 } }];
+    expect(parseExplainTotalCost(plan)).toBeCloseTo(157161.23);
+  });
+  it("accepts an unwrapped object too", () => {
+    expect(parseExplainTotalCost({ Plan: { "Total Cost": 42 } })).toBe(42);
+  });
+  it("returns null when the shape is missing or malformed (caller falls through to normal execution)", () => {
+    expect(parseExplainTotalCost(null)).toBe(null);
+    expect(parseExplainTotalCost([])).toBe(null);
+    expect(parseExplainTotalCost([{ Plan: {} }])).toBe(null);
+    expect(parseExplainTotalCost([{ Plan: { "Total Cost": "oops" } }])).toBe(null);
+    expect(parseExplainTotalCost("not json")).toBe(null);
+  });
+});
+
+describe("heavyCostThreshold", () => {
+  it("defaults to 100000 when env is unset/blank/invalid", () => {
+    expect(heavyCostThreshold({})).toBe(100000);
+    expect(heavyCostThreshold({ HEAVY_COST_THRESHOLD: "" })).toBe(100000);
+    expect(heavyCostThreshold({ HEAVY_COST_THRESHOLD: "abc" })).toBe(100000);
+    expect(heavyCostThreshold({ HEAVY_COST_THRESHOLD: "0" })).toBe(100000);
+    expect(heavyCostThreshold({ HEAVY_COST_THRESHOLD: "-5" })).toBe(100000);
+  });
+  it("honors a valid positive override (tune from the usage log without a deploy)", () => {
+    expect(heavyCostThreshold({ HEAVY_COST_THRESHOLD: "120000" })).toBe(120000);
+    expect(heavyCostThreshold({ HEAVY_COST_THRESHOLD: "50000" })).toBe(50000);
+  });
+  it("brackets the calibration data: metadata seq scan (58K) below, timeout class (157K) above", () => {
+    const t = heavyCostThreshold({});
+    expect(58011).toBeLessThan(t);   // full-corpus metadata ILIKE — fast, must NOT flag
+    expect(157161).toBeGreaterThan(t); // reported timeout query — must flag
   });
 });

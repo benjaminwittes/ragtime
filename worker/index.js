@@ -575,10 +575,109 @@ async function withStatementTimeoutRetry(fn, maxAttempts = 2) {
     try { return await fn(); }
     catch (e) {
       lastErr = e;
-      if (!String(e && e.message).includes("57014")) throw e;
+      if (!is57014(e)) throw e;
     }
   }
   throw lastErr;
+}
+
+// True when an error carries Postgres 57014 (statement_timeout). The corpus
+// surfaces it inside the run_query RPC's error body, so a substring check is the
+// reliable signal across both run_query and run_query_heavy.
+function is57014(e) { return String(e && e.message).includes("57014"); }
+
+// User-facing copy for a query that exceeded the time limit. Actionable, not a
+// raw Postgres dump (the old behavior — "run_query 500: {code:57014,...}").
+var TOO_COMPLEX_MSG = "This search was too broad to finish in the time limit. Try narrowing the scope (add a court or a tighter date range) or using fewer, more specific terms.";
+
+// Heavy-path runner: 90s ceiling (vs run_query's 60s), via the run_query_heavy
+// RPC. Used ONLY after the EXPLAIN guard flags a query expensive AND an authed
+// user opts into "run anyway" (Claude SQL), or for AMA queries the guard flags
+// heavy. Keeps the "run_query " error prefix so is57014() still matches.
+async function corpusRunQueryHeavy(env, sql) {
+  const r = await corpusFetch(env, `/rest/v1/rpc/run_query_heavy`, {
+    method: "POST",
+    body: JSON.stringify({ query_text: sql })
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`run_query ${r.status}: ${String(t).slice(0, 300)}`);
+  }
+  return await r.json();
+}
+
+// Pre-flight cost guard. EXPLAIN (FORMAT JSON) the final query (PLANS, never
+// executes) and return the root node's estimated Total Cost — or null if it
+// can't be obtained (invalid SQL, explain error), in which case callers treat it
+// as "not flagged" and fall through to normal execution where the real error (if
+// any) surfaces. Empirically (2026-06): the reported timeout query ~157K; a
+// narrow FTS ~600; a full-corpus metadata seq scan ~58K (cost-inflated but fast).
+function parseExplainTotalCost(planJson) {
+  try {
+    const root = Array.isArray(planJson) ? planJson[0] : planJson;
+    const cost = root && root.Plan && root.Plan["Total Cost"];
+    return (typeof cost === "number" && isFinite(cost)) ? cost : null;
+  } catch { return null; }
+}
+async function corpusExplainCost(env, sql) {
+  try {
+    const r = await corpusFetch(env, `/rest/v1/rpc/explain_cost`, {
+      method: "POST",
+      body: JSON.stringify({ query_text: sql })
+    });
+    if (!r.ok) return null;
+    return parseExplainTotalCost(await r.json());
+  } catch { return null; }
+}
+// Threshold above which a query is "heavy" (offer run-anyway instead of running
+// at the 60s ceiling). Default 100K — above the metadata seq-scan false-positive
+// ceiling (~58K), below the timeout class (~157K). Tunable via env without deploy.
+function heavyCostThreshold(env) {
+  const v = parseInt(env.HEAVY_COST_THRESHOLD || "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 100000;
+}
+
+// Approximate back-pressure on heavy (90s) queries: cap how many may START per
+// minute globally so a burst of broad searches can't pile up and thrash the
+// shared corpus instance's cache for everyone. Minute-bucketed KV counter with a
+// short TTL — self-healing, and the same get/put pattern as checkIpRateLimit
+// (approximate under races, which is fine for back-pressure). Returns true if a
+// slot was reserved, false if over the cap. Tunable via HEAVY_QUERY_PER_MIN.
+async function reserveHeavySlot(env, ctx) {
+  const cap = parseInt(env.HEAVY_QUERY_PER_MIN || "6", 10);
+  const key = `heavy:${yyyymmddhhmm(new Date())}`;
+  const n = parseInt((await env.QUOTA.get(key)) || "0", 10);
+  if (n >= cap) return false;
+  ctx.waitUntil(env.QUOTA.put(key, String(n + 1), { expirationTtl: 120 }));
+  return true;
+}
+
+// Best-effort server-side failure log. Failed AI runs otherwise escape the
+// usage_log entirely — it is client-driven and the client only logs SUCCESSFUL
+// traces, so the exact queries we most need to triage are invisible. Fire-and-
+// forget; never throws into the user path. (v1 marks failures via a note prefix;
+// no APP-project schema change.)
+function logCorpusFailure(env, ctx, fields) {
+  try {
+    const row = {
+      interaction_id: crypto.randomUUID(),
+      client_ts: new Date().toISOString(),
+      auth_mode: fields.authMode || null,
+      user_id: fields.userId || null,
+      surface: fields.surface || null,
+      mode: fields.mode || null,
+      question: fields.question ? String(fields.question).slice(0, 8000) : null,
+      note: ("[server-logged failure] " + String(fields.error || "unknown")).slice(0, 8000),
+      annotated_at: new Date().toISOString()
+    };
+    ctx.waitUntil(
+      supabaseFetch(env, "/rest/v1/usage_log?on_conflict=interaction_id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(row)
+      }).catch(() => {})
+    );
+  } catch { /* never break the user path */ }
 }
 
 // Per-IP rate limit shared by the corpus endpoints. Returns a 429 Response when
@@ -1035,7 +1134,7 @@ function substituteScoped(sqlIn, name, body) {
 
 // Run the stored plan's SQL against the corpus, substituting scoped_* table
 // names with inline scope-filtered subqueries. Faithful port of executeAmaPlan.
-async function executeCorpusPlan(env, plan, scope) {
+async function executeCorpusPlan(env, ctx, plan, scope) {
   const SCOPE_LITERAL_LIMIT = 25000;
   let scopeIdsSubquery = '';
   if (scope.cl_ids && scope.cl_ids.length > 0 && scope.cl_ids.length <= SCOPE_LITERAL_LIMIT) {
@@ -1059,7 +1158,10 @@ async function executeCorpusPlan(env, plan, scope) {
     ? '(SELECT d.* FROM docket_entries d WHERE d.cl_id IN (' + scopeIdsSubquery + '))'
     : null;
 
-  const results = [];
+  // Prepare each query (scope substitution) and EXPLAIN-cost it up front, so we
+  // can pick the runner per query AND reserve a SINGLE heavy slot for the whole
+  // execute if any query is flagged heavy (rather than one slot per query).
+  const prepared = [];
   for (let i = 0; i < plan.queries.length; i++) {
     const q = plan.queries[i];
     let sql = String(q.sql || '').trim().replace(/;\s*$/, '').trim();
@@ -1070,13 +1172,36 @@ async function executeCorpusPlan(env, plan, scope) {
       execSql = substituteScoped(execSql, 'scoped_docket_entries', scopedEntriesBody);
     }
     if (!/^\s*SELECT\b/i.test(execSql)) execSql = 'SELECT * FROM (' + execSql + ') AS ama_q';
+    const cost = await corpusExplainCost(env, execSql);
+    prepared.push({ q, i, sql, execSql, heavy: cost != null && cost > heavyCostThreshold(env) });
+  }
+  // If any query is heavy, take one heavy slot for the run (90s ceiling on the
+  // heavy ones). Over the cap → bubble a busy error the handler maps to 503.
+  if (prepared.some((p) => p.heavy) && !(await reserveHeavySlot(env, ctx))) {
+    const busy = new Error("The system is busy with other large searches right now. Try again in a moment, or narrow your question.");
+    busy.code = "heavy_busy";
+    throw busy;
+  }
+
+  const results = [];
+  for (const p of prepared) {
     let rows;
-    // One auto-retry on 57014 — AMA SQL is LLM-generated against the same
-    // cold-cache-prone FTS surface as Claude SQL. See withStatementTimeoutRetry.
-    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
-    catch (err) { throw new Error('Query "' + (q.label || ('query ' + (i + 1))) + '" failed: ' + err.message); }
+    // Heavy (guard-flagged) → 90s ceiling. Else 60s with one cold-cache retry —
+    // AMA SQL hits the same cold-cache-prone FTS surface as Claude SQL.
+    try {
+      rows = p.heavy
+        ? await corpusRunQueryHeavy(env, p.execSql)
+        : await withStatementTimeoutRetry(() => corpusRunQuery(env, p.execSql));
+    } catch (err) {
+      if (is57014(err)) {
+        const tooComplex = new Error(TOO_COMPLEX_MSG);
+        tooComplex.code = "too_complex";
+        throw tooComplex;
+      }
+      throw new Error('Query "' + (p.q.label || ('query ' + (p.i + 1))) + '" failed: ' + err.message);
+    }
     const truncated = (rows.length > 500) ? rows.slice(0, 500) : rows;
-    results.push({ label: q.label || ('query ' + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 500 });
+    results.push({ label: p.q.label || ('query ' + (p.i + 1)), sql: p.sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 500 });
   }
   return results;
 }
@@ -1392,8 +1517,15 @@ async function corpusExecuteHandler(request, env, ctx) {
   ctx.waitUntil(env.QUOTA.delete("plan:" + token));
 
   let results;
-  try { results = await executeCorpusPlan(env, blob.plan, blob.scope); }
-  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+  try { results = await executeCorpusPlan(env, ctx, blob.plan, blob.scope); }
+  catch (e) {
+    if (e && e.code === "too_complex") {
+      logCorpusFailure(env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "ama", question: blob.question, error: e.message });
+      return json({ error: { message: TOO_COMPLEX_MSG, code: "too_complex" } }, 400);
+    }
+    if (e && e.code === "heavy_busy") return json({ error: { message: e.message, code: "heavy_busy" } }, 503);
+    return json({ error: { message: e.message, code: "execute_failed" } }, 400);
+  }
 
   let res;
   try {
@@ -1601,6 +1733,14 @@ function parseSqlGen(raw) {
 async function corpusSqlHandler(request, env, ctx) {
   let body;
   try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+
+  // Confirm path: an authed user opted into "run anyway" on a query the guard
+  // (or a runtime 60s timeout) flagged heavy. Runs the stored query at 90s; no
+  // LLM generation, no prompt/provider validation needed here.
+  if (body && typeof body.confirm_token === "string" && body.confirm_token) {
+    return await corpusSqlConfirmHandler(request, env, ctx, body);
+  }
+
   const provider = (body && body.provider) || "anthropic";
   if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
   const model = body && body.model;
@@ -1641,17 +1781,40 @@ async function corpusSqlHandler(request, env, ctx) {
   }
   const idsSql = "SELECT DISTINCT sub.cl_id FROM (" + sanitized + ") AS sub" + scopeClause;
 
-  // 3) Run it against the corpus; cap the result set. One auto-retry on
-  // statement_timeout (57014) — see withStatementTimeoutRetry for rationale.
+  // 3) Pre-flight cost guard. If the planner estimates this query is expensive,
+  // don't burn the protective 60s ceiling on it — offer the authed "run anyway"
+  // (90s) path instead. SQL generation is already charged; the built query is
+  // stored under a token so confirming doesn't regenerate/recharge it.
+  const estCost = await corpusExplainCost(env, idsSql);
+  if (estCost != null && estCost > heavyCostThreshold(env)) {
+    return await offerRunAnyway(env, {
+      idsSql, generatedSql, label, provider, model, auth,
+      reason: "estimated_heavy", estCost,
+      costCents: res.costCents, balanceCents: res.balanceCents
+    });
+  }
+
+  // 4) Run at the 60s ceiling (one cold-cache retry). A 57014 timeout here means
+  // the planner under-estimated — offer run-anyway rather than dead-ending.
   let idRows;
   try { idRows = await withStatementTimeoutRetry(() => corpusRunQuery(env, idsSql)); }
-  catch (e) { return json({ error: { message: "The generated query failed: " + e.message, code: "query_failed", generated_sql: generatedSql } }, 400); }
+  catch (e) {
+    if (is57014(e)) {
+      logCorpusFailure(env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "sql", question: prompt, error: e.message });
+      return await offerRunAnyway(env, {
+        idsSql, generatedSql, label, provider, model, auth,
+        reason: "timed_out",
+        costCents: res.costCents, balanceCents: res.balanceCents
+      });
+    }
+    return json({ error: { message: "The generated query failed: " + e.message, code: "query_failed", generated_sql: generatedSql } }, 400);
+  }
   if (idRows.length > CLAUDE_MAX_RAW_ROWS) {
     return json({ error: { message: "The query matched " + idRows.length.toLocaleString("en-US") + " cases (cap is " + CLAUDE_MAX_RAW_ROWS.toLocaleString("en-US") + "). Try a more specific prompt.", code: "too_many_rows" } }, 400);
   }
   const matched = idRows.map((r) => r.cl_id).filter((x) => x != null);
 
-  // 4) Fetch display rows for the first 10k by date (from the live corpus).
+  // 5) Fetch display rows for the first 10k by date (from the live corpus).
   let displayRows = [];
   if (matched.length > 0) {
     const displaySql = "SELECT " + SQL_DISPLAY_COLS + " FROM cases WHERE cl_id IN (" + matched.join(",") + ") ORDER BY date_filed DESC NULLS LAST LIMIT 10000";
@@ -1667,6 +1830,86 @@ async function corpusSqlHandler(request, env, ctx) {
     display_rows: displayRows,
     _cost_cents: res.costCents,
     _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// Store the built (scope-applied) id-set query under a one-shot token and return
+// a needs_confirmation envelope. The client shows a "this is broad — may take up
+// to ~2 min" warning and, on confirm, re-posts the token to corpusSqlConfirmHandler
+// which runs it at the 90s ceiling. `reason` distinguishes a proactive guard hit
+// ("estimated_heavy", carries an estimate) from a runtime 60s timeout ("timed_out").
+async function offerRunAnyway(env, opts) {
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("sql:" + token, JSON.stringify({
+    idsSql: opts.idsSql, generatedSql: opts.generatedSql, label: opts.label,
+    provider: opts.provider, model: opts.model,
+    userId: opts.auth.userId, authMode: opts.auth.authMode
+  }), { expirationTtl: 900 });
+  const out = {
+    needs_confirmation: true,
+    reason: opts.reason,
+    token,
+    generated_sql: opts.generatedSql,
+    label: opts.label,
+    _cost_cents: opts.costCents,
+    _balance_cents: opts.balanceCents
+  };
+  if (opts.estCost != null) out.estimate = { cost: Math.round(opts.estCost) };
+  return json(out, 200);
+}
+
+// Confirm path for Claude SQL: the authed user opted into "run anyway". Skips LLM
+// generation (already charged on the original call) — runs the stored query at
+// the 90s ceiling (run_query_heavy) under the heavy-query back-pressure cap. No
+// model call here, so no further charge.
+async function corpusSqlConfirmHandler(request, env, ctx, body) {
+  const token = body.confirm_token;
+  const stored = await env.QUOTA.get("sql:" + token);
+  if (!stored) return json({ error: { message: "This search expired — re-run it.", code: "confirm_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored search is corrupt — re-run it." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider || "anthropic", body);
+  if (auth instanceof Response) return auth;
+  // A paid plan may only be executed by the same account that planned it.
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This search belongs to a different session. Re-run it." } }, 403);
+  }
+  // Heavy-query back-pressure: bound how many 90s queries run at once so a burst
+  // can't thrash the shared corpus instance for everyone.
+  if (!(await reserveHeavySlot(env, ctx))) {
+    return json({ error: { message: "The system is busy with other large searches right now. Try again in a moment, or narrow your search.", code: "heavy_busy" } }, 503);
+  }
+  // One-shot token (consume now).
+  ctx.waitUntil(env.QUOTA.delete("sql:" + token));
+
+  let idRows;
+  try { idRows = await corpusRunQueryHeavy(env, blob.idsSql); }
+  catch (e) {
+    if (is57014(e)) {
+      logCorpusFailure(env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "sql", question: blob.label, error: "heavy/90s: " + e.message });
+      return json({ error: { message: TOO_COMPLEX_MSG, code: "too_complex", generated_sql: blob.generatedSql } }, 400);
+    }
+    return json({ error: { message: "The generated query failed: " + e.message, code: "query_failed", generated_sql: blob.generatedSql } }, 400);
+  }
+  if (idRows.length > CLAUDE_MAX_RAW_ROWS) {
+    return json({ error: { message: "The query matched " + idRows.length.toLocaleString("en-US") + " cases (cap is " + CLAUDE_MAX_RAW_ROWS.toLocaleString("en-US") + "). Try a more specific prompt.", code: "too_many_rows" } }, 400);
+  }
+  const matched = idRows.map((r) => r.cl_id).filter((x) => x != null);
+  let displayRows = [];
+  if (matched.length > 0) {
+    const displaySql = "SELECT " + SQL_DISPLAY_COLS + " FROM cases WHERE cl_id IN (" + matched.join(",") + ") ORDER BY date_filed DESC NULLS LAST LIMIT 10000";
+    try { displayRows = await corpusRunQuery(env, displaySql); }
+    catch (e) { return json({ error: { message: "Fetching display rows failed: " + e.message } }, 502); }
+  }
+  return json({
+    generated_sql: blob.generatedSql,
+    label: blob.label,
+    cl_ids: matched,
+    count: matched.length,
+    display_rows: displayRows,
+    _cost_cents: 0,
+    _balance_cents: null
   }, 200);
 }
 
@@ -6208,5 +6451,8 @@ export {
   buildPlanningSystem,
   buildReadSystem,
   buildSynthesisSystem,
-  parseUsageLogRequest
+  parseUsageLogRequest,
+  is57014,
+  parseExplainTotalCost,
+  heavyCostThreshold
 };
