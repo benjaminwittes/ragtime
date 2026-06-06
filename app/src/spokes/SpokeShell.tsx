@@ -280,10 +280,12 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     confirm: SqlGenConfirmNeeded
   } | null>(null)
 
-  // Drop a stale run-anyway offer when the user switches modes.
-  useEffect(() => {
+  // Switch modes, dropping any stale run-anyway offer. (Handler, not an effect,
+  // so we don't setState synchronously inside an effect.)
+  function selectMode(m: QueryMode) {
+    setActiveMode(m)
     setPendingSqlConfirm(null)
-  }, [activeMode])
+  }
 
   /** Push a Claude-SQL result page (shared by the direct and run-anyway paths). */
   function pushClaudeSqlPage(prompt: string, r: SqlGenResult) {
@@ -667,7 +669,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         modes={spoke.queryModes}
         activeMode={activeMode}
         enabledModes={enabledModes}
-        onSelect={setActiveMode}
+        onSelect={selectMode}
       />
       {hasStack && (
         <Breadcrumb
