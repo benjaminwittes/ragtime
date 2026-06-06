@@ -265,10 +265,34 @@ export class WorkerSqlError extends Error {
   }
 }
 
+/**
+ * The Worker's "this query looks expensive" response (HTTP 200, not an error).
+ * The model already produced (and charged for) the SQL; the user is offered a
+ * "run anyway" path that executes at the 90s ceiling. `reason` distinguishes a
+ * proactive guard hit (`estimated_heavy`, carries `estimate`) from a runtime
+ * 60s timeout (`timed_out`). Confirm by calling confirmClaudeSql(token).
+ */
+export type SqlGenConfirmNeeded = {
+  needs_confirmation: true
+  reason: 'estimated_heavy' | 'timed_out' | string
+  token: string
+  generated_sql: string
+  label: string
+  estimate?: { cost: number }
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export function isSqlConfirmNeeded(
+  r: SqlGenResult | SqlGenConfirmNeeded,
+): r is SqlGenConfirmNeeded {
+  return (r as SqlGenConfirmNeeded).needs_confirmation === true
+}
+
 export async function runClaudeSql(
   req: SqlGenRequest,
   auth: AuthArg,
-): Promise<SqlGenResult> {
+): Promise<SqlGenResult | SqlGenConfirmNeeded> {
   const r = await fetch(`${WORKER_URL}/corpus/sql`, {
     method: 'POST',
     headers: authHeaders(auth),
@@ -282,6 +306,31 @@ export async function runClaudeSql(
     const body = (await r.json().catch(() => ({}))) as {
       error?: SqlGenError
     }
+    const err = body.error ?? {
+      message: `Request failed (${r.status} ${r.statusText})`,
+    }
+    throw new WorkerSqlError(err, r.status)
+  }
+  return (await r.json()) as SqlGenResult | SqlGenConfirmNeeded
+}
+
+/**
+ * "Run anyway" confirmation for a query the guard flagged heavy. Re-posts the
+ * stored token; the Worker runs it at the 90s ceiling under the heavy-query cap
+ * (no LLM call, so no further charge). A `heavy_busy` (503) means the system is
+ * saturated with large searches — surfaced as a normal WorkerSqlError.
+ */
+export async function confirmClaudeSql(
+  token: string,
+  auth: AuthArg,
+): Promise<SqlGenResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sql`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({ ...authBody(auth), confirm_token: token }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as { error?: SqlGenError }
     const err = body.error ?? {
       message: `Request failed (${r.status} ${r.statusText})`,
     }

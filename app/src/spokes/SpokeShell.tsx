@@ -9,6 +9,10 @@ import {
   type FilterFields,
   type FilterScope,
   WorkerSqlError,
+  type SqlGenResult,
+  type SqlGenConfirmNeeded,
+  isSqlConfirmNeeded,
+  confirmClaudeSql,
   fetchCasesByIds,
   fetchCorpusFacets,
   runClaudeAnalysis,
@@ -79,6 +83,10 @@ import type {
  *   - On mount/unmount: setActiveSpokeSlug() so the docs-overlay shows
  *     spoke-scoped entries.
  */
+/** Above this many ids, send `scope_sql` (if available) instead of inlining the
+ *  id list. Matches the Worker's executeCorpusPlan SCOPE_LITERAL_LIMIT (25k). */
+const SCOPE_INLINE_CAP = 25000
+
 export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const { setActiveSpokeSlug } = useDocs()
   const auth = useAuth()
@@ -188,11 +196,23 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setViewingIdx(stack.length - 1)
   }
 
-  /** Build the scope payload for /corpus/filter and /corpus/sql from the
-   *  tip's row IDs. Empty stack → empty scope (full corpus). */
+  /** Build the scope payload for /corpus/filter and /corpus/sql from the tip's
+   *  FULL id-set. Empty stack → empty scope (full corpus).
+   *
+   *  Uses the page's full `clIds` (not the capped display `rows`) so a filter of
+   *  e.g. 195k criminal cases is genuinely searched — previously this read
+   *  `rows` and silently truncated every downstream AI op to the 10k display
+   *  rows. For large scopes we send `scope_sql` (a tiny query the Worker
+   *  re-derives) instead of inlining tens of thousands of ids; the Worker's
+   *  cl_ids inline cap is 25k (executeCorpusPlan SCOPE_LITERAL_LIMIT). */
   function buildScopeFromTip(): FilterScope {
-    if (!tipPage || tipPage.rows.length === 0) return {}
-    return { cl_ids: tipPage.rows.map((r) => r.cl_id) }
+    if (!tipPage) return {}
+    const ids = tipPage.clIds ?? tipPage.rows.map((r) => r.cl_id)
+    if (ids.length === 0) return {}
+    if (ids.length > SCOPE_INLINE_CAP && tipPage.scopeSql) {
+      return { scope_sql: tipPage.scopeSql }
+    }
+    return { cl_ids: ids }
   }
 
   const enabledModes = useMemo<QueryMode[]>(() => {
@@ -225,6 +245,8 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         operationLabel: buildManualFilterLabel(fields),
         rows: r.display_rows,
         count: r.count,
+        clIds: r.cl_ids,
+        scopeSql: r.executed_sql,
         source: { kind: 'manual_filter', generatedSql: r.generated_sql },
       })
     } catch (e) {
@@ -251,6 +273,38 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // A heavy Claude-SQL query the user can opt to "run anyway" (90s). Non-null
+  // means the warning card is shown; cleared on Run-it / Refine / new submit.
+  const [pendingSqlConfirm, setPendingSqlConfirm] = useState<{
+    prompt: string
+    confirm: SqlGenConfirmNeeded
+  } | null>(null)
+
+  // Drop a stale run-anyway offer when the user switches modes.
+  useEffect(() => {
+    setPendingSqlConfirm(null)
+  }, [activeMode])
+
+  /** Push a Claude-SQL result page (shared by the direct and run-anyway paths). */
+  function pushClaudeSqlPage(prompt: string, r: SqlGenResult) {
+    if (typeof r._balance_cents === 'number') {
+      paid.applyBalanceFromWorker(r._balance_cents)
+    }
+    pushPage({
+      operationType: 'claude_sql',
+      operationLabel: buildClaudeSqlLabel(prompt, r.label),
+      rows: r.display_rows,
+      count: r.count,
+      clIds: r.cl_ids,
+      source: {
+        kind: 'claude_sql',
+        prompt,
+        label: r.label,
+        generatedSql: r.generated_sql,
+      },
+    })
+  }
+
   async function handleClaudeSqlSubmit(prompt: string) {
     if (!canSubmit) return
     if (!auth.auth) {
@@ -259,6 +313,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
     setQueryLoading(true)
     setQueryError(undefined)
+    setPendingSqlConfirm(null)
     try {
       const r = await runClaudeSql(
         { prompt, scope: buildScopeFromTip() },
@@ -267,18 +322,12 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       if (typeof r._balance_cents === 'number') {
         paid.applyBalanceFromWorker(r._balance_cents)
       }
-      pushPage({
-        operationType: 'claude_sql',
-        operationLabel: buildClaudeSqlLabel(prompt, r.label),
-        rows: r.display_rows,
-        count: r.count,
-        source: {
-          kind: 'claude_sql',
-          prompt,
-          label: r.label,
-          generatedSql: r.generated_sql,
-        },
-      })
+      // Heavy query — don't run at the 60s ceiling; offer the run-anyway path.
+      if (isSqlConfirmNeeded(r)) {
+        setPendingSqlConfirm({ prompt, confirm: r })
+        return
+      }
+      pushClaudeSqlPage(prompt, r)
     } catch (e) {
       if (e instanceof WorkerSqlError) {
         setQueryError(e.message)
@@ -291,6 +340,25 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       }
     } finally {
       setQueryLoading(false)
+    }
+  }
+
+  /** "Run anyway" — execute the flagged-heavy query at the 90s ceiling. */
+  async function handleClaudeSqlRunAnyway() {
+    if (!auth.auth || !pendingSqlConfirm) return
+    const { prompt, confirm } = pendingSqlConfirm
+    setPendingSqlConfirm(null)
+    setQueryLoading(true)
+    setQueryError(undefined)
+    setProgressLabel('Working — broad searches can take a minute or two…')
+    try {
+      const r = await confirmClaudeSql(confirm.token, auth.auth)
+      pushClaudeSqlPage(prompt, r)
+    } catch (e) {
+      setQueryError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setQueryLoading(false)
+      setProgressLabel(undefined)
     }
   }
 
@@ -326,6 +394,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         operationLabel: buildClaudeReadLabel(criterion),
         rows: keptRows,
         count: keptRows.length,
+        clIds: keptRows.map((r) => r.cl_id),
         source: {
           kind: 'claude_read',
           criterion,
@@ -364,6 +433,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         operationLabel: buildClaudeAnalysisLabel(prompt),
         rows: r.cases,
         count: r.cases.length,
+        clIds: r.cases.map((c) => c.cl_id),
         source: {
           kind: 'claude_analysis',
           prompt,
@@ -398,21 +468,26 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   }
 
   /** Build the AMA scope payload from the tip. No tip = run against full
-   *  corpus. Mirrors buildAmaScopeSummary() in legacy index.html. */
+   *  corpus. Uses the FULL id-set (not the capped display rows) so AMA over a
+   *  large filter genuinely covers it; large scopes go via `scope_sql`. */
   function buildAmaScope(): AmaScope {
-    if (!tipPage || tipPage.rows.length === 0) {
+    const ids = tipPage?.clIds ?? tipPage?.rows.map((r) => r.cl_id) ?? []
+    if (!tipPage || ids.length === 0) {
       return {
         is_full_db: true,
         count: facets?.case_count ?? 0,
         description: `The full corpus${facets ? ' (' + facets.case_count.toLocaleString() + ' cases)' : ''} across all federal courts.`,
       }
     }
-    return {
-      cl_ids: tipPage.rows.map((r) => r.cl_id),
+    const base = {
       is_full_db: false,
-      count: tipPage.rows.length,
-      description: `${tipPage.rows.length.toLocaleString()} cases from the current page.`,
+      count: ids.length,
+      description: `${ids.length.toLocaleString()} cases from the current scope.`,
     }
+    if (ids.length > SCOPE_INLINE_CAP && tipPage.scopeSql) {
+      return { ...base, scope_sql: tipPage.scopeSql }
+    }
+    return { ...base, cl_ids: ids }
   }
 
   async function handleClaudeAmaSubmit(question: string) {
@@ -463,7 +538,11 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     incomingRowsSnapshot: CaseDisplayRow[] | null,
   ) {
     if (!auth.auth) return
-    appendAmaLog({ label: 'Step 2/3.', message: 'Executing planned queries…' })
+    appendAmaLog({
+      label: 'Step 2/3.',
+      message:
+        'Executing planned queries… broad questions over a large scope can take a minute or two.',
+    })
     try {
       const synth = await runClaudeExecute(plan.token, auth.auth)
       if (typeof synth._balance_cents === 'number') {
@@ -486,10 +565,15 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         synth.output_mode === 'list' || synth.output_mode === 'hybrid'
       if (wantsList && synth.cl_ids && synth.cl_ids.length > 0) {
         narrowed = true
-        if (incomingRowsSnapshot && incomingRowsSnapshot.length > 0) {
-          const incomingMap = new Map(
-            incomingRowsSnapshot.map((r) => [r.cl_id, r]),
-          )
+        const incomingMap =
+          incomingRowsSnapshot && incomingRowsSnapshot.length > 0
+            ? new Map(incomingRowsSnapshot.map((r) => [r.cl_id, r]))
+            : null
+        // Map from the snapshot only if it actually contains every cited id;
+        // otherwise fetch. Over a large scope the snapshot is just the 10k
+        // display rows, so AMA can cite cases outside it — mapping alone would
+        // silently drop them.
+        if (incomingMap && synth.cl_ids.every((id) => incomingMap.has(id))) {
           outRows = synth.cl_ids
             .map((id) => incomingMap.get(id))
             .filter((r): r is CaseDisplayRow => r != null)
@@ -512,6 +596,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         operationLabel: buildClaudeAmaLabel(question),
         rows: outRows,
         count: outRows.length,
+        clIds: narrowed && synth.cl_ids ? synth.cl_ids : outRows.map((r) => r.cl_id),
         source: {
           kind: 'claude_ama',
           question,
@@ -621,6 +706,48 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           onSubmit={handleClaudeSqlSubmit}
         />
       )}
+      {canSubmit &&
+        activeMode === 'claude_sql' &&
+        pendingSqlConfirm &&
+        !queryLoading && (
+          <div
+            role="status"
+            className="space-y-3 border-b border-border bg-amber-500/10 px-6 py-4 text-sm text-amber-900 dark:text-amber-200"
+          >
+            <p>
+              {pendingSqlConfirm.confirm.reason === 'timed_out'
+                ? 'This search didn’t finish within the standard time limit — it’s a broad query.'
+                : 'This is a broad search across a large scope.'}{' '}
+              You can run it with an extended limit — it may take up to a minute
+              or two. Or refine your terms or narrow the scope for a faster
+              result.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button type="button" onClick={handleClaudeSqlRunAnyway}>
+                Run it anyway
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setPendingSqlConfirm(null)}
+              >
+                Refine instead
+              </Button>
+            </div>
+          </div>
+        )}
+      {canSubmit &&
+        activeMode === 'claude_sql' &&
+        queryLoading &&
+        progressLabel && (
+          <div
+            role="status"
+            className="flex items-center gap-2 border-b border-border bg-card px-6 py-3 text-sm text-muted-foreground"
+          >
+            <span className="inline-block size-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+            {progressLabel}
+          </div>
+        )}
       {canSubmit && activeMode === 'claude_read' && (
         <ClaudeReadForm
           loading={queryLoading}

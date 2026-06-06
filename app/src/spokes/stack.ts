@@ -40,6 +40,14 @@ export type StackPage = {
   rows: CaseDisplayRow[]
   /** Total matched count (may exceed rows.length for paginated results). */
   count: number
+  /** The FULL matched id-set (NOT the capped display `rows`). Used to build the
+   *  scope for the next operation so a large filter isn't silently truncated to
+   *  the 10k display rows. Absent for pages with no id-set (e.g. narrative AMA). */
+  clIds?: number[]
+  /** For manual_filter pages: the id-set SQL (`SELECT cl_id FROM cases WHERE …`).
+   *  Sent as `scope_sql` for large scopes so we pass a tiny query instead of
+   *  inlining tens of thousands of ids. */
+  scopeSql?: string
   /** Provenance object that drives ResultsList's rendering. */
   source: ResultSource
 }
