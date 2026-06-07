@@ -481,10 +481,16 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         description: `The full corpus${facets ? ' (' + facets.case_count.toLocaleString() + ' cases)' : ''} across all federal courts.`,
       }
     }
+    // Use the page's true `count` for the displayed scope size: the Worker
+    // caps the materialized id list at 25k+1, so `ids.length` understates a
+    // large filter (e.g. shows 25,001 for a 91k set). The scope decision still
+    // keys on ids.length — past the cap it's 25001 (> SCOPE_INLINE_CAP), which
+    // correctly routes to scope_sql.
+    const scopeCount = tipPage.count ?? ids.length
     const base = {
       is_full_db: false,
-      count: ids.length,
-      description: `${ids.length.toLocaleString()} cases from the current scope.`,
+      count: scopeCount,
+      description: `${scopeCount.toLocaleString()} cases from the current scope.`,
     }
     if (ids.length > SCOPE_INLINE_CAP && tipPage.scopeSql) {
       return { ...base, scope_sql: tipPage.scopeSql }

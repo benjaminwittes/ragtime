@@ -2395,9 +2395,19 @@ async function corpusFilterHandler(request, env, ctx) {
   const fields = (body && body.fields) || {};
   const scope = normalizeScope(body && body.scope);
   const where = buildFilterWhere(fields, scope.is_full_db ? null : scope);
+  // The full id-set is the scope for downstream AI ops. The frontend inlines it
+  // only up to 25k ids (SCOPE_LITERAL_LIMIT) and otherwise sends `scope_sql`
+  // (the unbounded query) instead — so materializing every id past the cap is
+  // pure waste AND slow (a broad filter hits 91k+ rows → ~30s + the JSON
+  // transfer of all those ids). Cap the materialization at 25k+1: ≤25k returns
+  // the real set; >25k returns 25001 ids (the length signals "too big" so the
+  // frontend switches to scope_sql) plus a truthful count(*) for the breadcrumb.
+  // `executed_sql` stays the UNBOUNDED query so scope_sql still covers the set.
+  const FILTER_ID_CAP = 25000;
+  const scopeSql = "SELECT cl_id FROM cases" + where;
   // No ORDER BY on the id-set query — ordering a set is pointless and forces a
   // sort of the whole match set. The display query keeps it (for the paged view).
-  const idsSql = "SELECT cl_id FROM cases" + where;
+  const idsSql = scopeSql + " LIMIT " + (FILTER_ID_CAP + 1);
   const rowsSql = "SELECT " + SQL_DISPLAY_COLS + " FROM cases" + where + " ORDER BY date_filed DESC NULLS LAST LIMIT 10000";
   let idRows, rows;
   try {
@@ -2407,12 +2417,20 @@ async function corpusFilterHandler(request, env, ctx) {
     return json({ error: { message: "Filter failed: " + e.message, code: "filter_failed" } }, 400);
   }
   const clIds = idRows.map((r) => r.cl_id).filter((x) => x != null);
+  let count = clIds.length;
+  if (clIds.length > FILTER_ID_CAP) {
+    // Capped — get the true count so the displayed total stays truthful (#7).
+    try {
+      const cnt = await corpusRunQuery(env, "SELECT count(*)::int AS n FROM cases" + where);
+      if (cnt && cnt[0] && typeof cnt[0].n === "number") count = cnt[0].n;
+    } catch { /* keep the capped length as a floor if the count query fails */ }
+  }
   return json({
     cl_ids: clIds,
     display_rows: rows,
-    count: clIds.length,
+    count,
     generated_sql: rowsSql,
-    executed_sql: idsSql
+    executed_sql: scopeSql
   }, 200);
 }
 
