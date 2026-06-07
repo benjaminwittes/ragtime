@@ -5476,6 +5476,31 @@ async function runHubKeywordForCorpus(env, corpus, escapedQuery, limit) {
   };
 }
 
+// Run fn over items with at most `limit` running at once, preserving order.
+// Used to throttle the hub's per-corpus FTS fan-out: parallel (5-at-once) puts
+// 5×N CPU-heavy queries on the 2-core DB under N concurrent searches and tips
+// it past its contention cliff. Serializing (limit 1) or near-serializing
+// (limit 2) trades ~1s of single-search latency for not collapsing under load
+// (load-test fix #4). Tunable via HUB_FANOUT_CONCURRENCY (default 2).
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  const workers = Math.max(1, Math.min(limit, items.length || 1));
+  await Promise.all(Array.from({ length: workers }, worker));
+  return results;
+}
+
+function hubFanoutConcurrency(env) {
+  const n = parseInt((env && env.HUB_FANOUT_CONCURRENCY) || "2", 10);
+  return Number.isFinite(n) && n >= 1 ? n : 2;
+}
+
 async function corpusHubKeywordHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
   if (rl) return rl;
@@ -5496,19 +5521,34 @@ async function corpusHubKeywordHandler(request, env, ctx) {
 
   const escapedQuery = escSqlLit(query);
 
-  // Run all corpora in parallel. Per-corpus failures don't fail the whole
-  // request — the user sees grouped results for the corpora that returned
-  // plus an inline error chip for the one that didn't. This matches the
-  // brief's "result-set characterization" tone: tell the user what was
-  // searched and what came back.
-  const settled = await Promise.all(corpora.map(async function (corpus) {
+  // Run the per-corpus FTS with bounded concurrency (fix #4) instead of all 5
+  // at once — keeps a burst of searches from over-subscribing the 2-core DB.
+  // Per-corpus failures don't fail the whole request — the user sees grouped
+  // results for the corpora that returned plus an inline error chip for the
+  // one that didn't (the brief's "result-set characterization" tone).
+  const limit = hubFanoutConcurrency(env);
+  const t0 = Date.now();
+  let slowest = null, slowestMs = -1;
+  const settled = await mapWithConcurrency(corpora, limit, async function (corpus) {
+    const c0 = Date.now();
     try {
       const out = await runHubKeywordForCorpus(env, corpus, escapedQuery, HUB_RESULTS_PER_CORPUS);
+      const dt = Date.now() - c0;
+      if (dt > slowestMs) { slowestMs = dt; slowest = corpus; }
       return [corpus, out];
     } catch (e) {
+      const dt = Date.now() - c0;
+      if (dt > slowestMs) { slowestMs = dt; slowest = corpus; }
       return [corpus, { count: 0, results: [], error: e && e.message ? e.message : String(e) }];
     }
-  }));
+  });
+
+  // Content-free operational log (NO query text) so we can watch hub DB stress
+  // during the beta from the Worker logs. Only cache MISSES reach this handler
+  // (the edge cache wraps it), so this is exactly the DB-hitting hub load.
+  try {
+    console.log(JSON.stringify({ ev: "hub_fanout", ms: Date.now() - t0, slowest, slowest_ms: slowestMs, n: corpora.length, conc: limit }));
+  } catch { /* logging must never break the response */ }
 
   const per_corpus = {};
   for (let i = 0; i < settled.length; i++) {
@@ -6583,6 +6623,8 @@ export {
   sha256Hex,
   corpusCacheKeyUrl,
   CORPUS_CACHE_TTL,
+  mapWithConcurrency,
+  hubFanoutConcurrency,
   is57014,
   parseExplainTotalCost,
   heavyCostThreshold
