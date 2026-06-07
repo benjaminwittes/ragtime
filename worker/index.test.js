@@ -86,6 +86,9 @@ import {
   parseUsageLogRequest,
   usageLogAuthorized,
   timingSafeStrEqual,
+  sha256Hex,
+  corpusCacheKeyUrl,
+  CORPUS_CACHE_TTL,
   is57014,
   parseExplainTotalCost,
   heavyCostThreshold
@@ -3031,5 +3034,41 @@ describe("usageLogAuthorized (internal-only logging gate)", () => {
   });
   it("authorizes only on an exact token match", () => {
     expect(usageLogAuthorized(req("s3cret"), { USAGE_LOG_TOKEN: "s3cret" })).toBe(true);
+  });
+});
+
+// ============================================================================
+// Edge cache for read-only corpus queries. Key correctness: same (path, body)
+// → same key; any difference → different key. Wrong keys would either serve a
+// stale/incorrect response or never hit. (The cache.put/match flow uses the
+// Workers Cache API, exercised in integration; here we pin the key + TTL map.)
+// ============================================================================
+describe("corpus edge cache key", () => {
+  it("is deterministic for identical (path, body)", async () => {
+    const a = await corpusCacheKeyUrl("/corpus/filter", '{"q":"x"}');
+    const b = await corpusCacheKeyUrl("/corpus/filter", '{"q":"x"}');
+    expect(a).toBe(b);
+  });
+  it("differs when the body differs", async () => {
+    const a = await corpusCacheKeyUrl("/corpus/filter", '{"q":"x"}');
+    const b = await corpusCacheKeyUrl("/corpus/filter", '{"q":"y"}');
+    expect(a).not.toBe(b);
+  });
+  it("differs when the path differs (same body)", async () => {
+    const a = await corpusCacheKeyUrl("/corpus/usc/filter", '{"q":"x"}');
+    const b = await corpusCacheKeyUrl("/corpus/cfr/filter", '{"q":"x"}');
+    expect(a).not.toBe(b);
+  });
+  it("produces a stable sha-256 hex digest", async () => {
+    expect(await sha256Hex("")).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  });
+  it("only whitelists read-only corpus paths (no AI/billing/logging)", () => {
+    const paths = Object.keys(CORPUS_CACHE_TTL);
+    expect(paths).toContain("/corpus/hub/keyword");
+    expect(paths).toContain("/corpus/filter");
+    for (const p of ["/corpus/execute", "/corpus/analyze", "/corpus/sql", "/corpus/feedback/log", "/ask"]) {
+      expect(paths).not.toContain(p);
+    }
+    for (const ttl of Object.values(CORPUS_CACHE_TTL)) expect(ttl).toBeGreaterThan(0);
   });
 });

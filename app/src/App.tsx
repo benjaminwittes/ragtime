@@ -3,6 +3,7 @@ import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
 import { SiteMasthead } from '@/components/SiteMasthead'
 import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
+import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
 import { SpokeShell } from '@/spokes/SpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
@@ -30,6 +31,7 @@ import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
 
 type Route =
   | { kind: 'hub' }
+  | { kind: 'privacy' }
   | { kind: 'spoke'; slug: CorpusSlug }
   | { kind: 'not-found'; pathname: string }
 
@@ -38,6 +40,7 @@ function parseRoute(pathname: string): Route {
   // carryover is read separately by the spoke (see readCarryoverQuery).
   pathname = pathname.split('?')[0].split('#')[0]
   if (pathname === '/' || pathname === '') return { kind: 'hub' }
+  if (pathname === '/privacy') return { kind: 'privacy' }
   const m = pathname.match(/^\/corpus\/([^/]+)\/?$/)
   if (m) {
     const slug = m[1] as CorpusSlug
@@ -79,9 +82,11 @@ function App() {
           if (spoke.status === 'active') return activeSpokeShell(spoke)
           return <ComingSoonSpoke spoke={spoke} onNavigate={navigate} />
         })()
-      : route.kind === 'not-found'
-        ? <NotFound pathname={route.pathname} onNavigate={navigate} />
-        : <Hub onNavigate={navigate} />
+      : route.kind === 'privacy'
+        ? <PrivacyPolicy onNavigate={navigate} />
+        : route.kind === 'not-found'
+          ? <NotFound pathname={route.pathname} onNavigate={navigate} />
+          : <Hub onNavigate={navigate} />
 
   return (
     <>
