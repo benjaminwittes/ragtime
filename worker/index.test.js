@@ -84,6 +84,8 @@ import {
   buildReadSystem,
   buildSynthesisSystem,
   parseUsageLogRequest,
+  usageLogAuthorized,
+  timingSafeStrEqual,
   sha256Hex,
   corpusCacheKeyUrl,
   CORPUS_CACHE_TTL,
@@ -2993,6 +2995,45 @@ describe("heavyCostThreshold", () => {
     const t = heavyCostThreshold({});
     expect(58011).toBeLessThan(t);   // full-corpus metadata ILIKE — fast, must NOT flag
     expect(157161).toBeGreaterThan(t); // reported timeout query — must flag
+  });
+});
+
+// ============================================================================
+// Usage-logging gate (public-no-logging posture). The public service ships
+// with NO logging: both server-side logging paths require the shared secret
+// USAGE_LOG_TOKEN, carried only by Ben's internal build as X-Usage-Log-Token.
+// These pin that an unconfigured token, a missing header, or a wrong header
+// all deny logging — so "our code does not log them" holds for public users.
+// ============================================================================
+describe("timingSafeStrEqual", () => {
+  it("true only for equal-length identical strings", () => {
+    expect(timingSafeStrEqual("abc123", "abc123")).toBe(true);
+  });
+  it("false on mismatch, length difference, or non-strings", () => {
+    expect(timingSafeStrEqual("abc123", "abc124")).toBe(false);
+    expect(timingSafeStrEqual("abc", "abcd")).toBe(false);
+    expect(timingSafeStrEqual("", "")).toBe(true);
+    expect(timingSafeStrEqual(null, "x")).toBe(false);
+    expect(timingSafeStrEqual("x", undefined)).toBe(false);
+  });
+});
+
+describe("usageLogAuthorized (internal-only logging gate)", () => {
+  const req = (headerVal) => ({
+    headers: { get: (h) => (h === "X-Usage-Log-Token" && headerVal != null ? headerVal : null) },
+  });
+  it("denies when USAGE_LOG_TOKEN is unconfigured (public default)", () => {
+    expect(usageLogAuthorized(req("anything"), {})).toBe(false);
+    expect(usageLogAuthorized(req("anything"), { USAGE_LOG_TOKEN: "" })).toBe(false);
+  });
+  it("denies when the header is absent even with a configured token", () => {
+    expect(usageLogAuthorized(req(null), { USAGE_LOG_TOKEN: "s3cret" })).toBe(false);
+  });
+  it("denies on a wrong token", () => {
+    expect(usageLogAuthorized(req("nope"), { USAGE_LOG_TOKEN: "s3cret" })).toBe(false);
+  });
+  it("authorizes only on an exact token match", () => {
+    expect(usageLogAuthorized(req("s3cret"), { USAGE_LOG_TOKEN: "s3cret" })).toBe(true);
   });
 });
 

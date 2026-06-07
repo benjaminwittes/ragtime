@@ -19,7 +19,7 @@ import {
 import { TopupDialog } from '@/auth/TopupDialog'
 import { usePaid } from '@/auth/use-paid'
 import { getDemoPassword, setDemoPassword } from '@/lib/demo-access'
-import { setUsageLogEnabled, useUsageLogEnabled } from '@/lib/usage-log'
+import { setUsageLogEnabled, useUsageLogEnabled, usageLoggingBuildEnabled } from '@/lib/usage-log'
 import { toHref } from '@/lib/routing'
 import type { Provider } from './byok-context'
 import { useByok } from './use-byok'
@@ -148,24 +148,26 @@ function PreferencesPanel() {
           </span>
         </span>
       </label>
-      <label className="mt-4 flex items-start gap-3 opacity-80">
-        <input
-          type="checkbox"
-          checked={usageLogOn}
-          onChange={(e) => setUsageLogEnabled(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
-        />
-        <span className="space-y-0.5">
-          <span className="block text-sm font-medium text-foreground">
-            Log my sessions for tuning
+      {usageLoggingBuildEnabled && (
+        <label className="mt-4 flex items-start gap-3 opacity-80">
+          <input
+            type="checkbox"
+            checked={usageLogOn}
+            onChange={(e) => setUsageLogEnabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+          />
+          <span className="space-y-0.5">
+            <span className="block text-sm font-medium text-foreground">
+              Log my sessions for tuning
+            </span>
+            <span className="block text-[11px] leading-relaxed text-muted-foreground">
+              Records each AI answer you run — the query, the plan, what it
+              returned, and any rating/note you add — so the tool can be
+              refined from real use. Off by default. Your sessions only.
+            </span>
           </span>
-          <span className="block text-[11px] leading-relaxed text-muted-foreground">
-            Records each AI answer you run — the query, the plan, what it
-            returned, and any rating/note you add — so the tool can be
-            refined from real use. Off by default. Your sessions only.
-          </span>
-        </span>
-      </label>
+        </label>
+      )}
     </section>
   )
 }
