@@ -20,6 +20,7 @@ import { TopupDialog } from '@/auth/TopupDialog'
 import { usePaid } from '@/auth/use-paid'
 import { getDemoPassword, setDemoPassword } from '@/lib/demo-access'
 import { setUsageLogEnabled, useUsageLogEnabled } from '@/lib/usage-log'
+import { toHref } from '@/lib/routing'
 import type { Provider } from './byok-context'
 import { useByok } from './use-byok'
 
@@ -328,6 +329,16 @@ function SignInForm() {
       <Button type="submit" disabled={submitting || !email.trim()}>
         {submitting ? 'Sending…' : 'Send sign-in link'}
       </Button>
+      <p className="text-xs text-muted-foreground">
+        We handle your email and billing data as described in our{' '}
+        <a
+          href={toHref('/privacy')}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Privacy Policy
+        </a>
+        .
+      </p>
     </form>
   )
 }
