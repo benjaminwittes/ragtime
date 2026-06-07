@@ -586,6 +586,11 @@ function DemoPanel({ onClose }: { onClose: () => void }) {
         modes on Lawfare&apos;s key (shared daily quota, no balance). For
         demos only — regular users use Lawfare-billed sign-in or their own
         key.
+        <span className="mt-2 block text-foreground/70">
+          Note: sessions run in demo mode are logged (your query, the plan,
+          and the result) to help improve the underlying datasets. This
+          applies to internal demo use only.
+        </span>
       </div>
       <Field label="Demo password">
         <Input
