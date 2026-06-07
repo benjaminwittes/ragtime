@@ -11,7 +11,7 @@ import type { DocsEntry } from '../types'
  */
 export const frusNarrativeSynthesisEntry: DocsEntry = {
   slug: 'frus-narrative-synthesis',
-  title: 'Narrative synthesis (AMA mode)',
+  title: 'Narrative Synthesis (AMA Mode)',
   summary: 'Tell-me-about questions over the State Department documentary record.',
   scope: { kind: 'spoke', spokeSlug: 'frus' },
   order: 10,
@@ -57,7 +57,7 @@ about specific *events* (Berlin Airlift, Bay of Pigs, Suez) work well now.
 The semantic-retrieval upgrade is on the post-beta roadmap.
 
 **Cost.** Plan call + synthesis call. The pre-flight modal shows the
-estimate when it exceeds ${25}¢ — refine the question if the scope is
-larger than you intended.
+estimate before every query — refine the question if the scope is larger
+than you intended, or opt out via its "don't show again" checkbox.
 `.trim(),
 }

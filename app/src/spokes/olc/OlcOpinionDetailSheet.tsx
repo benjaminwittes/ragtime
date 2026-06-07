@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
+import { DocsHint } from '@/docs/DocsHint'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
@@ -392,8 +393,9 @@ function AiSummarySection({
     <section className="rounded-md border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             AI summary
+            <DocsHint slug="olc-opinion-summary" label="how AI summary works" />
           </h3>
           <p className="mt-0.5 text-[11px] text-muted-foreground/80">
             Attribution-forward summary of the opinion. Uses your configured

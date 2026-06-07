@@ -342,6 +342,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         activeMode={activeMode}
         enabledModes={enabledModes}
         onSelect={setActiveMode}
+        docSlug="frus-narrative-synthesis"
       />
       {activeMode === 'manual_filter' && (
         <FrusFilterForm

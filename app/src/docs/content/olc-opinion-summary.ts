@@ -8,7 +8,7 @@ import type { DocsEntry } from '../types'
  */
 export const olcOpinionSummaryEntry: DocsEntry = {
   slug: 'olc-opinion-summary',
-  title: 'Summarize this opinion',
+  title: 'Summarize This Opinion',
   summary: 'Get a structured AI summary of one OLC opinion from its detail panel.',
   scope: { kind: 'spoke', spokeSlug: 'olc' },
   order: 20,

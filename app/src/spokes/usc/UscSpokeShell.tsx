@@ -334,6 +334,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         activeMode={activeMode}
         enabledModes={enabledModes}
         onSelect={setActiveMode}
+        docSlug="usc-ai-synthesis"
       />
       {activeMode === 'manual_filter' && (
         <UscFilterForm

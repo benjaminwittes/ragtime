@@ -9,7 +9,7 @@ import type { DocsEntry } from '../types'
  */
 export const cfrAiSynthesisEntry: DocsEntry = {
   slug: 'cfr-ai-synthesis',
-  title: 'Regulatory-analysis synthesis (AMA mode)',
+  title: 'Regulatory-Analysis Synthesis (AMA Mode)',
   summary: 'Ask CFR-shaped questions; get a cited analysis across the relevant regulations.',
   scope: { kind: 'spoke', spokeSlug: 'cfr' },
   order: 10,
@@ -67,6 +67,6 @@ regulatory analysis with inline citations to specific sections.
   describes what they say, not whether the regulation is well-designed.
 
 **Cost.** Plan call + synthesis call. The pre-flight modal shows the
-estimate when it exceeds the threshold.
+estimate before every query (opt out via its "don't show again" checkbox).
 `.trim(),
 }

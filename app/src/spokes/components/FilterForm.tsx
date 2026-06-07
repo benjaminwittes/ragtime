@@ -11,6 +11,7 @@ import {
   resolveCourtPreset,
 } from '@/lib/worker-client'
 import type { FacetSpec } from '../types'
+import { courtDisplayName } from '@/spokes/litigation/court-names'
 
 /**
  * Brief #6 §2's eight-axis filter form, ported from index.html.
@@ -245,12 +246,10 @@ export function FilterForm({
                           onChange={() => toggleCourt(code)}
                           className="h-3.5 w-3.5"
                         />
-                        <span className="font-mono text-xs uppercase">
-                          {code}
-                        </span>
+                        <span className="flex-1">{courtDisplayName(code)}</span>
                         <span
                           className={cn(
-                            'ml-auto text-xs',
+                            'ml-2 shrink-0 text-xs',
                             isCircuitCourt(code)
                               ? 'text-blue-700 dark:text-blue-300'
                               : 'text-muted-foreground',

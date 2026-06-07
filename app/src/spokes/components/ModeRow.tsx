@@ -1,5 +1,6 @@
 import type { QueryMode } from '../types'
 import { cn } from '@/lib/utils'
+import { DocsHint } from '@/docs/DocsHint'
 
 /**
  * The five query modes ported wholesale from index.html (brief #6 decision 3).
@@ -41,6 +42,7 @@ export function ModeRow({
   activeMode,
   enabledModes,
   onSelect,
+  docSlug,
 }: {
   /** All modes the descriptor declares for this spoke. */
   modes: readonly QueryMode[]
@@ -49,15 +51,20 @@ export function ModeRow({
    *  but don't accept clicks. */
   enabledModes: readonly QueryMode[]
   onSelect: (mode: QueryMode) => void
+  /** Docs entry describing what these modes are and how they differ. When
+   *  set, an inline "?" marker at the end of the row deep-links to it —
+   *  the contextual help affordance for the AI-function buttons. */
+  docSlug?: string
 }) {
   const enabled = new Set(enabledModes)
   return (
-    <div
-      role="tablist"
-      aria-label="Query modes"
-      className="flex flex-wrap gap-2 border-b border-border bg-card px-6 py-3"
-    >
-      {modes.map((m) => {
+    <div className="flex items-center gap-2 border-b border-border bg-card px-6 py-3">
+      <div
+        role="tablist"
+        aria-label="Query modes"
+        className="flex flex-1 flex-wrap gap-2"
+      >
+        {modes.map((m) => {
         const isEnabled = enabled.has(m)
         const isActive = m === activeMode
         return (
@@ -85,6 +92,10 @@ export function ModeRow({
           </button>
         )
       })}
+      </div>
+      {docSlug && (
+        <DocsHint slug={docSlug} label="how these modes differ" />
+      )}
     </div>
   )
 }

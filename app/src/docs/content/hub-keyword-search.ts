@@ -10,10 +10,10 @@ import type { DocsEntry } from '../types'
  */
 export const hubKeywordSearchEntry: DocsEntry = {
   slug: 'hub-keyword-search',
-  title: 'Cross-corpus keyword search',
+  title: 'Cross-Corpus Keyword Search',
   summary: 'How the free hub-level keyword search works, and how it routes to the specialized spokes.',
   scope: { kind: 'global' },
-  order: 10,
+  order: 2,
   content: `
 **What it is.** The plain-language box at the top of the hub. Type a
 question or a topic; the system fires five parallel full-text searches

@@ -9,7 +9,7 @@ import type { DocsEntry } from '../types'
  */
 export const uscAiSynthesisEntry: DocsEntry = {
   slug: 'usc-ai-synthesis',
-  title: 'Legal-analysis synthesis (AMA mode)',
+  title: 'Legal-Analysis Synthesis (AMA Mode)',
   summary: 'Ask USC-shaped legal questions; get a cited analysis across the relevant sections.',
   scope: { kind: 'spoke', spokeSlug: 'usc' },
   order: 10,
@@ -56,8 +56,8 @@ analysis with inline citations to specific sections.
   describes what they say, not whether the policy is right.
 
 **Cost.** Plan call + synthesis call. The pre-flight modal shows the
-estimate when it exceeds the threshold; refine the question if the scope
-is larger than you intended.
+estimate before every query; refine the question if the scope is larger
+than you intended, or opt out via its "don't show again" checkbox.
 
 **Phase 2: semantic retrieval.** USC questions about *principles*
 (\`due process\`, \`commerce clause concepts\`) underperform on keyword
