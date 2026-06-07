@@ -335,6 +335,8 @@ function shortLabel(slug: CorpusSlug): string {
       return 'OLC'
     case 'frus':
       return 'FRUS'
+    case 'lawfare':
+      return 'Lawfare'
   }
 }
 
@@ -351,5 +353,7 @@ function longLabel(slug: CorpusSlug): string {
       return 'OLC opinions'
     case 'frus':
       return 'FRUS'
+    case 'lawfare':
+      return 'Lawfare'
   }
 }

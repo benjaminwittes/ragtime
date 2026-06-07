@@ -12,6 +12,7 @@ import type {
   CaseDisplayRow,
   CfrSectionDisplayRow,
   FrusDocumentDisplayRow,
+  LawfareArticleDisplayRow,
   OlcOpinionDisplayRow,
   UscSectionDisplayRow,
 } from './worker-client'
@@ -64,6 +65,18 @@ export const OLC_COLUMNS: CsvColumn<OlcOpinionDisplayRow>[] = [
   { header: 'source_url_knight', value: (r) => r.source_url_knight },
   { header: 'page_count', value: (r) => r.page_count },
   { header: 'ocr_quality', value: (r) => r.ocr_quality },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const LAWFARE_COLUMNS: CsvColumn<LawfareArticleDisplayRow>[] = [
+  { header: 'title', value: (r) => r.title },
+  { header: 'authors', value: (r) => r.author_names.join('; ') },
+  { header: 'published_date', value: (r) => r.published_date },
+  { header: 'content_type', value: (r) => r.content_type },
+  { header: 'series', value: (r) => r.series },
+  { header: 'topics', value: (r) => r.topic_names.join('; ') },
+  { header: 'canonical_url', value: (r) => r.canonical_url },
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
 ]
