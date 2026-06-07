@@ -40,7 +40,21 @@ const WORKER_URL =
 const KEY = 'ragtime_usage_log_v1'
 const EVENT = 'ragtime:usage-log-toggle-changed'
 
+/**
+ * Build-time gate. The PUBLIC production build ships with logging fully OFF and
+ * the logging UI absent: VITE_ENABLE_USAGE_LOG is unset, so every function here
+ * is inert and the "Log my sessions" toggle is not rendered. Ben's INTERNAL
+ * build sets VITE_ENABLE_USAGE_LOG=1 plus VITE_USAGE_LOG_TOKEN=<shared secret>;
+ * the token rides each log request as X-Usage-Log-Token and the Worker only
+ * writes when it matches its USAGE_LOG_TOKEN. So the public service has no
+ * logging function at all, in the bundle or over the wire.
+ */
+export const usageLoggingBuildEnabled =
+  import.meta.env.VITE_ENABLE_USAGE_LOG === '1'
+const LOG_TOKEN = (import.meta.env.VITE_USAGE_LOG_TOKEN as string | undefined) || ''
+
 export function isUsageLogEnabled(): boolean {
+  if (!usageLoggingBuildEnabled) return false
   if (typeof window === 'undefined') return false
   try {
     return window.localStorage.getItem(KEY) === 'on'
@@ -50,6 +64,7 @@ export function isUsageLogEnabled(): boolean {
 }
 
 export function setUsageLogEnabled(on: boolean): void {
+  if (!usageLoggingBuildEnabled) return
   if (typeof window === 'undefined') return
   try {
     if (on) window.localStorage.setItem(KEY, 'on')
@@ -119,7 +134,7 @@ export async function postUsageLog(
   try {
     const r = await fetch(`${WORKER_URL}/corpus/feedback/log`, {
       method: 'POST',
-      headers: authHeaders(auth),
+      headers: { ...authHeaders(auth), 'X-Usage-Log-Token': LOG_TOKEN },
       body: JSON.stringify({
         ...authCredentialBody(auth),
         client_ts: new Date().toISOString(),

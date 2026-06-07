@@ -652,13 +652,36 @@ async function reserveHeavySlot(env, ctx) {
   return true;
 }
 
+// Usage logging is an INTERNAL tuning tool, never a public feature. The public
+// service ships with NO logging: the public frontend bundle omits the logging
+// code entirely (build flag), and BOTH server-side logging paths below require
+// a shared secret carried only by the internal build. With no USAGE_LOG_TOKEN
+// configured, or no matching X-Usage-Log-Token header, nothing is ever logged —
+// so the privacy policy's "our code does not log them" holds for every public
+// user. Only Ben's internal build (which sends the token) writes to usage_log.
+function timingSafeStrEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function usageLogAuthorized(request, env) {
+  const tok = env && env.USAGE_LOG_TOKEN;
+  if (!tok) return false; // unconfigured ⇒ logging fully off (public default)
+  const got = request.headers.get("X-Usage-Log-Token");
+  return !!got && timingSafeStrEqual(got, tok);
+}
+
 // Best-effort server-side failure log. Failed AI runs otherwise escape the
 // usage_log entirely — it is client-driven and the client only logs SUCCESSFUL
 // traces, so the exact queries we most need to triage are invisible. Fire-and-
 // forget; never throws into the user path. (v1 marks failures via a note prefix;
-// no APP-project schema change.)
-function logCorpusFailure(env, ctx, fields) {
+// no APP-project schema change.) Gated to the internal build (token) — public
+// failures are NOT logged, consistent with the no-logging public posture.
+function logCorpusFailure(request, env, ctx, fields) {
   try {
+    if (!usageLogAuthorized(request, env)) return;
     const row = {
       interaction_id: crypto.randomUUID(),
       client_ts: new Date().toISOString(),
@@ -879,6 +902,10 @@ function parseUsageLogRequest(body) {
 }
 
 async function corpusFeedbackLogHandler(request, env, ctx) {
+  // Internal-only: the public build never calls this, and even a credentialed
+  // client can't write without the shared secret. Unauthorized callers get a
+  // benign no-op (not an error) so nothing in the UI ever depends on logging.
+  if (!usageLogAuthorized(request, env)) return json({ ok: true, logged: false });
   let body;
   try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
   // Require valid corpus credentials (paid JWT / demo password / BYOK key) —
@@ -1520,7 +1547,7 @@ async function corpusExecuteHandler(request, env, ctx) {
   try { results = await executeCorpusPlan(env, ctx, blob.plan, blob.scope); }
   catch (e) {
     if (e && e.code === "too_complex") {
-      logCorpusFailure(env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "ama", question: blob.question, error: e.message });
+      logCorpusFailure(request, env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "ama", question: blob.question, error: e.message });
       return json({ error: { message: TOO_COMPLEX_MSG, code: "too_complex" } }, 400);
     }
     if (e && e.code === "heavy_busy") return json({ error: { message: e.message, code: "heavy_busy" } }, 503);
@@ -1800,7 +1827,7 @@ async function corpusSqlHandler(request, env, ctx) {
   try { idRows = await withStatementTimeoutRetry(() => corpusRunQuery(env, idsSql)); }
   catch (e) {
     if (is57014(e)) {
-      logCorpusFailure(env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "sql", question: prompt, error: e.message });
+      logCorpusFailure(request, env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "sql", question: prompt, error: e.message });
       return await offerRunAnyway(env, {
         idsSql, generatedSql, label, provider, model, auth,
         reason: "timed_out",
@@ -1887,7 +1914,7 @@ async function corpusSqlConfirmHandler(request, env, ctx, body) {
   try { idRows = await corpusRunQueryHeavy(env, blob.idsSql); }
   catch (e) {
     if (is57014(e)) {
-      logCorpusFailure(env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "sql", question: blob.label, error: "heavy/90s: " + e.message });
+      logCorpusFailure(request, env, ctx, { authMode: auth.authMode, userId: auth.userId, surface: "litigation", mode: "sql", question: blob.label, error: "heavy/90s: " + e.message });
       return json({ error: { message: TOO_COMPLEX_MSG, code: "too_complex", generated_sql: blob.generatedSql } }, 400);
     }
     return json({ error: { message: "The generated query failed: " + e.message, code: "query_failed", generated_sql: blob.generatedSql } }, 400);
@@ -6452,6 +6479,8 @@ export {
   buildReadSystem,
   buildSynthesisSystem,
   parseUsageLogRequest,
+  usageLogAuthorized,
+  timingSafeStrEqual,
   is57014,
   parseExplainTotalCost,
   heavyCostThreshold
