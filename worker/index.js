@@ -168,12 +168,93 @@ function lookupAnthropicRates(model) {
   return null;
 }
 
+// ---------------- Edge cache for read-only corpus queries ----------------
+// These endpoints are PUBLIC and their response depends ONLY on the request
+// body (query / fields / scope), never on the user — so a body-keyed edge
+// cache is correct and shared across all users. A cache HIT costs ZERO DB
+// connections, which is the highest-leverage fix for the concurrency collapse
+// the load test found (the DB saturates at a few dozen concurrent queries).
+// Per-colo (Cloudflare Cache API); short TTLs because the corpus is updated by
+// the pipeline (static corpora get longer TTLs). Only 200s are cached.
+const CORPUS_CACHE_TTL = {
+  "/corpus/hub/keyword": 300,
+  "/corpus/filter": 120,
+  "/corpus/cases": 120,
+  "/corpus/entries": 300,
+  "/corpus/facets": 300,
+  "/corpus/usc/filter": 1800, "/corpus/usc/facets": 1800,
+  "/corpus/cfr/filter": 1800, "/corpus/cfr/facets": 1800,
+  "/corpus/olc/filter": 1800, "/corpus/olc/facets": 1800,
+  "/corpus/frus/filter": 1800, "/corpus/frus/facets": 1800,
+};
+
+// path -> handler for the cacheable corpus endpoints (functions are hoisted).
+const CORPUS_CACHE_HANDLERS = {
+  "/corpus/hub/keyword": (req, env, ctx) => corpusHubKeywordHandler(req, env, ctx),
+  "/corpus/filter": (req, env, ctx) => corpusFilterHandler(req, env, ctx),
+  "/corpus/cases": (req, env, ctx) => corpusCasesHandler(req, env, ctx),
+  "/corpus/entries": (req, env, ctx) => corpusEntriesHandler(req, env, ctx),
+  "/corpus/facets": (req, env, ctx) => corpusFacetsHandler(req, env, ctx),
+  "/corpus/usc/filter": (req, env, ctx) => corpusUscFilterHandler(req, env, ctx),
+  "/corpus/usc/facets": (req, env, ctx) => corpusUscFacetsHandler(req, env, ctx),
+  "/corpus/cfr/filter": (req, env, ctx) => corpusCfrFilterHandler(req, env, ctx),
+  "/corpus/cfr/facets": (req, env, ctx) => corpusCfrFacetsHandler(req, env, ctx),
+  "/corpus/olc/filter": (req, env, ctx) => corpusOlcFilterHandler(req, env, ctx),
+  "/corpus/olc/facets": (req, env, ctx) => corpusOlcFacetsHandler(req, env, ctx),
+  "/corpus/frus/filter": (req, env, ctx) => corpusFrusFilterHandler(req, env, ctx),
+  "/corpus/frus/facets": (req, env, ctx) => corpusFrusFacetsHandler(req, env, ctx),
+};
+
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Stable cache key for (path, body). Uses a synthetic GET URL so the Cache API
+// (which keys on GET requests) can store POST responses.
+async function corpusCacheKeyUrl(path, bodyText) {
+  return "https://corpus-cache.ragtime/" + encodeURIComponent(path) + "?h=" + (await sha256Hex(path + "\n" + bodyText));
+}
+
+// Wrap a cacheable corpus handler with the edge cache. Reads the body once,
+// keys on its hash, and on a miss reconstructs the request so the downstream
+// handler can read the body again. Never caches non-200 (errors / 429) so a
+// transient failure can't be pinned in cache.
+async function withCorpusCache(request, env, ctx, path, ttl, handler) {
+  let bodyText = "";
+  try { bodyText = await request.text(); } catch { bodyText = ""; }
+  const cache = caches.default;
+  const cacheKey = new Request(await corpusCacheKeyUrl(path, bodyText), { method: "GET" });
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    const h = new Headers(hit.headers); h.set("X-RT-Cache", "HIT");
+    return new Response(hit.body, { status: hit.status, headers: h });
+  }
+  const req2 = new Request(request.url, { method: "POST", headers: request.headers, body: bodyText });
+  const resp = await handler(req2, env, ctx);
+  if (resp.status === 200) {
+    const text = await resp.clone().text();
+    const h = new Headers(resp.headers);
+    h.set("Cache-Control", "public, max-age=" + ttl);
+    h.set("X-RT-Cache", "MISS");
+    const toCache = new Response(text, { status: 200, headers: h });
+    ctx.waitUntil(cache.put(cacheKey, toCache.clone()));
+    return toCache;
+  }
+  return resp;
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return corsResponse();
     const url = new URL(request.url);
     const path = url.pathname;
     try {
+      // Edge-cache read-only corpus queries before dispatch (see above). The
+      // matching handler below is the cache miss path.
+      if (request.method === "POST" && CORPUS_CACHE_TTL[path] && CORPUS_CACHE_HANDLERS[path]) {
+        return await withCorpusCache(request, env, ctx, path, CORPUS_CACHE_TTL[path], CORPUS_CACHE_HANDLERS[path]);
+      }
       if (path === "/ask" && request.method === "POST") {
         return await askHandler(request, env, ctx);
       }
@@ -6452,6 +6533,9 @@ export {
   buildReadSystem,
   buildSynthesisSystem,
   parseUsageLogRequest,
+  sha256Hex,
+  corpusCacheKeyUrl,
+  CORPUS_CACHE_TTL,
   is57014,
   parseExplainTotalCost,
   heavyCostThreshold
