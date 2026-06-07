@@ -123,14 +123,25 @@ export type UsageLogRecord = {
 }
 
 /**
- * Upsert an interaction record. No-op (returns false) when the toggle is off
- * or auth is absent. Never throws — logging must not break the UI.
+ * Logging is active for a given session when it's in DEMO mode (the Lawfare
+ * internal shared-password mode — the public beta never uses demo) or when the
+ * internal dev build's toggle is on. Public paid/BYOK sessions never log, so the
+ * privacy policy's "our code does not log them" holds for the public; the Worker
+ * enforces the same gate server-side (usageLoggingAllowed).
+ */
+export function usageLogActiveFor(auth: AuthArg | null | undefined): boolean {
+  return !!auth && (auth.mode === 'demo' || isUsageLogEnabled())
+}
+
+/**
+ * Upsert an interaction record. No-op (returns false) when logging isn't active
+ * for this session or auth is absent. Never throws — logging must not break UI.
  */
 export async function postUsageLog(
   record: UsageLogRecord,
   auth: AuthArg | null | undefined,
 ): Promise<boolean> {
-  if (!isUsageLogEnabled() || !auth) return false
+  if (!auth || !usageLogActiveFor(auth)) return false
   try {
     const r = await fetch(`${WORKER_URL}/corpus/feedback/log`, {
       method: 'POST',

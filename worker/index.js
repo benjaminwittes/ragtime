@@ -754,6 +754,16 @@ function usageLogAuthorized(request, env) {
   return !!got && timingSafeStrEqual(got, tok);
 }
 
+// Usage logging is gated to INTERNAL use. The primary gate is DEMO mode — the
+// Lawfare shared demo password, held by internal staff only; the public beta
+// uses the access code + paid/BYOK and never the demo password, so paid / BYOK /
+// free sessions are NOT logged and the privacy policy's "our code does not log
+// them" holds for the public. (The shared-secret token path is retained as an
+// alternative for an internal dev build that isn't using demo mode.)
+function usageLoggingAllowed(authMode, request, env) {
+  return authMode === "demo" || usageLogAuthorized(request, env);
+}
+
 // Best-effort server-side failure log. Failed AI runs otherwise escape the
 // usage_log entirely — it is client-driven and the client only logs SUCCESSFUL
 // traces, so the exact queries we most need to triage are invisible. Fire-and-
@@ -762,7 +772,7 @@ function usageLogAuthorized(request, env) {
 // failures are NOT logged, consistent with the no-logging public posture.
 function logCorpusFailure(request, env, ctx, fields) {
   try {
-    if (!usageLogAuthorized(request, env)) return;
+    if (!usageLoggingAllowed(fields.authMode, request, env)) return;
     const row = {
       interaction_id: crypto.randomUUID(),
       client_ts: new Date().toISOString(),
@@ -983,16 +993,16 @@ function parseUsageLogRequest(body) {
 }
 
 async function corpusFeedbackLogHandler(request, env, ctx) {
-  // Internal-only: the public build never calls this, and even a credentialed
-  // client can't write without the shared secret. Unauthorized callers get a
-  // benign no-op (not an error) so nothing in the UI ever depends on logging.
-  if (!usageLogAuthorized(request, env)) return json({ ok: true, logged: false });
   let body;
   try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
   // Require valid corpus credentials (paid JWT / demo password / BYOK key) —
   // spam protection + server-trusted identity. Same gate as any /corpus call.
   const auth = await resolveCorpusAuth(request, env, ctx, "anthropic", body);
   if (auth instanceof Response) return auth;
+  // Internal-only: only DEMO sessions (or an internal dev build carrying the
+  // shared token) are logged. A public paid/BYOK caller gets a benign no-op so
+  // nothing in the UI ever depends on logging.
+  if (!usageLoggingAllowed(auth.authMode, request, env)) return json({ ok: true, logged: false });
   const parsed = parseUsageLogRequest(body);
   if (!parsed.ok) return json({ error: { message: "Usage log: " + parsed.error } }, 400);
   const v = parsed.value;
@@ -6619,6 +6629,7 @@ export {
   buildSynthesisSystem,
   parseUsageLogRequest,
   usageLogAuthorized,
+  usageLoggingAllowed,
   timingSafeStrEqual,
   sha256Hex,
   corpusCacheKeyUrl,

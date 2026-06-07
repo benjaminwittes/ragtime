@@ -85,6 +85,7 @@ import {
   buildSynthesisSystem,
   parseUsageLogRequest,
   usageLogAuthorized,
+  usageLoggingAllowed,
   timingSafeStrEqual,
   sha256Hex,
   corpusCacheKeyUrl,
@@ -3036,6 +3037,24 @@ describe("usageLogAuthorized (internal-only logging gate)", () => {
   });
   it("authorizes only on an exact token match", () => {
     expect(usageLogAuthorized(req("s3cret"), { USAGE_LOG_TOKEN: "s3cret" })).toBe(true);
+  });
+});
+
+describe("usageLoggingAllowed (demo-mode is the primary gate)", () => {
+  const req = (headerVal) => ({
+    headers: { get: (h) => (h === "X-Usage-Log-Token" && headerVal != null ? headerVal : null) },
+  });
+  it("allows DEMO sessions regardless of any token", () => {
+    expect(usageLoggingAllowed("demo", req(null), {})).toBe(true);
+    expect(usageLoggingAllowed("demo", req(null), { USAGE_LOG_TOKEN: "s3cret" })).toBe(true);
+  });
+  it("does NOT log public paid/BYOK sessions (no token configured)", () => {
+    expect(usageLoggingAllowed("paid", req(null), {})).toBe(false);
+    expect(usageLoggingAllowed("byok", req("anything"), {})).toBe(false);
+  });
+  it("still honors the dev token path for a non-demo internal build", () => {
+    expect(usageLoggingAllowed("paid", req("s3cret"), { USAGE_LOG_TOKEN: "s3cret" })).toBe(true);
+    expect(usageLoggingAllowed("byok", req("wrong"), { USAGE_LOG_TOKEN: "s3cret" })).toBe(false);
   });
 });
 

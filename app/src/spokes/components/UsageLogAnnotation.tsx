@@ -27,7 +27,9 @@ export function UsageLogAnnotation({
   record: UsageLogRecord
   auth: AuthArg | null | undefined
 }) {
-  const enabled = useUsageLogEnabled()
+  // Active in DEMO mode (Lawfare internal) or via the dev-build toggle.
+  const toggleEnabled = useUsageLogEnabled()
+  const enabled = toggleEnabled || auth?.mode === 'demo'
   const [rating, setRating] = useState<number | null>(null)
   const [note, setNote] = useState('')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>(
