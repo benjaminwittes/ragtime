@@ -89,6 +89,8 @@ import {
   sha256Hex,
   corpusCacheKeyUrl,
   CORPUS_CACHE_TTL,
+  mapWithConcurrency,
+  hubFanoutConcurrency,
   is57014,
   parseExplainTotalCost,
   heavyCostThreshold
@@ -3070,5 +3072,52 @@ describe("corpus edge cache key", () => {
       expect(paths).not.toContain(p);
     }
     for (const ttl of Object.values(CORPUS_CACHE_TTL)) expect(ttl).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================================
+// Hub fan-out concurrency limiter (load-test fix #4). Bounds how many per-corpus
+// FTS queries run at once so a burst of searches doesn't over-subscribe the
+// 2-core DB. Pin: order preserved, never exceeds the limit, env-tunable.
+// ============================================================================
+describe("mapWithConcurrency", () => {
+  it("preserves input order regardless of completion order", async () => {
+    const delays = [30, 5, 20, 1, 10];
+    const out = await mapWithConcurrency(delays, 2, (d, i) =>
+      new Promise((res) => setTimeout(() => res(i), d)));
+    expect(out).toEqual([0, 1, 2, 3, 4]);
+  });
+  it("never runs more than `limit` at once", async () => {
+    let running = 0, peak = 0;
+    await mapWithConcurrency([1, 2, 3, 4, 5, 6], 2, async () => {
+      running++; peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+    });
+    expect(peak).toBeLessThanOrEqual(2);
+  });
+  it("limit 1 is fully sequential (peak 1)", async () => {
+    let running = 0, peak = 0;
+    await mapWithConcurrency([1, 2, 3], 1, async () => {
+      running++; peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 3));
+      running--;
+    });
+    expect(peak).toBe(1);
+  });
+  it("handles empty input", async () => {
+    expect(await mapWithConcurrency([], 2, async () => 1)).toEqual([]);
+  });
+});
+
+describe("hubFanoutConcurrency", () => {
+  it("defaults to 2 when unset or invalid", () => {
+    expect(hubFanoutConcurrency({})).toBe(2);
+    expect(hubFanoutConcurrency({ HUB_FANOUT_CONCURRENCY: "nan" })).toBe(2);
+    expect(hubFanoutConcurrency({ HUB_FANOUT_CONCURRENCY: "0" })).toBe(2);
+  });
+  it("honors a valid override (incl. 1 = fully serial)", () => {
+    expect(hubFanoutConcurrency({ HUB_FANOUT_CONCURRENCY: "1" })).toBe(1);
+    expect(hubFanoutConcurrency({ HUB_FANOUT_CONCURRENCY: "3" })).toBe(3);
   });
 });
