@@ -8,6 +8,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 import { selectDocsForContext, getDocsEntry } from './registry'
 import { useDocs } from './DocsContext'
 
@@ -52,9 +53,25 @@ export function DocsOverlay() {
             </p>
           </div>
         ) : (
-          <ScrollArea className="flex-1 px-6">
+          <ScrollArea className="min-h-0 flex-1 px-6">
             {activeEntry ? (
-              <article className="prose prose-sm max-w-none py-4">
+              <article
+                className={cn(
+                  'max-w-none py-4 text-sm leading-relaxed text-foreground',
+                  // The typography plugin isn't installed, so style the
+                  // rendered markdown directly: real gaps between paragraphs
+                  // and list items, comfortable line height.
+                  '[&_p]:my-4 [&_p:first-of-type]:mt-0',
+                  '[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-5',
+                  '[&_li]:my-1.5 [&_li]:pl-1',
+                  '[&_strong]:font-semibold [&_strong]:text-foreground [&_em]:italic',
+                  '[&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-primary',
+                  '[&_h2]:mt-6 [&_h2]:mb-2 [&_h2]:font-serif [&_h2]:text-lg',
+                  '[&_h3]:mt-5 [&_h3]:mb-1.5 [&_h3]:font-semibold',
+                  '[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs',
+                  '[&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground',
+                )}
+              >
                 <button
                   className="mb-4 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
                   onClick={() => open(undefined)}
@@ -62,7 +79,7 @@ export function DocsOverlay() {
                 >
                   ← All topics
                 </button>
-                <h2 className="font-serif text-xl mb-2">{activeEntry.title}</h2>
+                <h2 className="mb-3 font-serif text-2xl">{activeEntry.title}</h2>
                 <ReactMarkdown>{activeEntry.content}</ReactMarkdown>
               </article>
             ) : (
