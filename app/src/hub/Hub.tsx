@@ -30,6 +30,7 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
         <HubKeywordSearch onNavigate={onNavigate} />
         <SpokeGrid onNavigate={onNavigate} />
         <AboutPanel />
+        <HubFooter onNavigate={onNavigate} />
       </div>
     </main>
   )
@@ -267,6 +268,23 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
       <div>{countLine}</div>
       <div>{holdings.coverage}</div>
     </dl>
+  )
+}
+
+function HubFooter({ onNavigate }: { onNavigate: (path: string) => void }) {
+  return (
+    <footer className="mt-12 border-t border-lawfare-line pt-6 text-xs text-muted-foreground">
+      <p>
+        &copy; The Lawfare Institute &middot;{' '}
+        <button
+          type="button"
+          onClick={() => onNavigate('/privacy')}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Privacy Policy
+        </button>
+      </p>
+    </footer>
   )
 }
 
