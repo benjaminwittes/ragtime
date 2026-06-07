@@ -352,6 +352,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         activeMode={activeMode}
         enabledModes={enabledModes}
         onSelect={setActiveMode}
+        docSlug="olc-narrative-synthesis"
       />
       {activeMode === 'manual_filter' && (
         <OlcFilterForm

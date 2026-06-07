@@ -670,6 +670,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         activeMode={activeMode}
         enabledModes={enabledModes}
         onSelect={selectMode}
+        docSlug="litigation-modes"
       />
       {hasStack && (
         <Breadcrumb

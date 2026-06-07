@@ -7,7 +7,7 @@ import type { DocsEntry } from '../types'
  */
 export const cfrSectionSummaryEntry: DocsEntry = {
   slug: 'cfr-section-summary',
-  title: 'Summarize this section',
+  title: 'Summarize This Section',
   summary: 'Plain-English structured summary of one CFR section.',
   scope: { kind: 'spoke', spokeSlug: 'cfr' },
   order: 20,

@@ -7,7 +7,7 @@ import type { DocsEntry } from '../types'
  */
 export const uscSectionSummaryEntry: DocsEntry = {
   slug: 'usc-section-summary',
-  title: 'Summarize this section',
+  title: 'Summarize This Section',
   summary: 'Plain-English structured summary of one USC section.',
   scope: { kind: 'spoke', spokeSlug: 'usc' },
   order: 20,

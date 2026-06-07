@@ -7,7 +7,7 @@ import type { DocsEntry } from '../types'
  */
 export const frusDocumentSummaryEntry: DocsEntry = {
   slug: 'frus-document-summary',
-  title: 'Summarize this document',
+  title: 'Summarize This Document',
   summary: 'Get a structured AI summary of one FRUS document from its detail panel.',
   scope: { kind: 'spoke', spokeSlug: 'frus' },
   order: 20,

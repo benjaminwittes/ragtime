@@ -10,7 +10,7 @@ import type { DocsEntry } from '../types'
  */
 export const olcNarrativeSynthesisEntry: DocsEntry = {
   slug: 'olc-narrative-synthesis',
-  title: 'Narrative synthesis (AMA mode)',
+  title: 'Narrative Synthesis (AMA Mode)',
   summary: 'Ask OLC-shaped questions and get a synthesized narrative across opinions.',
   scope: { kind: 'spoke', spokeSlug: 'olc' },
   order: 10,
@@ -41,9 +41,10 @@ the top shows the exact SQL queries the agent ran — auditable methodology
 per brief #2.
 
 **Cost.** The planning step is one model call (small); the synthesis step
-is another (proportional to how many opinions the plan pulled). You'll see
-the estimate in a pre-flight modal when it exceeds the threshold (currently
-${25}¢) so you can refine the question before spending.
+is another (proportional to how many opinions the plan pulled). The
+pre-flight modal shows the estimate before every query so you can refine
+the question before spending; you can opt out via its "don't show again"
+checkbox (and re-enable it under AI access → Preferences).
 
 **Editorial conventions.** The synthesis is attribution-forward: OLC
 opinions are the executive branch's *position*, not a court's holding.

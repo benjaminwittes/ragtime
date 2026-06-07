@@ -341,6 +341,7 @@ export function CfrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         activeMode={activeMode}
         enabledModes={enabledModes}
         onSelect={setActiveMode}
+        docSlug="cfr-ai-synthesis"
       />
       {activeMode === 'manual_filter' && (
         <CfrFilterForm
