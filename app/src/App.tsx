@@ -7,6 +7,7 @@ import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
 import { SpokeShell } from '@/spokes/SpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
+import { LawfareSpokeShell } from '@/spokes/lawfare/LawfareSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
@@ -112,6 +113,8 @@ function activeSpokeShell(spoke: CorpusSpoke) {
       <OlcSpokeShell spoke={spoke} />
     ) : spoke.slug === 'frus' ? (
       <FrusSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'lawfare' ? (
+      <LawfareSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )

@@ -9,6 +9,7 @@ import {
   buildCfrFilterWhere,
   buildOlcFilterWhere,
   buildFrusFilterWhere,
+  buildLawfareFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -38,6 +39,10 @@ import {
   executeFrusPlan,
   FRUS_SUMMARIZE_TEXT_CAP,
   FRUS_SCOPE_LITERAL_LIMIT,
+  normalizeLawfareScope,
+  parseLawfarePlan,
+  parseLawfareSynthesis,
+  parseLawfareSummary,
   normalizeUscScope,
   parseUscPlan,
   parseUscSynthesis,
@@ -689,6 +694,101 @@ describe("buildFrusFilterWhere", () => {
 });
 
 // ============================================================================
+// buildLawfareFilterWhere — Lawfare commentary filter. Axes: q (FTS),
+// author_slug / topic_slug (array @> membership), content_type, series, date
+// range, and include_suppressed. The defining behavior is the DEFAULT
+// exclusion of roundup digests (search_tier='suppressed') unless the caller
+// opts in — the accuracy guardrail that keeps secondary tables-of-contents out
+// of plain search.
+// ============================================================================
+describe("buildLawfareFilterWhere", () => {
+  it("excludes suppressed by default even with no other fields", () => {
+    expect(buildLawfareFilterWhere({})).toBe(" WHERE search_tier <> 'suppressed'");
+  });
+
+  it("includes suppressed only when include_suppressed is true", () => {
+    expect(buildLawfareFilterWhere({ include_suppressed: true })).toBe("");
+    // Anything other than strict true keeps the default exclusion.
+    expect(buildLawfareFilterWhere({ include_suppressed: "yes" })).toBe(
+      " WHERE search_tier <> 'suppressed'",
+    );
+    expect(buildLawfareFilterWhere({ include_suppressed: 1 })).toBe(
+      " WHERE search_tier <> 'suppressed'",
+    );
+  });
+
+  it("supports FTS with single-quote escaping", () => {
+    expect(buildLawfareFilterWhere({ q: "executive privilege" })).toContain(
+      "websearch_to_tsquery('english', 'executive privilege')",
+    );
+    expect(buildLawfareFilterWhere({ q: "O'Brien" })).toContain(
+      "websearch_to_tsquery('english', 'O''Brien')",
+    );
+  });
+
+  it("filters by author_slug and topic_slug with array membership", () => {
+    expect(buildLawfareFilterWhere({ author_slug: "benjamin-wittes" })).toContain(
+      "author_slugs @> ARRAY['benjamin-wittes']",
+    );
+    expect(buildLawfareFilterWhere({ topic_slug: "executive-power" })).toContain(
+      "topic_slugs @> ARRAY['executive-power']",
+    );
+  });
+
+  it("escapes single quotes in slug membership (injection guard)", () => {
+    // A crafted slug must not break out of the array literal.
+    const w = buildLawfareFilterWhere({ author_slug: "x') OR true OR ('" });
+    expect(w).toContain("author_slugs @> ARRAY['x'') OR true OR (''']");
+    expect(w).not.toContain("OR true OR ('']"); // the raw single-quote form must not survive
+  });
+
+  it("filters by content_type and series with exact match", () => {
+    expect(buildLawfareFilterWhere({ content_type: "podcast" })).toContain(
+      "content_type = 'podcast'",
+    );
+    expect(buildLawfareFilterWhere({ series: "The Lawfare Podcast" })).toContain(
+      "series = 'The Lawfare Podcast'",
+    );
+  });
+
+  it("accepts ISO YYYY-MM-DD date bounds on published_date", () => {
+    const w = buildLawfareFilterWhere({ date_from: "2025-01-01", date_to: "2025-12-31" });
+    expect(w).toContain("published_date >= '2025-01-01'");
+    expect(w).toContain("published_date <= '2025-12-31'");
+  });
+
+  it("rejects malformed dates silently", () => {
+    // Malformed dates drop out; only the default suppressed-exclusion remains.
+    expect(buildLawfareFilterWhere({ date_from: "not-a-date" })).toBe(
+      " WHERE search_tier <> 'suppressed'",
+    );
+    expect(buildLawfareFilterWhere({ date_to: "2025/01/01" })).toBe(
+      " WHERE search_tier <> 'suppressed'",
+    );
+    expect(buildLawfareFilterWhere({ date_from: "2025-1-1" })).toBe(
+      " WHERE search_tier <> 'suppressed'",
+    );
+  });
+
+  it("AND-joins multiple axes plus the default suppressed exclusion", () => {
+    const w = buildLawfareFilterWhere({
+      q: "birthright citizenship",
+      author_slug: "jane-doe",
+      content_type: "article",
+      date_from: "2025-01-01",
+    });
+    expect(w.startsWith(" WHERE ")).toBe(true);
+    expect(w).toContain("fts @@");
+    expect(w).toContain("author_slugs @> ARRAY['jane-doe']");
+    expect(w).toContain("content_type = 'article'");
+    expect(w).toContain("published_date >= '2025-01-01'");
+    expect(w).toContain("search_tier <> 'suppressed'");
+    // Five predicates (4 axes + the suppressed exclusion) separated by four ANDs.
+    expect((w.match(/ AND /g) || []).length).toBe(4);
+  });
+});
+
+// ============================================================================
 // OLC AI modes (PR 4q) — narrative synthesis (plan/execute) + summarize-one.
 //
 // The worker passes LLM-generated JSON through validators before letting it
@@ -1184,6 +1284,164 @@ describe("executeFrusPlan scope cap", () => {
     const plan = { queries: [{ label: "x", sql: "SELECT 1 FROM scoped_frus_documents" }] };
     // env is unused — the cap check fires before any DB call.
     await expect(executeFrusPlan({}, plan, scope)).rejects.toThrow(/too large to inline/);
+  });
+});
+
+// ============================================================================
+// Lawfare AI modes — narrative synthesis (plan/execute) + summarize-one over
+// the COMMENTARY corpus. Validators mirror OLC discipline (opinion_ids →
+// article_ids). The defining accuracy property is verified at the executor
+// level (the view lawfare_ama_source / scoped_lawfare_documents excludes
+// suppressed roundup digests) — these tests pin the JSON validators.
+// ============================================================================
+
+describe("normalizeLawfareScope", () => {
+  it("treats missing / undefined scope as full-corpus", () => {
+    const s = normalizeLawfareScope(undefined);
+    expect(s.is_full_db).toBe(true);
+    expect(s.article_ids).toBe(null);
+    expect(s.count).toBe(0);
+  });
+
+  it("treats empty article_ids as full-corpus (so the executor doesn't IN ())", () => {
+    const s = normalizeLawfareScope({ article_ids: [] });
+    expect(s.is_full_db).toBe(true);
+    expect(s.article_ids).toBe(null);
+  });
+
+  it("keeps a valid numeric article_ids list and computes count", () => {
+    const s = normalizeLawfareScope({ article_ids: [10, 20, 30] });
+    expect(s.is_full_db).toBe(false);
+    expect(s.article_ids).toEqual([10, 20, 30]);
+    expect(s.count).toBe(3);
+  });
+
+  it("drops non-finite values from article_ids without throwing", () => {
+    const s = normalizeLawfareScope({ article_ids: [1, "x", null, 2, NaN, "3"] });
+    expect(s.article_ids).toEqual([1, 2, 3]);
+  });
+
+  it("honors caller-supplied count + description", () => {
+    const s = normalizeLawfareScope({
+      article_ids: [1, 2, 3],
+      count: 3,
+      description: "3 pieces on birthright citizenship"
+    });
+    expect(s.description).toBe("3 pieces on birthright citizenship");
+  });
+});
+
+describe("parseLawfarePlan", () => {
+  const validPlan = JSON.stringify({
+    output_mode: "hybrid",
+    approach_summary: "Fan out FTS over the topic and pull authored pieces by date.",
+    candor_notes: ["Counts are of original authored pieces; roundup digests are excluded."],
+    queries: [{ label: "topic FTS", sql: "SELECT id, title, author_names, published_date, canonical_url FROM lawfare_ama_source WHERE fts @@ websearch_to_tsquery('english', 'X') LIMIT 200" }],
+    estimated_cost_cents: 9,
+    wants_synthesis: true
+  });
+
+  it("accepts a well-formed plan", () => {
+    const p = parseLawfarePlan(validPlan);
+    expect(p.output_mode).toBe("hybrid");
+    expect(p.queries).toHaveLength(1);
+    expect(p.estimated_cost_cents).toBe(9);
+  });
+
+  it("strips code fences before parsing", () => {
+    const fenced = "```json\n" + validPlan + "\n```";
+    expect(parseLawfarePlan(fenced).output_mode).toBe("hybrid");
+  });
+
+  it("rejects an unknown output_mode", () => {
+    const bad = JSON.stringify({ output_mode: "graph", queries: [] });
+    expect(() => parseLawfarePlan(bad)).toThrow(/output_mode/);
+  });
+
+  it("rejects non-array queries", () => {
+    const bad = JSON.stringify({ output_mode: "narrative", queries: "SELECT 1" });
+    expect(() => parseLawfarePlan(bad)).toThrow(/queries must be an array/);
+  });
+
+  it("rejects a top-level array (only objects allowed)", () => {
+    expect(() => parseLawfarePlan("[1,2,3]")).toThrow(/top-level value is not an object/);
+  });
+
+  it("coerces estimated_cost_cents to a non-negative integer", () => {
+    const negative = JSON.stringify({ output_mode: "narrative", queries: [], estimated_cost_cents: -50 });
+    expect(parseLawfarePlan(negative).estimated_cost_cents).toBe(0);
+  });
+
+  it("defaults candor_notes to [] when missing", () => {
+    const noNotes = JSON.stringify({ output_mode: "narrative", queries: [] });
+    expect(parseLawfarePlan(noNotes).candor_notes).toEqual([]);
+  });
+});
+
+describe("parseLawfareSynthesis", () => {
+  it("accepts a list-mode synthesis with valid article_ids", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "In 'X' (2025), Doe argued Y.",
+      article_ids: [42, 73],
+      candor_notes: []
+    });
+    const s = parseLawfareSynthesis(raw, "list");
+    expect(s.article_ids).toEqual([42, 73]);
+  });
+
+  it("rejects empty answer_markdown", () => {
+    const raw = JSON.stringify({ answer_markdown: "  ", article_ids: [] });
+    expect(() => parseLawfareSynthesis(raw, "narrative")).toThrow(/answer_markdown is empty/);
+  });
+
+  it("downgrades to narrative + candor note when list mode returns no article_ids", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "No pieces matched the criterion.",
+      article_ids: [],
+      candor_notes: []
+    });
+    const s = parseLawfareSynthesis(raw, "list");
+    expect(s.article_ids).toEqual([]);
+    expect(s.candor_notes.join(" ")).toMatch(/returned none/);
+  });
+
+  it("forces article_ids = null on narrative output_mode regardless of model output", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "Narrative-only answer.",
+      article_ids: [1, 2, 3],
+      candor_notes: []
+    });
+    const s = parseLawfareSynthesis(raw, "narrative");
+    expect(s.article_ids).toBe(null);
+  });
+
+  it("coerces article_ids strings to numbers and drops non-finite values", () => {
+    const raw = JSON.stringify({
+      answer_markdown: "x",
+      article_ids: ["42", 7, "not-a-number", null],
+      candor_notes: []
+    });
+    const s = parseLawfareSynthesis(raw, "list");
+    expect(s.article_ids).toEqual([42, 7]);
+  });
+});
+
+describe("parseLawfareSummary", () => {
+  it("accepts a well-formed summary", () => {
+    const raw = JSON.stringify({ summary_markdown: "**Thesis** — the author argues X.", candor_notes: [] });
+    const s = parseLawfareSummary(raw);
+    expect(s.summary_markdown).toMatch(/Thesis/);
+    expect(s.candor_notes).toEqual([]);
+  });
+
+  it("rejects empty summary_markdown", () => {
+    const raw = JSON.stringify({ summary_markdown: "  ", candor_notes: [] });
+    expect(() => parseLawfareSummary(raw)).toThrow(/summary_markdown is empty/);
+  });
+
+  it("defaults candor_notes to [] when missing", () => {
+    const raw = JSON.stringify({ summary_markdown: "x" });
+    expect(parseLawfareSummary(raw).candor_notes).toEqual([]);
   });
 });
 

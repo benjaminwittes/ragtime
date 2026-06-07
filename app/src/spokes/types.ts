@@ -16,7 +16,13 @@
  */
 
 /** Slugs of all loaded corpora. New corpora extend this union. */
-export type CorpusSlug = 'litigation' | 'olc' | 'usc' | 'cfr' | 'frus'
+export type CorpusSlug =
+  | 'litigation'
+  | 'olc'
+  | 'usc'
+  | 'cfr'
+  | 'frus'
+  | 'lawfare'
 
 /**
  * A spoke's lifecycle status. Drives whether it shows up in nav and how

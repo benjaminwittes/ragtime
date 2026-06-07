@@ -186,6 +186,7 @@ const CORPUS_CACHE_TTL = {
   "/corpus/cfr/filter": 1800, "/corpus/cfr/facets": 1800,
   "/corpus/olc/filter": 1800, "/corpus/olc/facets": 1800,
   "/corpus/frus/filter": 1800, "/corpus/frus/facets": 1800,
+  "/corpus/lawfare/filter": 1800, "/corpus/lawfare/facets": 1800,
 };
 
 // path -> handler for the cacheable corpus endpoints (functions are hoisted).
@@ -203,6 +204,8 @@ const CORPUS_CACHE_HANDLERS = {
   "/corpus/olc/facets": (req, env, ctx) => corpusOlcFacetsHandler(req, env, ctx),
   "/corpus/frus/filter": (req, env, ctx) => corpusFrusFilterHandler(req, env, ctx),
   "/corpus/frus/facets": (req, env, ctx) => corpusFrusFacetsHandler(req, env, ctx),
+  "/corpus/lawfare/filter": (req, env, ctx) => corpusLawfareFilterHandler(req, env, ctx),
+  "/corpus/lawfare/facets": (req, env, ctx) => corpusLawfareFacetsHandler(req, env, ctx),
 };
 
 async function sha256Hex(s) {
@@ -374,6 +377,27 @@ export default {
       }
       if (path === "/corpus/frus/items-by-ids" && request.method === "POST") {
         return await corpusFrusItemsByIdsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/lawfare/facets" && request.method === "POST") {
+        return await corpusLawfareFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/lawfare/filter" && request.method === "POST") {
+        return await corpusLawfareFilterHandler(request, env, ctx);
+      }
+      if (path === "/corpus/lawfare/article" && request.method === "POST") {
+        return await corpusLawfareArticleHandler(request, env, ctx);
+      }
+      if (path === "/corpus/lawfare/plan" && request.method === "POST") {
+        return await corpusLawfarePlanHandler(request, env, ctx);
+      }
+      if (path === "/corpus/lawfare/execute" && request.method === "POST") {
+        return await corpusLawfareExecuteHandler(request, env, ctx);
+      }
+      if (path === "/corpus/lawfare/summarize-article" && request.method === "POST") {
+        return await corpusLawfareSummarizeHandler(request, env, ctx);
+      }
+      if (path === "/corpus/lawfare/items-by-ids" && request.method === "POST") {
+        return await corpusLawfareItemsByIdsHandler(request, env, ctx);
       }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
@@ -4528,6 +4552,724 @@ async function corpusOlcSummarizeHandler(request, env, ctx) {
 }
 
 // ============================================================================
+// Lawfare commentary corpus — v1 alpha
+//
+// The platform's FIRST commentary corpus: ~27K articles, podcasts, and
+// newsletters from Lawfare's own archive. The atomic unit is an ARTICLE
+// (analysis/opinion by a named expert author); the unit of authority is the
+// byline. Unlike OLC/FRUS (primary sources), Lawfare is secondary
+// commentary, which drives a hard accuracy guardrail: the analytical (AMA)
+// path MUST query the view `lawfare_ama_source` (= the base table minus
+// search_tier='suppressed' roundup digests), so derivative tables-of-contents
+// are never counted or attributed in synthesis. The plain filter handler
+// queries the base table directly (and excludes suppressed by default unless
+// include_suppressed is set).
+//
+// Citations point to canonical_url (live lawfaremedia.org links), not PDF
+// download paths. author/topic/date/content_type/series are all populated and
+// reliable here — first-class scoping axes (contrast OLC, where author /
+// recipient / president are NULL).
+// ============================================================================
+
+// Display columns for the list table. body_text/body_html are omitted to keep
+// payloads cheap; the article-detail handler returns everything. canonical_url
+// rides along so result rows + AMA cited-list rows render a one-click "↗ read
+// on Lawfare" affordance (brief #1 §4b auditability).
+var LAWFARE_DISPLAY_COLS = "id, slug, title, dek, author_names, published_date::text AS published_date, topic_names, content_type, series, canonical_url, text_length, quality, search_tier";
+
+/**
+ * Build the WHERE clause for /corpus/lawfare/filter. Same single-quote
+ * escaping discipline as the USC/CFR/OLC/FRUS builders.
+ *
+ * Supported axes:
+ *   q                  FTS over fts (title + dek + body_text)
+ *   author_slug        author_slugs @> ARRAY['slug'] — exact slug membership
+ *   topic_slug         topic_slugs @> ARRAY['slug'] — exact slug membership
+ *   content_type       exact match — 'article' | 'podcast' | 'newsletter'
+ *   series             exact match on the recurring-series label
+ *   date_from / date_to  ISO YYYY-MM-DD bounds on published_date
+ *   include_suppressed boolean — by DEFAULT the filter EXCLUDES roundup
+ *                      digests (search_tier='suppressed'); only when this is
+ *                      true are they included.
+ */
+function buildLawfareFilterWhere(fields) {
+  var parts = [];
+  if (fields.q && typeof fields.q === 'string' && fields.q.trim()) {
+    var q = fields.q.trim().replace(/'/g, "''");
+    parts.push("fts @@ websearch_to_tsquery('english', '" + q + "')");
+  }
+  if (fields.author_slug && typeof fields.author_slug === 'string' && fields.author_slug.trim()) {
+    var a = fields.author_slug.trim().replace(/'/g, "''");
+    parts.push("author_slugs @> ARRAY['" + a + "']");
+  }
+  if (fields.topic_slug && typeof fields.topic_slug === 'string' && fields.topic_slug.trim()) {
+    var t = fields.topic_slug.trim().replace(/'/g, "''");
+    parts.push("topic_slugs @> ARRAY['" + t + "']");
+  }
+  if (fields.content_type && typeof fields.content_type === 'string' && fields.content_type.trim()) {
+    var c = fields.content_type.trim().replace(/'/g, "''");
+    parts.push("content_type = '" + c + "'");
+  }
+  if (fields.series && typeof fields.series === 'string' && fields.series.trim()) {
+    var s = fields.series.trim().replace(/'/g, "''");
+    parts.push("series = '" + s + "'");
+  }
+  if (fields.date_from && typeof fields.date_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.date_from)) {
+    parts.push("published_date >= '" + fields.date_from + "'");
+  }
+  if (fields.date_to && typeof fields.date_to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.date_to)) {
+    parts.push("published_date <= '" + fields.date_to + "'");
+  }
+  // Default: exclude suppressed (roundup digests). Only include them when the
+  // caller explicitly opts in. This predicate is always present so a query
+  // with no other axes still respects the default scope.
+  if (fields.include_suppressed !== true) {
+    parts.push("search_tier <> 'suppressed'");
+  }
+  return parts.length ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusLawfareFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    // ~27K rows — COUNT(*) is cheap; exact counts here (not the reltuples
+    // estimate USC/CFR rely on). Facet counts reflect the DEFAULT search scope
+    // (search_tier <> 'suppressed') so the numbers match what plain search
+    // shows by default.
+    const stats = await corpusRunQuery(env,
+      "SELECT count(*)::bigint AS document_count, " +
+      "MIN(published_date)::text AS earliest, " +
+      "MAX(published_date)::text AS latest " +
+      "FROM lawfare_documents WHERE search_tier <> 'suppressed'");
+    const contentTypes = await corpusRunQuery(env,
+      "SELECT content_type AS v, count(*)::bigint AS n FROM lawfare_documents " +
+      "WHERE search_tier <> 'suppressed' AND content_type IS NOT NULL AND content_type <> '' " +
+      "GROUP BY content_type ORDER BY n DESC");
+    const topics = await corpusRunQuery(env,
+      "SELECT t AS v, count(*)::bigint AS n FROM lawfare_documents, unnest(topic_names) AS t " +
+      "WHERE search_tier <> 'suppressed' AND t IS NOT NULL AND t <> '' " +
+      "GROUP BY t ORDER BY n DESC");
+    const series = await corpusRunQuery(env,
+      "SELECT series AS v, count(*)::bigint AS n FROM lawfare_documents " +
+      "WHERE search_tier <> 'suppressed' AND series IS NOT NULL AND series <> '' " +
+      "GROUP BY series ORDER BY n DESC");
+    // Top authors by piece count. Unnest the parallel slug/name arrays with
+    // ordinality so slug and display name stay aligned.
+    const topAuthors = await corpusRunQuery(env,
+      "SELECT a.slug AS slug, a.name AS name, count(*)::bigint AS n FROM lawfare_documents d, " +
+      "LATERAL unnest(d.author_slugs, d.author_names) AS a(slug, name) " +
+      "WHERE d.search_tier <> 'suppressed' AND a.slug IS NOT NULL AND a.slug <> '' " +
+      "GROUP BY a.slug, a.name ORDER BY n DESC LIMIT 50");
+    const s = stats[0] || {};
+    return json({
+      document_count: s.document_count,
+      earliest: s.earliest,
+      latest: s.latest,
+      content_types: contentTypes.map((r) => ({ value: r.v, count: r.n })),
+      topics: topics.map((r) => ({ value: r.v, count: r.n })),
+      series: series.map((r) => ({ value: r.v, count: r.n })),
+      top_authors: topAuthors.map((r) => ({ slug: r.slug, name: r.name, count: r.n }))
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "Lawfare facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+async function corpusLawfareFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const where = buildLawfareFilterWhere(fields);
+  const idsSql = "SELECT id FROM lawfare_documents" + where;
+  // Order by published_date desc — most recent first (research starts from
+  // current state and walks back).
+  const rowsSql = "SELECT " + LAWFARE_DISPLAY_COLS + " FROM lawfare_documents" + where +
+    " ORDER BY published_date DESC NULLS LAST LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "Lawfare filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const ids = idRows.map((r) => r.id).filter((x) => x != null);
+  return json({
+    ids,
+    display_rows: rows,
+    count: ids.length,
+    generated_sql: rowsSql,
+    executed_sql: idsSql
+  }, 200);
+}
+
+/**
+ * Single-article detail for the Lawfare article panel. Includes the full
+ * body_text + body_html plus all metadata (authors, topics, series,
+ * content_type, dek, canonical_url). Mirrors corpusOlcOpinionHandler.
+ */
+async function corpusLawfareArticleHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+  const sql = "SELECT id, slug, canonical_url, title, dek, author_names, author_slugs, " +
+    "published_at::text AS published_at, published_date::text AS published_date, published_raw, " +
+    "topic_names, topic_slugs, series, content_type, search_tier, " +
+    "body_text, body_html, text_length, quality, source " +
+    "FROM lawfare_documents WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Article fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Article not found", code: "not_found" } }, 404);
+  }
+  return json({ article: rows[0] }, 200);
+}
+
+// ── Lawfare AI modes ─────────────────────────────────────────────────────────
+// Two surfaces:
+//   1. Narrative synthesis (claude_ama-shaped) — "what have Lawfare authors
+//      argued about X" — plan + execute against the lawfare_ama_source VIEW
+//      (roundup digests excluded; only original authored pieces).
+//   2. Summarize-one-article — invoked from the article detail panel; a single
+//      Anthropic call on one article's body_text.
+//
+// Mirrors the OLC plan/execute shape, with Lawfare-specific schema, canonical
+// citation syntax (article title + author + date, with canonical_url, in
+// prose; cited list below does navigation), and COMMENTARY DISCIPLINE (attribute
+// every position to a named author + piece; synthesize what authors said,
+// never adjudicate; surface the range on contested questions; never add
+// RAGtime's own analysis).
+
+// Scope normalization for Lawfare. The corpus is small enough to always inline
+// an article_ids list when scope is narrowed; full-DB otherwise. Mirrors
+// normalizeOlcScope (opinion_ids → article_ids).
+function normalizeLawfareScope(s) {
+  s = s || {};
+  let ids = Array.isArray(s.article_ids)
+    ? s.article_ids.filter((x) => x != null).map(Number).filter(Number.isFinite)
+    : null;
+  if (ids && ids.length === 0) ids = null;
+  return {
+    article_ids: ids,
+    is_full_db: !ids,
+    count: Number(s.count) || (ids ? ids.length : 0),
+    description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : ""
+  };
+}
+
+var LAWFARE_AMA_SCHEMA_DOC = [
+  "RELATION: lawfare_ama_source — one row per Lawfare piece (article / podcast / newsletter). This is a VIEW over the base table that EXCLUDES roundup digests (secondary tables-of-contents); it holds only ORIGINAL AUTHORED pieces. Use this relation for ALL analytical work — counts here are counts of original commentary, never of derivative digests.",
+  "  id (bigint, PK)               — piece id; use this to identify a piece in your output.",
+  "  slug (text)                   — URL slug.",
+  "  canonical_url (text)          — the live lawfaremedia.org link; MUST accompany every citation so the user reads the real piece.",
+  "  title (text)                  — piece title; FTS-indexed in column \"fts\" alongside dek + body_text.",
+  "  dek (text)                    — subhead / standfirst summary, where present.",
+  "  author_names (text[])         — display names of the byline authors; POPULATED and reliable. The unit of authority is the byline — attribute positions to these names.",
+  "  author_slugs (text[])         — author slugs, parallel to author_names. Filter with author_slugs @> ARRAY['slug'] when scoping to an author.",
+  "  published_date (date)         — publication date; POPULATED and reliable; this is your temporal axis.",
+  "  topic_names (text[])          — Lawfare's controlled topic taxonomy (~13 values); POPULATED and reliable.",
+  "  topic_slugs (text[])          — topic slugs, parallel to topic_names. Filter with topic_slugs @> ARRAY['slug'].",
+  "  series (text)                 — recurring-series label (e.g. a podcast or column series); NULL where the piece is not part of a series.",
+  "  content_type (text)           — 'article' | 'podcast' | 'newsletter'. Surface this in synthesis ('from the Lawfare Podcast' vs 'in an article by ...').",
+  "  body_text (text)              — full piece text; LARGE (do not return raw — pull title/dek/author_names/published_date and let synthesis cite).",
+  "  text_length (int)             — piece length in characters.",
+  "  quality (text)                — ingest-quality flag.",
+  "  fts (tsvector, generated)     — over title + dek + body_text — use this for topical search.",
+  "",
+  "NOTES:",
+  "- Topical/conceptual search: WHERE fts @@ websearch_to_tsquery('english', 'your search') — supports OR and quoted phrases.",
+  "- AUTHOR is a first-class scoping axis. 'What has [author] argued about X' → WHERE author_slugs @> ARRAY['author-slug'] AND fts @@ ... . Author names are reliable.",
+  "- TOPIC is a controlled ~13-value taxonomy; topic_slugs @> ARRAY['topic-slug'] is a clean scoping axis.",
+  "- DATE axis is reliable; populated on rows. 'What has Lawfare said in the last year' → published_date >= now() - interval '1 year'.",
+  "- CONTENT_TYPE lets you separate written analysis from the Lawfare Podcast / newsletters; surface the medium in synthesis.",
+  "- COMMENTARY, NOT PRIMARY SOURCE: Lawfare is analysis/opinion by named experts. The unit of citation is the article; the unit of authority is the byline. Counts here are of ORIGINAL authored pieces (the view excludes roundup digests) — mention this when reporting counts.",
+  "- Read-only: only SELECT statements are accepted; LIMIT yourself to ≤ 500 rows per query.",
+].join("\n");
+
+function buildLawfarePlanningSystem() {
+  return [
+    "You are the planner for an agentic narrative-synthesis tool over the LAWFARE COMMENTARY corpus — articles, podcasts, and newsletters of legal/national-security analysis by named expert authors. This is COMMENTARY, not primary source: the unit of citation is the article, the unit of authority is the byline. Your job is to look at a user question and the current scope, then return a JSON plan describing how you would answer it.",
+    "",
+    "You have access to a Postgres database (read-only) via SELECT queries. Schema:",
+    "",
+    LAWFARE_AMA_SCHEMA_DOC,
+    "",
+    "Output a single JSON object with these keys (no prose, no code fences):",
+    "{",
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    "       // list = the question wants a refined set of pieces (the field will be narrowed).",
+    "       // narrative = the question wants an analytical answer; the field is unchanged.",
+    "       // hybrid = both — narrative summary plus a refined list (most synthesis questions).",
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats the user should see — e.g. for COUNT questions, that counts are of original authored pieces (the view excludes roundup digests); keyword-recall risk on conceptual queries; missing coverage you could not find"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ... FROM lawfare_ama_source WHERE ... LIMIT 200"},',
+    "    ...",
+    "  ],",
+    '  "estimated_cost_cents": <integer>,',
+    "       // your estimate of the synthesis call cost in cents (the planning call is already paid).",
+    "       // Synthesis input ≈ all query results in JSON; output ≈ 800-2000 tokens.",
+    "       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.",
+    '  "wants_synthesis": true',
+    "}",
+    "",
+    "Rules:",
+    "- Be ruthlessly economical with queries. Pull metadata (id, title, dek, author_names, published_date, topic_names, content_type, canonical_url) — NEVER body_text in a planned query. Synthesis works from titles + deks + bylines + dates; per-piece deep reads are a separate mode.",
+    "- The unit of citation is the article and the unit of authority is the byline — ALWAYS pull author_names, published_date, title, and canonical_url so synthesis can attribute every position to a named author + piece + date with a live link.",
+    "- AUTHOR is a first-class scoping axis. 'What has [author] argued about X' → filter author_slugs @> ARRAY['author-slug']. Do NOT skip the author filter just because the question also has a topic.",
+    "- TOPIC is a controlled taxonomy — use topic_slugs @> ARRAY['topic-slug'] where the question maps cleanly onto a topic.",
+    "- For trend questions, prefer ONE query that groups by year (or by author, or by content_type) over many narrow queries. For COUNT/methodology questions, surface in candor_notes that the count is of original authored pieces (the queryable view excludes roundup digests) plus the denominator/dataset.",
+    "- For narrative questions over a topic ('how have Lawfare authors thought about X'), order by published_date ASC and cap at 200 pieces per query — plenty of evidence for synthesis.",
+    "- KEYWORD UNDERPERFORMS ON CONCEPTUAL QUERIES — FAN OUT WITH OR GENEROUSLY. The author's phrasing rarely matches the user's. Specific failure modes:",
+    "    * **Doctrine vs phrasing.** User asks about 'executive privilege'; a piece may say 'the President's communications privilege', 'deliberative-process privilege', 'presidential confidentiality'. Fan: '\"executive privilege\" OR \"communications privilege\" OR \"deliberative process\" OR \"presidential confidentiality\"'.",
+    "    * **Issue framings.** 'Can the President do X' → 'authority', 'power', 'constitutional', 'Article II', 'statutory'. Fan these with the action verb.",
+    "    * **Named-entity drift.** A piece may name the umbrella department, the statute, or the case rather than the agency/officer the user named.",
+    "  WORKED EXAMPLE — *'what have Lawfare authors argued about birthright citizenship'*: don't just FTS 'birthright citizenship'. Fan: websearch_to_tsquery('english', '\"birthright citizenship\" OR \"Fourteenth Amendment\" OR \"jus soli\" OR \"citizenship clause\" OR \"subject to the jurisdiction\"').",
+    "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget; too many queries inflate the input and risk truncation. A single well-fanned query with strong OR coverage beats five literal-term queries.",
+    "- COMMENTARY DISCIPLINE (bake this into your plan). Lawfare is analysis/opinion. You are planning to SYNTHESIZE WHAT LAWFARE AUTHORS SAID — never to adjudicate which view is correct. On CONTESTED questions, plan queries that surface the RANGE of published positions (don't pre-select for one side). Distinguish reporting vs. argument vs. prediction where the source does.",
+    "- WHEN THE CURRENT SCOPE IS NARROWED (article_ids list provided): use the name \"scoped_lawfare_documents\" instead of \"lawfare_ama_source\". The runner substitutes this with an inline subquery over the view, already filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_lawfare_documents WHERE published_date > '2024-01-01'\" (good), not \"FROM scoped_lawfare_documents d WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"lawfare_ama_source\".",
+    "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
+  ].join("\n");
+}
+
+function buildLawfarePlanningUser(question, scope) {
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "CURRENT SCOPE:",
+    scope.description || (scope.is_full_db
+      ? "The full Lawfare commentary corpus (original authored pieces; roundup digests excluded)."
+      : fmtIntJs(scope.count) + " pieces (narrowed)."),
+    scope.is_full_db
+      ? "(no article_id constraint — your queries run against the full corpus; use the relation name \"lawfare_ama_source\")"
+      : "(narrowed to " + fmtIntJs(scope.count) + " article_ids; the runner will substitute scoped_lawfare_documents with an inline subquery over the view filtered to the scope — use THAT name in your queries)",
+    "",
+    "Return the JSON plan now."
+  ].join("\n");
+}
+
+function parseLawfarePlan(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error("JSON.parse error: " + pe2.message); }
+    } else {
+      throw new Error("could not find a JSON object in the response.");
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (["list", "narrative", "hybrid"].indexOf(v.output_mode) < 0) throw new Error("output_mode must be list, narrative, or hybrid.");
+  if (!Array.isArray(v.queries)) throw new Error("queries must be an array.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || "").trim();
+  return v;
+}
+
+async function executeLawfarePlan(env, plan, scope) {
+  // Scope is inlined as a subquery over the VIEW (lawfare_ama_source), so even
+  // a narrowed scope can never reach a suppressed roundup digest.
+  let scopedBody = null;
+  if (scope.article_ids && scope.article_ids.length > 0) {
+    const idsSubquery = "SELECT unnest('{" + scope.article_ids.join(",") + "}'::bigint[]) AS id";
+    scopedBody = "(SELECT d.* FROM lawfare_ama_source d WHERE d.id IN (" + idsSubquery + "))";
+  }
+
+  const results = [];
+  for (let i = 0; i < plan.queries.length; i++) {
+    const q = plan.queries[i];
+    let sql = String(q.sql || "").trim().replace(/;\s*$/, "").trim();
+    if (!sql) continue;
+    let execSql = sql;
+    if (scopedBody) {
+      execSql = substituteScoped(execSql, "scoped_lawfare_documents", scopedBody);
+    }
+    // HARD GUARDRAIL: the analytical/AMA path must never read suppressed roundup
+    // digests (they are derivative tables-of-contents, not authored Lawfare
+    // pieces — they must never be counted or attributed). The planner is told to
+    // use the lawfare_ama_source view, but we ALSO force it in code: rewrite any
+    // bare base-table reference to the view. The \b before "lawfare_documents"
+    // is a real word boundary only when not preceded by a word char, so this
+    // does NOT touch "scoped_lawfare_documents", and "lawfare_ama_source" is
+    // untouched. Belt-and-suspenders so a planner slip can't leak roundups.
+    execSql = execSql.replace(/\blawfare_documents\b/g, "lawfare_ama_source");
+    if (!/^\s*SELECT\b/i.test(execSql)) execSql = "SELECT * FROM (" + execSql + ") AS lawfare_q";
+    let rows;
+    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
+    catch (err) { throw new Error('Query "' + (q.label || ("query " + (i + 1))) + '" failed: ' + err.message); }
+    const truncated = (rows.length > 200) ? rows.slice(0, 200) : rows;
+    results.push({ label: q.label || ("query " + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 200 });
+  }
+  return results;
+}
+
+function buildLawfareSynthesisSystem(outputMode) {
+  const listClause = (outputMode === "list" || outputMode === "hybrid")
+    ? '"article_ids": [<bigint>, ...]   // the article ids the user should see; pulled from your query results.'
+    : '"article_ids": null';
+  return [
+    "You are the synthesis step for an agentic narrative-synthesis tool over the LAWFARE COMMENTARY corpus. The planner has already run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "answer_markdown": "...",  // markdown narrative; cite pieces in prose by title + author + date (e.g. "In \'The Limits of Executive Power\' (March 2025), Jane Doe argued that..."). DO NOT embed internal id tokens.',
+    "  " + listClause + ",",
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    "}",
+    "",
+    "COMMENTARY DISCIPLINE — this is the core of the job (Lawfare is analysis/opinion by named experts, NOT a court holding or a primary source):",
+    "- ATTRIBUTE EVERY POSITION to a specific author + piece (title) + date: \"In [title] ([date]), [author] argued that…\". The unit of citation is the article; the unit of authority is the byline. NEVER state a contested analytical claim as settled fact.",
+    "- SYNTHESIZE WHAT LAWFARE AUTHORS SAID — never adjudicate which view is correct, never add RAGtime's own analysis on top of theirs.",
+    "- ON CONTESTED QUESTIONS, surface the RANGE of published positions WITH ATTRIBUTION; do NOT declare a winner.",
+    "- DISTINGUISH reporting vs. argument vs. prediction where the source does; don't flatten a hedged forecast into a factual claim.",
+    "- SURFACE THE MEDIUM via content_type — \"from the Lawfare Podcast ([date])\" vs. \"in an article by [author]\" vs. \"in a newsletter\".",
+    "- EVERY CITATION MUST CARRY THE PIECE'S canonical_url (the live lawfaremedia.org link) so the user can read the real piece. Weave the link into the prose or list it with the citation.",
+    "- For analytical COUNTS, show methodology + denominator + dataset; because the queryable view excludes roundup digests, counts are of ORIGINAL authored pieces — say so.",
+    "",
+    "Other rules:",
+    "- CITE EVERY POSITION via TITLE + AUTHOR + DATE in PROSE. The user navigates to each cited piece via the Cited Articles list that renders below the narrative; do NOT embed [lawfare-ref:N] tokens or any other internal id markers. Bad: '...as argued in X [lawfare-ref:42]...'. Good: '...as argued in X...'.",
+    "- ZERO-RESULT HONESTY. When the query results are empty (or near-empty) for what should be a non-trivial question, the answer_markdown MUST: (1) name the FTS terms tried in prose ('I searched for pieces matching ...'), (2) acknowledge this may be a keyword-recall failure — commentary often phrases concepts differently than questions — and (3) note it could genuinely mean Lawfare has not covered the topic. Suggest one or two reformulations. DO NOT just say 'no results found'.",
+    "- For list and hybrid output_modes, article_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable pieces, downgrade to narrative mode and explain.",
+    "- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.",
+    "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes ("") for direct quotation, or single quotes (\'\' or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
+  ].join("\n");
+}
+
+function buildLawfareSynthesisUser(question, plan, results) {
+  const resultsForModel = results.map(function (r) {
+    return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated, rows: r.rows };
+  });
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "YOUR PLAN (from the planning step):",
+    plan.approach_summary,
+    "",
+    "PLANNED OUTPUT MODE: " + plan.output_mode,
+    "",
+    "CANDOR NOTES FROM PLANNING:",
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function (n) { return "- " + n; }).join("\n") : "(none)",
+    "",
+    "QUERY RESULTS (JSON):",
+    JSON.stringify(resultsForModel, null, 2),
+    "",
+    "Return the synthesis JSON now."
+  ].join("\n");
+}
+
+function parseLawfareSynthesis(raw, outputMode) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = repairAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
+          catch (pe4) {
+            const salvaged = salvageTruncatedSynthesis(raw);
+            if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "article_ids");
+            throw new Error("JSON.parse error: " + pe4.message);
+          }
+        }
+      } else {
+        const salvaged = salvageTruncatedSynthesis(raw);
+        if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "article_ids");
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.answer_markdown !== "string" || !v.answer_markdown.trim()) throw new Error("answer_markdown is empty.");
+  if (outputMode === "list" || outputMode === "hybrid") {
+    if (!Array.isArray(v.article_ids) || v.article_ids.length === 0) {
+      v.article_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(["Output mode requested an article list but synthesis returned none — showing narrative only."]);
+    } else {
+      v.article_ids = v.article_ids
+        .filter(function (x) { return x != null; })
+        .map(function (x) { return Number(x); })
+        .filter(function (x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.article_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusLawfarePlanHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const question = String((body && body.question) || "").trim();
+  if (!question) return json({ error: { message: "Missing question" } }, 400);
+  const scope = normalizeLawfareScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildLawfarePlanningSystem(),
+      messages: [{ role: "user", content: buildLawfarePlanningUser(question, scope) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Planning step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let plan;
+  try { plan = parseLawfarePlan(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse plan: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("lawfare-plan:" + token, JSON.stringify({
+    plan, scope, question, provider, model, userId: auth.userId, authMode: auth.authMode
+  }), { expirationTtl: 900 });
+
+  return json({
+    token,
+    output_mode: plan.output_mode,
+    approach_summary: plan.approach_summary,
+    candor_notes: plan.candor_notes,
+    queries: plan.queries.map(function (q) { return { label: q.label, sql: q.sql }; }),
+    estimated_cost_cents: plan.estimated_cost_cents,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+async function corpusLawfareExecuteHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const token = body && body.token;
+  if (!token || typeof token !== "string") return json({ error: { message: "Missing plan token" } }, 400);
+  const stored = await env.QUOTA.get("lawfare-plan:" + token);
+  if (!stored) return json({ error: { message: "Plan expired or not found — re-run the question.", code: "plan_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored plan is corrupt — re-run the question." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider, body);
+  if (auth instanceof Response) return auth;
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This plan belongs to a different session. Re-run the question." } }, 403);
+  }
+  ctx.waitUntil(env.QUOTA.delete("lawfare-plan:" + token));
+
+  let results;
+  try { results = await executeLawfarePlan(env, blob.plan, blob.scope); }
+  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider: blob.provider, model: blob.model,
+      system: buildLawfareSynthesisSystem(blob.plan.output_mode),
+      messages: [{ role: "user", content: buildLawfareSynthesisUser(blob.question, blob.plan, results) }],
+      max_tokens: blob.plan.output_mode === "narrative" ? 8000 : 6000
+    });
+  } catch (e) {
+    return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let synth;
+  try { synth = parseLawfareSynthesis(res.text, blob.plan.output_mode); }
+  catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    answer_markdown: synth.answer_markdown,
+    article_ids: synth.article_ids,
+    candor_notes: synth.candor_notes,
+    output_mode: blob.plan.output_mode,
+    query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── Lawfare: summarize one article ──────────────────────────────────────────
+// Invoked from the article detail panel. Pulls the article's body_text +
+// metadata, sends a single Anthropic call with an attribution-forward
+// summarize prompt, returns a markdown summary. One billed call; no plan/
+// execute split (bounded by the single article's length).
+
+var LAWFARE_SUMMARIZE_TEXT_CAP = 200000; // chars (~50K tokens)
+
+function buildLawfareSummarizeSystem() {
+  return [
+    "You are summarizing one LAWFARE piece (an article, podcast, or newsletter of legal/national-security commentary by a named expert author) for a researcher. This is COMMENTARY, not a primary source: the unit of authority is the byline. Your job: attribution-forward summary of what the AUTHOR argued — never editorialize on whether they are right.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "summary_markdown": "...",  // markdown summary, 4-10 short paragraphs.',
+    '  "candor_notes": ["caveats — truncation, gaps in the text you were shown"]',
+    "}",
+    "",
+    "Structure the summary_markdown around these headings (omit any that don't apply):",
+    "- **Thesis** — the author's central claim or argument, in one or two sentences.",
+    "- **Argument** — the steps of the reasoning, in the author's framing.",
+    "- **Key points** — notable sub-claims, evidence, or examples the author marshals.",
+    "- **Predictions / recommendations** — any forecasts or prescriptions the author makes (flag them AS forecasts/prescriptions, not facts).",
+    "- **Caveats the author flags** — anything the author explicitly hedges or confines.",
+    "",
+    "Rules:",
+    "- Describe what the AUTHOR argues. Do not say whether it is right or wrong, do not add your own analysis, and do not flatten a hedged prediction into a factual claim.",
+    "- Distinguish reporting vs. argument vs. prediction where the piece does.",
+    "- Quote sparingly; use curly quotes (“”) for direct quotation. Straight double quotes break JSON parsing.",
+    "- If the text was truncated before reaching you, note that in candor_notes (\"Summary based on the first N characters of the piece; later sections not seen.\").",
+    "- Output strict JSON only. No markdown outside summary_markdown. No code fences."
+  ].join("\n");
+}
+
+function buildLawfareSummarizeUser(article, wasTruncated) {
+  const authors = Array.isArray(article.author_names) ? article.author_names.filter(Boolean).join(", ") : "";
+  const topics = Array.isArray(article.topic_names) ? article.topic_names.filter(Boolean).join(", ") : "";
+  const parts = [
+    "PIECE METADATA:",
+    "- Title: " + (article.title || "(no title)"),
+    "- Published: " + (article.published_date || "(no date)"),
+    "- Author(s): " + (authors || "(none listed)"),
+    "- Content type: " + (article.content_type || "(unknown)"),
+    "- Series: " + (article.series || "(none)"),
+    "- Topics: " + (topics || "(none)"),
+    "- Canonical URL: " + (article.canonical_url || "(none)")
+  ];
+  if (article.dek) {
+    parts.push("");
+    parts.push("DEK / STANDFIRST:");
+    parts.push(article.dek);
+  }
+  parts.push("");
+  parts.push("PIECE TEXT" + (wasTruncated ? " (TRUNCATED to " + fmtIntJs(LAWFARE_SUMMARIZE_TEXT_CAP) + " characters — flag this in candor_notes):" : ":"));
+  const text = String(article.body_text || "");
+  parts.push(wasTruncated ? text.slice(0, LAWFARE_SUMMARIZE_TEXT_CAP) : text);
+  parts.push("");
+  parts.push("Return the summary JSON now.");
+  return parts.join("\n");
+}
+
+function parseLawfareSummary(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = cleaned.replace(/"answer_markdown"/g, '"summary_markdown"');
+      const rep2 = repairAnswerMarkdownQuotes(repaired.replace(/"summary_markdown"/g, '"answer_markdown"'))
+        .replace(/"answer_markdown"/g, '"summary_markdown"');
+      v = JSON.parse(rep2);
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) { throw new Error("JSON.parse error: " + pe3.message); }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.summary_markdown !== "string" || !v.summary_markdown.trim()) throw new Error("summary_markdown is empty.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusLawfareSummarizeHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  const sql = "SELECT id, title, dek, author_names, published_date::text AS published_date, " +
+    "topic_names, content_type, series, canonical_url, body_text " +
+    "FROM lawfare_documents WHERE id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Article fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Article not found", code: "not_found" } }, 404);
+  }
+  const article = rows[0];
+  const text = String(article.body_text || "");
+  if (!text.trim()) {
+    return json({ error: { message: "This piece has no body text to summarize.", code: "no_text" } }, 400);
+  }
+  const wasTruncated = text.length > LAWFARE_SUMMARIZE_TEXT_CAP;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildLawfareSummarizeSystem(),
+      messages: [{ role: "user", content: buildLawfareSummarizeUser(article, wasTruncated) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Summarize step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parseLawfareSummary(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse summary: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    summary_markdown: parsed.summary_markdown,
+    candor_notes: parsed.candor_notes,
+    was_truncated: wasTruncated,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+async function corpusLawfareItemsByIdsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseItemsByIdsRequest(body && body.ids);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  if (parsed.ids.length === 0) return json({ display_rows: [] }, 200);
+  const sql = buildItemsByIdsSql(LAWFARE_DISPLAY_COLS, "lawfare_documents", parsed.ids);
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Lawfare items-by-ids failed: " + e.message } }, 502); }
+  return json({ display_rows: rows }, 200);
+}
+
+// ============================================================================
 // FRUS (Foreign Relations of the United States) corpus — v1 alpha
 //
 // Fifth and final v1 spoke. The corpus has two tables:
@@ -6557,6 +7299,7 @@ export {
   buildCfrFilterWhere,
   buildOlcFilterWhere,
   buildFrusFilterWhere,
+  buildLawfareFilterWhere,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -6586,6 +7329,15 @@ export {
   executeFrusPlan,
   FRUS_SUMMARIZE_TEXT_CAP,
   FRUS_SCOPE_LITERAL_LIMIT,
+  normalizeLawfareScope,
+  parseLawfarePlan,
+  parseLawfareSynthesis,
+  parseLawfareSummary,
+  buildLawfarePlanningUser,
+  buildLawfarePlanningSystem,
+  buildLawfareSummarizeUser,
+  executeLawfarePlan,
+  LAWFARE_SUMMARIZE_TEXT_CAP,
   normalizeUscScope,
   parseUscPlan,
   parseUscSynthesis,

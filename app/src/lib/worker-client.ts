@@ -1220,6 +1220,295 @@ export async function summarizeOlcOpinion(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/lawfare/* — Lawfare (Lawfare's own published archive) spoke
+ *
+ * The platform's first COMMENTARY corpus — articles, podcast episodes, and
+ * newsletters from lawfaremedia.org. Atomic unit is an article/item (string
+ * id). Author and Topic are first-class facets (unlike OLC). Paradigmatically
+ * analytical/narrative: "what has Lawfare written/argued about X", synthesized
+ * WITH per-author, per-piece attribution — it surfaces what authors said,
+ * never adjudicates which view is right.
+ * ------------------------------------------------------------------------- */
+
+/** (value, count) pairs used for the content-type / series facet dropdowns. */
+export type LawfareFacetCount = {
+  value: string
+  count: number
+}
+
+/** A top author facet — slug + display name + count. */
+export type LawfareAuthorFacet = {
+  slug: string
+  name: string
+  count: number
+}
+
+/** A topic facet — slug + display name + count. */
+export type LawfareTopicFacet = {
+  value: string
+  count: number
+}
+
+export type LawfareFacets = {
+  document_count: number
+  /** Earliest published_date across the corpus (YYYY-MM-DD). */
+  earliest: string
+  /** Most recent published_date (YYYY-MM-DD). */
+  latest: string
+  /** ['article', 'podcast', 'newsletter'] with counts. */
+  content_types: LawfareFacetCount[]
+  /** The ~13 controlled topics with counts. */
+  topics: LawfareTopicFacet[]
+  /** Named series (e.g. recurring columns / podcast shows) with counts. */
+  series: LawfareFacetCount[]
+  /** Most-published authors — drives the searchable author select. */
+  top_authors: LawfareAuthorFacet[]
+}
+
+export async function fetchLawfareFacets(): Promise<LawfareFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/lawfare/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/lawfare/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as LawfareFacets
+}
+
+export type LawfareArticleDisplayRow = {
+  id: string
+  slug: string | null
+  title: string | null
+  dek: string | null
+  author_names: string[]
+  published_date: string | null
+  topic_names: string[]
+  content_type: string | null
+  series: string | null
+  canonical_url: string | null
+  text_length: number | null
+  quality: string | null
+  search_tier: string | null
+}
+
+export type LawfareFilterFields = {
+  /** FTS over body text + title + dek. */
+  q?: string
+  /** Exact match on an author slug (from the top_authors facet). */
+  author_slug?: string
+  /** Exact match on a topic slug (from the controlled topic facet). */
+  topic_slug?: string
+  /** 'article' | 'podcast' | 'newsletter'. */
+  content_type?: string
+  /** Exact match on a named series. */
+  series?: string
+  /** ISO YYYY-MM-DD lower bound on published_date. */
+  date_from?: string
+  /** ISO YYYY-MM-DD upper bound. */
+  date_to?: string
+  /** When true, include roundups & announcements (suppressed by default). */
+  include_suppressed?: boolean
+}
+
+export type LawfareFilterResult = {
+  ids: string[]
+  display_rows: LawfareArticleDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runLawfareFilter(
+  fields: LawfareFilterFields,
+): Promise<LawfareFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/lawfare/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/lawfare/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as LawfareFilterResult
+}
+
+export type LawfareArticleDetail = {
+  id: string
+  slug: string | null
+  title: string | null
+  dek: string | null
+  author_names: string[]
+  author_slugs: string[]
+  published_date: string | null
+  published_raw: string | null
+  topic_names: string[]
+  topic_slugs: string[]
+  content_type: string | null
+  series: string | null
+  canonical_url: string | null
+  text_length: number | null
+  quality: string | null
+  search_tier: string | null
+  body_text: string | null
+  body_html: string | null
+}
+
+export async function fetchLawfareArticle(
+  id: string,
+): Promise<LawfareArticleDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/lawfare/article`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/lawfare/article failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { article: LawfareArticleDetail }
+  return body.article
+}
+
+/* ----------------------------------------------------------------------------
+ * Lawfare AI modes — narrative synthesis + summarize-one-article
+ *
+ * Same plan/execute shape as OLC, with Lawfare-specific citation idiom
+ * ([lawfare-ref:ARTICLE_ID]) and the attribution-forward editorial register
+ * (synthesis attributes views to authors + pieces, never adjudicates).
+ * ------------------------------------------------------------------------- */
+
+/** Lawfare plan returned by /corpus/lawfare/plan. Same shape as OLC's. */
+export type LawfareAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Lawfare synthesis returned by /corpus/lawfare/execute. `article_ids`
+ *  (string ids) for list/hybrid modes. */
+export type LawfareAmaSynthesis = {
+  answer_markdown: string
+  article_ids: string[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Scope payload accepted by /corpus/lawfare/plan. `article_ids` for a
+ *  narrowed scope; otherwise the full corpus. */
+export type LawfareAmaScope = {
+  article_ids?: string[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runLawfarePlan(
+  question: string,
+  scope: LawfareAmaScope,
+  auth: AuthArg,
+): Promise<LawfareAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/lawfare/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Lawfare plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as LawfareAmaPlan
+}
+
+export async function runLawfareExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<LawfareAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/lawfare/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Lawfare execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as LawfareAmaSynthesis
+}
+
+/** Summary returned by /corpus/lawfare/summarize-article. `was_truncated` is
+ *  true when the article's text exceeded the worker's input cap. */
+export type LawfareArticleSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizeLawfareArticle(
+  id: string,
+  auth: AuthArg,
+): Promise<LawfareArticleSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/lawfare/summarize-article`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Lawfare summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as LawfareArticleSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/frus/* — FRUS (Foreign Relations of the United States) spoke
  *
  * Final v1 spoke. Two tables in the corpus: frus_documents (314K docs) +
@@ -1964,9 +2253,9 @@ export function detectCourtPreset(
  * auditability).
  * ------------------------------------------------------------------------- */
 
-async function fetchItemsByIds<Row>(
+async function fetchItemsByIds<Row, Id = number>(
   url: string,
-  ids: readonly number[],
+  ids: readonly Id[],
 ): Promise<Row[]> {
   if (ids.length === 0) return []
   const r = await fetch(url, {
@@ -2014,6 +2303,15 @@ export function fetchFrusItemsByIds(
 ): Promise<FrusDocumentDisplayRow[]> {
   return fetchItemsByIds<FrusDocumentDisplayRow>(
     `${WORKER_URL}/corpus/frus/items-by-ids`,
+    ids,
+  )
+}
+
+export function fetchLawfareItemsByIds(
+  ids: readonly string[],
+): Promise<LawfareArticleDisplayRow[]> {
+  return fetchItemsByIds<LawfareArticleDisplayRow, string>(
+    `${WORKER_URL}/corpus/lawfare/items-by-ids`,
     ids,
   )
 }
