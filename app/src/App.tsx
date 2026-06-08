@@ -4,6 +4,7 @@ import { SiteMasthead } from '@/components/SiteMasthead'
 import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
 import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
+import { TermsOfService } from '@/legal/TermsOfService'
 import { SpokeShell } from '@/spokes/SpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
@@ -33,6 +34,7 @@ import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
 type Route =
   | { kind: 'hub' }
   | { kind: 'privacy' }
+  | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
   | { kind: 'not-found'; pathname: string }
 
@@ -42,6 +44,7 @@ function parseRoute(pathname: string): Route {
   pathname = pathname.split('?')[0].split('#')[0]
   if (pathname === '/' || pathname === '') return { kind: 'hub' }
   if (pathname === '/privacy') return { kind: 'privacy' }
+  if (pathname === '/terms') return { kind: 'terms' }
   const m = pathname.match(/^\/corpus\/([^/]+)\/?$/)
   if (m) {
     const slug = m[1] as CorpusSlug
@@ -85,9 +88,11 @@ function App() {
         })()
       : route.kind === 'privacy'
         ? <PrivacyPolicy onNavigate={navigate} />
-        : route.kind === 'not-found'
-          ? <NotFound pathname={route.pathname} onNavigate={navigate} />
-          : <Hub onNavigate={navigate} />
+        : route.kind === 'terms'
+          ? <TermsOfService onNavigate={navigate} />
+          : route.kind === 'not-found'
+            ? <NotFound pathname={route.pathname} onNavigate={navigate} />
+            : <Hub onNavigate={navigate} />
 
   return (
     <>

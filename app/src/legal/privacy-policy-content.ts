@@ -2,16 +2,15 @@
  * RAGtime privacy policy — canonical text, kept in-repo so it's version-
  * controlled and rendered by the in-app /privacy page (PrivacyPolicy.tsx).
  *
- * Source of truth: the reviewed draft (Scott Anderson + Ben, 2026-06-07).
+ * Source of truth: signed off by counsel (Scott Anderson) + Ben, 2026-06-08.
  * When the policy changes, edit this file and bump LAST_UPDATED; the deploy
  * publishes it. Keep this in sync with the canonical .docx if one is maintained.
  *
- * ⚠️ Still a DISCUSSION DRAFT pending counsel's final sign-off (data-controller
- * / jurisdiction confirmations and the billing-retention figure are open). Do
- * not treat as published until those close.
+ * Data-request contact is the lawfarewebevents@lawfaremedia.org inbox (not an
+ * individual), per Ben 2026-06-08.
  */
 
-export const LAST_UPDATED = 'June 6, 2026'
+export const LAST_UPDATED = 'June 9, 2026'
 
 export const PRIVACY_POLICY_MD = `
 ## 1. About RAGtime and this policy
@@ -83,7 +82,7 @@ RAGtime uses browser local storage to keep you signed in (paid mode) and to reme
 
 ## 8. Your choices and rights
 
-You can use RAGtime without an account (local search or your own key). Paid users can request access to or deletion of their account and associated data by contacting Anna Hickey (anna.hickey@lawfaremedia.org). Lawfare is committed to respecting your data privacy rights, including those provided by the General Data Protection Regulation and applicable California state laws, as applicable.
+You can use RAGtime without an account (local search or your own key). Paid users can request access to or deletion of their account and associated data by contacting lawfarewebevents@lawfaremedia.org. Lawfare is committed to respecting your data privacy rights, including those provided by the General Data Protection Regulation and applicable California state laws, as applicable.
 
 ### Rights Under the General Data Protection Regulation (EU) 2016/679
 
@@ -103,7 +102,7 @@ If you are located in the European Economic Area (EEA), United Kingdom, or Switz
 
 **Rights Related to Automated Decision-Making and Profiling (Article 22):** You have the right not to be subject to a decision based solely on automated processing, including profiling, that produces legal or similarly significant effects, except where: (i) necessary for a contract; (ii) authorized by applicable law; or (iii) based on your explicit consent.
 
-**How to Exercise Your Rights:** To submit a request, contact anna.hickey@lawfaremedia.org. We will not charge a fee for reasonable requests; manifestly unfounded or excessive requests may be subject to a reasonable charge or refusal.
+**How to Exercise Your Rights:** To submit a request, contact lawfarewebevents@lawfaremedia.org. We will not charge a fee for reasonable requests; manifestly unfounded or excessive requests may be subject to a reasonable charge or refusal.
 
 **Right to Lodge a Complaint:** You have the right to lodge a complaint with your local supervisory authority. A list of EEA supervisory authorities is available at https://edpb.europa.eu.
 
@@ -125,7 +124,7 @@ If you are a California resident, you have the following rights:
 
 **Authorized Agent:** You may designate an authorized agent to submit requests on your behalf by providing written permission or a power of attorney. We may require verification of your identity directly before processing requests submitted by an agent.
 
-**How to Submit a Request:** Submit a verifiable consumer request to anna.hickey@lawfaremedia.org.
+**How to Submit a Request:** Submit a verifiable consumer request to lawfarewebevents@lawfaremedia.org.
 
 ## 9. Security
 
@@ -141,5 +140,5 @@ The collections RAGtime makes searchable are public records (e.g., court filings
 
 ## 12. Changes and contact
 
-We will post changes here and update the "last updated" date. Questions: anna.hickey@lawfaremedia.org.
+We will post changes here and update the "last updated" date. Questions: lawfarewebevents@lawfaremedia.org.
 `

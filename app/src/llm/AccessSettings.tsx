@@ -332,7 +332,14 @@ function SignInForm() {
         {submitting ? 'Sending…' : 'Send sign-in link'}
       </Button>
       <p className="text-xs text-muted-foreground">
-        We handle your email and billing data as described in our{' '}
+        By signing in you agree to our{' '}
+        <a
+          href={toHref('/terms')}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Terms of Service
+        </a>
+        . We handle your email and billing data as described in our{' '}
         <a
           href={toHref('/privacy')}
           className="underline underline-offset-2 hover:text-foreground"
