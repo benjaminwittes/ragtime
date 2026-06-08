@@ -6481,6 +6481,18 @@ async function checkoutHandler(request, env) {
     "line_items[0][quantity]": "1",
     "metadata[user_id]": userId,
     "metadata[block]": block,
+    "metadata[product]": "RAGtime",
+    // Label the resulting PaymentIntent/Charge so it is UNMISTAKABLE in the
+    // Stripe Dashboard + CSV exports that this is a RAGtime credit purchase,
+    // NOT a Lawfare donation — for accountant reconciliation. `description`
+    // surfaces in the Payments-list Description column; the metadata keys are
+    // filterable + included in exports. NOTE: session-level metadata does NOT
+    // propagate to the charge — it must be set via payment_intent_data to land
+    // on the object accountants see in the Payments view.
+    "payment_intent_data[description]": `RAGtime credits — $${block} prepaid block`,
+    "payment_intent_data[metadata][product]": "RAGtime",
+    "payment_intent_data[metadata][user_id]": userId,
+    "payment_intent_data[metadata][block]": block,
     success_url: `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/?checkout=cancel`
   });
