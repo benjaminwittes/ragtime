@@ -10,6 +10,7 @@ import {
   buildOlcFilterWhere,
   buildFrusFilterWhere,
   buildLawfareFilterWhere,
+  corsHeaders,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -3280,6 +3281,18 @@ describe("heavyCostThreshold", () => {
 // These pin that an unconfigured token, a missing header, or a wrong header
 // all deny logging — so "our code does not log them" holds for public users.
 // ============================================================================
+describe("corsHeaders (preflight allow-list)", () => {
+  it("allows the X-Usage-Log-Token header so the browser annotation POST is not blocked", () => {
+    // The client annotation save sends a custom X-Usage-Log-Token header; if it
+    // is absent from Access-Control-Allow-Headers the browser blocks the request
+    // at preflight (and the in-app "Save note" fails). Regression guard.
+    const allow = corsHeaders()["Access-Control-Allow-Headers"];
+    expect(allow).toContain("X-Usage-Log-Token");
+    expect(allow).toContain("Content-Type");
+    expect(allow).toContain("Authorization");
+  });
+});
+
 describe("timingSafeStrEqual", () => {
   it("true only for equal-length identical strings", () => {
     expect(timingSafeStrEqual("abc123", "abc123")).toBe(true);

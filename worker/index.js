@@ -7239,7 +7239,7 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Usage-Log-Token",
     "Access-Control-Max-Age": "86400"
   };
 }
@@ -7392,6 +7392,7 @@ export {
   parseUsageLogRequest,
   usageLogAuthorized,
   usageLoggingAllowed,
+  corsHeaders,
   timingSafeStrEqual,
   sha256Hex,
   corpusCacheKeyUrl,
