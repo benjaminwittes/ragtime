@@ -4077,10 +4077,15 @@ async function corpusOlcOpinionHandler(request, env, ctx) {
   if (!Number.isFinite(id) || id <= 0) {
     return json({ error: { message: "Missing or invalid id" } }, 400);
   }
+  // Prefer the LLM-cleaned / OCR'd text where present (Knight degraded scans),
+  // falling back to the raw extraction. Image-only docs have text ONLY in
+  // text_content_clean, so the detail panel would otherwise show nothing.
   const sql = "SELECT id, title, author, recipient, president, date_issued::text AS date_issued, " +
     "release_date::text AS release_date, summary, summary_source, " +
     "source, source_url_doj, source_url_knight, doj_dl_path, knight_doc_id, " +
-    "volume, page, page_count, text_length, text_content, ocr_quality, dedup_key " +
+    "volume, page, page_count, text_length, " +
+    "COALESCE(text_content_clean, text_content) AS text_content, clean_method, " +
+    "ocr_quality, dedup_key " +
     "FROM olc_opinions WHERE id = " + Math.floor(id) + " LIMIT 1";
   let rows;
   try { rows = await corpusRunQuery(env, sql); }
@@ -4560,9 +4565,12 @@ async function corpusOlcSummarizeHandler(request, env, ctx) {
   if (auth instanceof Response) return auth;
 
   // Pull the opinion. Same SELECT shape as /corpus/olc/opinion so the
-  // handler returns useful context to the model.
+  // handler returns useful context to the model. Prefer cleaned/OCR'd text
+  // (Knight degraded scans) so the summary works off legible text, not raw
+  // OCR garbage — and so image-only docs (text only in text_content_clean)
+  // are summarizable at all.
   const sql = "SELECT id, title, author, recipient, date_issued::text AS date_issued, " +
-    "summary, source, text_content, ocr_quality " +
+    "summary, source, COALESCE(text_content_clean, text_content) AS text_content, ocr_quality " +
     "FROM olc_opinions WHERE id = " + Math.floor(id) + " LIMIT 1";
   let rows;
   try { rows = await corpusRunQuery(env, sql); }
