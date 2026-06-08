@@ -11,6 +11,7 @@ import {
   buildFrusFilterWhere,
   buildLawfareFilterWhere,
   corsHeaders,
+  buildUsageLogSuccessRow,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -3281,6 +3282,45 @@ describe("heavyCostThreshold", () => {
 // These pin that an unconfigured token, a missing header, or a wrong header
 // all deny logging — so "our code does not log them" holds for public users.
 // ============================================================================
+describe("buildUsageLogSuccessRow (server-side trace capture)", () => {
+  const base = {
+    interaction_id: "11111111-2222-3333-4444-555555555555",
+    authMode: "demo", userId: null, surface: "lawfare", mode: "ama",
+    question: "what has Lapatina argued", output_mode: "narrative",
+    plan: { queries: [{ sql: "SELECT 1" }] }, query_summary: [{ label: "q1", total_rows: 5 }],
+    answer_markdown: "In ... she argued ...", cited_ids: [13, 84], candor_notes: ["caveat"],
+    cost_cents: 4.2, provider: "anthropic", model: "claude-opus-4-8",
+  };
+
+  it("captures the full trace under the client's interaction_id", () => {
+    const row = buildUsageLogSuccessRow(base);
+    expect(row.interaction_id).toBe(base.interaction_id);
+    expect(row.surface).toBe("lawfare");
+    expect(row.mode).toBe("ama");
+    expect(row.answer_markdown).toContain("she argued");
+    expect(row.cited_ids).toEqual([13, 84]);
+    expect(row.cost_cents).toBe(4.2);
+  });
+
+  it("NEVER includes rating/note/annotated_at — so it can't clobber a user annotation on merge-upsert", () => {
+    const row = buildUsageLogSuccessRow(base);
+    expect("rating" in row).toBe(false);
+    expect("note" in row).toBe(false);
+    expect("annotated_at" in row).toBe(false);
+  });
+
+  it("coerces malformed trace fields to null rather than emitting junk", () => {
+    const row = buildUsageLogSuccessRow({
+      interaction_id: base.interaction_id, surface: "lawfare", mode: "ama",
+      plan: "not-an-object", query_summary: "nope", cited_ids: "nope", cost_cents: Infinity,
+    });
+    expect(row.plan).toBeNull();
+    expect(row.query_summary).toBeNull();
+    expect(row.cited_ids).toBeNull();
+    expect(row.cost_cents).toBeNull();
+  });
+});
+
 describe("corsHeaders (preflight allow-list)", () => {
   it("allows the X-Usage-Log-Token header so the browser annotation POST is not blocked", () => {
     // The client annotation save sends a custom X-Usage-Log-Token header; if it

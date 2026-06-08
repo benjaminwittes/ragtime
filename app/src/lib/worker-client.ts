@@ -1452,12 +1452,16 @@ export async function runLawfarePlan(
 export async function runLawfareExecute(
   token: string,
   auth: AuthArg,
+  /** Client-generated id so the Worker's server-side trace log joins the same
+   *  usage_log row the inline annotation later upserts onto. */
+  interactionId?: string,
 ): Promise<LawfareAmaSynthesis> {
   const r = await fetch(`${WORKER_URL}/corpus/lawfare/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
       token,
+      ...(interactionId ? { interaction_id: interactionId } : {}),
       ...authCredentialBody(auth),
     }),
   })

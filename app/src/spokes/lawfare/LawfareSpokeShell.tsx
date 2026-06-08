@@ -258,8 +258,12 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       label: 'Step 2/3.',
       message: 'Executing planned queries…',
     })
+    // One id for the whole interaction: sent to the Worker so its server-side
+    // trace log lands on the same usage_log row the inline annotation upserts
+    // onto, and reused below for the annotation component.
+    const interactionId = newInteractionId()
     try {
-      const synth = await runLawfareExecute(plan.token, auth.auth)
+      const synth = await runLawfareExecute(plan.token, auth.auth, interactionId)
       if (typeof synth._balance_cents === 'number') {
         paid.applyBalanceFromWorker(synth._balance_cents)
       }
@@ -270,7 +274,7 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       })
       setAmaSynthesis(synth)
       setAmaResultPlan(plan)
-      setAmaInteractionId(newInteractionId())
+      setAmaInteractionId(interactionId)
       setAmaQuestion(question)
       const total = (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0)
       if (total > 0) {
