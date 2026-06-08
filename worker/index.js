@@ -4584,6 +4584,8 @@ var LAWFARE_DISPLAY_COLS = "id, slug, title, dek, author_names, published_date::
  * Supported axes:
  *   q                  FTS over fts (title + dek + body_text)
  *   author_slug        author_slugs @> ARRAY['slug'] — exact slug membership
+ *   author_name        case-insensitive substring over unnest(author_names) —
+ *                      reaches authors outside the top-authors dropdown
  *   topic_slug         topic_slugs @> ARRAY['slug'] — exact slug membership
  *   content_type       exact match — 'article' | 'podcast' | 'newsletter'
  *   series             exact match on the recurring-series label
@@ -4601,6 +4603,14 @@ function buildLawfareFilterWhere(fields) {
   if (fields.author_slug && typeof fields.author_slug === 'string' && fields.author_slug.trim()) {
     var a = fields.author_slug.trim().replace(/'/g, "''");
     parts.push("author_slugs @> ARRAY['" + a + "']");
+  }
+  // Free-text author NAME match — case-insensitive substring over the
+  // author_names array. Slugs follow an opaque first-initial+lastname scheme
+  // ('alapatina') that the UI/user cannot derive, so name matching is the
+  // reachable path for any author outside the top-authors dropdown.
+  if (fields.author_name && typeof fields.author_name === 'string' && fields.author_name.trim()) {
+    var an = fields.author_name.trim().replace(/'/g, "''");
+    parts.push("EXISTS (SELECT 1 FROM unnest(author_names) AS _an WHERE _an ILIKE '%" + an + "%')");
   }
   if (fields.topic_slug && typeof fields.topic_slug === 'string' && fields.topic_slug.trim()) {
     var t = fields.topic_slug.trim().replace(/'/g, "''");
@@ -4824,7 +4834,7 @@ function buildLawfarePlanningSystem() {
     "Rules:",
     "- Be ruthlessly economical with queries. Pull metadata (id, title, dek, author_names, published_date, topic_names, content_type, canonical_url) — NEVER body_text in a planned query. Synthesis works from titles + deks + bylines + dates; per-piece deep reads are a separate mode.",
     "- The unit of citation is the article and the unit of authority is the byline — ALWAYS pull author_names, published_date, title, and canonical_url so synthesis can attribute every position to a named author + piece + date with a live link.",
-    "- AUTHOR is a first-class scoping axis. 'What has [author] argued about X' → filter author_slugs @> ARRAY['author-slug']. Do NOT skip the author filter just because the question also has a topic.",
+    "- AUTHOR is a first-class scoping axis. 'What has [author] argued about X' → scope by NAME against the author_names array, NOT by a guessed slug. Author slugs follow an opaque scheme (first-initial + last name, e.g. 'alapatina' for Anastasiia Lapatina) that you CANNOT reliably derive from a name, so guessing author_slugs @> ARRAY['...'] silently returns zero. Instead match the display name: EXISTS (SELECT 1 FROM unnest(author_names) AS _a WHERE _a ILIKE '%lapatina%'). Use a distinctive surname (or surname fragment) as the ILIKE needle to tolerate spelling/diacritic variants (e.g. 'Anastasiia' vs 'Anastasia'). Do NOT skip the author filter just because the question also has a topic.",
     "- TOPIC is a controlled taxonomy — use topic_slugs @> ARRAY['topic-slug'] where the question maps cleanly onto a topic.",
     "- For trend questions, prefer ONE query that groups by year (or by author, or by content_type) over many narrow queries. For COUNT/methodology questions, surface in candor_notes that the count is of original authored pieces (the queryable view excludes roundup digests) plus the denominator/dataset.",
     "- For narrative questions over a topic ('how have Lawfare authors thought about X'), order by published_date ASC and cap at 200 pieces per query — plenty of evidence for synthesis.",

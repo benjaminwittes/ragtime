@@ -66,7 +66,11 @@ export function LawfareFilterForm({
     e.preventDefault()
     const fields: LawfareFilterFields = {}
     if (q.trim()) fields.q = q.trim()
+    // A picked author from the (top-50) dropdown filters by exact slug; otherwise
+    // the typed text becomes a free-text name match, so authors outside the
+    // dropdown (the long tail) are reachable instead of silently ignored.
     if (authorSlug) fields.author_slug = authorSlug
+    else if (authorQuery.trim()) fields.author_name = authorQuery.trim()
     if (topicSlug) fields.topic_slug = topicSlug
     if (contentType) fields.content_type = contentType
     if (from.trim()) fields.date_from = from.trim()
@@ -102,13 +106,13 @@ export function LawfareFilterForm({
       </Field>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Author" hint="Type to filter the list">
+        <Field label="Author" hint="Type a name to search; or pick from the top list">
           <div className="space-y-1.5">
             <Input
               type="text"
               value={authorQuery}
               onChange={(e) => setAuthorQuery(e.target.value)}
-              placeholder="Filter authors…"
+              placeholder="Search by author name…"
               disabled={loading}
             />
             <select
