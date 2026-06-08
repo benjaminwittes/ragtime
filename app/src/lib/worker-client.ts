@@ -1299,6 +1299,9 @@ export type LawfareFilterFields = {
   q?: string
   /** Exact match on an author slug (from the top_authors facet). */
   author_slug?: string
+  /** Case-insensitive author-name substring — reaches authors outside the
+   *  top-authors dropdown (slugs are an opaque scheme users can't derive). */
+  author_name?: string
   /** Exact match on a topic slug (from the controlled topic facet). */
   topic_slug?: string
   /** 'article' | 'podcast' | 'newsletter'. */

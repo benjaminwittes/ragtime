@@ -10,6 +10,7 @@ import {
   buildOlcFilterWhere,
   buildFrusFilterWhere,
   buildLawfareFilterWhere,
+  corsHeaders,
   constantTimeEqual,
   bufToHex,
   b64UrlDecodeToString,
@@ -740,6 +741,20 @@ describe("buildLawfareFilterWhere", () => {
     const w = buildLawfareFilterWhere({ author_slug: "x') OR true OR ('" });
     expect(w).toContain("author_slugs @> ARRAY['x'') OR true OR (''']");
     expect(w).not.toContain("OR true OR ('']"); // the raw single-quote form must not survive
+  });
+
+  it("filters by author_name as a case-insensitive substring over author_names", () => {
+    // The reachable path for any author outside the top-authors dropdown — and
+    // resilient to the opaque slug scheme (e.g. 'alapatina' for Lapatina).
+    expect(buildLawfareFilterWhere({ author_name: "Lapatina" })).toContain(
+      "EXISTS (SELECT 1 FROM unnest(author_names) AS _an WHERE _an ILIKE '%Lapatina%')",
+    );
+  });
+
+  it("escapes single quotes in author_name (injection guard)", () => {
+    const w = buildLawfareFilterWhere({ author_name: "x%' OR '1'='1" });
+    expect(w).toContain("ILIKE '%x%'' OR ''1''=''1%'");
+    expect(w).not.toContain("OR '1'='1%'"); // the raw single-quote form must not survive
   });
 
   it("filters by content_type and series with exact match", () => {
@@ -3266,6 +3281,18 @@ describe("heavyCostThreshold", () => {
 // These pin that an unconfigured token, a missing header, or a wrong header
 // all deny logging — so "our code does not log them" holds for public users.
 // ============================================================================
+describe("corsHeaders (preflight allow-list)", () => {
+  it("allows the X-Usage-Log-Token header so the browser annotation POST is not blocked", () => {
+    // The client annotation save sends a custom X-Usage-Log-Token header; if it
+    // is absent from Access-Control-Allow-Headers the browser blocks the request
+    // at preflight (and the in-app "Save note" fails). Regression guard.
+    const allow = corsHeaders()["Access-Control-Allow-Headers"];
+    expect(allow).toContain("X-Usage-Log-Token");
+    expect(allow).toContain("Content-Type");
+    expect(allow).toContain("Authorization");
+  });
+});
+
 describe("timingSafeStrEqual", () => {
   it("true only for equal-length identical strings", () => {
     expect(timingSafeStrEqual("abc123", "abc123")).toBe(true);
