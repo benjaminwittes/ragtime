@@ -85,12 +85,12 @@ export function AmaPreflight({
         <Dialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-lg -translate-x-1/2 -translate-y-1/2',
-            'rounded-lg border border-border bg-card p-5 shadow-lg',
+            'flex max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-lg',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
           )}
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex shrink-0 items-start justify-between gap-4 px-5 pt-5">
             <div>
               <Dialog.Title className="font-serif text-lg font-semibold">
                 Ask pre-flight
@@ -110,6 +110,10 @@ export function AmaPreflight({
             </Dialog.Close>
           </div>
 
+          {/* Scrollable body — caps to the dialog height so long plans /
+              candor notes (e.g. FRUS) scroll instead of running off-screen,
+              while the header above and the action bar below stay pinned. */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
           <dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Estimated cost
@@ -208,8 +212,9 @@ export function AmaPreflight({
             narrow scope. Broad questions over a large scope can take up to a
             minute or two to run.
           </p>
+          </div>
 
-          <div className="mt-5 flex items-center justify-between gap-3">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-5 py-4">
             <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
               <input
                 type="checkbox"
