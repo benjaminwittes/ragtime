@@ -6180,7 +6180,7 @@ async function corpusFrusSummarizeHandler(request, env, ctx) {
 // merged into one ranked list. That changes when pgvector lands (Phase 2)
 // and provides a single comparable similarity score.
 
-var HUB_CORPORA = ["litigation", "usc", "cfr", "olc", "frus"];
+var HUB_CORPORA = ["litigation", "usc", "cfr", "olc", "frus", "lawfare"];
 // Per-corpus top-K cap. The brief says the hub is "the shallow end" — five
 // results per card surface the result-set shape without overwhelming. Users
 // who want more click into the spoke.
@@ -6275,12 +6275,30 @@ function buildHubQueriesFrus(escapedQuery, limit) {
   return { rowsSql, countSql };
 }
 
+function buildHubQueriesLawfare(escapedQuery, limit) {
+  // Match the spoke's default scope: exclude suppressed roundup digests so the
+  // hub surfaces only original authored pieces (brief #5 / the Lawfare filter).
+  const ftsClause =
+    "fts @@ websearch_to_tsquery('english', '" + escapedQuery + "') " +
+    "AND search_tier <> 'suppressed'";
+  const rowsSql =
+    "SELECT id::text AS id, " +
+    "  COALESCE(title, '(untitled)') AS title, " +
+    "  content_type AS context, " +
+    "  published_date::text AS date " +
+    "FROM lawfare_documents WHERE " + ftsClause + " " +
+    "ORDER BY published_date DESC NULLS LAST LIMIT " + limit;
+  const countSql = "SELECT count(*)::bigint AS n FROM lawfare_documents WHERE " + ftsClause;
+  return { rowsSql, countSql };
+}
+
 var HUB_QUERY_BUILDERS = {
   litigation: buildHubQueriesLitigation,
   usc: buildHubQueriesUsc,
   cfr: buildHubQueriesCfr,
   olc: buildHubQueriesOlc,
-  frus: buildHubQueriesFrus
+  frus: buildHubQueriesFrus,
+  lawfare: buildHubQueriesLawfare
 };
 
 async function runHubKeywordForCorpus(env, corpus, escapedQuery, limit) {
@@ -7442,6 +7460,7 @@ export {
   buildHubQueriesCfr,
   buildHubQueriesOlc,
   buildHubQueriesFrus,
+  buildHubQueriesLawfare,
   ITEMS_BY_IDS_CAP,
   parseItemsByIdsRequest,
   buildItemsByIdsSql,
