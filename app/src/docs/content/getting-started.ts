@@ -12,12 +12,15 @@ export const gettingStartedEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 1,
   content: `
-RAGtime is a research tool over primary-source public records — federal
-court litigation, the U.S. Code, the Code of Federal Regulations, Justice
-Department legal opinions (OLC), and the documentary history of U.S.
-foreign relations (FRUS) — five corpora today, with more planned. Each is
-made searchable in one place and, where you want it, readable and
-analyzable with AI.
+RAGtime is a research tool over public records — five primary-source
+corpora (federal court litigation, the U.S. Code, the Code of Federal
+Regulations, Justice Department legal opinions (OLC), and the documentary
+history of U.S. foreign relations (FRUS)) plus Lawfare's own published
+analysis (articles, podcasts, and newsletters) — six corpora today, with
+more planned. Each is made searchable in one place and, where you want it,
+readable and analyzable with AI. (Lawfare is the one commentary corpus:
+there you're searching what Lawfare's authors have argued, not a primary
+source — see *Primary Sources, Not Commentary*.)
 
 The shape of the tool is a **hub and spokes.**
 

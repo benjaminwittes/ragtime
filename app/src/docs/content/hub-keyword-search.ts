@@ -16,9 +16,11 @@ export const hubKeywordSearchEntry: DocsEntry = {
   order: 2,
   content: `
 **What it is.** The plain-language box at the top of the hub. Type a
-question or a topic; the system fires five parallel full-text searches
-(one per corpus — Federal litigation, USC, CFR, OLC, FRUS) and returns the
-top-5 results from each, plus the total count per corpus. Free, no AI.
+question or a topic; the system fires six parallel full-text searches
+(one per corpus — Federal litigation, USC, CFR, OLC, FRUS, and Lawfare)
+and returns the top-5 results from each, plus the total count per corpus.
+Free, no AI. (Five of the six are primary sources; Lawfare returns its own
+published commentary — handy for "has anyone written about this?")
 
 **Why grouped by corpus, not one merged list?** Each corpus's relevance
 scores come from its own full-text index and aren't comparable across

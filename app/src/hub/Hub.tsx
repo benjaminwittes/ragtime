@@ -17,7 +17,7 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  *
  * The cross-corpus keyword search (brief #1 §3 free tier) sits above the
  * spoke grid: a single plain-language input fires parallel FTS queries
- * across all 5 corpora and surfaces grouped-by-corpus results inline.
+ * across all 6 corpora and surfaces grouped-by-corpus results inline.
  * The paid AI synthesis layer (brief #1 Phase 2) lands later — needs
  * pgvector to provide a single comparable relevance score across tables.
  */
@@ -61,7 +61,7 @@ function HubHeader() {
   )
 }
 
-/** The five loaded corpora as a quiet credibility strip under the hero.
+/** The six loaded corpora as a quiet credibility strip under the hero.
  * Rounded, impressionistic figures; the exact, sourced counts live on each
  * corpus card below (and inside each spoke's holdings band). */
 const HUB_STATS: { num: string; label: string }[] = [
@@ -70,6 +70,7 @@ const HUB_STATS: { num: string; label: string }[] = [
   { num: '228K', label: 'CFR §§' },
   { num: '2,145', label: 'OLC opinions' },
   { num: '314K', label: 'FRUS documents' },
+  { num: '23K', label: 'Lawfare pieces' },
 ]
 
 function HubHero() {
@@ -80,7 +81,8 @@ function HubHero() {
       </h1>
       <p className="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary">
         Statutes, regulations, executive-branch opinions, diplomatic history,
-        and the federal litigation that interprets them — together.
+        the federal litigation that interprets them — and Lawfare's analysis
+        of all of it — together.
       </p>
       <dl className="mx-auto mt-8 flex max-w-3xl flex-wrap items-baseline justify-center gap-x-7 gap-y-3">
         {HUB_STATS.map((s) => (

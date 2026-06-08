@@ -25,6 +25,18 @@ opinion, you're seeing the official primary text, full stop. When AI
 synthesizes across documents, that synthesis is clearly an AI answer with
 citations — not an editorial gloss presented as authority.
 
+**One corpus is commentary — by design, not by exception to this rule.**
+The Lawfare corpus holds Lawfare's own published work (articles, podcasts,
+newsletters). That's analysis, not a primary source — but it's *somebody
+else's* published analysis, treated as a corpus you search, exactly like
+the others. The rule above is about RAGtime never inserting *its own*
+editorial layer over the materials; it has nothing to say against
+*searching* a body of published commentary. So when you query Lawfare, the
+AI surfaces and attributes **what Lawfare's authors argued** ("In [piece]
+([date]), [author] argued…") — it never adjudicates who was right or adds
+RAGtime's own take. The line we hold is the same everywhere: descriptive,
+cited, attributed — never RAGtime editorializing.
+
 **What the AI analytical layer will do.** You can ask the AI layer, in
 various places, to analyze or summarize material in its data stack. Some AI
 functions — like ranking cases by subjective criteria — inevitably require
