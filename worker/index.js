@@ -818,6 +818,56 @@ function logCorpusFailure(request, env, ctx, fields) {
   } catch { /* never break the user path */ }
 }
 
+// Build the usage_log row for a SUCCESSFUL AMA trace, logged server-side. This
+// is the authoritative trace capture: it lands even when the client never logs
+// (logging toggle off, or a client-side failure), so the queries we most want
+// to triage aren't lost. Keyed on the CLIENT's interaction_id so it merge-
+// upserts onto the same row the client's inline ★/note annotation targets.
+// CRITICAL: omit rating / note / annotated_at entirely — PostgREST merge-
+// duplicates only updates columns present in the payload, so leaving them out
+// means a server-side trace write can never clobber a user's annotation,
+// regardless of which write lands first.
+function buildUsageLogSuccessRow(fields) {
+  return {
+    interaction_id: fields.interaction_id,
+    client_ts: new Date().toISOString(),
+    auth_mode: fields.authMode || null,
+    user_id: fields.userId || null,
+    user_email: fields.userEmail || null,
+    surface: fields.surface || null,
+    mode: fields.mode || null,
+    question: fields.question ? String(fields.question).slice(0, 8000) : null,
+    output_mode: fields.output_mode || null,
+    plan: (fields.plan && typeof fields.plan === "object") ? fields.plan : null,
+    query_summary: Array.isArray(fields.query_summary) ? fields.query_summary : null,
+    answer_markdown: fields.answer_markdown ? String(fields.answer_markdown).slice(0, 100000) : null,
+    cited_ids: Array.isArray(fields.cited_ids) ? fields.cited_ids : null,
+    candor_notes: Array.isArray(fields.candor_notes) ? fields.candor_notes : null,
+    cost_cents: (typeof fields.cost_cents === "number" && isFinite(fields.cost_cents)) ? fields.cost_cents : null,
+    provider: fields.provider || null,
+    model: fields.model || null
+    // NB: rating / note / annotated_at deliberately absent — see comment above.
+  };
+}
+
+// Best-effort server-side SUCCESS log (companion to logCorpusFailure). Fire-and-
+// forget; never throws into the user path. No-ops unless logging is allowed for
+// this session AND a valid client interaction_id is present (without one we
+// could not join to the annotation row and would risk orphan/duplicate rows).
+function logCorpusSuccess(request, env, ctx, fields) {
+  try {
+    if (!usageLoggingAllowed(fields.authMode, request, env)) return;
+    if (!fields.interaction_id || !UUID_RE.test(fields.interaction_id)) return;
+    ctx.waitUntil(
+      supabaseFetch(env, "/rest/v1/usage_log?on_conflict=interaction_id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(buildUsageLogSuccessRow(fields))
+      }).catch(() => {})
+    );
+  } catch { /* never break the user path */ }
+}
+
 // Per-IP rate limit shared by the corpus endpoints. Returns a 429 Response when
 // over the limit, else null. (Public fetch endpoints use this alone; the LLM
 // endpoints use it via resolveCorpusAuth.)
@@ -5111,12 +5161,29 @@ async function corpusLawfareExecuteHandler(request, env, ctx) {
   try { synth = parseLawfareSynthesis(res.text, blob.plan.output_mode); }
   catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
 
+  const querySummary = results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; });
+
+  // Authoritative server-side trace capture (joins the client annotation row by
+  // interaction_id). Fire-and-forget; gated + UUID-guarded inside the helper.
+  logCorpusSuccess(request, env, ctx, {
+    interaction_id: body && body.interaction_id,
+    // user_email is filled by the client annotation POST (derived from the JWT);
+    // the trace log keys on user_id, which already identifies paid sessions.
+    authMode: auth.authMode, userId: auth.userId,
+    surface: "lawfare", mode: "ama", question: blob.question,
+    output_mode: blob.plan.output_mode,
+    plan: { output_mode: blob.plan.output_mode, approach_summary: blob.plan.approach_summary, queries: blob.plan.queries, estimated_cost_cents: blob.plan.estimated_cost_cents },
+    query_summary: querySummary,
+    answer_markdown: synth.answer_markdown, cited_ids: synth.article_ids, candor_notes: synth.candor_notes,
+    cost_cents: res.costCents, provider: blob.provider, model: blob.model
+  });
+
   return json({
     answer_markdown: synth.answer_markdown,
     article_ids: synth.article_ids,
     candor_notes: synth.candor_notes,
     output_mode: blob.plan.output_mode,
-    query_summary: results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; }),
+    query_summary: querySummary,
     _cost_cents: res.costCents,
     _balance_cents: res.balanceCents
   }, 200);
@@ -7390,6 +7457,7 @@ export {
   buildReadSystem,
   buildSynthesisSystem,
   parseUsageLogRequest,
+  buildUsageLogSuccessRow,
   usageLogAuthorized,
   usageLoggingAllowed,
   corsHeaders,
