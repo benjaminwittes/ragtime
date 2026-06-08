@@ -663,6 +663,48 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setDetailOpen(true)
   }
 
+  /** Discard the tip (the last operation) and return to the previous layer —
+   *  the scope from which it was derived becomes active again. Restores the
+   *  legacy "← Back to previous page" affordance lost in the React port. The
+   *  discarded layer's results are not saved. */
+  function popTip() {
+    if (stack.length === 0) return
+    const tip = stack[stack.length - 1]
+    const ok = window.confirm(
+      `Discard this layer — ${tip.operationLabel} — and return to the previous scope?\n\n` +
+        `The discarded layer's results are not saved.`,
+    )
+    if (!ok) return
+    setStack((prev) => prev.slice(0, -1))
+    setViewingIdx(stack.length - 2) // new tip; -1 when the stack becomes empty (= All cases)
+    setActiveMode('manual_filter')
+    setQueryError(undefined)
+    setDetailOpen(false)
+    setOpenCase(null)
+  }
+
+  /** Discard the entire stack and return to the "All cases" root — a fresh
+   *  session. Restores the legacy "Reset session" affordance. */
+  function resetSession() {
+    if (
+      stack.length > 0 &&
+      !window.confirm(
+        `Reset session? This discards all ${stack.length} exploration layer(s).`,
+      )
+    ) {
+      return
+    }
+    setStack([])
+    setViewingIdx(-1)
+    setActiveMode('manual_filter')
+    setQueryError(undefined)
+    setDetailOpen(false)
+    setOpenCase(null)
+    setAmaLog([])
+    setPendingPlan(null)
+    setPendingSqlConfirm(null)
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SpokeHeader
@@ -684,6 +726,8 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           viewingIdx={viewingIdx}
           onViewPast={viewPast}
           onReturnToTip={returnToTip}
+          onPopTip={popTip}
+          onReset={resetSession}
         />
       )}
       {isViewingPast && (
