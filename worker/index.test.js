@@ -72,6 +72,7 @@ import {
   buildHubQueriesCfr,
   buildHubQueriesOlc,
   buildHubQueriesFrus,
+  buildHubQueriesLawfare,
   ITEMS_BY_IDS_CAP,
   parseItemsByIdsRequest,
   buildItemsByIdsSql,
@@ -1905,8 +1906,8 @@ describe("executeCfrPlan scope cap", () => {
 // ============================================================================
 
 describe("HUB_CORPORA", () => {
-  it("lists exactly the five loaded corpora", () => {
-    expect(HUB_CORPORA).toEqual(["litigation", "usc", "cfr", "olc", "frus"]);
+  it("lists exactly the six loaded corpora (incl. lawfare)", () => {
+    expect(HUB_CORPORA).toEqual(["litigation", "usc", "cfr", "olc", "frus", "lawfare"]);
   });
   it("declares a small results-per-corpus cap", () => {
     expect(HUB_RESULTS_PER_CORPUS).toBeGreaterThanOrEqual(3);
@@ -1993,6 +1994,27 @@ describe("buildHubQueriesFrus", () => {
   it("falls back to volume_id when place_name is null (context axis)", () => {
     const { rowsSql } = buildHubQueriesFrus("x", 5);
     expect(rowsSql).toMatch(/COALESCE\(place_name, volume_id\)/);
+  });
+});
+
+describe("buildHubQueriesLawfare", () => {
+  it("targets lawfare_documents, orders by published_date DESC, caps to the limit", () => {
+    const { rowsSql, countSql } = buildHubQueriesLawfare("executive privilege", 5);
+    expect(rowsSql).toMatch(/FROM lawfare_documents WHERE/);
+    expect(rowsSql).toMatch(/websearch_to_tsquery\('english', 'executive privilege'\)/);
+    expect(rowsSql).toMatch(/ORDER BY published_date DESC NULLS LAST/);
+    expect(rowsSql).toMatch(/LIMIT 5/);
+    expect(countSql).toMatch(/count\(\*\)/);
+    expect(countSql).toMatch(/FROM lawfare_documents WHERE/);
+  });
+  it("excludes suppressed roundup digests from both rows and count (matches the spoke's default scope)", () => {
+    const { rowsSql, countSql } = buildHubQueriesLawfare("x", 5);
+    expect(rowsSql).toMatch(/search_tier <> 'suppressed'/);
+    expect(countSql).toMatch(/search_tier <> 'suppressed'/);
+  });
+  it("surfaces content_type as the context axis", () => {
+    const { rowsSql } = buildHubQueriesLawfare("x", 5);
+    expect(rowsSql).toMatch(/content_type AS context/);
   });
 });
 
