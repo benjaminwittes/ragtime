@@ -1,4 +1,4 @@
-import { ChevronRightIcon } from 'lucide-react'
+import { ChevronRightIcon, RotateCcwIcon, Undo2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { StackPage } from '../stack'
@@ -11,6 +11,13 @@ import type { StackPage } from '../stack'
  * the active scope for new operations; if the user is viewing past, a
  * banner above invites them to return to the tip.
  *
+ * Stack navigation controls (restored from the legacy single-file UI):
+ *   - "Discard last layer" (onPopTip) — drop the tip and return to the
+ *     previous scope. Shown only when on the tip (you discard what you're on).
+ *   - "Reset session" (onReset) — discard the whole stack, back to All cases.
+ *     Always available once a stack exists.
+ *   - "Return to current" (onReturnToTip) — shown when viewing a past page.
+ *
  * Per the brief, this component is hidden when the stack is empty — the
  * empty-state main panel is genuinely empty. We render nothing in that
  * case; SpokeShell decides whether to mount us.
@@ -20,11 +27,15 @@ export function Breadcrumb({
   viewingIdx,
   onViewPast,
   onReturnToTip,
+  onPopTip,
+  onReset,
 }: {
   stack: readonly StackPage[]
   viewingIdx: number
   onViewPast: (idx: number) => void
   onReturnToTip: () => void
+  onPopTip: () => void
+  onReset: () => void
 }) {
   if (stack.length === 0) return null
 
@@ -47,17 +58,42 @@ export function Breadcrumb({
             />
           </span>
         ))}
-        {!isViewingTip && (
+        <div className="ml-auto flex items-center gap-1">
+          {isViewingTip ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onPopTip}
+              title="Discard the last layer and return to the previous scope"
+              className="h-6 gap-1 px-2 text-[11px]"
+            >
+              <Undo2Icon className="h-3 w-3" />
+              Discard last layer
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onReturnToTip}
+              className="h-6 px-2 text-[11px]"
+            >
+              Return to current ↦
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"
             variant="ghost"
-            onClick={onReturnToTip}
-            className="ml-auto h-6 px-2 text-[11px]"
+            onClick={onReset}
+            title="Discard all layers and start a fresh session"
+            className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
           >
-            Return to current ↦
+            <RotateCcwIcon className="h-3 w-3" />
+            Reset session
           </Button>
-        )}
+        </div>
       </nav>
     </div>
   )
