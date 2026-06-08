@@ -285,6 +285,14 @@ function HubFooter({ onNavigate }: { onNavigate: (path: string) => void }) {
         >
           Privacy Policy
         </button>
+        {' '}&middot;{' '}
+        <button
+          type="button"
+          onClick={() => onNavigate('/terms')}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Terms of Service
+        </button>
       </p>
     </footer>
   )
