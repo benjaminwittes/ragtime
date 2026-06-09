@@ -57,6 +57,11 @@ id = "06040b3266fb4555a70204af4907b455"
 #   SUPABASE_SERVICE_ROLE_KEY — Supabase Secret API Key (sb_secret_...)
 #
 # Optional bindings the code respects (defaults apply if unset):
+#   ANTHROPIC_API_KEY_DEMO    — internal/demo (Lawfare-password) Anthropic key;
+#                               splits internal spend from external paid spend on
+#                               Anthropic's per-key dashboard. Falls back to
+#                               ANTHROPIC_API_KEY when unset, so safe to deploy
+#                               before the key exists.
 #   DEMO_PASSWORD             — overrides built-in default
 #   BALANCE_FLOOR_CENTS       — default 5
 #   MARKUP                    — default 1.35
