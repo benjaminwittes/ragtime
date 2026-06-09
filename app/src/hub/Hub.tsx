@@ -66,11 +66,11 @@ function HubHeader() {
  * corpus card below (and inside each spoke's holdings band). */
 const HUB_STATS: { num: string; label: string }[] = [
   { num: '1.1M', label: 'court cases' },
-  { num: '60K', label: 'U.S. Code §§' },
-  { num: '228K', label: 'CFR §§' },
+  { num: '60k', label: 'U.S. Code §§' },
+  { num: '228k', label: 'CFR §§' },
   { num: '2,145', label: 'OLC opinions' },
-  { num: '314K', label: 'FRUS documents' },
-  { num: '23K', label: 'Lawfare pieces' },
+  { num: '314k', label: 'FRUS documents' },
+  { num: '23k', label: 'Lawfare pieces' },
 ]
 
 function HubHero() {
