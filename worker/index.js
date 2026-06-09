@@ -539,7 +539,10 @@ async function askHandler(request, env, ctx) {
     }
     ctx.waitUntil(env.QUOTA.put(dayKey, String(dayCount + 1), { expirationTtl: 172800 }));
     authMode = "demo";
-    apiKey = env.ANTHROPIC_API_KEY;
+    // Internal/demo (Lawfare-password) usage bills the dedicated demo key so
+    // Anthropic's per-key dashboard separates internal spend from external paid
+    // spend. Falls back to the main key if the demo key isn't set yet.
+    apiKey = env.ANTHROPIC_API_KEY_DEMO || env.ANTHROPIC_API_KEY;
     if (!apiKey) return json({ error: { message: "Worker not configured — ANTHROPIC_API_KEY missing" } }, 500);
   } else if (user_api_key) {
     authMode = "byok";
@@ -954,7 +957,9 @@ async function resolveCorpusAuth(request, env, ctx, provider, body) {
     const demoPw = env.DEMO_PASSWORD || DEFAULT_DEMO_PASSWORD;
     if (!constantTimeEqual(password, demoPw)) return json({ error: { message: "Invalid demo password" } }, 401);
     if (!env.ANTHROPIC_API_KEY) return json({ error: { message: "Worker not configured — ANTHROPIC_API_KEY missing" } }, 500);
-    return { authMode: "demo", apiKey: env.ANTHROPIC_API_KEY, userId: null, account: null };
+    // Internal/demo usage bills the dedicated demo key (falls back to the main
+    // key when unset) so internal vs external spend separate on Anthropic's side.
+    return { authMode: "demo", apiKey: env.ANTHROPIC_API_KEY_DEMO || env.ANTHROPIC_API_KEY, userId: null, account: null };
   }
   if (userApiKey) {
     return { authMode: "byok", apiKey: userApiKey, userId: null, account: null };
@@ -7424,6 +7429,7 @@ export {
   webhookHandler,
   checkIpRateLimit,
   checkUserRateLimit,
+  resolveCorpusAuth,
   withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,

@@ -21,6 +21,7 @@ import {
   webhookHandler,
   checkIpRateLimit,
   checkUserRateLimit,
+  resolveCorpusAuth,
   withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,
@@ -3485,5 +3486,55 @@ describe("hubFanoutConcurrency", () => {
   it("honors a valid override (incl. 1 = fully serial)", () => {
     expect(hubFanoutConcurrency({ HUB_FANOUT_CONCURRENCY: "1" })).toBe(1);
     expect(hubFanoutConcurrency({ HUB_FANOUT_CONCURRENCY: "3" })).toBe(3);
+  });
+});
+
+// ============================================================================
+// resolveCorpusAuth — demo/internal key split. Internal (Lawfare-password) usage
+// must bill ANTHROPIC_API_KEY_DEMO when present so Anthropic's per-key dashboard
+// separates internal spend from external paid spend, falling back to the main
+// ANTHROPIC_API_KEY when the demo key isn't set (safe to deploy before the key
+// exists). Only the demo branch is exercised here — the paid branch needs a
+// valid JWT + account and is covered by the auth/JWT tests.
+// ============================================================================
+describe("resolveCorpusAuth — internal/demo key split", () => {
+  function mockKV(initial = {}) {
+    const store = { ...initial };
+    return {
+      store,
+      get: vi.fn(async (k) => (k in store ? store[k] : null)),
+      put: vi.fn(async (k, v) => { store[k] = v; })
+    };
+  }
+  const ctx = { waitUntil: (p) => p };
+  // No Authorization header → password branch; CF-Connecting-IP for the IP limiter.
+  const demoRequest = () =>
+    new Request("https://worker.test/corpus/plan", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "9.9.9.9" }
+    });
+
+  it("uses the dedicated demo key when ANTHROPIC_API_KEY_DEMO is set", async () => {
+    const env = {
+      QUOTA: mockKV(),
+      DEMO_PASSWORD: "sekret",
+      ANTHROPIC_API_KEY: "sk-main",
+      ANTHROPIC_API_KEY_DEMO: "sk-demo",
+    };
+    const auth = await resolveCorpusAuth(demoRequest(), env, ctx, "anthropic", { password: "sekret" });
+    expect(auth.authMode).toBe("demo");
+    expect(auth.apiKey).toBe("sk-demo");
+  });
+
+  it("falls back to the main key when ANTHROPIC_API_KEY_DEMO is unset", async () => {
+    const env = {
+      QUOTA: mockKV(),
+      DEMO_PASSWORD: "sekret",
+      ANTHROPIC_API_KEY: "sk-main",
+      // ANTHROPIC_API_KEY_DEMO intentionally absent
+    };
+    const auth = await resolveCorpusAuth(demoRequest(), env, ctx, "anthropic", { password: "sekret" });
+    expect(auth.authMode).toBe("demo");
+    expect(auth.apiKey).toBe("sk-main");
   });
 });
