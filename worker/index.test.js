@@ -22,6 +22,13 @@ import {
   checkIpRateLimit,
   checkUserRateLimit,
   resolveCorpusAuth,
+  LEGAL_ADVICE_CANDOR_NOTE,
+  buildPlanningSystem,
+  buildUscPlanningSystem,
+  buildCfrPlanningSystem,
+  buildOlcPlanningSystem,
+  buildLawfarePlanningSystem,
+  buildFrusPlanningSystem,
   withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,
@@ -3537,4 +3544,44 @@ describe("resolveCorpusAuth — internal/demo key split", () => {
     expect(auth.authMode).toBe("demo");
     expect(auth.apiKey).toBe("sk-main");
   });
+});
+
+// ============================================================================
+// LEGAL_ADVICE_CANDOR_NOTE — the ToS §3 "not legal advice" candor note, emitted
+// by every AMA planner when a question reads like a request for legal advice.
+// These tests guard (a) the EXACT note text (Ben/Scott-approved; must not drift
+// — it's rendered verbatim to users and ties back to the ToS) and (b) that all
+// six planner system prompts actually carry the trigger rule, so a future
+// prompt refactor can't silently drop the note from a corpus. (Calibration —
+// which questions fire vs stay silent — is an LLM behavior, exercised live, not
+// unit-testable here.)
+// ============================================================================
+describe("LEGAL_ADVICE_CANDOR_NOTE (ToS §3 not-legal-advice note)", () => {
+  it("matches the approved text verbatim", () => {
+    expect(LEGAL_ADVICE_CANDOR_NOTE).toBe(
+      "As stated in RAGtime's Terms of Service, this service does not provide legal advice. " +
+      "This output is research. Nothing here creates an attorney-client relationship, or " +
+      "provides legal representation or advice to any person. It is not a substitute for a " +
+      "qualified attorney's judgment on any person's specific situation."
+    );
+  });
+
+  const planners = {
+    litigation: buildPlanningSystem,
+    usc: buildUscPlanningSystem,
+    cfr: buildCfrPlanningSystem,
+    olc: buildOlcPlanningSystem,
+    lawfare: buildLawfarePlanningSystem,
+    frus: buildFrusPlanningSystem,
+  };
+
+  for (const [name, build] of Object.entries(planners)) {
+    it(`${name} planner carries the not-legal-advice trigger + verbatim note`, () => {
+      const prompt = build();
+      expect(prompt).toContain("NOT-LEGAL-ADVICE NOTE");
+      expect(prompt).toContain("UNDER-fire");
+      // The exact note must be embedded (JSON.stringify'd) so the planner emits it verbatim.
+      expect(prompt).toContain(JSON.stringify(LEGAL_ADVICE_CANDOR_NOTE));
+    });
+  }
 });

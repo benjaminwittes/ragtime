@@ -1186,6 +1186,21 @@ var AMA_SCHEMA_DOC = [
   '- Read-only: only SELECT statements are accepted; LIMIT yourself to ≤ 10000 rows per query.'
 ].join('\n');
 
+// Operationalizes ToS §3 ("Not professional advice") at query time. Shared
+// verbatim across all six AMA planners (litigation, USC, CFR, OLC, Lawfare,
+// FRUS): when — and only when — a question reads like a request for legal
+// advice about whether some conduct is lawful or what someone should do in
+// their own situation, the planner appends this exact note to candor_notes.
+// Calibrated to UNDER-fire so it never becomes wallpaper; neutral research
+// framing stays silent. The note text is Ben/Scott-approved and ties back to
+// the ToS; keep it verbatim (a unit test asserts the exact string).
+const LEGAL_ADVICE_CANDOR_NOTE = "As stated in RAGtime's Terms of Service, this service does not provide legal advice. This output is research. Nothing here creates an attorney-client relationship, or provides legal representation or advice to any person. It is not a substitute for a qualified attorney's judgment on any person's specific situation.";
+const LEGAL_ADVICE_PLANNER_RULE = [
+  '- NOT-LEGAL-ADVICE NOTE. If — and ONLY if — the question reads like a request for legal advice about whether some conduct is lawful, or what a person should do in their own situation — however phrased: first/second person ("can I/we do X", "am I liable", "do I have a case", "what are my options", "how do I…") OR impersonal legality-of-conduct ("is it legal to X", "is it legal for a person to X", "is X allowed", "would someone be breaking the law if…") — you MUST include this EXACT string, verbatim and unaltered, as one of the candor_notes:',
+  '    ' + JSON.stringify(LEGAL_ADVICE_CANDOR_NOTE),
+  '  Calibrate to UNDER-fire. Neutral research framing must NOT trigger it: "what cases involve X", "what does this section/statute say", "how have courts treated X", "what is the penalty for X under the statute", "list regulations about Y" are RESEARCH, not advice-seeking — stay silent. When in doubt, do NOT add the note.'
+].join('\n');
+
 function buildPlanningSystem() {
   return [
     'You are the planner for an agentic "ask me anything" tool over a federal litigation database. Your job is to look at a user question and the current scope, then return a JSON plan describing how you would answer it.',
@@ -1256,6 +1271,7 @@ function buildPlanningSystem() {
     '- PERFORMANCE for narrowed scopes (esp. > 100K cases): FTS-first patterns are dramatically faster. To find docket entries matching some text WITHIN a scope, write "SELECT cl_id FROM scoped_docket_entries WHERE fts @@ ..." rather than joining scoped_cases × scoped_docket_entries first. Postgres can use the FTS GIN index on docket_entries.fts directly; the scope filter then narrows the much smaller FTS result set. Avoid heavy joins of scoped_cases × scoped_docket_entries with an FTS predicate at the join level — those reliably hit the statement timeout on six-figure scopes.',
     '- WHEN THE CURRENT SCOPE IS NARROWED (cl_ids list provided): use the names "scoped_cases" instead of "cases" and "scoped_docket_entries" instead of "docket_entries". The runner substitutes these names with inline subqueries already filtered to the scope. CRITICAL: reference these names ONLY after FROM or JOIN keywords, and DO NOT alias them — write "FROM scoped_cases WHERE cause LIKE ..." (good), not "FROM scoped_cases sc WHERE sc.cause LIKE ..." (will break). To qualify a column, use the unaliased name: "scoped_cases.cl_id" works. WHEN SCOPE IS THE FULL DATABASE: use the regular table names "cases" and "docket_entries" (and you may alias them freely).',
     '- For sampling at top-of-stack, you can use "ORDER BY random()" but be aware that\'s expensive on huge tables; prefer "ORDER BY date_filed DESC" with a LIMIT if you want a recency-biased sample.',
+    LEGAL_ADVICE_PLANNER_RULE,
     '- Output strict JSON only. No markdown. No code fences. No prose outside the object.'
   ].join('\n');
 }
@@ -2862,6 +2878,7 @@ function buildUscPlanningSystem() {
     "- CONSTITUTION GAP. When an answer turns substantially on Article II or the Bill of Rights, add a candor_note that RAGtime does not hold the constitutional text yet (post-launch acquisition).",
     "- NEVER editorialize. USC sections are binding text; describe what they say, do not opine on policy or interpretation beyond what's textually grounded.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (section_ids list provided): use the name \"scoped_usc_sections\" instead of \"usc_sections\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. WHEN SCOPE IS THE FULL CORPUS: use \"usc_sections\".",
+    LEGAL_ADVICE_PLANNER_RULE,
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
   ].join("\n");
 }
@@ -3537,6 +3554,7 @@ function buildCfrPlanningSystem() {
     "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned query with strong OR coverage is better than five literal-term queries.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (section_ids list provided): use the name \"scoped_cfr_sections\" instead of \"cfr_sections\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. WHEN SCOPE IS THE FULL CORPUS: use \"cfr_sections\".",
     "- NEVER editorialize. CFR sections are binding regulatory text; describe what they say, do not opine on compliance burden or regulatory policy.",
+    LEGAL_ADVICE_PLANNER_RULE,
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
   ].join("\n");
 }
@@ -4201,6 +4219,7 @@ function buildOlcPlanningSystem() {
     "  WORKED EXAMPLE — *'OLC opinions on the President's power to remove agency heads'*: don't just FTS 'remove agency heads'. Fan: websearch_to_tsquery('english', '(\"removal power\" OR \"power to remove\" OR \"at-will removal\" OR \"removability\") AND (\"agency\" OR \"officer\" OR \"principal officer\" OR \"inferior officer\")'). Add Article II as a candor-note hook since the constitutional dimension is dispositive for many of these.",
     "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned query with strong OR coverage is better than five literal-term queries.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (opinion_ids list provided): use the name \"scoped_olc_opinions\" instead of \"olc_opinions\". The runner substitutes this with an inline subquery already filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_olc_opinions WHERE date_issued > '2010-01-01'\" (good), not \"FROM scoped_olc_opinions o WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"olc_opinions\".",
+    LEGAL_ADVICE_PLANNER_RULE,
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
   ].join("\n");
 }
@@ -4909,6 +4928,7 @@ function buildLawfarePlanningSystem() {
     "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget; too many queries inflate the input and risk truncation. A single well-fanned query with strong OR coverage beats five literal-term queries.",
     "- COMMENTARY DISCIPLINE (bake this into your plan). Lawfare is analysis/opinion. You are planning to SYNTHESIZE WHAT LAWFARE AUTHORS SAID — never to adjudicate which view is correct. On CONTESTED questions, plan queries that surface the RANGE of published positions (don't pre-select for one side). Distinguish reporting vs. argument vs. prediction where the source does.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (article_ids list provided): use the name \"scoped_lawfare_documents\" instead of \"lawfare_ama_source\". The runner substitutes this with an inline subquery over the view, already filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_lawfare_documents WHERE published_date > '2024-01-01'\" (good), not \"FROM scoped_lawfare_documents d WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"lawfare_ama_source\".",
+    LEGAL_ADVICE_PLANNER_RULE,
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
   ].join("\n");
 }
@@ -5761,6 +5781,7 @@ function buildFrusPlanningSystem() {
     "- ANALYTICAL COUNTS. Always include the denominator (corpus size or the relevant subset) in candor_notes.",
     "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer. A single well-fanned query with strong OR coverage is better than five literal-term queries.",
     "- WHEN THE CURRENT SCOPE IS NARROWED (document_ids list provided): use the name \"scoped_frus_documents\" instead of \"frus_documents\". The runner substitutes this with an inline subquery filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_frus_documents WHERE classification = 'Secret'\" (good), not \"FROM scoped_frus_documents d WHERE ...\" (will break). WHEN SCOPE IS THE FULL CORPUS: use \"frus_documents\".",
+    LEGAL_ADVICE_PLANNER_RULE,
     "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
   ].join("\n");
 }
@@ -7430,6 +7451,13 @@ export {
   checkIpRateLimit,
   checkUserRateLimit,
   resolveCorpusAuth,
+  LEGAL_ADVICE_CANDOR_NOTE,
+  buildPlanningSystem,
+  buildUscPlanningSystem,
+  buildCfrPlanningSystem,
+  buildOlcPlanningSystem,
+  buildLawfarePlanningSystem,
+  buildFrusPlanningSystem,
   withStatementTimeoutRetry,
   supabaseGetAccount,
   verifyJwt,
