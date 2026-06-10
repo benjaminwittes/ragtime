@@ -247,8 +247,12 @@ async function withCorpusCache(request, env, ctx, path, ttl, handler) {
   return resp;
 }
 
-export default {
-  async fetch(request, env, ctx) {
+// Route + handle one request. Extracted from default.fetch so (a) the fetch
+// wrapper below can time and log every request uniformly, and (b) the service-
+// health probes in the 30-min cron can exercise a real endpoint path in-process
+// (a Worker can't reliably fetch its own URL — self-requests trip recursion
+// protection).
+async function routeRequest(request, env, ctx) {
     if (request.method === "OPTIONS") return corsResponse();
     const url = new URL(request.url);
     const path = url.pathname;
@@ -415,16 +419,50 @@ export default {
     } catch (err) {
       return json({ error: { message: "Internal error: " + (err.message || String(err)) } }, 500);
     }
+}
+
+// Content-free per-request log line ({ev:"req"}). One line per request in
+// Workers Logs (observability is enabled in wrangler.toml) gives per-endpoint
+// latency / error-rate / cache-hit series with no new infrastructure — the
+// service-health signal the ops floor was missing. NO query text and NO user
+// identifiers, matching the hub_fanout log's posture. OPTIONS preflights are
+// skipped as noise; the path is length-capped so scanner junk on 404s can't
+// bloat log lines.
+function logRequest(request, resp, ms) {
+  try {
+    if (request.method === "OPTIONS") return;
+    const line = {
+      ev: "req",
+      path: new URL(request.url).pathname.slice(0, 80),
+      method: request.method,
+      status: resp.status,
+      ms
+    };
+    const cache = resp.headers.get("X-RT-Cache");
+    if (cache) line.cache = cache;
+    (resp.status >= 500 ? console.error : console.log)(JSON.stringify(line));
+  } catch { /* logging must never break the response */ }
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const t0 = Date.now();
+    const resp = await routeRequest(request, env, ctx);
+    logRequest(request, resp, Date.now() - t0);
+    return resp;
   },
 
   // Cron triggers (see wrangler.toml [triggers]). Two schedules:
   //   "0 13 * * 1"    weekly  → billing reconciliation
-  //   anything else   frequent→ off-box pipeline liveness check
+  //   anything else   frequent→ off-box pipeline liveness check (data
+  //                   freshness) + service-health probes (user-facing
+  //                   latency/errors)
   async scheduled(event, env, ctx) {
     if (event.cron === "0 13 * * 1") {
       ctx.waitUntil(runReconciliation(env));
     } else {
       ctx.waitUntil(runPipelineLivenessCheck(env));
+      ctx.waitUntil(runServiceHealthCheck(env, ctx));
     }
   }
 };
@@ -6619,6 +6657,105 @@ async function runPipelineLivenessCheck(env) {
   }
 }
 
+// ---------------- Service-health probes (frequent Cron Trigger) ----------------
+// The liveness check above watches DATA freshness (is the pipeline writing?).
+// These probes watch SERVICE health (can a user actually query, and how fast?)
+// — the gap the robustness recon flagged: nothing observed user-facing
+// latency/error rate. Each probe exercises a real serving path and measures
+// wall-clock. Every run logs {ev:"health", ...} (a free 30-min latency
+// heartbeat series in Workers Logs, alongside the per-request {ev:"req"}
+// lines); Slack alerts fire on failure or slowness, muted via KV for
+// HEALTH_ALERT_MUTE_MIN after each alert so a sustained outage pages once,
+// not every 30 minutes. No "all clear" heartbeat to Slack (same noise-down
+// posture as reconciliation).
+
+var DEFAULT_HEALTH_DB_SLOW_MS = 5000;    // indexed single-row PostgREST reads run <300ms healthy
+var DEFAULT_HEALTH_HUB_SLOW_MS = 20000;  // hub cache-miss fan-out: ~0.5-2s typical, broad-term tail ~10s
+var DEFAULT_HEALTH_ALERT_MUTE_MIN = 120;
+
+// One probe: run fn, measure, never throw. detail carries an error message
+// (failure) or a short annotation like the cache disposition (success).
+async function runHealthProbe(name, slowMs, fn) {
+  const t0 = Date.now();
+  try {
+    const detail = await fn();
+    const ms = Date.now() - t0;
+    return { name, ok: true, slow: ms > slowMs, ms, detail: detail || null };
+  } catch (e) {
+    return { name, ok: false, slow: false, ms: Date.now() - t0, detail: (e && e.message) || String(e) };
+  }
+}
+
+// Pure: probe results -> alert lines (empty array = all healthy). Split out
+// for unit tests.
+function healthAlertLines(results) {
+  const lines = [];
+  for (const r of results) {
+    if (!r.ok) lines.push(`${r.name}: FAILED after ${r.ms}ms (${String(r.detail).slice(0, 200)})`);
+    else if (r.slow) lines.push(`${r.name}: slow — ${r.ms}ms`);
+  }
+  return lines;
+}
+
+async function runServiceHealthCheck(env, ctx) {
+  const dbSlow = parseInt(env.HEALTH_DB_SLOW_MS || DEFAULT_HEALTH_DB_SLOW_MS, 10);
+  const hubSlow = parseInt(env.HEALTH_HUB_SLOW_MS || DEFAULT_HEALTH_HUB_SLOW_MS, 10);
+
+  const results = await Promise.all([
+    // Corpus DB read path: PostgREST, indexed single-row read. Catches the
+    // corpus project being down, paused, or under enough load that even a
+    // trivial read crawls.
+    runHealthProbe("corpus_db", dbSlow, async () => {
+      const r = await corpusFetch(env, "/rest/v1/cases?select=cl_id&limit=1");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await r.text();
+    }),
+    // APP (billing/auth) DB read path — the plane sign-in and balances live on.
+    runHealthProbe("app_db", dbSlow, async () => {
+      const r = await supabaseFetch(env, "/rest/v1/accounts?select=user_id&limit=1");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await r.text();
+    }),
+    // Hub keyword end-to-end through the real route (edge cache wrapper +
+    // 5-corpus FTS fan-out) — the known weak spot under load. In-process via
+    // routeRequest (a Worker can't fetch itself). Fixed moderate-frequency
+    // term keeps the cost realistic but bounded; the 300s edge TTL has lapsed
+    // by the next 30-min run, so probes usually measure a genuine fan-out.
+    // The fixed CF-Connecting-IP gives the probe its own rate-limit key
+    // (1 req/30min — never trips, never collides with a real user).
+    runHealthProbe("hub_keyword", hubSlow, async () => {
+      const req = new Request("https://health-probe.internal/corpus/hub/keyword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "10.255.255.1" },
+        body: JSON.stringify({ query: "certiorari" })
+      });
+      const resp = await routeRequest(req, env, ctx);
+      if (resp.status !== 200) {
+        throw new Error(`HTTP ${resp.status}: ${String(await resp.text()).slice(0, 200)}`);
+      }
+      return resp.headers.get("X-RT-Cache") || null;
+    })
+  ]);
+
+  try { console.log(JSON.stringify({ ev: "health", results })); } catch { /* never throw from logging */ }
+
+  const lines = healthAlertLines(results);
+  if (lines.length === 0) return;
+
+  // Mute window: only the first breach in HEALTH_ALERT_MUTE_MIN pages Slack.
+  // KV trouble must not swallow the alert — on any KV error we alert anyway.
+  try {
+    if (env.QUOTA) {
+      const muted = await env.QUOTA.get("health:alert-mute");
+      if (muted) return;
+      await env.QUOTA.put("health:alert-mute", "1", {
+        expirationTtl: parseInt(env.HEALTH_ALERT_MUTE_MIN || DEFAULT_HEALTH_ALERT_MUTE_MIN, 10) * 60
+      });
+    }
+  } catch { /* fall through to notify */ }
+  await notify(env, `service health:\n${lines.map((l) => `• ${l}`).join("\n")}`);
+}
+
 async function webhookHandler(request, env) {
   const sig = request.headers.get("Stripe-Signature") || "";
   const rawBody = await request.text();
@@ -7539,5 +7676,8 @@ export {
   hubFanoutConcurrency,
   is57014,
   parseExplainTotalCost,
-  heavyCostThreshold
+  heavyCostThreshold,
+  healthAlertLines,
+  runHealthProbe,
+  logRequest
 };

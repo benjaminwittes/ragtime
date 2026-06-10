@@ -11,10 +11,19 @@ enabled = true
 # Scheduled cron triggers (dispatched by event.cron in index.js scheduled()):
 #   "0 13 * * 1"     weekly, Mon 13:00 UTC (~9am ET) — billing reconciliation
 #                    (balance_cents vs sum(ledger), Slack-alert on drift).
-#   "*/30 * * * *"   every 30 min — OFF-BOX pipeline liveness check: alerts if
-#                    the corpus has stopped receiving new documents (the
-#                    pipeline + its watchdog run on Mac2 and can't detect the
-#                    box itself dying; this runs on Cloudflare, so it can).
+#   "*/30 * * * *"   every 30 min — two off-box checks:
+#                    (1) pipeline liveness: alerts if the corpus has stopped
+#                        receiving new documents (the pipeline + its watchdog
+#                        run on Mac2 and can't detect the box itself dying;
+#                        this runs on Cloudflare, so it can);
+#                    (2) service-health probes: corpus DB read, APP DB read,
+#                        and an end-to-end hub keyword fan-out — measures
+#                        user-facing latency, Slack-alerts on failure/slow
+#                        (thresholds HEALTH_DB_SLOW_MS / HEALTH_HUB_SLOW_MS,
+#                        repeat alerts muted HEALTH_ALERT_MUTE_MIN, default
+#                        120). Every run also logs {ev:"health"}; every
+#                        request logs {ev:"req"} — both content-free, visible
+#                        in Workers Logs (observability above).
 [triggers]
 crons = ["0 13 * * 1", "*/30 * * * *"]
 

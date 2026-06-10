@@ -110,7 +110,10 @@ import {
   hubFanoutConcurrency,
   is57014,
   parseExplainTotalCost,
-  heavyCostThreshold
+  heavyCostThreshold,
+  healthAlertLines,
+  runHealthProbe,
+  logRequest
 } from "./index.js";
 
 // base64url-encode a JS object (no padding) for building fake JWT segments.
@@ -3584,4 +3587,114 @@ describe("LEGAL_ADVICE_CANDOR_NOTE (ToS §3 not-legal-advice note)", () => {
       expect(prompt).toContain(JSON.stringify(LEGAL_ADVICE_CANDOR_NOTE));
     });
   }
+});
+
+describe("service-health probes (30-min cron)", () => {
+  describe("healthAlertLines", () => {
+    it("returns no lines when every probe is healthy", () => {
+      expect(healthAlertLines([
+        { name: "corpus_db", ok: true, slow: false, ms: 120, detail: null },
+        { name: "hub_keyword", ok: true, slow: false, ms: 900, detail: "MISS" }
+      ])).toEqual([]);
+    });
+
+    it("flags a failed probe with its duration and detail", () => {
+      const lines = healthAlertLines([
+        { name: "corpus_db", ok: false, slow: false, ms: 30000, detail: "HTTP 503" }
+      ]);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("corpus_db");
+      expect(lines[0]).toContain("FAILED after 30000ms");
+      expect(lines[0]).toContain("HTTP 503");
+    });
+
+    it("flags a slow-but-successful probe", () => {
+      const lines = healthAlertLines([
+        { name: "hub_keyword", ok: true, slow: true, ms: 45000, detail: "MISS" }
+      ]);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("slow — 45000ms");
+    });
+
+    it("reports each unhealthy probe and skips the healthy ones", () => {
+      const lines = healthAlertLines([
+        { name: "corpus_db", ok: true, slow: false, ms: 100, detail: null },
+        { name: "app_db", ok: false, slow: false, ms: 5000, detail: "HTTP 500" },
+        { name: "hub_keyword", ok: true, slow: true, ms: 30000, detail: null }
+      ]);
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toContain("app_db");
+      expect(lines[1]).toContain("hub_keyword");
+    });
+
+    it("truncates a runaway error detail to 200 chars", () => {
+      const lines = healthAlertLines([
+        { name: "corpus_db", ok: false, slow: false, ms: 1, detail: "x".repeat(500) }
+      ]);
+      expect(lines[0].length).toBeLessThan(300);
+    });
+  });
+
+  describe("runHealthProbe", () => {
+    it("marks success under the slow threshold", async () => {
+      const r = await runHealthProbe("p", 5000, async () => "HIT");
+      expect(r).toMatchObject({ name: "p", ok: true, slow: false, detail: "HIT" });
+      expect(r.ms).toBeGreaterThanOrEqual(0);
+    });
+
+    it("marks slow when fn exceeds the threshold", async () => {
+      const r = await runHealthProbe("p", 0, async () => {
+        await new Promise((res) => setTimeout(res, 5));
+      });
+      expect(r.ok).toBe(true);
+      expect(r.slow).toBe(true);
+    });
+
+    it("captures a thrown error as ok:false without throwing", async () => {
+      const r = await runHealthProbe("p", 5000, async () => {
+        throw new Error("connection refused");
+      });
+      expect(r.ok).toBe(false);
+      expect(r.detail).toBe("connection refused");
+    });
+  });
+
+  describe("logRequest ({ev:'req'} per-request line)", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("logs a content-free line with path, method, status, ms", () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      logRequest(
+        new Request("https://x.test/corpus/hub/keyword", { method: "POST" }),
+        new Response("{}", { status: 200, headers: { "X-RT-Cache": "HIT" } }),
+        42
+      );
+      const line = JSON.parse(log.mock.calls[0][0]);
+      expect(line).toEqual({
+        ev: "req", path: "/corpus/hub/keyword", method: "POST", status: 200, ms: 42, cache: "HIT"
+      });
+    });
+
+    it("routes 5xx lines to console.error", () => {
+      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+      logRequest(
+        new Request("https://x.test/ask", { method: "POST" }),
+        new Response("oops", { status: 502 }),
+        7
+      );
+      expect(JSON.parse(err.mock.calls[0][0]).status).toBe(502);
+    });
+
+    it("skips OPTIONS preflights and caps scanner-junk paths at 80 chars", () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      logRequest(new Request("https://x.test/ask", { method: "OPTIONS" }), new Response(""), 1);
+      expect(log).not.toHaveBeenCalled();
+      logRequest(
+        new Request("https://x.test/" + "a".repeat(300), { method: "GET" }),
+        new Response("", { status: 404 }),
+        1
+      );
+      expect(JSON.parse(log.mock.calls[0][0]).path.length).toBe(80);
+    });
+  });
 });
