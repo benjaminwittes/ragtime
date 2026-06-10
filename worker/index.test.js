@@ -81,6 +81,12 @@ import {
   buildHubQueriesOlc,
   buildHubQueriesFrus,
   buildHubQueriesLawfare,
+  SEMANTIC_CORPORA,
+  parseSemanticSearchRequest,
+  vecLiteral,
+  stripChunkHeader,
+  rrfFuse,
+  buildSemanticMetaSql,
   ITEMS_BY_IDS_CAP,
   parseItemsByIdsRequest,
   buildItemsByIdsSql,
@@ -3695,6 +3701,88 @@ describe("service-health probes (30-min cron)", () => {
         1
       );
       expect(JSON.parse(log.mock.calls[0][0]).path.length).toBe(80);
+    });
+  });
+});
+
+describe("semantic search (pilot)", () => {
+  describe("parseSemanticSearchRequest", () => {
+    it("accepts a pilot corpus with defaults", () => {
+      const p = parseSemanticSearchRequest({ corpus: "olc", query: "executive privilege scope" });
+      expect(p).toEqual({ corpus: "olc", query: "executive privilege scope", k: 12 });
+    });
+    it("rejects non-pilot corpora (litigation is deliberately out)", () => {
+      expect(parseSemanticSearchRequest({ corpus: "litigation", query: "x" }).error).toMatch(/unsupported/i);
+      expect(parseSemanticSearchRequest({ corpus: "usc", query: "x" }).error).toMatch(/unsupported/i);
+      expect(parseSemanticSearchRequest({ query: "x" }).error).toBeTruthy();
+    });
+    it("pilot list is exactly olc/frus/lawfare", () => {
+      expect(SEMANTIC_CORPORA).toEqual(["olc", "frus", "lawfare"]);
+    });
+    it("rejects missing and oversize queries", () => {
+      expect(parseSemanticSearchRequest({ corpus: "olc" }).error).toMatch(/missing/i);
+      expect(parseSemanticSearchRequest({ corpus: "olc", query: "q".repeat(501) }).error).toMatch(/too long/i);
+    });
+    it("clamps k to [1, 50] and defaults junk to 12", () => {
+      expect(parseSemanticSearchRequest({ corpus: "frus", query: "q", k: 999 }).k).toBe(50);
+      expect(parseSemanticSearchRequest({ corpus: "frus", query: "q", k: 0 }).k).toBe(12);
+      expect(parseSemanticSearchRequest({ corpus: "frus", query: "q", k: "nope" }).k).toBe(12);
+      expect(parseSemanticSearchRequest({ corpus: "frus", query: "q", k: 5 }).k).toBe(5);
+    });
+  });
+
+  describe("vecLiteral", () => {
+    it("renders a pgvector input literal", () => {
+      expect(vecLiteral([0.5, -1, 0.0000004])).toBe("[0.500000,-1.000000,0.000000]");
+    });
+  });
+
+  describe("stripChunkHeader", () => {
+    it("drops the structural header before the first blank line", () => {
+      expect(stripChunkHeader("OLC Opinion: X\n2026-01-01\n\nThe body text.")).toBe("The body text.");
+    });
+    it("passes through header-less content", () => {
+      expect(stripChunkHeader("just body")).toBe("just body");
+    });
+  });
+
+  describe("rrfFuse", () => {
+    it("ranks a doc found by both branches above single-branch docs", () => {
+      const fused = rrfFuse(["a", "b", "c"], ["x", "a"], 10);
+      expect(fused[0].id).toBe("a");
+      expect(fused[0].matched).toBe("both");
+      expect(fused.map((f) => f.id).sort()).toEqual(["a", "b", "c", "x"]);
+    });
+    it("labels single-branch provenance", () => {
+      const fused = rrfFuse(["s1"], ["k1"], 10);
+      const byId = Object.fromEntries(fused.map((f) => [f.id, f.matched]));
+      expect(byId.s1).toBe("semantic");
+      expect(byId.k1).toBe("keyword");
+    });
+    it("respects k", () => {
+      const fused = rrfFuse(["a", "b", "c"], ["d", "e"], 2);
+      expect(fused.length).toBe(2);
+    });
+    it("handles an empty branch (degraded mode)", () => {
+      const fused = rrfFuse([], ["k1", "k2"], 10);
+      expect(fused.map((f) => f.id)).toEqual(["k1", "k2"]);
+    });
+  });
+
+  describe("buildSemanticMetaSql", () => {
+    it("targets the right table per corpus", () => {
+      expect(buildSemanticMetaSql("olc", ["1", "2"])).toContain("FROM olc_opinions");
+      expect(buildSemanticMetaSql("frus", ["3"])).toContain("FROM frus_documents");
+      expect(buildSemanticMetaSql("lawfare", ["4"])).toContain("FROM lawfare_documents");
+    });
+    it("sanitizes ids to integers (no injection through the id path)", () => {
+      const sql = buildSemanticMetaSql("olc", ["7; DROP TABLE x", "abc", "42"]);
+      expect(sql).toContain("IN (7,42)");
+      expect(sql).not.toContain("DROP");
+    });
+    it("returns null when no valid ids remain", () => {
+      expect(buildSemanticMetaSql("olc", ["abc"])).toBeNull();
+      expect(buildSemanticMetaSql("olc", [])).toBeNull();
     });
   });
 });
