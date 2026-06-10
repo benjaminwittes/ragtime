@@ -187,6 +187,10 @@ const CORPUS_CACHE_TTL = {
   "/corpus/olc/filter": 1800, "/corpus/olc/facets": 1800,
   "/corpus/frus/filter": 1800, "/corpus/frus/facets": 1800,
   "/corpus/lawfare/filter": 1800, "/corpus/lawfare/facets": 1800,
+  // Hybrid semantic+keyword retrieval (pilot corpora). Same body-keyed cache
+  // logic: response depends only on (corpus, query, k). A HIT also saves the
+  // OpenAI query-embedding call, not just the DB round-trips.
+  "/corpus/semantic-search": 300,
 };
 
 // path -> handler for the cacheable corpus endpoints (functions are hoisted).
@@ -206,6 +210,7 @@ const CORPUS_CACHE_HANDLERS = {
   "/corpus/frus/facets": (req, env, ctx) => corpusFrusFacetsHandler(req, env, ctx),
   "/corpus/lawfare/filter": (req, env, ctx) => corpusLawfareFilterHandler(req, env, ctx),
   "/corpus/lawfare/facets": (req, env, ctx) => corpusLawfareFacetsHandler(req, env, ctx),
+  "/corpus/semantic-search": (req, env, ctx) => corpusSemanticSearchHandler(req, env, ctx),
 };
 
 async function sha256Hex(s) {
@@ -6478,6 +6483,245 @@ async function corpusHubKeywordHandler(request, env, ctx) {
   return json({ query, per_corpus }, 200);
 }
 
+// ---------------- Semantic search (features stream #3, step 1) ----------------
+// Hybrid retrieval over the pgvector chunk store (public.doc_chunks on the
+// CORPUS project, built by ragtime-pipeline ingest/embeddings/). Pilot
+// corpora only: conceptual-prose corpora where embeddings beat keyword
+// search. The vector branch goes through the semantic_search() RPC (same
+// least-privilege shape as run_query); the keyword branch reuses the hub's
+// per-corpus FTS builders; the two fuse with Reciprocal Rank Fusion at the
+// DOCUMENT level so exact names and citations are never blurred away by
+// embedding similarity. This endpoint is the substrate "more like this" and
+// the semantically-routed Hub AMA build on.
+var SEMANTIC_CORPORA = ["olc", "frus", "lawfare"];
+var SEMANTIC_DEFAULT_K = 12;
+var SEMANTIC_MAX_K = 50;
+var SEMANTIC_QUERY_MAX_CHARS = 500;
+// Fetch more chunks than requested docs: long documents yield several
+// neighboring chunks, which collapse to one doc before fusion.
+var SEMANTIC_CHUNK_FACTOR = 3;
+var SEMANTIC_SNIPPET_CHARS = 280;
+var EMBEDDING_MODEL = "text-embedding-3-small";
+var EMBEDDING_DIMS = 1536;
+var RRF_K = 60; // standard RRF damping constant
+
+function parseSemanticSearchRequest(body) {
+  const corpus = String((body && body.corpus) || "").trim();
+  if (SEMANTIC_CORPORA.indexOf(corpus) < 0) {
+    return { error: "Unknown or unsupported corpus (semantic pilot: " + SEMANTIC_CORPORA.join(", ") + ")" };
+  }
+  const query = String((body && body.query) || "").trim();
+  if (!query) return { error: "Missing query" };
+  if (query.length > SEMANTIC_QUERY_MAX_CHARS) {
+    return { error: "Query too long (max " + SEMANTIC_QUERY_MAX_CHARS + " characters)" };
+  }
+  let k = parseInt((body && body.k) != null ? body.k : SEMANTIC_DEFAULT_K, 10);
+  if (!Number.isFinite(k) || k < 1) k = SEMANTIC_DEFAULT_K;
+  if (k > SEMANTIC_MAX_K) k = SEMANTIC_MAX_K;
+  return { corpus, query, k };
+}
+
+function vecLiteral(vec) {
+  // pgvector input literal. 6 decimals is comfortably lossless for halfvec.
+  let out = "[";
+  for (let i = 0; i < vec.length; i++) {
+    out += (i ? "," : "") + Number(vec[i]).toFixed(6);
+  }
+  return out + "]";
+}
+
+// Chunks carry their structural header (title/date/etc.) before the first
+// blank line; snippets shown next to real metadata strip it.
+function stripChunkHeader(content) {
+  const s = String(content || "");
+  const cut = s.indexOf("\n\n");
+  return cut >= 0 ? s.slice(cut + 2) : s;
+}
+
+// Document-level Reciprocal Rank Fusion. Inputs are ranked id lists (ids as
+// strings); returns ids ranked by summed 1/(RRF_K + rank), with provenance.
+function rrfFuse(semanticIds, keywordIds, k) {
+  const score = {};
+  const seen = {};
+  for (let i = 0; i < semanticIds.length; i++) {
+    const id = semanticIds[i];
+    score[id] = (score[id] || 0) + 1 / (RRF_K + i + 1);
+    seen[id] = seen[id] ? "both" : "semantic";
+  }
+  for (let i = 0; i < keywordIds.length; i++) {
+    const id = keywordIds[i];
+    score[id] = (score[id] || 0) + 1 / (RRF_K + i + 1);
+    seen[id] = seen[id] === "semantic" || seen[id] === "both" ? "both" : "keyword";
+  }
+  return Object.keys(score)
+    .sort(function (a, b) { return score[b] - score[a]; })
+    .slice(0, k)
+    .map(function (id) { return { id: id, score: score[id], matched: seen[id] }; });
+}
+
+// Per-corpus metadata lookup for fused result ids — mirrors the hub builders'
+// (id, title, context, date) shape so spoke UIs can render either source.
+function buildSemanticMetaSql(corpus, ids) {
+  const safe = ids
+    .map(function (x) { return String(parseInt(x, 10)); })
+    .filter(function (x) { return x !== "NaN"; });
+  if (!safe.length) return null;
+  const inList = safe.join(",");
+  if (corpus === "olc") {
+    return "SELECT id::text AS id, COALESCE(title,'(no title)') AS title, " +
+      "source AS context, date_issued::text AS date " +
+      "FROM olc_opinions WHERE id IN (" + inList + ")";
+  }
+  if (corpus === "frus") {
+    return "SELECT id::text AS id, COALESCE(title,'(no title)') AS title, " +
+      "COALESCE(place_name, volume_id) AS context, doc_date::text AS date " +
+      "FROM frus_documents WHERE id IN (" + inList + ")";
+  }
+  if (corpus === "lawfare") {
+    return "SELECT id::text AS id, COALESCE(title,'(untitled)') AS title, " +
+      "content_type AS context, published_date::text AS date " +
+      "FROM lawfare_documents WHERE id IN (" + inList + ")";
+  }
+  throw new Error("Unknown corpus: " + corpus);
+}
+
+async function embedQuery(env, query) {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error("Semantic search not configured (no embedding key)");
+  }
+  const r = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + env.OPENAI_API_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ model: EMBEDDING_MODEL, input: query, dimensions: EMBEDDING_DIMS })
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error("Embedding API " + r.status + ": " + String(t).slice(0, 200));
+  }
+  const data = await r.json();
+  const vec = data && data.data && data.data[0] && data.data[0].embedding;
+  if (!Array.isArray(vec) || vec.length !== EMBEDDING_DIMS) {
+    throw new Error("Embedding API returned unexpected shape");
+  }
+  return vec;
+}
+
+async function corpusSemanticSearchHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseSemanticSearchRequest(body);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  const { corpus, query, k } = parsed;
+
+  const t0 = Date.now();
+  let vec;
+  try {
+    vec = await embedQuery(env, query);
+  } catch (e) {
+    return json({ error: { message: e && e.message ? e.message : String(e) } }, 502);
+  }
+
+  // Vector + keyword branches in parallel. Either branch may fail without
+  // failing the request (degraded results beat a 502); both failing is an
+  // error. The vector branch over-fetches chunks (SEMANTIC_CHUNK_FACTOR) so
+  // multi-chunk documents collapse to one entry before fusion.
+  const chunkK = Math.min(k * SEMANTIC_CHUNK_FACTOR, 50);
+  const [semOut, ftsOut] = await Promise.all([
+    (async function () {
+      const r = await corpusFetch(env, "/rest/v1/rpc/semantic_search", {
+        method: "POST",
+        body: JSON.stringify({ p_corpus: corpus, p_embedding: vecLiteral(vec), p_k: chunkK })
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error("semantic_search " + r.status + ": " + String(t).slice(0, 200));
+      }
+      return r.json();
+    })().then(function (rows) { return { rows: rows }; },
+              function (e) { return { error: e && e.message ? e.message : String(e) }; }),
+    runHubKeywordForCorpus(env, corpus, escSqlLit(query), k)
+      .then(function (out) { return { out: out }; },
+            function (e) { return { error: e && e.message ? e.message : String(e) }; })
+  ]);
+
+  if (semOut.error && ftsOut.error) {
+    return json({ error: { message: "semantic: " + semOut.error + "; keyword: " + ftsOut.error } }, 502);
+  }
+
+  // Collapse chunks -> documents, keeping each doc's best (first) chunk for
+  // the snippet and its similarity.
+  const semDocs = [];
+  const semById = {};
+  const chunkRows = (semOut.rows || []);
+  for (let i = 0; i < chunkRows.length; i++) {
+    const row = chunkRows[i];
+    const id = String(row.source_id);
+    if (!semById[id]) {
+      semById[id] = {
+        similarity: row.similarity,
+        snippet: stripChunkHeader(row.content).slice(0, SEMANTIC_SNIPPET_CHARS)
+      };
+      semDocs.push(id);
+    }
+  }
+  const ftsResults = (ftsOut.out && ftsOut.out.results) || [];
+  const ftsIds = ftsResults.map(function (r) { return String(r.id); });
+
+  const fused = rrfFuse(semDocs, ftsIds, k);
+
+  // One metadata query covers every fused id (semantic-only docs have no
+  // title/date yet — the chunk store deliberately doesn't duplicate them).
+  let meta = {};
+  const metaSql = buildSemanticMetaSql(corpus, fused.map(function (f) { return f.id; }));
+  if (metaSql) {
+    try {
+      const rows = await corpusRunQuery(env, metaSql);
+      for (let i = 0; i < rows.length; i++) meta[rows[i].id] = rows[i];
+    } catch (e) {
+      // Fall through: results ship with snippets only.
+    }
+  }
+
+  const results = fused.map(function (f) {
+    const m = meta[f.id] || {};
+    const sem = semById[f.id] || {};
+    return {
+      id: f.id,
+      title: m.title || "(no title)",
+      context: m.context || null,
+      date: m.date || null,
+      matched: f.matched,
+      score: f.score,
+      similarity: sem.similarity != null ? sem.similarity : null,
+      snippet: sem.snippet || null
+    };
+  });
+
+  // Content-free operational log (NO query text), same series as hub_fanout.
+  try {
+    console.log(JSON.stringify({
+      ev: "semantic", corpus: corpus, ms: Date.now() - t0, k: k,
+      sem_n: semDocs.length, fts_n: ftsIds.length,
+      sem_err: semOut.error ? 1 : 0, fts_err: ftsOut.error ? 1 : 0
+    }));
+  } catch { /* logging must never break the response */ }
+
+  return json({
+    corpus: corpus,
+    query: query,
+    results: results,
+    branches: {
+      semantic: semOut.error ? { error: semOut.error } : { count: semDocs.length },
+      keyword: ftsOut.error ? { error: ftsOut.error } : { count: ftsIds.length }
+    }
+  }, 200);
+}
+
 async function corpusEntriesHandler(request, env, ctx) {
   const rl = await checkIpRateLimit(request, env, ctx);
   if (rl) return rl;
@@ -7649,6 +7893,12 @@ export {
   buildHubQueriesOlc,
   buildHubQueriesFrus,
   buildHubQueriesLawfare,
+  SEMANTIC_CORPORA,
+  parseSemanticSearchRequest,
+  vecLiteral,
+  stripChunkHeader,
+  rrfFuse,
+  buildSemanticMetaSql,
   ITEMS_BY_IDS_CAP,
   parseItemsByIdsRequest,
   buildItemsByIdsSql,
