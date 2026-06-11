@@ -12,7 +12,7 @@ export const accessAndCostEntry: DocsEntry = {
   title: 'Access & Cost',
   summary: 'Free search, bring-your-own-key, or a Lawfare-billed prepaid balance — and how charges work.',
   scope: { kind: 'global' },
-  order: 3,
+  order: 4,
   content: `
 RAGtime has three access modes, side by side. You pick one in **AI access**
 (top right). To be clear, Lawfare is not seeking to monetize RAGtime — we

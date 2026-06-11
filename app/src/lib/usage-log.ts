@@ -107,7 +107,15 @@ export function newInteractionId(): string {
 export type UsageLogRecord = {
   interaction_id: string
   surface: string
-  mode: 'ama' | 'keyword' | 'manual_filter' | 'summarize' | 'sql' | 'read' | 'analyze'
+  mode:
+    | 'ama'
+    | 'keyword'
+    | 'manual_filter'
+    | 'summarize'
+    | 'sql'
+    | 'read'
+    | 'analyze'
+    | 'semantic_search'
   question?: string | null
   output_mode?: string | null
   plan?: unknown

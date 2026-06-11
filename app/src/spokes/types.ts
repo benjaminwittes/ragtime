@@ -224,4 +224,11 @@ export type CorpusSpoke = {
    * Undefined = spoke doesn't participate; defined = spoke declares its
    * document unit + similarity hints + cross-corpus posture. */
   moreLikeThis?: MoreLikeThisCapability
+
+  /** Semantic retrieval is live for this corpus (brief #9, locked
+   * 2026-06-11): the manual-filter surface gains the keyword/semantic/both
+   * toggle (default both, segregated panes, overlap badged). Only set on
+   * corpora with embeddings in doc_chunks — absence means the toggle simply
+   * doesn't render (no grayed-out tease). */
+  semanticSearch?: boolean
 }

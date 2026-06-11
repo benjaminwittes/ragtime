@@ -1,4 +1,5 @@
 import type { LawfareArticleDisplayRow } from '@/lib/worker-client'
+import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 /**
  * Lawfare manual-filter results list.
@@ -21,6 +22,7 @@ export function LawfareResultsList({
   hasRun,
   executedSql,
   onOpenArticle,
+  semanticMatchIds,
 }: {
   rows: readonly LawfareArticleDisplayRow[] | undefined
   count: number | undefined
@@ -29,6 +31,7 @@ export function LawfareResultsList({
   hasRun: boolean
   executedSql: string | undefined
   onOpenArticle: (row: LawfareArticleDisplayRow) => void
+  semanticMatchIds?: ReadonlySet<string>
 }) {
   if (!hasRun && !loading) {
     return (
@@ -76,7 +79,11 @@ export function LawfareResultsList({
         {(count ?? rows.length).toLocaleString()} pieces · showing first{' '}
         {rows.length.toLocaleString()}
       </p>
-      <LawfareArticleRowsList rows={rows} onOpenArticle={onOpenArticle} />
+      <LawfareArticleRowsList
+        rows={rows}
+        onOpenArticle={onOpenArticle}
+        semanticMatchIds={semanticMatchIds}
+      />
     </div>
   )
 }
@@ -89,9 +96,13 @@ export function LawfareResultsList({
 export function LawfareArticleRowsList({
   rows,
   onOpenArticle,
+  semanticMatchIds,
 }: {
   rows: readonly LawfareArticleDisplayRow[]
   onOpenArticle: (row: LawfareArticleDisplayRow) => void
+  /** Ids also present in the semantic pane (brief #9: overlap badged in
+   *  both panes). Undefined when no semantic search ran. */
+  semanticMatchIds?: ReadonlySet<string>
 }) {
   return (
     <ul className="space-y-2">
@@ -115,6 +126,9 @@ export function LawfareArticleRowsList({
                 {r.title ?? '(untitled)'}
               </h3>
               <div className="flex shrink-0 items-center gap-2">
+                {semanticMatchIds?.has(String(r.id)) && (
+                  <AlsoMatchBadge kind="semantic" />
+                )}
                 {r.content_type && <ContentTypeBadge value={r.content_type} />}
                 <SourceLink row={r} />
               </div>

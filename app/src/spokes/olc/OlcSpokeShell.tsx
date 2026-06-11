@@ -7,10 +7,13 @@ import {
   type OlcFilterFields,
   type OlcFilterResult,
   type OlcOpinionDisplayRow,
+  type SemanticSearchRow,
   fetchOlcFacets,
+  fetchOlcItemsByIds,
   runOlcExecute,
   runOlcFilter,
   runOlcPlan,
+  runSemanticSearch,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
@@ -25,6 +28,11 @@ import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
+import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
+import {
+  ResultsPaneHeader,
+  SemanticResultsList,
+} from '../components/SemanticResultsList'
 import { UsageLogAnnotation } from '../components/UsageLogAnnotation'
 import { downloadCsv } from '@/lib/export-csv'
 import { downloadNarrativePdf } from '@/lib/export-pdf'
@@ -108,6 +116,16 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
 
+  // Semantic pane state (brief #9). The keyword pane is the filter state
+  // above, unchanged; the semantic pane runs /corpus/semantic-search in
+  // vector-only mode off the same free-text field.
+  const [searchMode, setSearchMode] = useState<SearchMode>('both')
+  const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
+  const [semLoading, setSemLoading] = useState(false)
+  const [semError, setSemError] = useState<string | undefined>(undefined)
+  const [semHasRun, setSemHasRun] = useState(false)
+  const [semOpeningId, setSemOpeningId] = useState<string | null>(null)
+
   // AMA state.
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
   const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
@@ -178,6 +196,31 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   }, [])
 
   async function handleSubmit(fields: OlcFilterFields) {
+    // Both panes run in parallel off one submit (brief #9: default "both" —
+    // never make the user search twice). Semantic consumes only the free-
+    // text field; with no search text the semantic pane simply doesn't run.
+    const wantKeyword = searchMode !== 'semantic'
+    const wantSemantic =
+      spoke.semanticSearch === true &&
+      searchMode !== 'keyword' &&
+      !!fields.search?.trim()
+    if (searchMode === 'semantic' && !wantSemantic) {
+      setSemHasRun(true)
+      setSemRows([])
+      setSemError(
+        'Semantic search needs search text — add words to the search field. (Structured filters alone run in Keyword mode.)',
+      )
+      return
+    }
+    await Promise.all([
+      wantKeyword ? runKeywordPane(fields) : Promise.resolve(),
+      wantSemantic
+        ? runSemanticPane(fields.search!.trim())
+        : Promise.resolve(clearSemanticPane()),
+    ])
+  }
+
+  async function runKeywordPane(fields: OlcFilterFields) {
     setQueryLoading(true)
     setQueryError(undefined)
     setHasRun(true)
@@ -193,7 +236,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'olc',
           mode: 'manual_filter',
           question: fields.search ?? fields.title ?? fields.author ?? '(structured filter)',
-          plan: { fields, executed_sql: r.executed_sql },
+          plan: { fields, executed_sql: r.executed_sql, search_mode: searchMode },
           cited_ids: r.ids,
         },
         auth.auth,
@@ -208,6 +251,69 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       setQueryLoading(false)
     }
   }
+
+  function clearSemanticPane() {
+    setSemRows(undefined)
+    setSemError(undefined)
+    setSemHasRun(false)
+  }
+
+  async function runSemanticPane(query: string) {
+    setSemLoading(true)
+    setSemError(undefined)
+    setSemHasRun(true)
+    try {
+      const r = await runSemanticSearch('olc', query, { mode: 'semantic' })
+      setSemRows(r.results)
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'olc',
+          mode: 'semantic_search',
+          question: query,
+          plan: { search_mode: searchMode },
+          cited_ids: r.results.map((row) => row.id),
+        },
+        auth.auth,
+      )
+    } catch (e) {
+      setSemError(e instanceof Error ? e.message : String(e))
+      setSemRows([])
+    } finally {
+      setSemLoading(false)
+    }
+  }
+
+  /** Open a semantic result in the detail panel: resolve the id to a full
+   *  display row (items-by-ids) so the sheet renders the same shape as a
+   *  filter-list open. */
+  async function handleOpenSemanticResult(row: SemanticSearchRow) {
+    setSemOpeningId(row.id)
+    try {
+      const full = await fetchOlcItemsByIds([Number(row.id)])
+      if (full.length > 0) handleOpenOpinion(full[0])
+    } catch {
+      // Detail open is best-effort; the card simply stays closed.
+    } finally {
+      setSemOpeningId(null)
+    }
+  }
+
+  // Overlap sets for the cross-pane badges (brief #9 decision 3). Keyword
+  // side uses the FULL matching-id list, so a semantic card is badged even
+  // when its keyword rank is beyond the displayed rows.
+  const keywordIdSet = useMemo(
+    () => new Set(filterIds.map((id) => String(id))),
+    [filterIds],
+  )
+  const semanticIdSet = useMemo(
+    () => new Set((semRows ?? []).map((r) => r.id)),
+    [semRows],
+  )
+  const showKeywordPane = searchMode !== 'semantic'
+  const showSemanticPane =
+    spoke.semanticSearch === true && searchMode !== 'keyword' && (semHasRun || semLoading)
+  const panesSideBySide = showKeywordPane && showSemanticPane
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!auth.auth) {
@@ -355,13 +461,22 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         docSlug="olc-narrative-synthesis"
       />
       {activeMode === 'manual_filter' && (
-        <OlcFilterForm
-          sources={facets?.sources ?? []}
-          ocrQualities={facets?.ocr_qualities ?? []}
-          loading={queryLoading}
-          onSubmit={handleSubmit}
-          initialSearch={carryover ?? undefined}
-        />
+        <>
+          {spoke.semanticSearch && (
+            <SearchModeToggle
+              mode={searchMode}
+              onSelect={setSearchMode}
+              disabled={queryLoading || semLoading}
+            />
+          )}
+          <OlcFilterForm
+            sources={facets?.sources ?? []}
+            ocrQualities={facets?.ocr_qualities ?? []}
+            loading={queryLoading}
+            onSubmit={handleSubmit}
+            initialSearch={carryover ?? undefined}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && (
         <ClaudeAmaForm
@@ -375,18 +490,46 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
       {activeMode === 'manual_filter' && (
         <>
-          {rows && rows.length > 0 && !queryLoading && (
+          {showKeywordPane && rows && rows.length > 0 && !queryLoading && (
             <ExportBar onCsv={downloadFilterCsv} />
           )}
-          <OlcResultsList
-            rows={rows}
-            count={count}
-            loading={queryLoading}
-            error={queryError}
-            hasRun={hasRun}
-            executedSql={executedSql}
-            onOpenOpinion={handleOpenOpinion}
-          />
+          <div
+            className={
+              panesSideBySide
+                ? 'grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-border'
+                : undefined
+            }
+          >
+            {showKeywordPane && (
+              <div className="min-w-0">
+                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+                <OlcResultsList
+                  rows={rows}
+                  count={count}
+                  loading={queryLoading}
+                  error={queryError}
+                  hasRun={hasRun}
+                  executedSql={executedSql}
+                  onOpenOpinion={handleOpenOpinion}
+                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+                />
+              </div>
+            )}
+            {showSemanticPane && (
+              <div className="min-w-0">
+                {panesSideBySide && <ResultsPaneHeader kind="semantic" />}
+                <SemanticResultsList
+                  rows={semRows}
+                  loading={semLoading}
+                  error={semError}
+                  hasRun={semHasRun}
+                  keywordIds={hasRun ? keywordIdSet : undefined}
+                  onOpen={handleOpenSemanticResult}
+                  openingId={semOpeningId}
+                />
+              </div>
+            )}
+          </div>
         </>
       )}
       {activeMode === 'claude_ama' && (

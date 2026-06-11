@@ -74,4 +74,5 @@ export const lawfareSpoke: CorpusSpoke = {
   },
   facets: [],
   defaultSearchDepth: 'full-doc',
+  semanticSearch: true,
 }

@@ -2324,6 +2324,64 @@ export function fetchLawfareItemsByIds(
 }
 
 /* ----------------------------------------------------------------------------
+ * Semantic search (brief #9) — vector retrieval over the pgvector chunk
+ * store, pilot corpora only. The spoke UI's segregated view calls this with
+ * mode 'semantic' (vector-only) and pairs it with the spoke's own filter
+ * path for the keyword pane; mode 'hybrid' (RRF-fused) is reserved for AI-
+ * planner use.
+ * ------------------------------------------------------------------------- */
+
+export type SemanticCorpus = 'olc' | 'frus' | 'lawfare'
+
+export type SemanticSearchRow = {
+  id: string
+  title: string
+  /** Corpus-appropriate context line (OLC: source; FRUS: place/volume;
+   *  Lawfare: content type). */
+  context: string | null
+  date: string | null
+  matched: 'semantic' | 'keyword' | 'both'
+  score: number
+  /** Cosine similarity of the best-matching chunk (vector branch only). */
+  similarity: number | null
+  /** Best-matching chunk text, structural header stripped. */
+  snippet: string | null
+}
+
+export type SemanticSearchResult = {
+  corpus: SemanticCorpus
+  query: string
+  mode: 'semantic' | 'hybrid'
+  results: SemanticSearchRow[]
+  branches: {
+    semantic: { count: number } | { error: string }
+    keyword: { count: number } | { error: string } | { skipped: true }
+  }
+}
+
+export async function runSemanticSearch(
+  corpus: SemanticCorpus,
+  query: string,
+  opts?: { k?: number; mode?: 'semantic' | 'hybrid' },
+): Promise<SemanticSearchResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/semantic-search`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      corpus,
+      query,
+      k: opts?.k ?? 12,
+      mode: opts?.mode ?? 'semantic',
+    }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/semantic-search failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SemanticSearchResult
+}
+
+/* ----------------------------------------------------------------------------
  * Helpers
  * ------------------------------------------------------------------------- */
 
