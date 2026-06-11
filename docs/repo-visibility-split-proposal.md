@@ -7,16 +7,19 @@
 ## Goal
 
 Split the single public `benjaminwittes/ragtime` repo into two, so that backend
-logic and prompt IP stop being anonymously readable while the live product and
-its transparency model are unaffected:
+logic and prompt IP stop being anonymously readable while the live product is
+unaffected:
 
 - **`ragtime` (stays public)** — the frontend (`app/`), served by GitHub Pages.
-  Unchanged for users.
+  Unchanged for users; gains nothing from being private (it ships to browsers
+  anyway), so keeping it public preserves Pages hosting at no cost.
 - **`ragtime-worker` (new, private)** — the Cloudflare Worker (`worker/`), the
   DB migrations (`migrations/`), and the internal docs (`CLAUDE.md`,
-  `DEPLOY.md`). Transparency to qualified journalists is delivered by
-  *individually granting* repo access (collaborator/team), which is only
-  meaningful on a private repo.
+  `DEPLOY.md`). Private purely to protect backend logic and the planner/
+  synthesis prompts (the product's core IP) — an internal/dev concern only.
+
+Access to the *product* by qualified users (invitation + the app's own auth) is
+a separate, product-level matter and is unaffected by where the source lives.
 
 This mirrors the existing `ragtime` / `ragtime-pipeline` split, extended one
 step: as scraping infra is already private, so too should be the backend auth
@@ -86,10 +89,11 @@ logic and the planner/synthesis prompts.
    *Decisions*). Merge to `main`.
 9. Verify Pages still serves `app/` unchanged post-merge.
 
-### Phase 3 — access model + optional history scrub
+### Phase 3 — access + optional history scrub
 
-10. Set up journalist access on `ragtime-worker`: individual collaborator
-    invites, or a read-only `journalists` team. Document the qualification bar.
+10. Set collaborator access on `ragtime-worker` to the dev team only (it's an
+    internal repo; no external/journalist access is involved — product access
+    for qualified users is handled separately by the app's invitation + auth).
 11. *(Optional)* Scrub `worker/`/`migrations/` from the **public** repo's
     history too. This removes the backend from public history entirely but
     rewrites public history (breaks existing clones/forks). **Recommended
@@ -114,9 +118,7 @@ The one race to avoid is two deploy workflows firing on the same Worker — Phas
    *redacted* public `CLAUDE.md` (strip the secret-binding manifest / internal
    ops, keep contributor-facing frontend context)?
 2. **Public history scrub** (Phase 3 step 11): skip (recommended) or perform?
-3. **Access model:** individual invites vs a read-only `journalists` team; and
-   the qualification bar for granting access.
-4. **Repo name:** `ragtime-worker` (vs `ragtime-backend`).
+3. **Repo name:** `ragtime-worker` (vs `ragtime-backend`).
 
 ## Relationship to #108
 
