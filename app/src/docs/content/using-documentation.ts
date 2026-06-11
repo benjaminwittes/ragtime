@@ -10,7 +10,7 @@ export const usingDocumentationEntry: DocsEntry = {
   title: 'Using This Documentation',
   summary: 'How the help overlay works — the ? shortcut, contextual topics, and the inline ? markers.',
   scope: { kind: 'global' },
-  order: 7,
+  order: 8,
   content: `
 This overlay is RAGtime's built-in documentation. There are three ways to
 reach it:

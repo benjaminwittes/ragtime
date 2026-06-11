@@ -1,4 +1,5 @@
 import type { OlcOpinionDisplayRow } from '@/lib/worker-client'
+import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 /**
  * OLC manual-filter results table.
@@ -24,6 +25,7 @@ export function OlcResultsList({
   hasRun,
   executedSql,
   onOpenOpinion,
+  semanticMatchIds,
 }: {
   rows: readonly OlcOpinionDisplayRow[] | undefined
   count: number | undefined
@@ -32,6 +34,7 @@ export function OlcResultsList({
   hasRun: boolean
   executedSql: string | undefined
   onOpenOpinion: (row: OlcOpinionDisplayRow) => void
+  semanticMatchIds?: ReadonlySet<string>
 }) {
   if (!hasRun && !loading) {
     return (
@@ -79,7 +82,11 @@ export function OlcResultsList({
         {(count ?? rows.length).toLocaleString()} opinions · showing first{' '}
         {rows.length.toLocaleString()}
       </p>
-      <OlcOpinionRowsTable rows={rows} onOpenOpinion={onOpenOpinion} />
+      <OlcOpinionRowsTable
+        rows={rows}
+        onOpenOpinion={onOpenOpinion}
+        semanticMatchIds={semanticMatchIds}
+      />
     </div>
   )
 }
@@ -93,9 +100,13 @@ export function OlcResultsList({
 export function OlcOpinionRowsTable({
   rows,
   onOpenOpinion,
+  semanticMatchIds,
 }: {
   rows: readonly OlcOpinionDisplayRow[]
   onOpenOpinion: (row: OlcOpinionDisplayRow) => void
+  /** Ids also present in the semantic pane (brief #9: overlap badged in
+   *  both panes). Undefined when no semantic search ran. */
+  semanticMatchIds?: ReadonlySet<string>
 }) {
   return (
     <div className="overflow-x-auto rounded-md border border-border">
@@ -130,6 +141,11 @@ export function OlcOpinionRowsTable({
                 <span className="font-medium text-foreground">
                   {r.title ?? '(no title)'}
                 </span>
+                {semanticMatchIds?.has(String(r.id)) && (
+                  <span className="ml-2 inline-block align-middle">
+                    <AlsoMatchBadge kind="semantic" />
+                  </span>
+                )}
               </Td>
               <Td className="font-mono text-xs">{r.date_issued ?? '—'}</Td>
               <Td className="text-xs text-muted-foreground">

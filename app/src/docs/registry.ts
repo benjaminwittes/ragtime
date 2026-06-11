@@ -2,6 +2,7 @@ import type { DocsContext, DocsEntry } from './types'
 // Global entries (always visible).
 import { gettingStartedEntry } from './content/getting-started'
 import { hubKeywordSearchEntry } from './content/hub-keyword-search'
+import { semanticSearchEntry } from './content/semantic-search'
 import { accessAndCostEntry } from './content/access-and-cost'
 import { auditabilityEntry } from './content/auditability'
 import { freeTierMetadataFloorEntry } from './content/free-tier-metadata-floor'
@@ -39,11 +40,11 @@ import { lawfareArticleSummaryEntry } from './content/lawfare-article-summary'
  *
  * Editorial intent (per brief #6 §6, brief #6 decisions 9b cross-reference):
  * - Global entries cover cross-cutting principles users should know once:
- *   getting started, the cross-corpus hub search, access & cost,
- *   auditability, the free-tier metadata floor, primary-sources-not-
- *   commentary, how the docs overlay / `?` shortcut works, and how to give
- *   feedback. Ordered (order 1-8) so they list in a stable sequence
- *   everywhere.
+ *   getting started, the cross-corpus hub search, the keyword/semantic
+ *   retrieval toggle, access & cost, auditability, the free-tier metadata
+ *   floor, primary-sources-not-commentary, how the docs overlay / `?`
+ *   shortcut works, and how to give feedback. Ordered (order 1-9) so they
+ *   list in a stable sequence everywhere.
  * - Spoke entries cover per-corpus content: a "How to use this corpus"
  *   intro (order 9), the corpus's AI synthesis mode (order 10), and the
  *   per-document Summarize action (order 20). They surface only when their
@@ -56,6 +57,7 @@ export const docsEntries: readonly DocsEntry[] = [
   // Global
   gettingStartedEntry,
   hubKeywordSearchEntry,
+  semanticSearchEntry,
   accessAndCostEntry,
   auditabilityEntry,
   freeTierMetadataFloorEntry,

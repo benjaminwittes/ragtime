@@ -7,10 +7,13 @@ import {
   type FrusFacets,
   type FrusFilterFields,
   type FrusFilterResult,
+  type SemanticSearchRow,
   fetchFrusFacets,
+  fetchFrusItemsByIds,
   runFrusExecute,
   runFrusFilter,
   runFrusPlan,
+  runSemanticSearch,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
@@ -25,6 +28,11 @@ import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
+import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
+import {
+  ResultsPaneHeader,
+  SemanticResultsList,
+} from '../components/SemanticResultsList'
 import { UsageLogAnnotation } from '../components/UsageLogAnnotation'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { downloadCsv } from '@/lib/export-csv'
@@ -106,6 +114,15 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
 
+  // Semantic pane state (brief #9). See OlcSpokeShell for the pattern
+  // rationale; the keyword pane is the filter state above, unchanged.
+  const [searchMode, setSearchMode] = useState<SearchMode>('both')
+  const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
+  const [semLoading, setSemLoading] = useState(false)
+  const [semError, setSemError] = useState<string | undefined>(undefined)
+  const [semHasRun, setSemHasRun] = useState(false)
+  const [semOpeningId, setSemOpeningId] = useState<string | null>(null)
+
   // AMA state.
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
   const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
@@ -172,6 +189,29 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   }, [])
 
   async function handleSubmit(fields: FrusFilterFields) {
+    // Both panes off one submit (brief #9; see OlcSpokeShell).
+    const wantKeyword = searchMode !== 'semantic'
+    const wantSemantic =
+      spoke.semanticSearch === true &&
+      searchMode !== 'keyword' &&
+      !!fields.search?.trim()
+    if (searchMode === 'semantic' && !wantSemantic) {
+      setSemHasRun(true)
+      setSemRows([])
+      setSemError(
+        'Semantic search needs search text — add words to the search field. (Structured filters alone run in Keyword mode.)',
+      )
+      return
+    }
+    await Promise.all([
+      wantKeyword ? runKeywordPane(fields) : Promise.resolve(),
+      wantSemantic
+        ? runSemanticPane(fields.search!.trim())
+        : Promise.resolve(clearSemanticPane()),
+    ])
+  }
+
+  async function runKeywordPane(fields: FrusFilterFields) {
     setQueryLoading(true)
     setQueryError(undefined)
     setHasRun(true)
@@ -187,7 +227,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'frus',
           mode: 'manual_filter',
           question: fields.search ?? fields.title ?? fields.place ?? '(structured filter)',
-          plan: { fields, executed_sql: r.executed_sql },
+          plan: { fields, executed_sql: r.executed_sql, search_mode: searchMode },
           cited_ids: r.ids,
         },
         auth.auth,
@@ -202,6 +242,65 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       setQueryLoading(false)
     }
   }
+
+  function clearSemanticPane() {
+    setSemRows(undefined)
+    setSemError(undefined)
+    setSemHasRun(false)
+  }
+
+  async function runSemanticPane(query: string) {
+    setSemLoading(true)
+    setSemError(undefined)
+    setSemHasRun(true)
+    try {
+      const r = await runSemanticSearch('frus', query, { mode: 'semantic' })
+      setSemRows(r.results)
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'frus',
+          mode: 'semantic_search',
+          question: query,
+          plan: { search_mode: searchMode },
+          cited_ids: r.results.map((row) => row.id),
+        },
+        auth.auth,
+      )
+    } catch (e) {
+      setSemError(e instanceof Error ? e.message : String(e))
+      setSemRows([])
+    } finally {
+      setSemLoading(false)
+    }
+  }
+
+  /** Open a semantic result via items-by-ids so the detail sheet renders
+   *  the same shape as a filter-list open. */
+  async function handleOpenSemanticResult(row: SemanticSearchRow) {
+    setSemOpeningId(row.id)
+    try {
+      const full = await fetchFrusItemsByIds([Number(row.id)])
+      if (full.length > 0) handleOpenDocument(full[0])
+    } catch {
+      // Best-effort; the card simply stays closed.
+    } finally {
+      setSemOpeningId(null)
+    }
+  }
+
+  const keywordIdSet = useMemo(
+    () => new Set(filterIds.map((id) => String(id))),
+    [filterIds],
+  )
+  const semanticIdSet = useMemo(
+    () => new Set((semRows ?? []).map((r) => r.id)),
+    [semRows],
+  )
+  const showKeywordPane = searchMode !== 'semantic'
+  const showSemanticPane =
+    spoke.semanticSearch === true && searchMode !== 'keyword' && (semHasRun || semLoading)
+  const panesSideBySide = showKeywordPane && showSemanticPane
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!auth.auth) {
@@ -345,13 +444,22 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         docSlug="frus-narrative-synthesis"
       />
       {activeMode === 'manual_filter' && (
-        <FrusFilterForm
-          subSeries={facets?.sub_series ?? []}
-          classifications={facets?.classifications ?? []}
-          loading={queryLoading}
-          onSubmit={handleSubmit}
-          initialSearch={carryover ?? undefined}
-        />
+        <>
+          {spoke.semanticSearch && (
+            <SearchModeToggle
+              mode={searchMode}
+              onSelect={setSearchMode}
+              disabled={queryLoading || semLoading}
+            />
+          )}
+          <FrusFilterForm
+            subSeries={facets?.sub_series ?? []}
+            classifications={facets?.classifications ?? []}
+            loading={queryLoading}
+            onSubmit={handleSubmit}
+            initialSearch={carryover ?? undefined}
+          />
+        </>
       )}
       {activeMode === 'claude_ama' && (
         <ClaudeAmaForm
@@ -364,18 +472,46 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       )}
       {activeMode === 'manual_filter' && (
         <>
-          {rows && rows.length > 0 && !queryLoading && (
+          {showKeywordPane && rows && rows.length > 0 && !queryLoading && (
             <ExportBar onCsv={downloadFilterCsv} />
           )}
-          <FrusResultsList
-            rows={rows}
-            count={count}
-            loading={queryLoading}
-            error={queryError}
-            hasRun={hasRun}
-            executedSql={executedSql}
-            onOpenDocument={handleOpenDocument}
-          />
+          <div
+            className={
+              panesSideBySide
+                ? 'grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-border'
+                : undefined
+            }
+          >
+            {showKeywordPane && (
+              <div className="min-w-0">
+                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+                <FrusResultsList
+                  rows={rows}
+                  count={count}
+                  loading={queryLoading}
+                  error={queryError}
+                  hasRun={hasRun}
+                  executedSql={executedSql}
+                  onOpenDocument={handleOpenDocument}
+                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+                />
+              </div>
+            )}
+            {showSemanticPane && (
+              <div className="min-w-0">
+                {panesSideBySide && <ResultsPaneHeader kind="semantic" />}
+                <SemanticResultsList
+                  rows={semRows}
+                  loading={semLoading}
+                  error={semError}
+                  hasRun={semHasRun}
+                  keywordIds={hasRun ? keywordIdSet : undefined}
+                  onOpen={handleOpenSemanticResult}
+                  openingId={semOpeningId}
+                />
+              </div>
+            )}
+          </div>
         </>
       )}
       {activeMode === 'claude_ama' && (

@@ -71,4 +71,5 @@ export const olcSpoke: CorpusSpoke = {
   },
   facets: [],
   defaultSearchDepth: 'full-doc',
+  semanticSearch: true,
 }

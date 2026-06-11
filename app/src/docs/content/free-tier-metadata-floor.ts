@@ -10,7 +10,7 @@ export const freeTierMetadataFloorEntry: DocsEntry = {
   title: "What's Free: The Metadata Floor",
   summary: 'Structured filtering — not just keyword search — is free on every corpus.',
   scope: { kind: 'global' },
-  order: 5,
+  order: 6,
   content: `
 On every corpus, the free tier includes structured-metadata filtering, not
 just full-text keyword search. That means you can filter by dates, titles

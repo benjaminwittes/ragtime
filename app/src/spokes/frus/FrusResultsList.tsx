@@ -1,4 +1,5 @@
 import type { FrusDocumentDisplayRow } from '@/lib/worker-client'
+import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 /**
  * FRUS manual-filter results table.
@@ -23,6 +24,7 @@ export function FrusResultsList({
   hasRun,
   executedSql,
   onOpenDocument,
+  semanticMatchIds,
 }: {
   rows: readonly FrusDocumentDisplayRow[] | undefined
   count: number | undefined
@@ -31,6 +33,7 @@ export function FrusResultsList({
   hasRun: boolean
   executedSql: string | undefined
   onOpenDocument: (row: FrusDocumentDisplayRow) => void
+  semanticMatchIds?: ReadonlySet<string>
 }) {
   if (!hasRun && !loading) {
     return (
@@ -78,7 +81,11 @@ export function FrusResultsList({
         {(count ?? rows.length).toLocaleString()} documents · showing first{' '}
         {rows.length.toLocaleString()}
       </p>
-      <FrusDocumentRowsTable rows={rows} onOpenDocument={onOpenDocument} />
+      <FrusDocumentRowsTable
+        rows={rows}
+        onOpenDocument={onOpenDocument}
+        semanticMatchIds={semanticMatchIds}
+      />
     </div>
   )
 }
@@ -91,9 +98,13 @@ export function FrusResultsList({
 export function FrusDocumentRowsTable({
   rows,
   onOpenDocument,
+  semanticMatchIds,
 }: {
   rows: readonly FrusDocumentDisplayRow[]
   onOpenDocument: (row: FrusDocumentDisplayRow) => void
+  /** Ids also present in the semantic pane (brief #9: overlap badged in
+   *  both panes). Undefined when no semantic search ran. */
+  semanticMatchIds?: ReadonlySet<string>
 }) {
   return (
     <div className="overflow-x-auto rounded-md border border-border">
@@ -128,6 +139,11 @@ export function FrusDocumentRowsTable({
                 <span className="font-medium text-foreground">
                   {r.title ?? '(no title)'}
                 </span>
+                {semanticMatchIds?.has(String(r.id)) && (
+                  <span className="ml-2 inline-block align-middle">
+                    <AlsoMatchBadge kind="semantic" />
+                  </span>
+                )}
               </Td>
               <Td className="font-mono text-xs">{r.doc_date ?? '—'}</Td>
               <Td className="font-mono text-xs text-muted-foreground">

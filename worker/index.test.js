@@ -3709,7 +3709,15 @@ describe("semantic search (pilot)", () => {
   describe("parseSemanticSearchRequest", () => {
     it("accepts a pilot corpus with defaults", () => {
       const p = parseSemanticSearchRequest({ corpus: "olc", query: "executive privilege scope" });
-      expect(p).toEqual({ corpus: "olc", query: "executive privilege scope", k: 12 });
+      expect(p).toEqual({ corpus: "olc", query: "executive privilege scope", k: 12, mode: "hybrid" });
+    });
+    it("accepts mode=semantic (vector-only, for the spoke segregated view)", () => {
+      expect(parseSemanticSearchRequest({ corpus: "olc", query: "q", mode: "semantic" }).mode).toBe("semantic");
+      expect(parseSemanticSearchRequest({ corpus: "olc", query: "q", mode: "hybrid" }).mode).toBe("hybrid");
+    });
+    it("rejects unknown modes", () => {
+      expect(parseSemanticSearchRequest({ corpus: "olc", query: "q", mode: "fused" }).error).toMatch(/mode/i);
+      expect(parseSemanticSearchRequest({ corpus: "olc", query: "q", mode: "keyword" }).error).toMatch(/mode/i);
     });
     it("rejects non-pilot corpora (litigation is deliberately out)", () => {
       expect(parseSemanticSearchRequest({ corpus: "litigation", query: "x" }).error).toMatch(/unsupported/i);

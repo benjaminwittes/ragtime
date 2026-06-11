@@ -10,7 +10,7 @@ export const givingFeedbackEntry: DocsEntry = {
   title: 'Giving Feedback',
   summary: "How to flag a result that's off, or a search that didn't find what it should have.",
   scope: { kind: 'global' },
-  order: 8,
+  order: 9,
   content: `
 RAGtime is in beta, and feedback on search and AI quality is the most
 useful thing you can send.

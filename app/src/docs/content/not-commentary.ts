@@ -10,7 +10,7 @@ export const notCommentaryEntry: DocsEntry = {
   title: 'Primary Sources, Not Commentary',
   summary: 'RAGtime searches and analyzes primary sources. It does not annotate or editorialize them.',
   scope: { kind: 'global' },
-  order: 6,
+  order: 7,
   content: `
 RAGtime's edge is cross-cutting search plus AI over primary sources — not
 editorial annotation of them. So a few things are deliberately out of

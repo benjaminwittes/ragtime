@@ -6518,7 +6518,15 @@ function parseSemanticSearchRequest(body) {
   let k = parseInt((body && body.k) != null ? body.k : SEMANTIC_DEFAULT_K, 10);
   if (!Number.isFinite(k) || k < 1) k = SEMANTIC_DEFAULT_K;
   if (k > SEMANTIC_MAX_K) k = SEMANTIC_MAX_K;
-  return { corpus, query, k };
+  // mode "hybrid" (default) fuses vector + keyword with RRF — the AI-planner
+  // shape. mode "semantic" is vector-only: the spoke UI's segregated view
+  // pairs it with the spoke's own filter path, so running the keyword branch
+  // here would execute the same FTS twice per search.
+  const mode = String((body && body.mode) || "hybrid").trim();
+  if (mode !== "hybrid" && mode !== "semantic") {
+    return { error: 'Unknown mode (expected "hybrid" or "semantic")' };
+  }
+  return { corpus, query, k, mode };
 }
 
 function vecLiteral(vec) {
@@ -6616,7 +6624,7 @@ async function corpusSemanticSearchHandler(request, env, ctx) {
   try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
   const parsed = parseSemanticSearchRequest(body);
   if (parsed.error) return json({ error: { message: parsed.error } }, 400);
-  const { corpus, query, k } = parsed;
+  const { corpus, query, k, mode } = parsed;
 
   const t0 = Date.now();
   let vec;
@@ -6630,6 +6638,9 @@ async function corpusSemanticSearchHandler(request, env, ctx) {
   // failing the request (degraded results beat a 502); both failing is an
   // error. The vector branch over-fetches chunks (SEMANTIC_CHUNK_FACTOR) so
   // multi-chunk documents collapse to one entry before fusion.
+  // mode "semantic" skips the keyword branch entirely (the spoke UI runs its
+  // own filter for the keyword pane) — then the vector branch failing IS the
+  // request failing.
   const chunkK = Math.min(k * SEMANTIC_CHUNK_FACTOR, 50);
   const [semOut, ftsOut] = await Promise.all([
     (async function () {
@@ -6644,13 +6655,15 @@ async function corpusSemanticSearchHandler(request, env, ctx) {
       return r.json();
     })().then(function (rows) { return { rows: rows }; },
               function (e) { return { error: e && e.message ? e.message : String(e) }; }),
-    runHubKeywordForCorpus(env, corpus, escSqlLit(query), k)
-      .then(function (out) { return { out: out }; },
-            function (e) { return { error: e && e.message ? e.message : String(e) }; })
+    mode === "semantic"
+      ? Promise.resolve({ out: { results: [] } })
+      : runHubKeywordForCorpus(env, corpus, escSqlLit(query), k)
+          .then(function (out) { return { out: out }; },
+                function (e) { return { error: e && e.message ? e.message : String(e) }; })
   ]);
 
-  if (semOut.error && ftsOut.error) {
-    return json({ error: { message: "semantic: " + semOut.error + "; keyword: " + ftsOut.error } }, 502);
+  if (semOut.error && (ftsOut.error || mode === "semantic")) {
+    return json({ error: { message: "semantic: " + semOut.error + (ftsOut.error ? "; keyword: " + ftsOut.error : "") } }, 502);
   }
 
   // Collapse chunks -> documents, keeping each doc's best (first) chunk for
@@ -6705,7 +6718,7 @@ async function corpusSemanticSearchHandler(request, env, ctx) {
   // Content-free operational log (NO query text), same series as hub_fanout.
   try {
     console.log(JSON.stringify({
-      ev: "semantic", corpus: corpus, ms: Date.now() - t0, k: k,
+      ev: "semantic", corpus: corpus, mode: mode, ms: Date.now() - t0, k: k,
       sem_n: semDocs.length, fts_n: ftsIds.length,
       sem_err: semOut.error ? 1 : 0, fts_err: ftsOut.error ? 1 : 0
     }));
@@ -6714,10 +6727,12 @@ async function corpusSemanticSearchHandler(request, env, ctx) {
   return json({
     corpus: corpus,
     query: query,
+    mode: mode,
     results: results,
     branches: {
       semantic: semOut.error ? { error: semOut.error } : { count: semDocs.length },
-      keyword: ftsOut.error ? { error: ftsOut.error } : { count: ftsIds.length }
+      keyword: mode === "semantic" ? { skipped: true }
+        : ftsOut.error ? { error: ftsOut.error } : { count: ftsIds.length }
     }
   }, 200);
 }

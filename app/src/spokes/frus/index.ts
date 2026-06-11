@@ -66,4 +66,5 @@ export const frusSpoke: CorpusSpoke = {
   },
   facets: [],
   defaultSearchDepth: 'full-doc',
+  semanticSearch: true,
 }
