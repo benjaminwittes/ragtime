@@ -187,6 +187,7 @@ const CORPUS_CACHE_TTL = {
   "/corpus/olc/filter": 1800, "/corpus/olc/facets": 1800,
   "/corpus/frus/filter": 1800, "/corpus/frus/facets": 1800,
   "/corpus/lawfare/filter": 1800, "/corpus/lawfare/facets": 1800,
+  "/corpus/presidential/filter": 1800, "/corpus/presidential/facets": 1800,
   // Hybrid semantic+keyword retrieval (pilot corpora). Same body-keyed cache
   // logic: response depends only on (corpus, query, k). A HIT also saves the
   // OpenAI query-embedding call, not just the DB round-trips.
@@ -210,6 +211,8 @@ const CORPUS_CACHE_HANDLERS = {
   "/corpus/frus/facets": (req, env, ctx) => corpusFrusFacetsHandler(req, env, ctx),
   "/corpus/lawfare/filter": (req, env, ctx) => corpusLawfareFilterHandler(req, env, ctx),
   "/corpus/lawfare/facets": (req, env, ctx) => corpusLawfareFacetsHandler(req, env, ctx),
+  "/corpus/presidential/filter": (req, env, ctx) => corpusPresidentialFilterHandler(req, env, ctx),
+  "/corpus/presidential/facets": (req, env, ctx) => corpusPresidentialFacetsHandler(req, env, ctx),
   "/corpus/semantic-search": (req, env, ctx) => corpusSemanticSearchHandler(req, env, ctx),
 };
 
@@ -407,6 +410,27 @@ async function routeRequest(request, env, ctx) {
       }
       if (path === "/corpus/lawfare/items-by-ids" && request.method === "POST") {
         return await corpusLawfareItemsByIdsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/presidential/facets" && request.method === "POST") {
+        return await corpusPresidentialFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/presidential/filter" && request.method === "POST") {
+        return await corpusPresidentialFilterHandler(request, env, ctx);
+      }
+      if (path === "/corpus/presidential/document" && request.method === "POST") {
+        return await corpusPresidentialDocumentHandler(request, env, ctx);
+      }
+      if (path === "/corpus/presidential/plan" && request.method === "POST") {
+        return await corpusPresidentialPlanHandler(request, env, ctx);
+      }
+      if (path === "/corpus/presidential/execute" && request.method === "POST") {
+        return await corpusPresidentialExecuteHandler(request, env, ctx);
+      }
+      if (path === "/corpus/presidential/summarize-document" && request.method === "POST") {
+        return await corpusPresidentialSummarizeHandler(request, env, ctx);
+      }
+      if (path === "/corpus/presidential/items-by-ids" && request.method === "POST") {
+        return await corpusPresidentialItemsByIdsHandler(request, env, ctx);
       }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
@@ -4678,6 +4702,766 @@ async function corpusOlcSummarizeHandler(request, env, ctx) {
 }
 
 // ============================================================================
+// Presidential documents corpus — v1 (brief #11)
+//
+// The formal signed instruments by which the President directs the executive
+// branch and the public: executive orders (5,898, back to 1940), proclamations
+// (4,394), memoranda (803), determinations (790), notices (769) — 12,654 rows
+// in presidential_documents, via the Federal Register API. Companion table
+// presidential_dispositions holds the PARSED OFR cross-reference graph
+// (revokes / amends / supersedes / see — captured, not inferred), promoted to
+// v1 because the brief's question set is status-and-lineage-heavy ("is this EO
+// still in effect", the cross-administration reversal matrix).
+//
+// The corpus's central honesty problem is COVERAGE ASYMMETRY: EOs reach back
+// to 1940 but pre-1948 rows are metadata-only finding aids (no body text);
+// the other four types only begin in 1993/94. Every count-by-president or
+// trend answer must carry that denominator — the planner and synthesis
+// prompts below enforce it.
+// ============================================================================
+
+// Display columns for the list table. body_text and disposition_notes are
+// omitted (large); the document-detail handler returns everything plus the
+// parsed disposition edges. html_url/pdf_url ride along for the constructed
+// external source links (federalregister.gov), per the 4x pattern.
+var PRESIDENTIAL_DISPLAY_COLS = "id, doc_type, display_citation, title, president_name, president_slug, " +
+  "signing_date::text AS signing_date, publication_date::text AS publication_date, fr_citation, " +
+  "eo_number, proclamation_number, agencies, text_quality, text_length, html_url, pdf_url";
+
+/**
+ * Build the WHERE clause for /corpus/presidential/filter. Same single-quote
+ * escaping discipline as the USC/CFR/OLC/FRUS/Lawfare builders.
+ *
+ * Supported axes:
+ *   search        FTS over fts (title + display_citation + body_text; note
+ *                 metadata-only rows match on title/citation only)
+ *   title         substring (ILIKE %title%)
+ *   docType       exact match — executive_order | proclamation | memorandum |
+ *                 determination | notice
+ *   president     exact match on president_slug ('donald-trump', 'joe-biden')
+ *   eoNumber      exact integer — direct EO lookup ("what does EO 14239 say")
+ *   proclamationNumber  exact integer
+ *   agency        case-insensitive substring over unnest(agencies)
+ *   from / to     ISO YYYY-MM-DD bounds on signing_date
+ *   textQuality   exact match — 'clean' | 'juris_backfill' | 'metadata_only'
+ *                 (so users can exclude finding-aid-only rows)
+ */
+function buildPresidentialFilterWhere(fields) {
+  var parts = [];
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var q = fields.search.trim().replace(/'/g, "''");
+    parts.push("fts @@ websearch_to_tsquery('english', '" + q + "')");
+  }
+  if (fields.title && typeof fields.title === 'string' && fields.title.trim()) {
+    var t = fields.title.trim().replace(/'/g, "''");
+    parts.push("title ILIKE '%" + t + "%'");
+  }
+  if (fields.docType && typeof fields.docType === 'string' && fields.docType.trim()) {
+    var dt = fields.docType.trim().replace(/'/g, "''");
+    parts.push("doc_type = '" + dt + "'");
+  }
+  if (fields.president && typeof fields.president === 'string' && fields.president.trim()) {
+    var p = fields.president.trim().replace(/'/g, "''");
+    parts.push("president_slug = '" + p + "'");
+  }
+  if (fields.eoNumber != null && Number.isFinite(Number(fields.eoNumber)) && Number(fields.eoNumber) > 0) {
+    parts.push("eo_number = " + Math.floor(Number(fields.eoNumber)));
+  }
+  if (fields.proclamationNumber != null && Number.isFinite(Number(fields.proclamationNumber)) && Number(fields.proclamationNumber) > 0) {
+    parts.push("proclamation_number = " + Math.floor(Number(fields.proclamationNumber)));
+  }
+  if (fields.agency && typeof fields.agency === 'string' && fields.agency.trim()) {
+    var ag = fields.agency.trim().replace(/'/g, "''");
+    parts.push("EXISTS (SELECT 1 FROM unnest(agencies) AS _a WHERE _a ILIKE '%" + ag + "%')");
+  }
+  if (fields.from && typeof fields.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.from)) {
+    parts.push("signing_date >= '" + fields.from + "'");
+  }
+  if (fields.to && typeof fields.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.to)) {
+    parts.push("signing_date <= '" + fields.to + "'");
+  }
+  if (fields.textQuality && typeof fields.textQuality === 'string' && fields.textQuality.trim()) {
+    var tq = fields.textQuality.trim().replace(/'/g, "''");
+    parts.push("text_quality = '" + tq + "'");
+  }
+  return parts.length ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusPresidentialFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    // 12,654 rows — exact counts are cheap, like OLC.
+    const stats = await corpusRunQuery(env,
+      "SELECT count(*)::bigint AS document_count, " +
+      "MIN(signing_date)::text AS earliest, " +
+      "MAX(signing_date)::text AS latest, " +
+      "count(*) FILTER (WHERE text_quality <> 'metadata_only')::bigint AS with_text " +
+      "FROM presidential_documents");
+    const docTypes = await corpusRunQuery(env,
+      "SELECT doc_type AS v, count(*)::bigint AS n FROM presidential_documents " +
+      "GROUP BY doc_type ORDER BY n DESC");
+    const presidents = await corpusRunQuery(env,
+      "SELECT president_slug AS slug, president_name AS name, count(*)::bigint AS n " +
+      "FROM presidential_documents WHERE president_slug IS NOT NULL " +
+      "GROUP BY president_slug, president_name ORDER BY MIN(signing_date) DESC");
+    const s = stats[0] || {};
+    return json({
+      document_count: s.document_count,
+      with_text: s.with_text,
+      earliest: s.earliest,
+      latest: s.latest,
+      doc_types: docTypes.map((r) => ({ value: r.v, count: r.n })),
+      presidents: presidents.map((r) => ({ slug: r.slug, name: r.name, count: r.n }))
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "Presidential facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+async function corpusPresidentialFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const where = buildPresidentialFilterWhere(fields);
+  const idsSql = "SELECT id FROM presidential_documents" + where;
+  // Brief #11 decision: relevance on query, recency on browse. With an FTS
+  // search present, order by ts_rank; otherwise signing_date desc.
+  let orderBy = " ORDER BY signing_date DESC NULLS LAST";
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var rq = fields.search.trim().replace(/'/g, "''");
+    orderBy = " ORDER BY ts_rank(fts, websearch_to_tsquery('english', '" + rq + "')) DESC, signing_date DESC NULLS LAST";
+  }
+  const rowsSql = "SELECT " + PRESIDENTIAL_DISPLAY_COLS + " FROM presidential_documents" + where +
+    orderBy + " LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "Presidential filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const ids = idRows.map((r) => r.id).filter((x) => x != null);
+  return json({
+    ids,
+    display_rows: rows,
+    count: ids.length,
+    generated_sql: rowsSql,
+    executed_sql: idsSql
+  }, 200);
+}
+
+/**
+ * Single-document detail. Returns the full row (body_text, raw
+ * disposition_notes, all provenance/links) PLUS the parsed disposition graph
+ * in both directions: what this document did to others (outbound) and what
+ * later documents did to it (inbound) — the "is this still in effect" trail,
+ * rendered prominently on the detail sheet per brief #11 §3.
+ */
+async function corpusPresidentialDocumentHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+  const docSql = "SELECT id, source_key, document_number, doc_type, eo_number, proclamation_number, " +
+    "display_citation, title, president_slug, president_name, " +
+    "signing_date::text AS signing_date, publication_date::text AS publication_date, " +
+    "fr_citation, agencies, disposition_notes, cfr_codified_at, text_quality, " +
+    "body_text, text_length, html_url, body_xml_url, pdf_url " +
+    "FROM presidential_documents WHERE id = " + Math.floor(id) + " LIMIT 1";
+  const outboundSql = "SELECT d.relationship, d.target_type, d.target_eo_number, " +
+    "d.target_proclamation_number, d.target_date::text AS target_date, d.target_raw, d.target_id, " +
+    "t.display_citation AS target_citation, t.title AS target_title " +
+    "FROM presidential_dispositions d " +
+    "LEFT JOIN presidential_documents t ON t.id = d.target_id " +
+    "WHERE d.source_id = " + Math.floor(id) + " ORDER BY d.relationship, d.target_date";
+  const inboundSql = "SELECT d.relationship, d.target_raw, d.source_id, " +
+    "s.display_citation AS source_citation, s.title AS source_title, " +
+    "s.signing_date::text AS source_signing_date, s.president_name AS source_president " +
+    "FROM presidential_dispositions d " +
+    "JOIN presidential_documents s ON s.id = d.source_id " +
+    "WHERE d.target_id = " + Math.floor(id) + " ORDER BY s.signing_date";
+  let rows, outbound, inbound;
+  try {
+    [rows, outbound, inbound] = await Promise.all([
+      corpusRunQuery(env, docSql),
+      corpusRunQuery(env, outboundSql),
+      corpusRunQuery(env, inboundSql)
+    ]);
+  } catch (e) { return json({ error: { message: "Document fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Document not found", code: "not_found" } }, 404);
+  }
+  return json({ document: rows[0], dispositions_out: outbound, dispositions_in: inbound }, 200);
+}
+
+async function corpusPresidentialItemsByIdsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseItemsByIdsRequest(body && body.ids);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  if (parsed.ids.length === 0) return json({ display_rows: [] }, 200);
+  const sql = buildItemsByIdsSql(PRESIDENTIAL_DISPLAY_COLS, "presidential_documents", parsed.ids);
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Presidential items-by-ids failed: " + e.message } }, 502); }
+  return json({ display_rows: rows }, 200);
+}
+
+// ── Presidential AI modes ───────────────────────────────────────────────────
+// One claude_ama mode (planner picks output_mode per question shape — the
+// "no query-architecture buttons" principle) + summarize-one-document on the
+// detail sheet. Mirrors the OLC shape; the corpus-specific work is the schema
+// doc: TWO tables (documents + the parsed disposition graph) and the
+// denominator discipline the brief's question set demands.
+
+// 12,654 documents — always inlineable like OLC; no scope_sql path needed.
+function normalizePresidentialScope(s) {
+  s = s || {};
+  let ids = Array.isArray(s.document_ids)
+    ? s.document_ids.filter((x) => x != null).map(Number).filter(Number.isFinite)
+    : null;
+  if (ids && ids.length === 0) ids = null;
+  return {
+    document_ids: ids,
+    is_full_db: !ids,
+    count: Number(s.count) || (ids ? ids.length : 0),
+    description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : ""
+  };
+}
+
+var PRESIDENTIAL_AMA_SCHEMA_DOC = [
+  "TABLE: presidential_documents — one row per Federal Register presidential document (12,654 total).",
+  "  id (bigint, PK)                — document id; use this when you need to identify a document in your output.",
+  "  doc_type (text)                — 'executive_order' (5,898) | 'proclamation' (4,394) | 'memorandum' (803) | 'determination' (790) | 'notice' (769).",
+  "  eo_number (int)                — sequential EO number (executive_order rows only); 'EO 14239' → eo_number = 14239.",
+  "  proclamation_number (int)      — sequential number (proclamation rows only).",
+  "  display_citation (text)        — canonical human citation ('Executive Order 14239', 'Memorandum of March 18, 2025'). Use this when citing.",
+  "  title (text)                   — document title; FTS-indexed alongside display_citation + body_text.",
+  "  president_slug (text)          — 'donald-trump', 'joe-biden', 'barack-obama', ... 100% populated. president_name has the display form.",
+  "  signing_date (date)            — when the President signed; your temporal axis (2 rows NULL).",
+  "  publication_date (date)        — when OFR published in the Federal Register (lags signing by days).",
+  "  fr_citation (text)             — Federal Register citation ('90 FR 12345').",
+  "  agencies (text[])              — implementing agencies; array. Filter: EXISTS (SELECT 1 FROM unnest(agencies) a WHERE a ILIKE '%homeland%').",
+  "  disposition_notes (text)       — RAW OFR cross-reference string; prefer the PARSED table below.",
+  "  text_quality (text)            — 'clean' | 'juris_backfill' (typed DOJ JURIS text, 1948-1993 EOs) | 'metadata_only' (NO body text — 1,466 rows, almost all 1940-1947 EOs).",
+  "  body_text (text)               — full document text; LARGE (do not return in planned queries — pull metadata and let synthesis cite).",
+  "  text_length (int)              — body length in characters.",
+  "  fts (tsvector, generated)      — to_tsvector over title + display_citation + body_text. metadata_only rows match on title/citation ONLY.",
+  "",
+  "TABLE: presidential_dispositions — the PARSED OFR cross-reference graph (14,728 edges; captured from disposition_notes, not inferred).",
+  "  source_id (bigint)             — FK to presidential_documents.id: the document that carries the note.",
+  "  relationship (text)            — normalized: 'revokes' | 'revoked_by' | 'revokes_in_part' | 'revoked_in_part_by' | 'amends' | 'amended_by' | 'supersedes' | 'superseded_by' | 'supersedes_in_part' | 'superseded_in_part_by' | 'continues' | 'continued_by' | 'suspends' | 'suspended_by' | 'supplements' | 'supplemented_by' | 'reinstates' | 'reinstated_by' | 'ratified_by' | 'extended_by' | 'authority_repealed_by' | 'see'.",
+  "  target_type (text)             — 'eo' | 'proclamation' | 'memorandum' | 'determination' | 'notice' | 'statute' | 'other'.",
+  "  target_eo_number (int)         — EO number of the target where parseable.",
+  "  target_id (bigint, nullable)   — resolved FK to presidential_documents.id where the target is in the corpus (12,495 of 13,149 EO targets resolve; unresolved = pre-1936 or lettered EOs).",
+  "  target_date (date), target_raw (text) — the verbatim target fragment.",
+  "",
+  "DISPOSITION QUERY PATTERNS:",
+  "- 'Is EO X still in effect?' → inbound edges: SELECT d.relationship, s.display_citation, s.signing_date::text, s.president_name FROM presidential_dispositions d JOIN presidential_documents s ON s.id = d.source_id WHERE d.target_eo_number = X AND d.target_type = 'eo' ORDER BY s.signing_date. revoked_by/superseded_by = no longer in effect (at least in part); amended_by = modified; only 'see' edges are non-dispositive. NO INBOUND REVOCATION ≠ CONFIRMED ACTIVE — the graph records explicit dispositions only; say so in candor_notes.",
+  "- Cross-administration reversal counts ('how many of X's EOs did Y revoke') → join source and target documents through the graph: FROM presidential_dispositions d JOIN presidential_documents src ON src.id = d.source_id JOIN presidential_documents tgt ON tgt.id = d.target_id WHERE d.relationship IN ('revokes','revokes_in_part','supersedes','supersedes_in_part') AND src.president_slug = '...' AND tgt.president_slug = '...' AND tgt.doc_type = 'executive_order'. State your definition of 'reversed' (which relationships you counted) in the answer.",
+  "- Lineage/evolution chains ('the EOs defining classification') → combine FTS retrieval with the graph's supersedes/revokes spine, ordered by signing_date.",
+  "",
+  "NOTES:",
+  "- Topical/conceptual search: WHERE fts @@ websearch_to_tsquery('english', 'your search') — supports OR and quoted phrases.",
+  "- COVERAGE ASYMMETRY (the central caveat — surface in candor_notes on ANY count-by-president or trend answer): EOs cover 1940→present, but the other four types only begin 1993/94. Proclamation/memoranda/determination/notice counts for pre-1994 presidents are NOT in this corpus (Truman through Bush 41 show zero — that is a corpus floor, not history). Pre-1936 documents are entirely out of corpus, and 1936-1939 is sparse.",
+  "- TEXT FLOOR: 1,466 rows (almost all 1940-1947 EOs) are metadata_only — title/citation searchable, body NOT searchable or readable. Flag in candor_notes when a question's era overlaps 1940-1947.",
+  "- CEREMONIAL PROCLAMATIONS: roughly half of proclamations are ceremonial (commemorative weeks, observances); there is no ceremonial/substantive flag. Counts of proclamations mix both — note this when it matters.",
+  "- FORM-SHOPPING CONFOUND: declining EO counts partly reflect substitution toward memoranda (lower-profile); the memoranda series only begins 1994. Trend answers should surface this.",
+  "- Read-only: only SELECT statements are accepted; LIMIT yourself to ≤ 500 rows per query."
+].join("\n");
+
+function buildPresidentialPlanningSystem() {
+  return [
+    "You are the planner for an agentic narrative-synthesis tool over the PRESIDENTIAL DOCUMENTS corpus — the formal signed instruments by which the President directs the executive branch and the public (executive orders, proclamations, memoranda, determinations, notices), with the OFR's parsed amendment/revocation graph alongside. These documents ARE the administration's acts — politically the hottest terrain on the platform; describe, never editorialize. Your job is to look at a user question and the current scope, then return a JSON plan describing how you would answer it.",
+    "",
+    "You have access to a Postgres database (read-only) via SELECT queries. Schema:",
+    "",
+    PRESIDENTIAL_AMA_SCHEMA_DOC,
+    "",
+    "Output a single JSON object with these keys (no prose, no code fences):",
+    "{",
+    '  "output_mode": "list" | "narrative" | "hybrid",',
+    "       // list = the question wants a refined set of documents (the field will be narrowed).",
+    "       // narrative = the question wants an analytical answer; the field is unchanged.",
+    "       // hybrid = both — narrative summary plus a refined list (most synthesis questions).",
+    '  "approach_summary": "2-4 sentence plan, plain prose, no markdown headers",',
+    '  "candor_notes": ["caveats the user should see — e.g. the coverage-asymmetry denominator on count questions, the metadata-only text floor for 1940-47, the no-recorded-revocation-is-not-confirmed-active caveat on status questions"],',
+    '  "queries": [',
+    '    {"label": "what this query gathers", "sql": "SELECT ... FROM presidential_documents WHERE ... LIMIT 200"},',
+    "    ...",
+    "  ],",
+    '  "estimated_cost_cents": <integer>,',
+    "       // your estimate of the synthesis call cost in cents (the planning call is already paid).",
+    "       // Synthesis input ≈ all query results in JSON; output ≈ 800-2000 tokens.",
+    "       // Anthropic Sonnet pricing × 1.35 markup is roughly: input 0.4¢/1K tokens, output 2¢/1K tokens.",
+    '  "wants_synthesis": true',
+    "}",
+    "",
+    "Rules:",
+    "- Be ruthlessly economical with queries. Pull metadata (id, display_citation, title, doc_type, president_name, signing_date, text_quality) — NEVER body_text in a planned query. The synthesis step works from citations + titles + dates; per-document deep reads are a separate mode.",
+    "- STATUS / LINEAGE QUESTIONS ('is EO X still in effect', 'what amended X', 'what did X revoke') → use presidential_dispositions, not text search. Direct-lookup questions resolve on eo_number. Always add the no-recorded-revocation caveat for 'still in effect' answers.",
+    "- REVERSAL-MATRIX QUESTIONS ('how many of X's EOs did Y withdraw or supersede') → ONE graph query joining source and target presidents; state the relationship set you counted in candor_notes ('counted revokes, revokes_in_part, supersedes, supersedes_in_part; amendments not counted').",
+    "- COUNT / TREND QUESTIONS → one GROUP BY query (by president or by year). MANDATORY candor_notes: the coverage asymmetry (EOs 1940→, other types 1994→; pre-1936 out of corpus) and — for trends — the form-shopping confound (memoranda substitution, series starts 1994). Normalize per-year where term lengths differ.",
+    "- For narrative questions over a topic ('trace presidential action on X'), order by signing_date ASC and cap at 200 documents per query.",
+    "- KEYWORD UNDERPERFORMS — FAN OUT WITH OR GENEROUSLY. Presidential documents use formal register: the user's phrasing rarely matches the document's. Specific failure modes:",
+    "    * **Policy vs instrument language.** User asks about 'travel ban'; the proclamations say 'suspension of entry', 'restricting entry', 'detrimental to the interests of the United States'. Fan: '\"suspension of entry\" OR \"restrict entry\" OR \"suspend entry\" OR \"immigrant and nonimmigrant entry\"'.",
+    "    * **Authority constructions.** 'sanctions' documents invoke 'blocking property', 'national emergency', 'IEEPA', 'prohibited transactions'. Fan all of these alongside the user's term.",
+    "    * **Agency/subject formulations.** The document may name the umbrella authority or statutory hook rather than the colloquial subject ('classification' → 'classified national security information', 'national security information', 'security classification').",
+    "  WORKED EXAMPLE — *'executive orders on classified information'*: don't just FTS 'classified information'. Fan: websearch_to_tsquery('english', '\"classified national security information\" OR \"security classification\" OR \"national security information\" OR \"classified information\"') AND doc_type = 'executive_order', ordered by signing_date ASC — then let the disposition graph's supersedes spine order the lineage.",
+    "- NARRATIVE DISCIPLINE. For output_mode='narrative' or 'hybrid', prefer 2–4 queries, NOT 6+. Synthesis has a finite output-token budget (currently 8000 for narrative); too many queries inflate the synthesis input and risk truncation mid-answer.",
+    "- WHEN THE CURRENT SCOPE IS NARROWED (document_ids list provided): use the name \"scoped_presidential_documents\" instead of \"presidential_documents\". The runner substitutes this with an inline subquery already filtered to the scope. CRITICAL: reference this name ONLY after FROM or JOIN keywords, and DO NOT alias it. Write \"FROM scoped_presidential_documents WHERE signing_date > '2025-01-20'\" (good), not \"FROM scoped_presidential_documents p WHERE ...\" (will break). presidential_dispositions is NEVER scoped — always reference it by its real name. WHEN SCOPE IS THE FULL CORPUS: use \"presidential_documents\".",
+    LEGAL_ADVICE_PLANNER_RULE,
+    "- Output strict JSON only. No markdown. No code fences. No prose outside the object."
+  ].join("\n");
+}
+
+function buildPresidentialPlanningUser(question, scope) {
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "CURRENT SCOPE:",
+    scope.description || (scope.is_full_db
+      ? "The full corpus — all 12,654 presidential documents (EOs, proclamations, memoranda, determinations, notices)."
+      : fmtIntJs(scope.count) + " documents (narrowed)."),
+    scope.is_full_db
+      ? "(no document_id constraint — your queries run against the full corpus; use the table name \"presidential_documents\")"
+      : "(narrowed to " + fmtIntJs(scope.count) + " document_ids; the runner will substitute scoped_presidential_documents with an inline subquery filtered to the scope — use THAT name in your queries)",
+    "",
+    "Return the JSON plan now."
+  ].join("\n");
+}
+
+function parsePresidentialPlan(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    const firstObj = extractFirstJsonObject(cleaned);
+    if (firstObj) {
+      try { v = JSON.parse(firstObj); }
+      catch (pe2) { throw new Error("JSON.parse error: " + pe2.message); }
+    } else {
+      throw new Error("could not find a JSON object in the response.");
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (["list", "narrative", "hybrid"].indexOf(v.output_mode) < 0) throw new Error("output_mode must be list, narrative, or hybrid.");
+  if (!Array.isArray(v.queries)) throw new Error("queries must be an array.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  v.estimated_cost_cents = Math.max(0, Math.round(Number(v.estimated_cost_cents) || 0));
+  v.approach_summary = String(v.approach_summary || "").trim();
+  return v;
+}
+
+async function executePresidentialPlan(env, plan, scope) {
+  // 12,654 documents max — always inlineable, no scope_sql path needed.
+  let scopedBody = null;
+  if (scope.document_ids && scope.document_ids.length > 0) {
+    const idsSubquery = "SELECT unnest('{" + scope.document_ids.join(",") + "}'::bigint[]) AS id";
+    scopedBody = "(SELECT p.* FROM presidential_documents p WHERE p.id IN (" + idsSubquery + "))";
+  }
+
+  const results = [];
+  for (let i = 0; i < plan.queries.length; i++) {
+    const q = plan.queries[i];
+    let sql = String(q.sql || "").trim().replace(/;\s*$/, "").trim();
+    if (!sql) continue;
+    let execSql = sql;
+    if (scopedBody) {
+      execSql = substituteScoped(execSql, "scoped_presidential_documents", scopedBody);
+    }
+    if (!/^\s*SELECT\b/i.test(execSql)) execSql = "SELECT * FROM (" + execSql + ") AS presidential_q";
+    let rows;
+    try { rows = await withStatementTimeoutRetry(() => corpusRunQuery(env, execSql)); }
+    catch (err) { throw new Error('Query "' + (q.label || ("query " + (i + 1))) + '" failed: ' + err.message); }
+    const truncated = (rows.length > 200) ? rows.slice(0, 200) : rows;
+    results.push({ label: q.label || ("query " + (i + 1)), sql, rows: truncated, total_rows: rows.length, was_truncated: rows.length > 200 });
+  }
+  return results;
+}
+
+function buildPresidentialSynthesisSystem(outputMode) {
+  const listClause = (outputMode === "list" || outputMode === "hybrid")
+    ? '"document_ids": [<bigint>, ...]   // the document ids the user should see; pulled from your query results.'
+    : '"document_ids": null';
+  return [
+    "You are the synthesis step for an agentic narrative-synthesis tool over the PRESIDENTIAL DOCUMENTS corpus. The planner has already run the SQL queries you proposed; you now have the question, the plan, and the query results. Write the user-facing answer.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "answer_markdown": "...",  // markdown narrative; cite documents in prose by display citation + year (e.g. "Executive Order 12333 (1981)", "the October 2025 proclamation on ..."). DO NOT embed internal id tokens.',
+    "  " + listClause + ",",
+    '  "candor_notes": ["any caveats discovered during synthesis"]',
+    "}",
+    "",
+    "Rules:",
+    "- DESCRIBE, NEVER EDITORIALIZE. These documents are the administration's acts — politically the hottest terrain on the platform. Describe what each document orders, claims as authority, and did to prior instruments; never characterize wisdom or legality. Questions about legality route to 'what courts/OLC have said' framing, not your judgment.",
+    "- CITE EVERY DOCUMENT via DISPLAY CITATION + YEAR in PROSE — 'Executive Order 13526 (2009)', 'the Memorandum of March 18, 2025'. The user navigates via the Cited Documents list below the narrative; do NOT embed id tokens.",
+    "- HONEST ABSENCE. If asked what a document defines, provides, or says and the text does NOT contain it, say so plainly ('the order forbids assassination but nowhere defines the term'). NEVER synthesize a definition or provision the document lacks — this corpus is the canonical text; absence IS the answer.",
+    "- STATUS HONESTY. 'Still in effect' conclusions rest on the disposition graph, which records explicit OFR-noted dispositions only: say 'no recorded revocation or supersession' rather than 'confirmed active'. Name the amendment trail where the results carry it.",
+    "- DENOMINATOR DISCIPLINE. Any count-by-president or trend statement must carry the coverage caveat (EOs 1940→present; proclamations/memoranda/determinations/notices only 1994→; pre-1936 out of corpus) and, for trends, the memoranda-substitution confound.",
+    "- METADATA-ONLY ROWS. If your result set includes text_quality='metadata_only' rows (1940-1947 EOs), note that their text is not in the corpus — they are finding-aid entries; the FR/NARA links hold the originals.",
+    "- ZERO-RESULT HONESTY. When the query results are empty (or near-empty) for what should be a non-trivial question, the answer_markdown MUST: (1) name the FTS terms tried in prose, (2) acknowledge this may be a keyword recall failure — presidential documents use formal register ('suspension of entry', not 'travel ban'; 'blocking property', not 'sanctions'), and (3) note the corpus floors where relevant (pre-1936 absent; 1940-47 EO text absent). Suggest one or two reformulations. DO NOT just say 'no results found'.",
+    "- For list and hybrid output_modes, document_ids must be a non-empty array of bigints drawn from your query results. If your queries did not return identifiable documents, downgrade to narrative mode and explain.",
+    "- Be tight. The user wants an answer, not a methodology essay. Keep candor_notes for caveats.",
+    "- Output strict JSON only. No markdown outside answer_markdown. No code fences.",
+    '- CRITICAL: inside answer_markdown, do NOT use straight double quotes (") — they break JSON parsing when not escaped. Use curly quotes ("") for direct quotation, or single quotes (\'\' or \') for short inline quotation. Apostrophes (\') are fine. If you absolutely must use a straight double quote, escape it as \\".'
+  ].join("\n");
+}
+
+function buildPresidentialSynthesisUser(question, plan, results) {
+  const resultsForModel = results.map(function (r) {
+    return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated, rows: r.rows };
+  });
+  return [
+    "USER QUESTION:",
+    question,
+    "",
+    "YOUR PLAN (from the planning step):",
+    plan.approach_summary,
+    "",
+    "PLANNED OUTPUT MODE: " + plan.output_mode,
+    "",
+    "CANDOR NOTES FROM PLANNING:",
+    (plan.candor_notes && plan.candor_notes.length) ? plan.candor_notes.map(function (n) { return "- " + n; }).join("\n") : "(none)",
+    "",
+    "QUERY RESULTS (JSON):",
+    JSON.stringify(resultsForModel, null, 2),
+    "",
+    "Return the synthesis JSON now."
+  ].join("\n");
+}
+
+function parsePresidentialSynthesis(raw, outputMode) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = repairAnswerMarkdownQuotes(cleaned);
+      if (repaired !== cleaned) { v = JSON.parse(repaired); }
+      else { throw pe; }
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) {
+          try { v = JSON.parse(repairAnswerMarkdownQuotes(firstObj)); }
+          catch (pe4) {
+            const salvaged = salvageTruncatedSynthesis(raw);
+            if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "document_ids");
+            throw new Error("JSON.parse error: " + pe4.message);
+          }
+        }
+      } else {
+        const salvaged = salvageTruncatedSynthesis(raw);
+        if (salvaged) return buildSalvagedSynthesis(salvaged, outputMode, "document_ids");
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.answer_markdown !== "string" || !v.answer_markdown.trim()) throw new Error("answer_markdown is empty.");
+  if (outputMode === "list" || outputMode === "hybrid") {
+    if (!Array.isArray(v.document_ids) || v.document_ids.length === 0) {
+      v.document_ids = [];
+      v.candor_notes = (v.candor_notes || []).concat(["Output mode requested a document list but synthesis returned none — showing narrative only."]);
+    } else {
+      v.document_ids = v.document_ids
+        .filter(function (x) { return x != null; })
+        .map(function (x) { return Number(x); })
+        .filter(function (x) { return Number.isFinite(x); });
+    }
+  } else {
+    v.document_ids = null;
+  }
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusPresidentialPlanHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const question = String((body && body.question) || "").trim();
+  if (!question) return json({ error: { message: "Missing question" } }, 400);
+  const scope = normalizePresidentialScope(body && body.scope);
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildPresidentialPlanningSystem(),
+      messages: [{ role: "user", content: buildPresidentialPlanningUser(question, scope) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Planning step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let plan;
+  try { plan = parsePresidentialPlan(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse plan: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const token = crypto.randomUUID();
+  await env.QUOTA.put("presidential-plan:" + token, JSON.stringify({
+    plan, scope, question, provider, model, userId: auth.userId, authMode: auth.authMode
+  }), { expirationTtl: 900 });
+
+  return json({
+    token,
+    output_mode: plan.output_mode,
+    approach_summary: plan.approach_summary,
+    candor_notes: plan.candor_notes,
+    queries: plan.queries.map(function (q) { return { label: q.label, sql: q.sql }; }),
+    estimated_cost_cents: plan.estimated_cost_cents,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+async function corpusPresidentialExecuteHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const token = body && body.token;
+  if (!token || typeof token !== "string") return json({ error: { message: "Missing plan token" } }, 400);
+  const stored = await env.QUOTA.get("presidential-plan:" + token);
+  if (!stored) return json({ error: { message: "Plan expired or not found — re-run the question.", code: "plan_expired" } }, 410);
+  let blob;
+  try { blob = JSON.parse(stored); } catch { return json({ error: { message: "Stored plan is corrupt — re-run the question." } }, 500); }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, blob.provider, body);
+  if (auth instanceof Response) return auth;
+  if (blob.authMode === "paid" && (auth.authMode !== "paid" || auth.userId !== blob.userId)) {
+    return json({ error: { message: "This plan belongs to a different session. Re-run the question." } }, 403);
+  }
+  ctx.waitUntil(env.QUOTA.delete("presidential-plan:" + token));
+
+  let results;
+  try { results = await executePresidentialPlan(env, blob.plan, blob.scope); }
+  catch (e) { return json({ error: { message: e.message, code: "execute_failed" } }, 400); }
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider: blob.provider, model: blob.model,
+      system: buildPresidentialSynthesisSystem(blob.plan.output_mode),
+      messages: [{ role: "user", content: buildPresidentialSynthesisUser(blob.question, blob.plan, results) }],
+      max_tokens: blob.plan.output_mode === "narrative" ? 8000 : 6000
+    });
+  } catch (e) {
+    return json({ error: { message: "Synthesis step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let synth;
+  try { synth = parsePresidentialSynthesis(res.text, blob.plan.output_mode); }
+  catch (e) { return json({ error: { message: "Could not parse synthesis: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  const querySummary = results.map(function (r) { return { label: r.label, total_rows: r.total_rows, was_truncated: r.was_truncated }; });
+
+  // Authoritative server-side trace capture (joins the client annotation row by
+  // interaction_id). Fire-and-forget; gated + UUID-guarded inside the helper.
+  logCorpusSuccess(request, env, ctx, {
+    interaction_id: body && body.interaction_id,
+    authMode: auth.authMode, userId: auth.userId,
+    surface: "presidential", mode: "ama", question: blob.question,
+    output_mode: blob.plan.output_mode,
+    plan: { output_mode: blob.plan.output_mode, approach_summary: blob.plan.approach_summary, queries: blob.plan.queries, estimated_cost_cents: blob.plan.estimated_cost_cents },
+    query_summary: querySummary,
+    answer_markdown: synth.answer_markdown, cited_ids: synth.document_ids, candor_notes: synth.candor_notes,
+    cost_cents: res.costCents, provider: blob.provider, model: blob.model
+  });
+
+  return json({
+    answer_markdown: synth.answer_markdown,
+    document_ids: synth.document_ids,
+    candor_notes: synth.candor_notes,
+    output_mode: blob.plan.output_mode,
+    query_summary: querySummary,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ── Presidential: summarize one document ────────────────────────────────────
+// Invoked from the document detail sheet. One billed call; no plan/execute
+// split (bounded by the single document's length). The disposition trail
+// (parsed graph, both directions) rides along in the prompt so the summary
+// can state lineage status honestly.
+
+var PRESIDENTIAL_SUMMARIZE_TEXT_CAP = 200000; // chars (~50K tokens)
+
+function buildPresidentialSummarizeSystem() {
+  return [
+    "You are summarizing one PRESIDENTIAL DOCUMENT (an executive order, proclamation, memorandum, determination, or notice) for a researcher. These documents are the administration's formal acts — politically charged terrain. Your job: describe what the document orders and claims as authority; never editorialize on wisdom or legality.",
+    "",
+    "Output a single JSON object (no prose, no code fences) with these keys:",
+    "{",
+    '  "summary_markdown": "...",  // markdown summary, 4-10 short paragraphs.',
+    '  "candor_notes": ["caveats — truncation, gaps in the text you were shown"]',
+    "}",
+    "",
+    "Structure the summary_markdown around these headings (omit any that don't apply):",
+    "- **What it does** — the operative commands, in one or two sentences.",
+    "- **Authority invoked** — the constitutional/statutory hooks the document itself cites.",
+    "- **Who it tasks** — agencies/officials directed, and to do what by when.",
+    "- **Effect on prior instruments** — what it revokes, amends, or supersedes (from the disposition data provided).",
+    "- **Status** — what later documents did to it (from the disposition data); phrase as 'no recorded revocation' rather than 'confirmed active'.",
+    "- **Notable definitions / limits** — terms the document defines or explicitly leaves undefined, carve-outs, sunset clauses.",
+    "",
+    "Rules:",
+    "- Describe what the document says. Do not assess legality or wisdom, and do not add context the document itself does not contain.",
+    "- HONEST ABSENCE: if the document conspicuously does NOT define a key term or provide an expected element, say so plainly — absence is part of an accurate summary.",
+    "- Quote sparingly; use curly quotes (“”) for direct quotation. Straight double quotes break JSON parsing.",
+    "- If the text was truncated before reaching you, note that in candor_notes (\"Summary based on the first N characters; later sections not seen.\").",
+    "- Output strict JSON only. No markdown outside summary_markdown. No code fences."
+  ].join("\n");
+}
+
+function buildPresidentialSummarizeUser(doc, dispositionsOut, dispositionsIn, wasTruncated) {
+  const agencies = Array.isArray(doc.agencies) ? doc.agencies.filter(Boolean).join(", ") : "";
+  const parts = [
+    "DOCUMENT METADATA:",
+    "- Citation: " + (doc.display_citation || "(none)"),
+    "- Title: " + (doc.title || "(no title)"),
+    "- Type: " + (doc.doc_type || "(unknown)"),
+    "- President: " + (doc.president_name || "(unknown)"),
+    "- Signed: " + (doc.signing_date || "(no date)"),
+    "- FR citation: " + (doc.fr_citation || "(none)"),
+    "- Agencies: " + (agencies || "(none listed)")
+  ];
+  if (Array.isArray(dispositionsOut) && dispositionsOut.length) {
+    parts.push("");
+    parts.push("WHAT THIS DOCUMENT DID TO PRIOR INSTRUMENTS (parsed OFR disposition data):");
+    dispositionsOut.slice(0, 40).forEach(function (d) {
+      parts.push("- " + d.relationship + ": " + (d.target_citation || d.target_raw));
+    });
+  }
+  if (Array.isArray(dispositionsIn) && dispositionsIn.length) {
+    parts.push("");
+    parts.push("WHAT LATER DOCUMENTS DID TO THIS ONE (parsed OFR disposition data):");
+    dispositionsIn.slice(0, 40).forEach(function (d) {
+      parts.push("- " + d.relationship + " — " + (d.source_citation || "(unresolved)") +
+        (d.source_signing_date ? " (" + d.source_signing_date + ")" : ""));
+    });
+  }
+  parts.push("");
+  parts.push("DOCUMENT TEXT" + (wasTruncated ? " (TRUNCATED to " + fmtIntJs(PRESIDENTIAL_SUMMARIZE_TEXT_CAP) + " characters — flag this in candor_notes):" : ":"));
+  const text = String(doc.body_text || "");
+  parts.push(wasTruncated ? text.slice(0, PRESIDENTIAL_SUMMARIZE_TEXT_CAP) : text);
+  parts.push("");
+  parts.push("Return the summary JSON now.");
+  return parts.join("\n");
+}
+
+function parsePresidentialSummary(raw) {
+  const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let v;
+  try { v = JSON.parse(cleaned); }
+  catch (pe) {
+    try {
+      const repaired = cleaned.replace(/"answer_markdown"/g, '"summary_markdown"');
+      const rep2 = repairAnswerMarkdownQuotes(repaired.replace(/"summary_markdown"/g, '"answer_markdown"'))
+        .replace(/"answer_markdown"/g, '"summary_markdown"');
+      v = JSON.parse(rep2);
+    } catch (pe2) {
+      const firstObj = extractFirstJsonObject(cleaned);
+      if (firstObj) {
+        try { v = JSON.parse(firstObj); }
+        catch (pe3) { throw new Error("JSON.parse error: " + pe3.message); }
+      } else {
+        throw new Error("could not find a JSON object.");
+      }
+    }
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("top-level value is not an object.");
+  if (typeof v.summary_markdown !== "string" || !v.summary_markdown.trim()) throw new Error("summary_markdown is empty.");
+  v.candor_notes = Array.isArray(v.candor_notes) ? v.candor_notes : [];
+  return v;
+}
+
+async function corpusPresidentialSummarizeHandler(request, env, ctx) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const provider = (body && body.provider) || "anthropic";
+  if (!PROVIDERS[provider]) return json({ error: { message: "Invalid or missing provider" } }, 400);
+  const model = body && body.model;
+  if (!model || typeof model !== "string") return json({ error: { message: "Missing or invalid model" } }, 400);
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return json({ error: { message: "Missing or invalid id" } }, 400);
+  }
+
+  const auth = await resolveCorpusAuth(request, env, ctx, provider, body);
+  if (auth instanceof Response) return auth;
+
+  const docSql = "SELECT id, display_citation, title, doc_type, president_name, " +
+    "signing_date::text AS signing_date, fr_citation, agencies, text_quality, body_text " +
+    "FROM presidential_documents WHERE id = " + Math.floor(id) + " LIMIT 1";
+  const outSql = "SELECT d.relationship, d.target_raw, t.display_citation AS target_citation " +
+    "FROM presidential_dispositions d LEFT JOIN presidential_documents t ON t.id = d.target_id " +
+    "WHERE d.source_id = " + Math.floor(id);
+  const inSql = "SELECT d.relationship, s.display_citation AS source_citation, " +
+    "s.signing_date::text AS source_signing_date " +
+    "FROM presidential_dispositions d JOIN presidential_documents s ON s.id = d.source_id " +
+    "WHERE d.target_id = " + Math.floor(id) + " ORDER BY s.signing_date";
+  let rows, outbound, inbound;
+  try {
+    [rows, outbound, inbound] = await Promise.all([
+      corpusRunQuery(env, docSql),
+      corpusRunQuery(env, outSql),
+      corpusRunQuery(env, inSql)
+    ]);
+  } catch (e) { return json({ error: { message: "Document fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) {
+    return json({ error: { message: "Document not found", code: "not_found" } }, 404);
+  }
+  const doc = rows[0];
+  const text = String(doc.body_text || "");
+  if (!text.trim()) {
+    return json({ error: { message: "This document is a metadata-only finding-aid entry (pre-1948 Federal Register digitization floor) — the corpus knows it exists but holds no text to summarize. The Federal Register / NARA links on the detail view hold the original.", code: "no_text" } }, 400);
+  }
+  const wasTruncated = text.length > PRESIDENTIAL_SUMMARIZE_TEXT_CAP;
+
+  let res;
+  try {
+    res = await corpusModelCall(env, ctx, auth, {
+      provider, model,
+      system: buildPresidentialSummarizeSystem(),
+      messages: [{ role: "user", content: buildPresidentialSummarizeUser(doc, outbound, inbound, wasTruncated) }],
+      max_tokens: 4000
+    });
+  } catch (e) {
+    return json({ error: { message: "Summarize step: " + e.message, code: e.code } }, e.status || 502);
+  }
+  let parsed;
+  try { parsed = parsePresidentialSummary(res.text); }
+  catch (e) { return json({ error: { message: "Could not parse summary: " + e.message, raw: String(res.text).slice(0, 600) } }, 502); }
+
+  return json({
+    summary_markdown: parsed.summary_markdown,
+    candor_notes: parsed.candor_notes,
+    was_truncated: wasTruncated,
+    _cost_cents: res.costCents,
+    _balance_cents: res.balanceCents
+  }, 200);
+}
+
+// ============================================================================
 // Lawfare commentary corpus — v1 alpha
 //
 // The platform's FIRST commentary corpus: ~27K articles, podcasts, and
@@ -6258,7 +7042,7 @@ async function corpusFrusSummarizeHandler(request, env, ctx) {
 // merged into one ranked list. That changes when pgvector lands (Phase 2)
 // and provides a single comparable similarity score.
 
-var HUB_CORPORA = ["litigation", "usc", "cfr", "olc", "frus", "lawfare"];
+var HUB_CORPORA = ["litigation", "usc", "cfr", "olc", "frus", "lawfare", "presidential"];
 // Per-corpus top-K cap. The brief says the hub is "the shallow end" — five
 // results per card surface the result-set shape without overwhelming. Users
 // who want more click into the spoke.
@@ -6370,13 +7154,27 @@ function buildHubQueriesLawfare(escapedQuery, limit) {
   return { rowsSql, countSql };
 }
 
+function buildHubQueriesPresidential(escapedQuery, limit) {
+  const ftsClause = "fts @@ websearch_to_tsquery('english', '" + escapedQuery + "')";
+  const rowsSql =
+    "SELECT id::text AS id, " +
+    "  COALESCE(title, display_citation, '(no title)') AS title, " +
+    "  display_citation AS context, " +
+    "  signing_date::text AS date " +
+    "FROM presidential_documents WHERE " + ftsClause + " " +
+    "ORDER BY signing_date DESC NULLS LAST LIMIT " + limit;
+  const countSql = "SELECT count(*)::bigint AS n FROM presidential_documents WHERE " + ftsClause;
+  return { rowsSql, countSql };
+}
+
 var HUB_QUERY_BUILDERS = {
   litigation: buildHubQueriesLitigation,
   usc: buildHubQueriesUsc,
   cfr: buildHubQueriesCfr,
   olc: buildHubQueriesOlc,
   frus: buildHubQueriesFrus,
-  lawfare: buildHubQueriesLawfare
+  lawfare: buildHubQueriesLawfare,
+  presidential: buildHubQueriesPresidential
 };
 
 async function runHubKeywordForCorpus(env, corpus, escapedQuery, limit) {
@@ -6493,7 +7291,7 @@ async function corpusHubKeywordHandler(request, env, ctx) {
 // DOCUMENT level so exact names and citations are never blurred away by
 // embedding similarity. This endpoint is the substrate "more like this" and
 // the semantically-routed Hub AMA build on.
-var SEMANTIC_CORPORA = ["olc", "frus", "lawfare"];
+var SEMANTIC_CORPORA = ["olc", "frus", "lawfare", "presidential"];
 var SEMANTIC_DEFAULT_K = 12;
 var SEMANTIC_MAX_K = 50;
 var SEMANTIC_QUERY_MAX_CHARS = 500;
@@ -6589,6 +7387,11 @@ function buildSemanticMetaSql(corpus, ids) {
     return "SELECT id::text AS id, COALESCE(title,'(untitled)') AS title, " +
       "content_type AS context, published_date::text AS date " +
       "FROM lawfare_documents WHERE id IN (" + inList + ")";
+  }
+  if (corpus === "presidential") {
+    return "SELECT id::text AS id, COALESCE(title, display_citation, '(no title)') AS title, " +
+      "display_citation AS context, signing_date::text AS date " +
+      "FROM presidential_documents WHERE id IN (" + inList + ")";
   }
   throw new Error("Unknown corpus: " + corpus);
 }
@@ -7880,6 +8683,16 @@ export {
   buildLawfareSummarizeUser,
   executeLawfarePlan,
   LAWFARE_SUMMARIZE_TEXT_CAP,
+  buildPresidentialFilterWhere,
+  normalizePresidentialScope,
+  parsePresidentialPlan,
+  parsePresidentialSynthesis,
+  parsePresidentialSummary,
+  buildPresidentialPlanningUser,
+  buildPresidentialPlanningSystem,
+  buildPresidentialSummarizeUser,
+  executePresidentialPlan,
+  PRESIDENTIAL_SUMMARIZE_TEXT_CAP,
   normalizeUscScope,
   parseUscPlan,
   parseUscSynthesis,
@@ -7908,6 +8721,7 @@ export {
   buildHubQueriesOlc,
   buildHubQueriesFrus,
   buildHubQueriesLawfare,
+  buildHubQueriesPresidential,
   SEMANTIC_CORPORA,
   parseSemanticSearchRequest,
   vecLiteral,
