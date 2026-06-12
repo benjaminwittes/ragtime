@@ -3735,14 +3735,30 @@ describe("parsePresidentialSummary", () => {
 describe("buildPresidentialSummarizeUser", () => {
   const doc = { display_citation: "Executive Order 12333", title: "United States Intelligence Activities", doc_type: "executive_order", president_name: "Ronald Reagan", signing_date: "1981-12-04", fr_citation: "46 FR 59941", agencies: ["Central Intelligence Agency"], body_text: "x".repeat(100) };
   it("includes the disposition trail in both directions", () => {
+    // Inbound 'amends' = EO 13470's own note "Amends: EO 12333" — forward
+    // voice, so it lands under WHAT LATER DOCUMENTS DID (flipped passive).
     const u = buildPresidentialSummarizeUser(doc,
       [{ relationship: "revokes", target_raw: "EO 12036", target_citation: "Executive Order 12036" }],
-      [{ relationship: "amended_by", source_citation: "Executive Order 13470", source_signing_date: "2008-07-30" }],
+      [{ relationship: "amends", source_citation: "Executive Order 13470", source_signing_date: "2008-07-30" }],
       false);
     expect(u).toContain("WHAT THIS DOCUMENT DID TO PRIOR INSTRUMENTS");
     expect(u).toContain("Executive Order 12036");
     expect(u).toContain("WHAT LATER DOCUMENTS DID TO THIS ONE");
-    expect(u).toContain("Executive Order 13470");
+    expect(u).toContain("amended_by — Executive Order 13470");
+  });
+  it("normalizes verb voice across both edge directions", () => {
+    // Own row carries reverse-voice "Amended by: EO 13284" → something
+    // done TO this document, not something it did. Inbound 'revoked_by'
+    // = EO 12036's note "Revoked by: EO 12333" → this document revoked
+    // 12036.
+    const u = buildPresidentialSummarizeUser(doc,
+      [{ relationship: "amended_by", target_raw: "EO 13284", target_citation: "Executive Order 13284" }],
+      [{ relationship: "revoked_by", source_citation: "Executive Order 12036", source_signing_date: "1978-01-24" }],
+      false);
+    expect(u).toContain("WHAT LATER DOCUMENTS DID TO THIS ONE");
+    expect(u).toContain("amended_by — Executive Order 13284");
+    expect(u).toContain("WHAT THIS DOCUMENT DID TO PRIOR INSTRUMENTS");
+    expect(u).toContain("revokes: Executive Order 12036");
   });
   it("flags truncation", () => {
     const big = { ...doc, body_text: "x".repeat(PRESIDENTIAL_SUMMARIZE_TEXT_CAP + 10) };

@@ -5332,6 +5332,30 @@ function buildPresidentialSummarizeSystem() {
   ].join("\n");
 }
 
+// Disposition verb-voice helpers. The OFR notes carry BOTH voices —
+// "Revokes: EO X" (forward) and "Revoked by: EO Y" (reverse) — so an
+// edge's semantic direction depends on its verb voice, not which row
+// carries it. (Same normalization the spoke's detail sheet performs.)
+function presidentialEdgeIsReverseVoice(rel) {
+  return /_by$/.test(String(rel || ""));
+}
+var PRESIDENTIAL_VERB_PASSIVE = {
+  revokes: "revoked_by", revokes_in_part: "revoked_in_part_by",
+  amends: "amended_by", supersedes: "superseded_by",
+  supersedes_in_part: "superseded_in_part_by", suspends: "suspended_by",
+  supplements: "supplemented_by", reinstates: "reinstated_by",
+  continues: "continued_by"
+};
+function presidentialVerbToPassive(rel) {
+  return PRESIDENTIAL_VERB_PASSIVE[rel] || rel + "_by";
+}
+function presidentialVerbToActive(rel) {
+  for (var k in PRESIDENTIAL_VERB_PASSIVE) {
+    if (PRESIDENTIAL_VERB_PASSIVE[k] === rel) return k;
+  }
+  return String(rel).replace(/_by$/, "");
+}
+
 function buildPresidentialSummarizeUser(doc, dispositionsOut, dispositionsIn, wasTruncated) {
   const agencies = Array.isArray(doc.agencies) ? doc.agencies.filter(Boolean).join(", ") : "";
   const parts = [
@@ -5344,20 +5368,40 @@ function buildPresidentialSummarizeUser(doc, dispositionsOut, dispositionsIn, wa
     "- FR citation: " + (doc.fr_citation || "(none)"),
     "- Agencies: " + (agencies || "(none listed)")
   ];
-  if (Array.isArray(dispositionsOut) && dispositionsOut.length) {
+  // Partition by verb voice (not row direction): what this document DID =
+  // its own forward-voice edges + inbound reverse-voice edges (flipped);
+  // what was done TO it = its own reverse-voice edges + inbound
+  // forward-voice edges (flipped passive).
+  const did = [];
+  const doneTo = [];
+  (Array.isArray(dispositionsOut) ? dispositionsOut : []).forEach(function (d) {
+    if (d.relationship === "see") return;
+    const label = d.target_citation || d.target_raw;
+    if (presidentialEdgeIsReverseVoice(d.relationship)) {
+      doneTo.push("- " + d.relationship + " — " + label);
+    } else {
+      did.push("- " + d.relationship + ": " + label);
+    }
+  });
+  (Array.isArray(dispositionsIn) ? dispositionsIn : []).forEach(function (d) {
+    if (d.relationship === "see") return;
+    const label = (d.source_citation || "(unresolved)") +
+      (d.source_signing_date ? " (" + d.source_signing_date + ")" : "");
+    if (presidentialEdgeIsReverseVoice(d.relationship)) {
+      did.push("- " + presidentialVerbToActive(d.relationship) + ": " + label);
+    } else {
+      doneTo.push("- " + presidentialVerbToPassive(d.relationship) + " — " + label);
+    }
+  });
+  if (did.length) {
     parts.push("");
     parts.push("WHAT THIS DOCUMENT DID TO PRIOR INSTRUMENTS (parsed OFR disposition data):");
-    dispositionsOut.slice(0, 40).forEach(function (d) {
-      parts.push("- " + d.relationship + ": " + (d.target_citation || d.target_raw));
-    });
+    did.slice(0, 40).forEach(function (l) { parts.push(l); });
   }
-  if (Array.isArray(dispositionsIn) && dispositionsIn.length) {
+  if (doneTo.length) {
     parts.push("");
     parts.push("WHAT LATER DOCUMENTS DID TO THIS ONE (parsed OFR disposition data):");
-    dispositionsIn.slice(0, 40).forEach(function (d) {
-      parts.push("- " + d.relationship + " — " + (d.source_citation || "(unresolved)") +
-        (d.source_signing_date ? " (" + d.source_signing_date + ")" : ""));
-    });
+    doneTo.slice(0, 40).forEach(function (l) { parts.push(l); });
   }
   parts.push("");
   parts.push("DOCUMENT TEXT" + (wasTruncated ? " (TRUNCATED to " + fmtIntJs(PRESIDENTIAL_SUMMARIZE_TEXT_CAP) + " characters — flag this in candor_notes):" : ":"));
