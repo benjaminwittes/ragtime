@@ -53,6 +53,16 @@ import {
   parseLawfarePlan,
   parseLawfareSynthesis,
   parseLawfareSummary,
+  buildPresidentialFilterWhere,
+  normalizePresidentialScope,
+  parsePresidentialPlan,
+  parsePresidentialSynthesis,
+  parsePresidentialSummary,
+  buildPresidentialPlanningUser,
+  buildPresidentialPlanningSystem,
+  buildPresidentialSummarizeUser,
+  PRESIDENTIAL_SUMMARIZE_TEXT_CAP,
+  buildHubQueriesPresidential,
   normalizeUscScope,
   parseUscPlan,
   parseUscSynthesis,
@@ -1923,8 +1933,8 @@ describe("executeCfrPlan scope cap", () => {
 // ============================================================================
 
 describe("HUB_CORPORA", () => {
-  it("lists exactly the six loaded corpora (incl. lawfare)", () => {
-    expect(HUB_CORPORA).toEqual(["litigation", "usc", "cfr", "olc", "frus", "lawfare"]);
+  it("lists exactly the seven loaded corpora (incl. presidential)", () => {
+    expect(HUB_CORPORA).toEqual(["litigation", "usc", "cfr", "olc", "frus", "lawfare", "presidential"]);
   });
   it("declares a small results-per-corpus cap", () => {
     expect(HUB_RESULTS_PER_CORPUS).toBeGreaterThanOrEqual(3);
@@ -3582,6 +3592,7 @@ describe("LEGAL_ADVICE_CANDOR_NOTE (ToS §3 not-legal-advice note)", () => {
     olc: buildOlcPlanningSystem,
     lawfare: buildLawfarePlanningSystem,
     frus: buildFrusPlanningSystem,
+    presidential: buildPresidentialPlanningSystem,
   };
 
   for (const [name, build] of Object.entries(planners)) {
@@ -3593,6 +3604,176 @@ describe("LEGAL_ADVICE_CANDOR_NOTE (ToS §3 not-legal-advice note)", () => {
       expect(prompt).toContain(JSON.stringify(LEGAL_ADVICE_CANDOR_NOTE));
     });
   }
+});
+
+// ============================================================================
+// Presidential documents spoke (brief #11)
+// ============================================================================
+describe("buildPresidentialFilterWhere", () => {
+  it("returns empty string for empty fields", () => {
+    expect(buildPresidentialFilterWhere({})).toBe("");
+  });
+  it("filters by search FTS with quote escaping", () => {
+    const w = buildPresidentialFilterWhere({ search: "national 'emergency'" });
+    expect(w).toContain("websearch_to_tsquery('english', 'national ''emergency''')");
+  });
+  it("filters by doc_type, president, and textQuality exactly", () => {
+    const w = buildPresidentialFilterWhere({ docType: "executive_order", president: "joe-biden", textQuality: "metadata_only" });
+    expect(w).toContain("doc_type = 'executive_order'");
+    expect(w).toContain("president_slug = 'joe-biden'");
+    expect(w).toContain("text_quality = 'metadata_only'");
+  });
+  it("filters by EO and proclamation number as integers (floors floats, ignores junk)", () => {
+    expect(buildPresidentialFilterWhere({ eoNumber: 14239 })).toContain("eo_number = 14239");
+    expect(buildPresidentialFilterWhere({ eoNumber: "12333.9" })).toContain("eo_number = 12333");
+    expect(buildPresidentialFilterWhere({ eoNumber: "DROP TABLE" })).toBe("");
+    expect(buildPresidentialFilterWhere({ proclamationNumber: 7647 })).toContain("proclamation_number = 7647");
+  });
+  it("filters agencies via EXISTS over unnest with escaping", () => {
+    const w = buildPresidentialFilterWhere({ agency: "Homeland's" });
+    expect(w).toContain("EXISTS (SELECT 1 FROM unnest(agencies)");
+    expect(w).toContain("ILIKE '%Homeland''s%'");
+  });
+  it("applies signing_date bounds only for valid ISO dates", () => {
+    const w = buildPresidentialFilterWhere({ from: "2025-01-20", to: "2026-01-01" });
+    expect(w).toContain("signing_date >= '2025-01-20'");
+    expect(w).toContain("signing_date <= '2026-01-01'");
+    expect(buildPresidentialFilterWhere({ from: "garbage" })).toBe("");
+  });
+  it("joins multiple axes with AND", () => {
+    const w = buildPresidentialFilterWhere({ docType: "proclamation", search: "tariff" });
+    expect(w.split(" AND ").length).toBe(2);
+  });
+});
+
+describe("normalizePresidentialScope", () => {
+  it("treats missing/empty ids as full-db", () => {
+    expect(normalizePresidentialScope({}).is_full_db).toBe(true);
+    expect(normalizePresidentialScope({ document_ids: [] }).is_full_db).toBe(true);
+  });
+  it("keeps numeric ids and drops junk", () => {
+    const s = normalizePresidentialScope({ document_ids: [1, "2", null, "x"] });
+    expect(s.document_ids).toEqual([1, 2]);
+    expect(s.is_full_db).toBe(false);
+    expect(s.count).toBe(2);
+  });
+});
+
+describe("buildPresidentialPlanningSystem", () => {
+  it("documents both tables and the central caveats", () => {
+    const p = buildPresidentialPlanningSystem();
+    expect(p).toContain("presidential_documents");
+    expect(p).toContain("presidential_dispositions");
+    expect(p).toContain("COVERAGE ASYMMETRY");
+    expect(p).toContain("metadata_only");
+    expect(p).toContain("scoped_presidential_documents");
+  });
+  it("teaches the disposition query patterns (status + reversal matrix)", () => {
+    const p = buildPresidentialPlanningSystem();
+    expect(p).toContain("Is EO X still in effect?");
+    expect(p).toContain("NO INBOUND REVOCATION");
+    expect(p).toContain("REVERSAL-MATRIX QUESTIONS");
+  });
+});
+
+describe("buildPresidentialPlanningUser", () => {
+  it("describes the full-corpus scope and names presidential_documents", () => {
+    const s = normalizePresidentialScope({});
+    const u = buildPresidentialPlanningUser("is EO 12333 still in effect?", s);
+    expect(u).toContain('use the table name "presidential_documents"');
+  });
+  it("describes a narrowed scope and names scoped_presidential_documents", () => {
+    const s = normalizePresidentialScope({ document_ids: [1, 2, 3] });
+    const u = buildPresidentialPlanningUser("count these", s);
+    expect(u).toContain("scoped_presidential_documents");
+    expect(u).toContain("3");
+  });
+});
+
+describe("parsePresidentialPlan", () => {
+  const good = { output_mode: "hybrid", approach_summary: "plan", candor_notes: [], queries: [{ label: "q", sql: "SELECT 1" }], estimated_cost_cents: 3, wants_synthesis: true };
+  it("parses a clean plan and a code-fenced plan", () => {
+    expect(parsePresidentialPlan(JSON.stringify(good)).output_mode).toBe("hybrid");
+    expect(parsePresidentialPlan("```json\n" + JSON.stringify(good) + "\n```").queries.length).toBe(1);
+  });
+  it("rejects a bad output_mode", () => {
+    expect(() => parsePresidentialPlan(JSON.stringify({ ...good, output_mode: "essay" }))).toThrow(/output_mode/);
+  });
+});
+
+describe("parsePresidentialSynthesis", () => {
+  it("returns document_ids for hybrid mode and nulls them for narrative", () => {
+    const v = parsePresidentialSynthesis(JSON.stringify({ answer_markdown: "x", document_ids: [5, "6"], candor_notes: [] }), "hybrid");
+    expect(v.document_ids).toEqual([5, 6]);
+    const n = parsePresidentialSynthesis(JSON.stringify({ answer_markdown: "x", document_ids: [5], candor_notes: [] }), "narrative");
+    expect(n.document_ids).toBe(null);
+  });
+  it("downgrades gracefully when hybrid synthesis returns no ids", () => {
+    const v = parsePresidentialSynthesis(JSON.stringify({ answer_markdown: "x", document_ids: [], candor_notes: [] }), "hybrid");
+    expect(v.document_ids).toEqual([]);
+    expect(v.candor_notes.join(" ")).toContain("narrative only");
+  });
+  it("salvage path returns degraded narrative with document_ids = null", () => {
+    const truncated =
+      '{"answer_markdown": "Executive Order 12333 has been amended three times since 1981. The 2008 amendment restructured';
+    const v = parsePresidentialSynthesis(truncated, "narrative");
+    expect(v.document_ids).toBe(null);
+    expect(v.answer_markdown).toMatch(/12333/);
+  });
+});
+
+describe("parsePresidentialSummary", () => {
+  it("parses a clean summary", () => {
+    const v = parsePresidentialSummary(JSON.stringify({ summary_markdown: "ok", candor_notes: [] }));
+    expect(v.summary_markdown).toBe("ok");
+  });
+  it("rejects an empty summary", () => {
+    expect(() => parsePresidentialSummary(JSON.stringify({ summary_markdown: "", candor_notes: [] }))).toThrow();
+  });
+});
+
+describe("buildPresidentialSummarizeUser", () => {
+  const doc = { display_citation: "Executive Order 12333", title: "United States Intelligence Activities", doc_type: "executive_order", president_name: "Ronald Reagan", signing_date: "1981-12-04", fr_citation: "46 FR 59941", agencies: ["Central Intelligence Agency"], body_text: "x".repeat(100) };
+  it("includes the disposition trail in both directions", () => {
+    const u = buildPresidentialSummarizeUser(doc,
+      [{ relationship: "revokes", target_raw: "EO 12036", target_citation: "Executive Order 12036" }],
+      [{ relationship: "amended_by", source_citation: "Executive Order 13470", source_signing_date: "2008-07-30" }],
+      false);
+    expect(u).toContain("WHAT THIS DOCUMENT DID TO PRIOR INSTRUMENTS");
+    expect(u).toContain("Executive Order 12036");
+    expect(u).toContain("WHAT LATER DOCUMENTS DID TO THIS ONE");
+    expect(u).toContain("Executive Order 13470");
+  });
+  it("flags truncation", () => {
+    const big = { ...doc, body_text: "x".repeat(PRESIDENTIAL_SUMMARIZE_TEXT_CAP + 10) };
+    const u = buildPresidentialSummarizeUser(big, [], [], true);
+    expect(u).toContain("TRUNCATED");
+    expect(u.length).toBeLessThan(PRESIDENTIAL_SUMMARIZE_TEXT_CAP + 5000);
+  });
+});
+
+describe("buildHubQueriesPresidential", () => {
+  it("returns the normalized hub shape with FTS + recency order", () => {
+    const { rowsSql, countSql } = buildHubQueriesPresidential("tariff", 5);
+    expect(rowsSql).toContain("FROM presidential_documents");
+    expect(rowsSql).toContain("websearch_to_tsquery('english', 'tariff')");
+    expect(rowsSql).toContain("display_citation AS context");
+    expect(rowsSql).toContain("ORDER BY signing_date DESC NULLS LAST LIMIT 5");
+    expect(countSql).toContain("count(*)::bigint");
+  });
+});
+
+describe("presidential registry membership", () => {
+  it("is in HUB_CORPORA and SEMANTIC_CORPORA", () => {
+    expect(HUB_CORPORA).toContain("presidential");
+    expect(SEMANTIC_CORPORA).toContain("presidential");
+  });
+  it("buildSemanticMetaSql returns the (id,title,context,date) shape", () => {
+    const sql = buildSemanticMetaSql("presidential", ["12", "34"]);
+    expect(sql).toContain("FROM presidential_documents WHERE id IN (12,34)");
+    expect(sql).toContain("display_citation AS context");
+    expect(sql).toContain("signing_date::text AS date");
+  });
 });
 
 describe("service-health probes (30-min cron)", () => {
@@ -3724,8 +3905,8 @@ describe("semantic search (pilot)", () => {
       expect(parseSemanticSearchRequest({ corpus: "usc", query: "x" }).error).toMatch(/unsupported/i);
       expect(parseSemanticSearchRequest({ query: "x" }).error).toBeTruthy();
     });
-    it("pilot list is exactly olc/frus/lawfare", () => {
-      expect(SEMANTIC_CORPORA).toEqual(["olc", "frus", "lawfare"]);
+    it("semantic list is exactly olc/frus/lawfare/presidential", () => {
+      expect(SEMANTIC_CORPORA).toEqual(["olc", "frus", "lawfare", "presidential"]);
     });
     it("rejects missing and oversize queries", () => {
       expect(parseSemanticSearchRequest({ corpus: "olc" }).error).toMatch(/missing/i);
