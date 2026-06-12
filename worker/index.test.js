@@ -63,6 +63,7 @@ import {
   buildPresidentialSummarizeUser,
   PRESIDENTIAL_SUMMARIZE_TEXT_CAP,
   buildHubQueriesPresidential,
+  buildClemencyFilterWhere,
   normalizeUscScope,
   parseUscPlan,
   parseUscSynthesis,
@@ -3776,6 +3777,31 @@ describe("buildHubQueriesPresidential", () => {
     expect(rowsSql).toContain("display_citation AS context");
     expect(rowsSql).toContain("ORDER BY signing_date DESC NULLS LAST LIMIT 5");
     expect(countSql).toContain("count(*)::bigint");
+  });
+});
+
+describe("buildClemencyFilterWhere", () => {
+  it("returns empty for empty fields", () => {
+    expect(buildClemencyFilterWhere({})).toBe("");
+  });
+  it("filters by clemency_type, president (ILIKE), topic, provenance exactly", () => {
+    const w = buildClemencyFilterWhere({ clemencyType: "Commutation", president: "Biden", topic: "January 6", provenance: "wikipedia_derived" });
+    expect(w).toContain("clemency_type = 'Commutation'");
+    expect(w).toContain("president_name ILIKE '%Biden%'");
+    expect(w).toContain("topic = 'January 6'");
+    expect(w).toContain("provenance = 'wikipedia_derived'");
+  });
+  it("escapes single quotes in search and person", () => {
+    expect(buildClemencyFilterWhere({ search: "O'Brien" })).toContain("''Brien");
+    expect(buildClemencyFilterWhere({ person: "D'Angelo" })).toContain("ILIKE '%D''Angelo%'");
+  });
+  it("treats reoffended only as a true boolean flag", () => {
+    expect(buildClemencyFilterWhere({ reoffended: true })).toContain("has_reoffended");
+    expect(buildClemencyFilterWhere({ reoffended: false })).toBe("");
+  });
+  it("applies grant_date bounds only for valid ISO dates", () => {
+    expect(buildClemencyFilterWhere({ from: "2025-01-20" })).toContain("grant_date >= '2025-01-20'");
+    expect(buildClemencyFilterWhere({ to: "junk" })).toBe("");
   });
 });
 
