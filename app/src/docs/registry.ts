@@ -32,6 +32,10 @@ import { cfrSectionSummaryEntry } from './content/cfr-section-summary'
 import { aboutLawfareEntry } from './content/about-lawfare'
 import { lawfareNarrativeSynthesisEntry } from './content/lawfare-narrative-synthesis'
 import { lawfareArticleSummaryEntry } from './content/lawfare-article-summary'
+// Presidential Documents spoke.
+import { aboutPresidentialEntry } from './content/about-presidential'
+import { presidentialNarrativeSynthesisEntry } from './content/presidential-narrative-synthesis'
+import { presidentialDocumentSummaryEntry } from './content/presidential-document-summary'
 
 /**
  * Central docs registry.
@@ -87,6 +91,10 @@ export const docsEntries: readonly DocsEntry[] = [
   aboutLawfareEntry,
   lawfareNarrativeSynthesisEntry,
   lawfareArticleSummaryEntry,
+  // Presidential Documents
+  aboutPresidentialEntry,
+  presidentialNarrativeSynthesisEntry,
+  presidentialDocumentSummaryEntry,
 ]
 
 /**
