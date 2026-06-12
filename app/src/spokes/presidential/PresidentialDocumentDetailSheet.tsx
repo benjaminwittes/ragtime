@@ -171,8 +171,8 @@ function PresidentialDocumentDetailBody({
         )}
         {detail && (
           <div className="space-y-5">
-            <StatusLineageSection dispIn={dispIn} />
-            <EffectOnPriorSection dispOut={dispOut} />
+            <StatusLineageSection dispIn={dispIn} dispOut={dispOut} />
+            <EffectOnPriorSection dispIn={dispIn} dispOut={dispOut} />
 
             {detail.agencies && detail.agencies.length > 0 && (
               <section>
@@ -262,22 +262,145 @@ function MetadataLine({ detail }: { detail: PresidentialDocumentDetail }) {
 }
 
 /**
- * Inbound disposition edges — what later documents did to this one. The
- * "is it still in effect" trail. Phrasing rule (brief #11 §5): when no
- * revocation/supersession is recorded, say "no recorded revocation" —
- * the graph captures explicit OFR-noted dispositions only, so absence of
- * an edge is not proof of active status.
+ * Edge-direction normalization. The OFR notes carry BOTH voices —
+ * "Revokes: EO X" (forward) and "Revoked by: EO Y" (reverse) — so an edge's
+ * semantic direction depends on its verb voice, not just which row carries
+ * it. What was done TO this document = its own reverse-voice edges
+ * (outbound '_by' rows) + other documents' forward-voice edges that target
+ * it (inbound non-'_by' rows, verb flipped to passive for display).
+ * What this document DID = its own forward-voice edges + other documents'
+ * reverse-voice edges targeting it ("EO X says it was revoked by me").
+ */
+type LineageItem = {
+  verb: string
+  citation: string
+  date?: string | null
+  president?: string | null
+  dispositive: boolean
+}
+
+function isReverseVoice(rel: string): boolean {
+  return rel.endsWith('_by')
+}
+
+/** 'revokes' → 'Revoked by' (passive); used when flipping inbound forward-voice edges. */
+function toPassive(rel: string): string {
+  const map: Record<string, string> = {
+    revokes: 'revoked_by',
+    revokes_in_part: 'revoked_in_part_by',
+    amends: 'amended_by',
+    supersedes: 'superseded_by',
+    supersedes_in_part: 'superseded_in_part_by',
+    suspends: 'suspended_by',
+    supplements: 'supplemented_by',
+    reinstates: 'reinstated_by',
+    continues: 'continued_by',
+  }
+  return map[rel] ?? rel + '_by'
+}
+
+/** 'revoked_by' → 'revokes' (active); used when flipping inbound reverse-voice edges. */
+function toActive(rel: string): string {
+  const map: Record<string, string> = {
+    revoked_by: 'revokes',
+    revoked_in_part_by: 'revokes_in_part',
+    amended_by: 'amends',
+    superseded_by: 'supersedes',
+    superseded_in_part_by: 'supersedes_in_part',
+    suspended_by: 'suspends',
+    supplemented_by: 'supplements',
+    reinstated_by: 'reinstates',
+    continued_by: 'continues',
+  }
+  return map[rel] ?? rel.replace(/_by$/, '')
+}
+
+const FULLY_DISPOSITIVE = new Set(['revoked_by', 'superseded_by'])
+
+/** Everything done TO this document, normalized to passive voice. */
+function actedUponItems(
+  dispIn: readonly PresidentialDispositionIn[],
+  dispOut: readonly PresidentialDispositionOut[],
+): LineageItem[] {
+  const items: LineageItem[] = []
+  for (const d of dispOut) {
+    if (d.relationship === 'see' || !isReverseVoice(d.relationship)) continue
+    items.push({
+      verb: d.relationship,
+      citation: d.target_citation ?? d.target_raw,
+      date: d.target_date,
+      dispositive: FULLY_DISPOSITIVE.has(d.relationship),
+    })
+  }
+  for (const d of dispIn) {
+    if (d.relationship === 'see' || isReverseVoice(d.relationship)) continue
+    const passive = toPassive(d.relationship)
+    items.push({
+      verb: passive,
+      citation: d.source_citation ?? '(unresolved document)',
+      date: d.source_signing_date,
+      president: d.source_president,
+      dispositive: FULLY_DISPOSITIVE.has(passive),
+    })
+  }
+  return dedupeLineage(items)
+}
+
+/** Everything this document DID to prior instruments, normalized to active voice. */
+function actedOnItems(
+  dispIn: readonly PresidentialDispositionIn[],
+  dispOut: readonly PresidentialDispositionOut[],
+): LineageItem[] {
+  const items: LineageItem[] = []
+  for (const d of dispOut) {
+    if (d.relationship === 'see' || isReverseVoice(d.relationship)) continue
+    items.push({
+      verb: d.relationship,
+      citation: d.target_citation ?? d.target_raw,
+      date: d.target_date,
+      dispositive: false,
+    })
+  }
+  for (const d of dispIn) {
+    if (d.relationship === 'see' || !isReverseVoice(d.relationship)) continue
+    items.push({
+      verb: toActive(d.relationship),
+      citation: d.source_citation ?? '(unresolved document)',
+      date: d.source_signing_date,
+      dispositive: false,
+    })
+  }
+  return dedupeLineage(items)
+}
+
+/** The same relationship is often recorded from both rows' notes — dedupe. */
+function dedupeLineage(items: LineageItem[]): LineageItem[] {
+  const seen = new Set<string>()
+  return items.filter((it) => {
+    const k = it.verb + '|' + it.citation
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+}
+
+/**
+ * What later documents did to this one — the "is it still in effect"
+ * trail. Phrasing rule (brief #11 §5): when no revocation/supersession is
+ * recorded, say "no recorded revocation" — the graph captures explicit
+ * OFR-noted dispositions only, so absence of an edge is not proof of
+ * active status.
  */
 function StatusLineageSection({
   dispIn,
+  dispOut,
 }: {
   dispIn: readonly PresidentialDispositionIn[]
+  dispOut: readonly PresidentialDispositionOut[]
 }) {
-  const dispositive = dispIn.filter((d) => d.relationship !== 'see')
-  const revoked = dispositive.some((d) =>
-    ['revoked_by', 'superseded_by'].includes(d.relationship),
-  )
-  const touched = dispositive.length > 0
+  const items = actedUponItems(dispIn, dispOut)
+  const revoked = items.some((d) => d.dispositive)
+  const touched = items.length > 0
   return (
     <section>
       <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -297,23 +420,21 @@ function StatusLineageSection({
             ? 'No recorded full revocation — but later documents have modified it (see below). Absence of a recorded disposition is not proof of active status.'
             : 'No recorded revocation, supersession, or amendment in the OFR disposition data. Note: the data records explicit dispositions only — this is not proof the document remains in effect.'}
       </p>
-      {dispositive.length > 0 && (
+      {items.length > 0 && (
         <ul className="mt-2 space-y-1 text-xs">
-          {dispositive.map((d, i) => (
+          {items.map((d, i) => (
             <li key={i} className="leading-relaxed">
               <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                {prettyRelationship(d.relationship)}
+                {prettyRelationship(d.verb)}
               </span>{' '}
-              <span className="font-medium text-foreground">
-                {d.source_citation ?? '(unresolved document)'}
-              </span>
-              {d.source_signing_date && (
-                <span className="text-muted-foreground"> ({d.source_signing_date}</span>
+              <span className="font-medium text-foreground">{d.citation}</span>
+              {d.date && (
+                <span className="text-muted-foreground"> ({d.date}</span>
               )}
-              {d.source_president && (
-                <span className="text-muted-foreground">, {d.source_president}</span>
+              {d.president && (
+                <span className="text-muted-foreground">, {d.president}</span>
               )}
-              {d.source_signing_date && <span className="text-muted-foreground">)</span>}
+              {d.date && <span className="text-muted-foreground">)</span>}
             </li>
           ))}
         </ul>
@@ -322,30 +443,30 @@ function StatusLineageSection({
   )
 }
 
-/** Outbound disposition edges — what this document did to prior instruments. */
+/** What this document did to prior instruments. */
 function EffectOnPriorSection({
+  dispIn,
   dispOut,
 }: {
+  dispIn: readonly PresidentialDispositionIn[]
   dispOut: readonly PresidentialDispositionOut[]
 }) {
-  const dispositive = dispOut.filter((d) => d.relationship !== 'see')
+  const items = actedOnItems(dispIn, dispOut)
   const related = dispOut.filter((d) => d.relationship === 'see')
-  if (dispOut.length === 0) return null
+  if (items.length === 0 && related.length === 0) return null
   return (
     <section>
       <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Effect on prior instruments
       </h3>
-      {dispositive.length > 0 ? (
+      {items.length > 0 ? (
         <ul className="mt-2 space-y-1 text-xs">
-          {dispositive.map((d, i) => (
+          {items.map((d, i) => (
             <li key={i} className="leading-relaxed">
               <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                {prettyRelationship(d.relationship)}
+                {prettyRelationship(d.verb)}
               </span>{' '}
-              <span className="font-medium text-foreground">
-                {d.target_citation ?? d.target_raw}
-              </span>
+              <span className="font-medium text-foreground">{d.citation}</span>
             </li>
           ))}
         </ul>
