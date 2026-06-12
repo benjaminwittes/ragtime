@@ -432,6 +432,18 @@ async function routeRequest(request, env, ctx) {
       if (path === "/corpus/presidential/items-by-ids" && request.method === "POST") {
         return await corpusPresidentialItemsByIdsHandler(request, env, ctx);
       }
+      if (path === "/corpus/clemency/facets" && request.method === "POST") {
+        return await corpusClemencyFacetsHandler(request, env, ctx);
+      }
+      if (path === "/corpus/clemency/filter" && request.method === "POST") {
+        return await corpusClemencyFilterHandler(request, env, ctx);
+      }
+      if (path === "/corpus/clemency/grant" && request.method === "POST") {
+        return await corpusClemencyGrantHandler(request, env, ctx);
+      }
+      if (path === "/corpus/clemency/items-by-ids" && request.method === "POST") {
+        return await corpusClemencyItemsByIdsHandler(request, env, ctx);
+      }
       if (path === "/api/checkout" && request.method === "POST") {
         return await checkoutHandler(request, env);
       }
@@ -4916,6 +4928,169 @@ async function corpusPresidentialItemsByIdsHandler(request, env, ctx) {
   return json({ display_rows: rows }, 200);
 }
 
+// ── Clemency grants — the Presidential Documents corpus's second table ───────
+// Person-shaped clemency records (pardons + commutations), sibling to the
+// document-shaped presidential_documents (brief #11 §7). Surfaced inside the
+// Presidential Documents spoke; the presidential AMA planner queries both
+// tables. Source: Pardonpedia, CC BY 4.0 (attribution surfaced in the UI).
+// The provenance axis is first-class: the Jan 6 names are wikipedia_derived.
+
+var CLEMENCY_DISPLAY_COLS = "pardon_id, clemency_type, person_name, " +
+  "grant_date::text AS grant_date, president_name, district, offense, topic, " +
+  "relationship, provenance, warrant_url, has_reoffended, forgiven_amount, " +
+  "news_count, (warrant_text IS NOT NULL) AS has_warrant_text";
+
+/**
+ * WHERE builder for /corpus/clemency/filter. Same escaping discipline as the
+ * other corpus filter builders.
+ *   search          FTS over person_name + offense + topic + district + wiki extract
+ *   person          substring (ILIKE) on person_name
+ *   clemencyType    exact — 'Pardon' | 'Commutation'
+ *   president       substring (ILIKE) on president_name
+ *   topic           exact match
+ *   district        substring (ILIKE)
+ *   provenance      exact — 'doj' | 'wikipedia_derived' | 'whitehouse' | 'other'
+ *   relationship    exact — 'Political Ally' | 'Family' | 'Donor' | ...
+ *   reoffended      boolean — only grants flagged has_reoffended
+ *   from / to       ISO YYYY-MM-DD bounds on grant_date
+ */
+function buildClemencyFilterWhere(fields) {
+  var parts = [];
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var q = fields.search.trim().replace(/'/g, "''");
+    parts.push("fts @@ websearch_to_tsquery('english', '" + q + "')");
+  }
+  if (fields.person && typeof fields.person === 'string' && fields.person.trim()) {
+    var pn = fields.person.trim().replace(/'/g, "''");
+    parts.push("person_name ILIKE '%" + pn + "%'");
+  }
+  if (fields.clemencyType && typeof fields.clemencyType === 'string' && fields.clemencyType.trim()) {
+    var ct = fields.clemencyType.trim().replace(/'/g, "''");
+    parts.push("clemency_type = '" + ct + "'");
+  }
+  if (fields.president && typeof fields.president === 'string' && fields.president.trim()) {
+    var pr = fields.president.trim().replace(/'/g, "''");
+    parts.push("president_name ILIKE '%" + pr + "%'");
+  }
+  if (fields.topic && typeof fields.topic === 'string' && fields.topic.trim()) {
+    var t = fields.topic.trim().replace(/'/g, "''");
+    parts.push("topic = '" + t + "'");
+  }
+  if (fields.district && typeof fields.district === 'string' && fields.district.trim()) {
+    var d = fields.district.trim().replace(/'/g, "''");
+    parts.push("district ILIKE '%" + d + "%'");
+  }
+  if (fields.provenance && typeof fields.provenance === 'string' && fields.provenance.trim()) {
+    var pv = fields.provenance.trim().replace(/'/g, "''");
+    parts.push("provenance = '" + pv + "'");
+  }
+  if (fields.relationship && typeof fields.relationship === 'string' && fields.relationship.trim()) {
+    var rl = fields.relationship.trim().replace(/'/g, "''");
+    parts.push("relationship = '" + rl + "'");
+  }
+  if (fields.reoffended === true) {
+    parts.push("has_reoffended");
+  }
+  if (fields.from && typeof fields.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.from)) {
+    parts.push("grant_date >= '" + fields.from + "'");
+  }
+  if (fields.to && typeof fields.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fields.to)) {
+    parts.push("grant_date <= '" + fields.to + "'");
+  }
+  return parts.length ? " WHERE " + parts.join(" AND ") : "";
+}
+
+async function corpusClemencyFacetsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  try {
+    const stats = await corpusRunQuery(env,
+      "SELECT count(*)::bigint AS grant_count, " +
+      "count(*) FILTER (WHERE warrant_text IS NOT NULL)::bigint AS with_warrant_text, " +
+      "MIN(grant_date)::text AS earliest, MAX(grant_date)::text AS latest " +
+      "FROM clemency_grants");
+    const types = await corpusRunQuery(env,
+      "SELECT clemency_type AS v, count(*)::bigint AS n FROM clemency_grants GROUP BY clemency_type ORDER BY n DESC");
+    const presidents = await corpusRunQuery(env,
+      "SELECT president_name AS v, count(*)::bigint AS n FROM clemency_grants " +
+      "WHERE president_name IS NOT NULL GROUP BY president_name ORDER BY MIN(grant_date) DESC");
+    const topics = await corpusRunQuery(env,
+      "SELECT topic AS v, count(*)::bigint AS n FROM clemency_grants " +
+      "WHERE topic IS NOT NULL GROUP BY topic ORDER BY n DESC LIMIT 25");
+    const s = stats[0] || {};
+    return json({
+      grant_count: s.grant_count, with_warrant_text: s.with_warrant_text,
+      earliest: s.earliest, latest: s.latest,
+      clemency_types: types.map((r) => ({ value: r.v, count: r.n })),
+      presidents: presidents.map((r) => ({ value: r.v, count: r.n })),
+      topics: topics.map((r) => ({ value: r.v, count: r.n }))
+    }, 200);
+  } catch (e) {
+    return json({ error: { message: "Clemency facets fetch failed: " + e.message } }, 502);
+  }
+}
+
+async function corpusClemencyFilterHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const fields = (body && body.fields) || {};
+  const where = buildClemencyFilterWhere(fields);
+  const idsSql = "SELECT pardon_id FROM clemency_grants" + where;
+  let orderBy = " ORDER BY grant_date DESC NULLS LAST, person_name";
+  if (fields.search && typeof fields.search === 'string' && fields.search.trim()) {
+    var rq = fields.search.trim().replace(/'/g, "''");
+    orderBy = " ORDER BY ts_rank(fts, websearch_to_tsquery('english', '" + rq + "')) DESC, grant_date DESC NULLS LAST";
+  }
+  const rowsSql = "SELECT " + CLEMENCY_DISPLAY_COLS + " FROM clemency_grants" + where + orderBy + " LIMIT 10000";
+  let idRows, rows;
+  try {
+    idRows = await corpusRunQuery(env, idsSql);
+    rows = await corpusRunQuery(env, rowsSql);
+  } catch (e) {
+    return json({ error: { message: "Clemency filter failed: " + e.message, code: "filter_failed" } }, 400);
+  }
+  const ids = idRows.map((r) => r.pardon_id).filter((x) => x != null);
+  return json({ ids, display_rows: rows, count: ids.length, generated_sql: rowsSql, executed_sql: idsSql }, 200);
+}
+
+async function corpusClemencyGrantHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const id = Number(body && body.id);
+  if (!Number.isFinite(id) || id <= 0) return json({ error: { message: "Missing or invalid id" } }, 400);
+  const sql = "SELECT pardon_id, clemency_type, person_name, grant_date::text AS grant_date, " +
+    "president_name, president_term, district, offense, sentenced, topic, office_held, relationship, " +
+    "source_url, provenance, warrant_url, warrant_text, warrant_text_length, " +
+    "wikipedia_url, wikipedia_name, wikipedia_summary_title, wikipedia_summary_extract, wikipedia_article_url, " +
+    "has_reoffended, forgiven_amount, news_count, extras " +
+    "FROM clemency_grants WHERE pardon_id = " + Math.floor(id) + " LIMIT 1";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Clemency grant fetch failed: " + e.message } }, 502); }
+  if (!rows || rows.length === 0) return json({ error: { message: "Grant not found", code: "not_found" } }, 404);
+  return json({ grant: rows[0] }, 200);
+}
+
+async function corpusClemencyItemsByIdsHandler(request, env, ctx) {
+  const rl = await checkIpRateLimit(request, env, ctx);
+  if (rl) return rl;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: { message: "Invalid JSON body" } }, 400); }
+  const parsed = parseItemsByIdsRequest(body && body.ids);
+  if (parsed.error) return json({ error: { message: parsed.error } }, 400);
+  if (parsed.ids.length === 0) return json({ display_rows: [] }, 200);
+  const inList = parsed.ids.map((x) => String(parseInt(x, 10))).filter((x) => x !== "NaN").join(",");
+  const sql = "SELECT " + CLEMENCY_DISPLAY_COLS + " FROM clemency_grants WHERE pardon_id IN (" + inList + ")";
+  let rows;
+  try { rows = await corpusRunQuery(env, sql); }
+  catch (e) { return json({ error: { message: "Clemency items-by-ids failed: " + e.message } }, 502); }
+  return json({ display_rows: rows }, 200);
+}
+
 // ── Presidential AI modes ───────────────────────────────────────────────────
 // One claude_ama mode (planner picks output_mode per question shape — the
 // "no query-architecture buttons" principle) + summarize-one-document on the
@@ -4969,6 +5144,19 @@ var PRESIDENTIAL_AMA_SCHEMA_DOC = [
   "- 'Is EO X still in effect?' → inbound edges: SELECT d.relationship, s.display_citation, s.signing_date::text, s.president_name FROM presidential_dispositions d JOIN presidential_documents s ON s.id = d.source_id WHERE d.target_eo_number = X AND d.target_type = 'eo' ORDER BY s.signing_date. revoked_by/superseded_by = no longer in effect (at least in part); amended_by = modified; only 'see' edges are non-dispositive. NO INBOUND REVOCATION ≠ CONFIRMED ACTIVE — the graph records explicit dispositions only; say so in candor_notes.",
   "- Cross-administration reversal counts ('how many of X's EOs did Y revoke') → join source and target documents through the graph: FROM presidential_dispositions d JOIN presidential_documents src ON src.id = d.source_id JOIN presidential_documents tgt ON tgt.id = d.target_id WHERE d.relationship IN ('revokes','revokes_in_part','supersedes','supersedes_in_part') AND src.president_slug = '...' AND tgt.president_slug = '...' AND tgt.doc_type = 'executive_order'. State your definition of 'reversed' (which relationships you counted) in the answer.",
   "- Lineage/evolution chains ('the EOs defining classification') → combine FTS retrieval with the graph's supersedes/revokes spine, ordered by signing_date.",
+  "",
+  "TABLE: clemency_grants — presidential pardons and commutations (7,240 grants, Nixon→present; Pardonpedia-sourced, CC BY 4.0). Pardons ARE presidential acts — query this table for clemency questions.",
+  "  pardon_id (bigint, PK), clemency_type (text 'Pardon' (5,066) | 'Commutation' (2,174)), person_name (text), grant_date (date).",
+  "  president_name (text — full form e.g. 'Donald Trump', 'Joseph R. Biden Jr.'), district (text), offense (text), sentenced (text).",
+  "  topic (text, nullable — 'Drug Commutations' (1,832), 'January 6' (1,565), 'Iran-Contra', 'Watergate', etc.), relationship (text, nullable — 'Political Ally'/'Family'/'Donor', sparse: 24 rows).",
+  "  provenance (text) — 'doj' (5,548) | 'wikipedia_derived' (1,691) | 'whitehouse'. THE AUDITABILITY AXIS: the 1,565 January 6 names are ALL wikipedia_derived because DOJ records that blanket pardon as a class, not by name — when reporting J6 recipients, attribute the names to Wikipedia, not a DOJ warrant.",
+  "  warrant_text (text, nullable) — full text of the justice.gov clemency warrant where fetched. has_reoffended (bool), forgiven_amount (numeric), news_count (int).",
+  "  fts (tsvector) over person_name + offense + topic + district. Cross-link: individualized grants relate to the blanket-pardon proclamation in presidential_documents (e.g. the Jan 6 proclamation) by topic/date.",
+  "",
+  "CLEMENCY QUERY PATTERNS:",
+  "- 'Everyone pardoned for January 6' → SELECT person_name, grant_date::text, district FROM clemency_grants WHERE topic = 'January 6' ORDER BY person_name. MANDATORY candor_note: these names are Wikipedia-derived (DOJ recorded the blanket pardon as a class, not by name).",
+  "- Count/compare by president or type → GROUP BY president_name / clemency_type. MANDATORY candor_note when Biden is involved: Biden's mass commutations are NOT yet individualized upstream (264 rows vs ~4,200 reported actions) — a corpus floor, not history.",
+  "- 'Pardons of political allies / family / donors' → WHERE relationship IS NOT NULL (note: only 24 rows carry it; under-coverage, not absence).",
   "",
   "NOTES:",
   "- Topical/conceptual search: WHERE fts @@ websearch_to_tsquery('english', 'your search') — supports OR and quoted phrases.",
@@ -8737,6 +8925,7 @@ export {
   buildPresidentialSummarizeUser,
   executePresidentialPlan,
   PRESIDENTIAL_SUMMARIZE_TEXT_CAP,
+  buildClemencyFilterWhere,
   normalizeUscScope,
   parseUscPlan,
   parseUscSynthesis,
