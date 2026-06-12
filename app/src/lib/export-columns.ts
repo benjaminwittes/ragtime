@@ -11,6 +11,7 @@ import type { CsvColumn } from './export-csv'
 import type {
   CaseDisplayRow,
   CfrSectionDisplayRow,
+  ClemencyGrantDisplayRow,
   FrusDocumentDisplayRow,
   LawfareArticleDisplayRow,
   OlcOpinionDisplayRow,
@@ -108,4 +109,20 @@ export const PRESIDENTIAL_COLUMNS: CsvColumn<PresidentialDocumentDisplayRow>[] =
   { header: 'federalregister_url', value: (r) => r.html_url },
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
+]
+
+export const CLEMENCY_COLUMNS: CsvColumn<ClemencyGrantDisplayRow>[] = [
+  { header: 'recipient', value: (r) => r.person_name },
+  { header: 'clemency_type', value: (r) => r.clemency_type },
+  { header: 'president', value: (r) => r.president_name },
+  { header: 'grant_date', value: (r) => r.grant_date },
+  { header: 'district', value: (r) => r.district },
+  { header: 'offense', value: (r) => r.offense },
+  { header: 'topic', value: (r) => r.topic },
+  { header: 'relationship', value: (r) => r.relationship },
+  { header: 'provenance', value: (r) => r.provenance },
+  { header: 'has_reoffended', value: (r) => r.has_reoffended },
+  { header: 'forgiven_amount', value: (r) => r.forgiven_amount },
+  { header: 'warrant_url', value: (r) => r.warrant_url },
+  { header: 'pardon_id', value: (r) => r.pardon_id },
 ]
