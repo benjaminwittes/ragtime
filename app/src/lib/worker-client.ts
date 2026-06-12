@@ -1220,6 +1220,305 @@ export async function summarizeOlcOpinion(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/presidential/* — Presidential Documents spoke (brief #11)
+ *
+ * The formal signed instruments by which the President directs the executive
+ * branch and the public: executive orders, proclamations, memoranda,
+ * determinations, notices (12,654 documents, EOs back to 1940). Companion
+ * parsed disposition graph (revokes/amends/supersedes — OFR-captured, not
+ * inferred) rides along on the detail endpoint: the "is this still in
+ * effect" trail.
+ * ------------------------------------------------------------------------- */
+
+export type PresidentialFacetCount = {
+  value: string
+  count: number
+}
+
+export type PresidentialPresidentCount = {
+  slug: string
+  name: string
+  count: number
+}
+
+export type PresidentialFacets = {
+  document_count: number
+  /** Documents with body text (the rest are pre-1948 metadata-only finding aids). */
+  with_text: number
+  earliest: string
+  latest: string
+  doc_types: PresidentialFacetCount[]
+  presidents: PresidentialPresidentCount[]
+}
+
+export async function fetchPresidentialFacets(): Promise<PresidentialFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/presidential/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/presidential/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as PresidentialFacets
+}
+
+export type PresidentialDocumentDisplayRow = {
+  id: number
+  doc_type: string | null
+  /** Canonical human citation — 'Executive Order 14239', 'Memorandum of March 18, 2025'. */
+  display_citation: string | null
+  title: string | null
+  president_name: string | null
+  president_slug: string | null
+  signing_date: string | null
+  publication_date: string | null
+  fr_citation: string | null
+  eo_number: number | null
+  proclamation_number: number | null
+  agencies: string[] | null
+  /** 'clean' | 'juris_backfill' | 'metadata_only' — the finding-aid badge keys off the last. */
+  text_quality: string | null
+  text_length: number | null
+  html_url: string | null
+  pdf_url: string | null
+}
+
+export type PresidentialFilterFields = {
+  search?: string
+  title?: string
+  /** Exact: executive_order | proclamation | memorandum | determination | notice. */
+  docType?: string
+  /** Exact president_slug ('donald-trump', 'joe-biden'). */
+  president?: string
+  /** Direct EO-number lookup. */
+  eoNumber?: number
+  proclamationNumber?: number
+  /** Substring over the implementing-agencies array. */
+  agency?: string
+  from?: string
+  to?: string
+  textQuality?: string
+}
+
+export type PresidentialFilterResult = {
+  ids: number[]
+  display_rows: PresidentialDocumentDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runPresidentialFilter(
+  fields: PresidentialFilterFields,
+): Promise<PresidentialFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/presidential/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/presidential/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as PresidentialFilterResult
+}
+
+/** One parsed disposition edge — outbound (what this document did to others). */
+export type PresidentialDispositionOut = {
+  relationship: string
+  target_type: string
+  target_eo_number: number | null
+  target_proclamation_number: number | null
+  target_date: string | null
+  target_raw: string
+  /** Resolved corpus row id, where the target is in the corpus. */
+  target_id: number | null
+  target_citation: string | null
+  target_title: string | null
+}
+
+/** One parsed disposition edge — inbound (what later documents did to this one). */
+export type PresidentialDispositionIn = {
+  relationship: string
+  target_raw: string
+  source_id: number
+  source_citation: string | null
+  source_title: string | null
+  source_signing_date: string | null
+  source_president: string | null
+}
+
+export type PresidentialDocumentDetail = {
+  id: number
+  source_key: string | null
+  document_number: string | null
+  doc_type: string | null
+  eo_number: number | null
+  proclamation_number: number | null
+  display_citation: string | null
+  title: string | null
+  president_slug: string | null
+  president_name: string | null
+  signing_date: string | null
+  publication_date: string | null
+  fr_citation: string | null
+  agencies: string[] | null
+  /** Raw OFR cross-reference string (the parsed edges are alongside). */
+  disposition_notes: string | null
+  cfr_codified_at: string | null
+  text_quality: string | null
+  body_text: string | null
+  text_length: number | null
+  html_url: string | null
+  body_xml_url: string | null
+  pdf_url: string | null
+}
+
+export type PresidentialDocumentResponse = {
+  document: PresidentialDocumentDetail
+  dispositions_out: PresidentialDispositionOut[]
+  dispositions_in: PresidentialDispositionIn[]
+}
+
+export async function fetchPresidentialDocument(
+  id: number,
+): Promise<PresidentialDocumentResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/presidential/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/presidential/document failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as PresidentialDocumentResponse
+}
+
+export type PresidentialAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type PresidentialAmaSynthesis = {
+  answer_markdown: string
+  document_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type PresidentialAmaScope = {
+  document_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runPresidentialPlan(
+  question: string,
+  scope: PresidentialAmaScope,
+  auth: AuthArg,
+): Promise<PresidentialAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/presidential/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Presidential plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as PresidentialAmaPlan
+}
+
+export async function runPresidentialExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<PresidentialAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/presidential/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Presidential execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as PresidentialAmaSynthesis
+}
+
+export type PresidentialDocumentSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizePresidentialDocument(
+  id: number,
+  auth: AuthArg,
+): Promise<PresidentialDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/presidential/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    // 'no_text' fires on pre-1948 metadata-only finding-aid rows.
+    throw new WorkerAmaError(
+      body.error?.message ?? `Presidential summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as PresidentialDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/lawfare/* — Lawfare (Lawfare's own published archive) spoke
  *
  * The platform's first COMMENTARY corpus — articles, podcast episodes, and
@@ -2323,6 +2622,15 @@ export function fetchLawfareItemsByIds(
   )
 }
 
+export function fetchPresidentialItemsByIds(
+  ids: readonly number[],
+): Promise<PresidentialDocumentDisplayRow[]> {
+  return fetchItemsByIds<PresidentialDocumentDisplayRow>(
+    `${WORKER_URL}/corpus/presidential/items-by-ids`,
+    ids,
+  )
+}
+
 /* ----------------------------------------------------------------------------
  * Semantic search (brief #9) — vector retrieval over the pgvector chunk
  * store, pilot corpora only. The spoke UI's segregated view calls this with
@@ -2331,7 +2639,7 @@ export function fetchLawfareItemsByIds(
  * planner use.
  * ------------------------------------------------------------------------- */
 
-export type SemanticCorpus = 'olc' | 'frus' | 'lawfare'
+export type SemanticCorpus = 'olc' | 'frus' | 'lawfare' | 'presidential'
 
 export type SemanticSearchRow = {
   id: string

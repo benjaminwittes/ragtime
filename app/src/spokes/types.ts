@@ -23,6 +23,7 @@ export type CorpusSlug =
   | 'cfr'
   | 'frus'
   | 'lawfare'
+  | 'presidential'
 
 /**
  * A spoke's lifecycle status. Drives whether it shows up in nav and how

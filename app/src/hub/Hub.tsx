@@ -71,6 +71,7 @@ const HUB_STATS: { num: string; label: string }[] = [
   { num: '2,145', label: 'OLC opinions' },
   { num: '314k', label: 'FRUS documents' },
   { num: '23k', label: 'Lawfare pieces' },
+  { num: '12.7k', label: 'presidential documents' },
 ]
 
 function HubHero() {

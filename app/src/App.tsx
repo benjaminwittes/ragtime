@@ -10,6 +10,7 @@ import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
 import { LawfareSpokeShell } from '@/spokes/lawfare/LawfareSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
+import { PresidentialSpokeShell } from '@/spokes/presidential/PresidentialSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import { toHref, toLogical } from '@/lib/routing'
@@ -120,6 +121,8 @@ function activeSpokeShell(spoke: CorpusSpoke) {
       <FrusSpokeShell spoke={spoke} />
     ) : spoke.slug === 'lawfare' ? (
       <LawfareSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'presidential' ? (
+      <PresidentialSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )

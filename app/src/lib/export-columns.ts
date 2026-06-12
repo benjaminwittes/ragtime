@@ -14,6 +14,7 @@ import type {
   FrusDocumentDisplayRow,
   LawfareArticleDisplayRow,
   OlcOpinionDisplayRow,
+  PresidentialDocumentDisplayRow,
   UscSectionDisplayRow,
 } from './worker-client'
 
@@ -88,6 +89,23 @@ export const FRUS_COLUMNS: CsvColumn<FrusDocumentDisplayRow>[] = [
   { header: 'place_name', value: (r) => r.place_name },
   { header: 'classification', value: (r) => r.classification },
   { header: 'source_url', value: (r) => r.source_url },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const PRESIDENTIAL_COLUMNS: CsvColumn<PresidentialDocumentDisplayRow>[] = [
+  { header: 'citation', value: (r) => r.display_citation },
+  { header: 'title', value: (r) => r.title },
+  { header: 'doc_type', value: (r) => r.doc_type },
+  { header: 'president', value: (r) => r.president_name },
+  { header: 'signing_date', value: (r) => r.signing_date },
+  { header: 'publication_date', value: (r) => r.publication_date },
+  { header: 'fr_citation', value: (r) => r.fr_citation },
+  { header: 'eo_number', value: (r) => r.eo_number },
+  { header: 'proclamation_number', value: (r) => r.proclamation_number },
+  { header: 'agencies', value: (r) => (r.agencies ?? []).join('; ') },
+  { header: 'text_quality', value: (r) => r.text_quality },
+  { header: 'federalregister_url', value: (r) => r.html_url },
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
 ]
