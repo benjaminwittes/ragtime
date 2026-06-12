@@ -1519,6 +1519,127 @@ export async function summarizePresidentialDocument(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/clemency/* — clemency grants (the Presidential Documents corpus's
+ * second table; brief #11 §7). Person-shaped pardon/commutation records,
+ * sourced from Pardonpedia (CC BY 4.0). Surfaced inside the Presidential
+ * Documents spoke via a Documents/Clemency toggle.
+ * ------------------------------------------------------------------------- */
+
+export type ClemencyFacetCount = { value: string; count: number }
+
+export type ClemencyFacets = {
+  grant_count: number
+  with_warrant_text: number
+  earliest: string
+  latest: string
+  clemency_types: ClemencyFacetCount[]
+  presidents: ClemencyFacetCount[]
+  topics: ClemencyFacetCount[]
+}
+
+export async function fetchClemencyFacets(): Promise<ClemencyFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/clemency/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/clemency/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as ClemencyFacets
+}
+
+export type ClemencyGrantDisplayRow = {
+  pardon_id: number
+  clemency_type: string | null
+  person_name: string | null
+  grant_date: string | null
+  president_name: string | null
+  district: string | null
+  offense: string | null
+  topic: string | null
+  relationship: string | null
+  /** doj | wikipedia_derived | whitehouse | other — the auditability axis. */
+  provenance: string | null
+  warrant_url: string | null
+  has_reoffended: boolean
+  forgiven_amount: number | null
+  news_count: number
+  has_warrant_text: boolean
+}
+
+export type ClemencyFilterFields = {
+  search?: string
+  person?: string
+  /** 'Pardon' | 'Commutation'. */
+  clemencyType?: string
+  president?: string
+  topic?: string
+  district?: string
+  provenance?: string
+  relationship?: string
+  reoffended?: boolean
+  from?: string
+  to?: string
+}
+
+export type ClemencyFilterResult = {
+  ids: number[]
+  display_rows: ClemencyGrantDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runClemencyFilter(
+  fields: ClemencyFilterFields,
+): Promise<ClemencyFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/clemency/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/clemency/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as ClemencyFilterResult
+}
+
+export type ClemencyGrantDetail = ClemencyGrantDisplayRow & {
+  president_term: string | null
+  sentenced: string | null
+  office_held: string | null
+  source_url: string | null
+  warrant_text: string | null
+  warrant_text_length: number | null
+  wikipedia_url: string | null
+  wikipedia_name: string | null
+  wikipedia_summary_title: string | null
+  wikipedia_summary_extract: string | null
+  wikipedia_article_url: string | null
+  /** Folded aux records: money / givebacks / reoffenders / news / corpus_links. */
+  extras: Record<string, unknown[]> | null
+}
+
+export async function fetchClemencyGrant(
+  id: number,
+): Promise<ClemencyGrantDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/clemency/grant`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/clemency/grant failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { grant: ClemencyGrantDetail }
+  return body.grant
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/lawfare/* — Lawfare (Lawfare's own published archive) spoke
  *
  * The platform's first COMMENTARY corpus — articles, podcast episodes, and

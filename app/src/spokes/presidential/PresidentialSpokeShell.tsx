@@ -42,6 +42,8 @@ import { PresidentialAmaResult } from './PresidentialAmaResult'
 import { PresidentialFilterForm } from './PresidentialFilterForm'
 import { PresidentialDocumentDetailSheet } from './PresidentialDocumentDetailSheet'
 import { PresidentialResultsList } from './PresidentialResultsList'
+import { ClemencySurface } from './ClemencySurface'
+import { cn } from '@/lib/utils'
 
 /**
  * Presidential Documents spoke shell (brief #11). Two query modes:
@@ -120,6 +122,10 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [semOpeningId, setSemOpeningId] = useState<string | null>(null)
 
   // AMA state.
+  // The Presidential Documents corpus has two tables (brief #11 §7): the FR
+  // documents and the clemency grants. A section toggle swaps the body
+  // between them; the cross-table AMA lives in the documents section.
+  const [section, setSection] = useState<'documents' | 'clemency'>('documents')
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
   const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
   const [pendingPlan, setPendingPlan] = useState<{
@@ -420,6 +426,11 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={facetsLoading}
         error={facetsError}
       />
+      <SectionToggle section={section} onSelect={setSection} />
+      {section === 'clemency' ? (
+        <ClemencySurface />
+      ) : (
+      <>
       <ModeRow
         modes={spoke.queryModes}
         activeMode={activeMode}
@@ -552,6 +563,41 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         onCancel={handleAmaCancel}
         paidAccount={auth.isPaid ? paid.account : null}
       />
+      </>
+      )}
+    </div>
+  )
+}
+
+function SectionToggle({
+  section,
+  onSelect,
+}: {
+  section: 'documents' | 'clemency'
+  onSelect: (s: 'documents' | 'clemency') => void
+}) {
+  const tabs: Array<['documents' | 'clemency', string]> = [
+    ['documents', 'Documents'],
+    ['clemency', 'Clemency'],
+  ]
+  return (
+    <div className="flex items-center gap-1 border-b border-border bg-card px-6 pt-3">
+      {tabs.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onSelect(key)}
+          aria-current={section === key}
+          className={cn(
+            'rounded-t-md border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+            section === key
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   )
 }

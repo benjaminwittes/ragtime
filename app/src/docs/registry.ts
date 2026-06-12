@@ -36,6 +36,7 @@ import { lawfareArticleSummaryEntry } from './content/lawfare-article-summary'
 import { aboutPresidentialEntry } from './content/about-presidential'
 import { presidentialNarrativeSynthesisEntry } from './content/presidential-narrative-synthesis'
 import { presidentialDocumentSummaryEntry } from './content/presidential-document-summary'
+import { aboutClemencyEntry } from './content/about-clemency'
 
 /**
  * Central docs registry.
@@ -95,6 +96,7 @@ export const docsEntries: readonly DocsEntry[] = [
   aboutPresidentialEntry,
   presidentialNarrativeSynthesisEntry,
   presidentialDocumentSummaryEntry,
+  aboutClemencyEntry,
 ]
 
 /**
