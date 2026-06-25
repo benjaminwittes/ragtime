@@ -2,6 +2,13 @@ name = "ragtimeproxy"
 main = "index.js"
 compatibility_date = "2026-05-21"
 
+# Preserve plain-text vars set in the Cloudflare dashboard that aren't mirrored
+# here, so a deploy never silently drops one. Without this, `wrangler deploy`
+# reconciles the var set against [vars] below and DELETES any dashboard-only
+# var — e.g. the HEALTH_* alert-tuning knobs read with code defaults in
+# index.js. (Secrets are always preserved regardless; this is only for vars.)
+keep_vars = true
+
 # Workers Observability — Cloudflare's "Logs" feature. Enabled on the
 # live Worker since 2026-05-04; preserved here so a future deploy does
 # not silently disable it.
@@ -48,6 +55,12 @@ CORPUS_SUPABASE_KEY = "sb_publishable_yXX3zE7j7bVfqLj6cy8oeA_allTHvzN"
 # guard). Bounds request rate independent of IP; the prepaid balance bounds
 # total spend. Tune here without a code change. Default in code is 30.
 PER_USER_PER_MIN = "30"
+# Off-box pipeline-liveness staleness threshold (minutes). Now version-controlled
+# rather than dashboard-only: it was a dashboard knob, which is how it became an
+# ad-hoc mute during the 2026-06-17 outage (bumped sky-high from a phone to stop
+# the every-30-min spam, leaving liveness blind). Code default is 120; pin it
+# here so the threshold is reviewable and a hand-edit can't silently disable it.
+PIPELINE_STALE_MINUTES = "120"
 
 # KV namespace for per-IP rate-limit counters and the daily demo quota
 # counter. TTL'd entries; see askHandler in index.js for the keys used.

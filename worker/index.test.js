@@ -33,6 +33,9 @@ import {
   supabaseGetAccount,
   verifyJwt,
   pipelineStaleness,
+  livenessAlertDecision,
+  humanDuration,
+  LIVENESS_BACKOFF_MIN,
   normalizeOlcScope,
   parseOlcPlan,
   parseOlcSynthesis,
@@ -2936,6 +2939,77 @@ describe("pipelineStaleness", () => {
     const r = pipelineStaleness("not-a-date", now, 120);
     expect(r.stale).toBe(true);
     expect(r.ageMinutes).toBeNull();
+  });
+});
+
+// ============================================================================
+// livenessAlertDecision — incident-aware paging. Encodes the fix for the
+// 2026-06-17 incident: a sustained outage must page on a widening cadence
+// (open → 30m → 2h → 6h → daily), NOT every 30-min cron tick, and must emit a
+// single recovery note when documents resume. Pure function, KV-free.
+// ============================================================================
+describe("livenessAlertDecision", () => {
+  const t0 = Date.parse("2026-06-17T00:00:00Z");
+  const at = (min) => t0 + min * 60000;
+  const bo = LIVENESS_BACKOFF_MIN; // [30, 120, 360, 1440]
+
+  it("opens an incident and pages immediately on first down detection", () => {
+    const d = livenessAlertDecision(null, true, t0, bo);
+    expect(d.page).toBe(true);
+    expect(d.recovered).toBe(false);
+    expect(d.incident).toEqual({ firstMs: t0, lastMs: t0, count: 1 });
+  });
+
+  it("holds (no page) while still inside the current backoff window", () => {
+    const open = { firstMs: t0, lastMs: t0, count: 1 };
+    const d = livenessAlertDecision(open, true, at(29), bo); // < 30m since last page
+    expect(d.page).toBe(false);
+    expect(d.incident).toBe(open); // state unchanged
+  });
+
+  it("re-pages once the backoff for the current count has elapsed", () => {
+    const open = { firstMs: t0, lastMs: t0, count: 1 };
+    const d = livenessAlertDecision(open, true, at(30), bo); // exactly 30m → second page
+    expect(d.page).toBe(true);
+    expect(d.incident).toEqual({ firstMs: t0, lastMs: at(30), count: 2 });
+  });
+
+  it("widens the cadence as the incident persists (30m → 2h → 6h → daily)", () => {
+    // After page #2, wait must be 120m; 119m holds, 120m pages.
+    const c2 = { firstMs: t0, lastMs: at(30), count: 2 };
+    expect(livenessAlertDecision(c2, true, at(30 + 119), bo).page).toBe(false);
+    expect(livenessAlertDecision(c2, true, at(30 + 120), bo).page).toBe(true);
+    // After page #4+, the cadence caps at the last backoff entry (daily).
+    const c5 = { firstMs: t0, lastMs: at(1000), count: 5 };
+    expect(livenessAlertDecision(c5, true, at(1000 + 1439), bo).page).toBe(false);
+    expect(livenessAlertDecision(c5, true, at(1000 + 1440), bo).page).toBe(true);
+  });
+
+  it("announces recovery exactly once when an open incident clears, then closes it", () => {
+    const open = { firstMs: t0, lastMs: at(30), count: 2 };
+    const d = livenessAlertDecision(open, false, at(200), bo);
+    expect(d.recovered).toBe(true);
+    expect(d.page).toBe(false);
+    expect(d.incident).toBeNull(); // closed
+  });
+
+  it("stays quiet when up and no incident is open (the healthy steady state)", () => {
+    const d = livenessAlertDecision(null, false, t0, bo);
+    expect(d.page).toBe(false);
+    expect(d.recovered).toBe(false);
+    expect(d.incident).toBeNull();
+  });
+});
+
+describe("humanDuration", () => {
+  it("formats minutes, hours, and days", () => {
+    expect(humanDuration(95 * 60000)).toBe("1h 35m");
+    expect(humanDuration(40 * 60000)).toBe("40m");
+    expect(humanDuration((2 * 1440 + 10) * 60000)).toBe("2d 0h 10m");
+  });
+  it("is defensive about bad input", () => {
+    expect(humanDuration(-5)).toBe("unknown");
+    expect(humanDuration(NaN)).toBe("unknown");
   });
 });
 
