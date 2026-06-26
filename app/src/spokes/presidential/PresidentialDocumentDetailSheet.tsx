@@ -44,10 +44,13 @@ export function PresidentialDocumentDetailSheet({
   row,
   open,
   onOpenChange,
+  onMoreLikeThis,
 }: {
   row: PresidentialDocumentDisplayRow | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Pivot to "more like this document" (briefs §3). Omitted = button hidden. */
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -56,7 +59,11 @@ export function PresidentialDocumentDetailSheet({
         className="!w-full !max-w-2xl flex h-full flex-col gap-0 p-0"
       >
         {row ? (
-          <PresidentialDocumentDetailBody key={row.id} row={row} />
+          <PresidentialDocumentDetailBody
+            key={row.id}
+            row={row}
+            onMoreLikeThis={onMoreLikeThis}
+          />
         ) : (
           <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
             No document selected.
@@ -69,8 +76,10 @@ export function PresidentialDocumentDetailSheet({
 
 function PresidentialDocumentDetailBody({
   row,
+  onMoreLikeThis,
 }: {
   row: PresidentialDocumentDisplayRow
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
 }) {
   const auth = useAuth()
   const paid = usePaid()
@@ -161,6 +170,29 @@ function PresidentialDocumentDetailBody({
         )}
       </SheetHeader>
       <div className="flex-1 overflow-y-auto p-5">
+        {onMoreLikeThis && (
+          <div className="mb-4 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!auth.hasAuth}
+              title={
+                auth.hasAuth
+                  ? 'Find documents similar to this one'
+                  : 'Configure AI access (header, top right) to enable.'
+              }
+              onClick={() =>
+                onMoreLikeThis({
+                  id: row.id,
+                  title: detail?.title ?? row.title ?? null,
+                })
+              }
+            >
+              More like this
+            </Button>
+          </div>
+        )}
         {loading && (
           <p className="text-sm text-muted-foreground">Loading document…</p>
         )}

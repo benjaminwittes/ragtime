@@ -38,6 +38,9 @@ import { downloadCsv } from '@/lib/export-csv'
 import { downloadNarrativePdf } from '@/lib/export-pdf'
 import { PRESIDENTIAL_COLUMNS } from '@/lib/export-columns'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { useMoreLikeThis, type MltSeed } from '../more-like-this/useMoreLikeThis'
+import { MoreLikeThisPrompt } from '../more-like-this/MoreLikeThisPrompt'
+import { MoreLikeThisView } from '../more-like-this/MoreLikeThisView'
 import { PresidentialAmaResult } from './PresidentialAmaResult'
 import { PresidentialFilterForm } from './PresidentialFilterForm'
 import { PresidentialDocumentDetailSheet } from './PresidentialDocumentDetailSheet'
@@ -281,6 +284,51 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
+  // ── "More like this" pivot stack (briefs §3) ───────────────────────────
+  const [mltOpeningId, setMltOpeningId] = useState<string | null>(null)
+  const mlt = useMoreLikeThis({
+    slug: 'presidential',
+    auth: auth.auth,
+    stashedLabel: 'Presidential search',
+    onBalance: paid.applyBalanceFromWorker,
+    onResult: (page) => {
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'presidential',
+          mode: 'more_like_this',
+          question: page.prompt || '(overall similarity)',
+          plan: {
+            seed_id: page.seed.id,
+            route: page.result.route,
+            lens: page.result.lens,
+            query: page.result.query,
+          },
+          cited_ids: page.result.results.map((r) => r.id),
+          cost_cents: page.result._cost_cents,
+        },
+        auth.auth,
+      )
+    },
+  })
+
+  function handleMoreLikeThis(seed: MltSeed) {
+    setDetailOpen(false)
+    mlt.requestPivot(seed)
+  }
+
+  async function handleOpenMltResult(id: string) {
+    setMltOpeningId(id)
+    try {
+      const full = await fetchPresidentialItemsByIds([Number(id)])
+      if (full.length > 0) handleOpenDocument(full[0])
+    } catch {
+      // Best-effort.
+    } finally {
+      setMltOpeningId(null)
+    }
+  }
+
   const keywordIdSet = useMemo(
     () => new Set(filterIds.map((id) => String(id))),
     [filterIds],
@@ -431,6 +479,15 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         <ClemencySurface />
       ) : (
       <>
+      {mlt.active ? (
+        <MoreLikeThisView
+          controller={mlt}
+          documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'document'}
+          onOpenResult={handleOpenMltResult}
+          openingId={mltOpeningId}
+        />
+      ) : (
+      <>
       <ModeRow
         modes={spoke.queryModes}
         activeMode={activeMode}
@@ -551,10 +608,21 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         />
       )}
 
+      </>
+      )}
+      <MoreLikeThisPrompt
+        seed={mlt.pendingSeed}
+        documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'document'}
+        similarityHints={spoke.moreLikeThis?.similarityHints ?? []}
+        loading={mlt.loading}
+        onSubmit={mlt.submitPivot}
+        onCancel={mlt.cancelPivot}
+      />
       <PresidentialDocumentDetailSheet
         row={openDocument}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onMoreLikeThis={handleMoreLikeThis}
       />
       <AmaPreflight
         plan={pendingPlan?.plan ?? null}

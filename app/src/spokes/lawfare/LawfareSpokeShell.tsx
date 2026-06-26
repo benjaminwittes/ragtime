@@ -38,6 +38,9 @@ import { downloadCsv } from '@/lib/export-csv'
 import { downloadNarrativePdf } from '@/lib/export-pdf'
 import { LAWFARE_COLUMNS } from '@/lib/export-columns'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { useMoreLikeThis, type MltSeed } from '../more-like-this/useMoreLikeThis'
+import { MoreLikeThisPrompt } from '../more-like-this/MoreLikeThisPrompt'
+import { MoreLikeThisView } from '../more-like-this/MoreLikeThisView'
 import { LawfareAmaResult } from './LawfareAmaResult'
 import { LawfareArticleDetailSheet } from './LawfareArticleDetailSheet'
 import { LawfareFilterForm } from './LawfareFilterForm'
@@ -301,6 +304,53 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
+  // ── "More like this" pivot stack (briefs §3) ───────────────────────────
+  // Lawfare ids are numeric PKs rendered as strings; the worker parses them
+  // as ints, so the seed carries Number(id) and the open path uses String(id).
+  const [mltOpeningId, setMltOpeningId] = useState<string | null>(null)
+  const mlt = useMoreLikeThis({
+    slug: 'lawfare',
+    auth: auth.auth,
+    stashedLabel: 'Lawfare search',
+    onBalance: paid.applyBalanceFromWorker,
+    onResult: (page) => {
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'lawfare',
+          mode: 'more_like_this',
+          question: page.prompt || '(overall similarity)',
+          plan: {
+            seed_id: page.seed.id,
+            route: page.result.route,
+            lens: page.result.lens,
+            query: page.result.query,
+          },
+          cited_ids: page.result.results.map((r) => r.id),
+          cost_cents: page.result._cost_cents,
+        },
+        auth.auth,
+      )
+    },
+  })
+
+  function handleMoreLikeThis(seed: MltSeed) {
+    setDetailOpen(false)
+    mlt.requestPivot(seed)
+  }
+
+  async function handleOpenMltResult(id: string) {
+    setMltOpeningId(id)
+    try {
+      const full = await fetchLawfareItemsByIds([id])
+      if (full.length > 0) handleOpenArticle(full[0])
+    } catch {
+      // Best-effort.
+    } finally {
+      setMltOpeningId(null)
+    }
+  }
+
   const keywordIdSet = useMemo(
     () => new Set(filterIds.map((id) => String(id))),
     [filterIds],
@@ -450,6 +500,15 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={facetsLoading}
         error={facetsError}
       />
+      {mlt.active ? (
+        <MoreLikeThisView
+          controller={mlt}
+          documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'piece'}
+          onOpenResult={handleOpenMltResult}
+          openingId={mltOpeningId}
+        />
+      ) : (
+      <>
       <ModeRow
         modes={spoke.queryModes}
         activeMode={activeMode}
@@ -572,10 +631,21 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         />
       )}
 
+      </>
+      )}
+      <MoreLikeThisPrompt
+        seed={mlt.pendingSeed}
+        documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'piece'}
+        similarityHints={spoke.moreLikeThis?.similarityHints ?? []}
+        loading={mlt.loading}
+        onSubmit={mlt.submitPivot}
+        onCancel={mlt.cancelPivot}
+      />
       <LawfareArticleDetailSheet
         row={openArticle}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onMoreLikeThis={handleMoreLikeThis}
       />
       <AmaPreflight
         plan={pendingPlan?.plan ?? null}

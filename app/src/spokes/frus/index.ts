@@ -67,4 +67,14 @@ export const frusSpoke: CorpusSpoke = {
   facets: [],
   defaultSearchDepth: 'full-doc',
   semanticSearch: true,
+  moreLikeThis: {
+    documentUnit: { label: 'document' },
+    similarityHints: [
+      'the same diplomatic episode',
+      'the same policy question',
+      'documents from the other side of the negotiation',
+    ],
+    supportsMultiSelect: false,
+    permitsCrossCorpusPivot: false,
+  },
 }
