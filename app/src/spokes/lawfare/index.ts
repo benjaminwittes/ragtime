@@ -75,4 +75,14 @@ export const lawfareSpoke: CorpusSpoke = {
   facets: [],
   defaultSearchDepth: 'full-doc',
   semanticSearch: true,
+  moreLikeThis: {
+    documentUnit: { label: 'piece' },
+    similarityHints: [
+      'the same legal question',
+      'the same controversy or case',
+      'pieces taking a different view',
+    ],
+    supportsMultiSelect: false,
+    permitsCrossCorpusPivot: false,
+  },
 }

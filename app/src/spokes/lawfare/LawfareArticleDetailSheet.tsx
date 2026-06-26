@@ -39,10 +39,13 @@ export function LawfareArticleDetailSheet({
   row,
   open,
   onOpenChange,
+  onMoreLikeThis,
 }: {
   row: LawfareArticleDisplayRow | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Pivot to "more like this piece" (briefs §3). Omitted = button hidden. */
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -51,7 +54,11 @@ export function LawfareArticleDetailSheet({
         className="!w-full !max-w-2xl flex h-full flex-col gap-0 p-0"
       >
         {row ? (
-          <LawfareArticleDetailBody key={row.id} row={row} />
+          <LawfareArticleDetailBody
+            key={row.id}
+            row={row}
+            onMoreLikeThis={onMoreLikeThis}
+          />
         ) : (
           <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
             No piece selected.
@@ -62,7 +69,13 @@ export function LawfareArticleDetailSheet({
   )
 }
 
-function LawfareArticleDetailBody({ row }: { row: LawfareArticleDisplayRow }) {
+function LawfareArticleDetailBody({
+  row,
+  onMoreLikeThis,
+}: {
+  row: LawfareArticleDisplayRow
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
+}) {
   const auth = useAuth()
   const paid = usePaid()
   const [detail, setDetail] = useState<LawfareArticleDetail | null>(null)
@@ -152,6 +165,29 @@ function LawfareArticleDetailBody({ row }: { row: LawfareArticleDisplayRow }) {
         </SheetDescription>
       </SheetHeader>
       <div className="flex-1 overflow-y-auto p-5">
+        {onMoreLikeThis && (
+          <div className="mb-4 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!auth.hasAuth}
+              title={
+                auth.hasAuth
+                  ? 'Find pieces similar to this one'
+                  : 'Configure AI access (header, top right) to enable.'
+              }
+              onClick={() =>
+                onMoreLikeThis({
+                  id: Number(row.id),
+                  title: detail?.title ?? row.title ?? null,
+                })
+              }
+            >
+              More like this
+            </Button>
+          </div>
+        )}
         {loading && (
           <p className="text-sm text-muted-foreground">Loading piece…</p>
         )}

@@ -84,4 +84,14 @@ export const presidentialSpoke: CorpusSpoke = {
   ],
   defaultSearchDepth: 'full-doc',
   semanticSearch: true,
+  moreLikeThis: {
+    documentUnit: { label: 'document' },
+    similarityHints: [
+      'the same kind of presidential action',
+      'the same policy area',
+      'documents it revokes, amends, or supersedes',
+    ],
+    supportsMultiSelect: false,
+    permitsCrossCorpusPivot: false,
+  },
 }
