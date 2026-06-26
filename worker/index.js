@@ -139,6 +139,17 @@ function checkPaidBudget({ balanceCents, floorCents, estMaxCents }) {
 // catches a real outage (fleet down / Mac2 dead), not noise.
 var DEFAULT_PIPELINE_STALE_MINUTES = 120;
 
+// Escalating re-alert backoff for a SUSTAINED liveness outage. The cron fires
+// every 30 min; without this the same outage paged Slack every 30 min forever
+// (the 2026-06-17 incident — Mac2 was down 8 days and the only way to stop the
+// spam from abroad was to hand-edit the threshold, which left the alert blind).
+// Now: page once when an incident opens, then re-page on this widening cadence
+// (minutes since the last page) so a real outage stays visible without spamming.
+var LIVENESS_BACKOFF_MIN = [30, 120, 360, 1440]; // 30m → 2h → 6h → daily
+// Incident state self-expires in KV so a wedged key can never permanently
+// suppress alerts (defense-in-depth against the same class of silent-blind bug).
+var LIVENESS_INCIDENT_TTL_SEC = 14 * 24 * 3600; // 14 days
+
 // ---------------- JWKS cache (module-scope) ----------------
 // Lives for the life of one Worker isolate. Refreshed on miss-by-kid
 // (handles key rotation) and on TTL expiry.
@@ -7864,14 +7875,16 @@ async function checkoutHandler(request, env) {
 // Best-effort ops alert to Slack (incoming-webhook URL in SLACK_ALERT_WEBHOOK_URL).
 // Never throws and no-ops when the secret is unset, so it can't affect request
 // handling or break before the secret is configured.
-async function notify(env, text) {
+async function notify(env, text, opts = {}) {
   const url = env.SLACK_ALERT_WEBHOOK_URL;
   if (!url) return;
+  const emoji = opts.emoji || ":rotating_light:";
+  const label = opts.label || "alert";
   try {
     await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: `:rotating_light: RAGtime alert — ${text}` })
+      body: JSON.stringify({ text: `${emoji} RAGtime ${label} — ${text}` })
     });
   } catch (e) {
     console.error("notify (Slack) failed:", e && e.message);
@@ -7922,9 +7935,50 @@ function pipelineStaleness(latestIso, nowMs, staleMinutes) {
   return { stale: ageMinutes > staleMinutes, ageMinutes };
 }
 
+// Compact human duration for alert text, e.g. 95→"1h 35m", 2890→"2d 0h 10m".
+function humanDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return "unknown";
+  const totalMin = Math.floor(ms / 60000);
+  const d = Math.floor(totalMin / 1440);
+  const h = Math.floor((totalMin % 1440) / 60);
+  const m = totalMin % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// Incident-aware paging decision (pure → unit-testable without KV/network).
+// Given the prior incident state and whether the pipeline is currently "down",
+// decide whether to page now, announce recovery, and what the next state is.
+//   incident: null | { firstMs, lastMs, count }   (count = pages sent so far)
+// Returns { page, recovered, incident }.
+function livenessAlertDecision(incident, down, nowMs, backoffMin) {
+  if (!down) {
+    // Up. If an incident was open, this transition is a one-time recovery.
+    if (incident) return { page: false, recovered: true, incident: null };
+    return { page: false, recovered: false, incident: null };
+  }
+  // Down. Open a fresh incident and page immediately…
+  if (!incident) {
+    return { page: true, recovered: false, incident: { firstMs: nowMs, lastMs: nowMs, count: 1 } };
+  }
+  // …or, for an open incident, re-page only once the backoff for the current
+  // page count has elapsed since the last page (widening cadence).
+  const idx = Math.min(incident.count - 1, backoffMin.length - 1);
+  const waitMs = backoffMin[idx] * 60000;
+  if (nowMs - incident.lastMs >= waitMs) {
+    return {
+      page: true,
+      recovered: false,
+      incident: { firstMs: incident.firstMs, lastMs: nowMs, count: incident.count + 1 }
+    };
+  }
+  return { page: false, recovered: false, incident }; // hold — still inside backoff
+}
+
 async function runPipelineLivenessCheck(env) {
   const staleMinutes = parseInt(env.PIPELINE_STALE_MINUTES || DEFAULT_PIPELINE_STALE_MINUTES, 10);
-  let rows;
+  let down, detail;
   try {
     // documents.created_at is the most active ingest heartbeat (the harvest lane
     // writes continuously for weeks of backlog; Pass-2 also writes here).
@@ -7935,19 +7989,62 @@ async function runPipelineLivenessCheck(env) {
     if (!r.ok) {
       throw new Error(`documents read ${r.status}: ${String(await r.text()).slice(0, 300)}`);
     }
-    rows = await r.json();
-  } catch (e) {
-    await notify(env, `pipeline liveness: could not query the corpus (${e && e.message}). Worker→corpus path or the corpus DB may be down.`);
-    return;
-  }
-  const latestIso = Array.isArray(rows) && rows[0] ? rows[0].created_at : null;
-  const { stale, ageMinutes } = pipelineStaleness(latestIso, Date.now(), staleMinutes);
-  if (stale) {
+    const rows = await r.json();
+    const latestIso = Array.isArray(rows) && rows[0] ? rows[0].created_at : null;
+    const { stale, ageMinutes } = pipelineStaleness(latestIso, Date.now(), staleMinutes);
+    down = stale;
     const age = ageMinutes == null ? "unknown (no documents found)" : `${ageMinutes} min ago`;
-    await notify(env,
-      `pipeline liveness: newest corpus document is ${age} (alert threshold ${staleMinutes} min). ` +
-      `Ingestion may be down — check the api/pass2 fleet + free-text harvester on Mac2.`
-    );
+    detail = stale
+      ? `newest corpus document is ${age} (alert threshold ${staleMinutes} min). ` +
+        `Ingestion may be down — check the api/pass2 fleet + free-text harvester on Mac2.`
+      : `newest corpus document is ${age}.`;
+  } catch (e) {
+    // A query failure is itself a "down" symptom (Worker→corpus path or corpus DB).
+    down = true;
+    detail = `could not query the corpus (${e && e.message}). Worker→corpus path or the corpus DB may be down.`;
+  }
+  await manageLivenessIncident(env, down, detail, Date.now());
+}
+
+// Wraps the pure decision with KV-backed incident state so a sustained outage
+// pages on the escalating cadence instead of every 30-min cron tick, and a
+// single "recovered" note fires when documents resume. KV trouble must never
+// swallow a page: on any KV read error we treat the incident as fresh (alert).
+async function manageLivenessIncident(env, down, detail, nowMs) {
+  let incident = null;
+  try {
+    const raw = env.QUOTA ? await env.QUOTA.get("liveness:incident") : null;
+    incident = raw ? JSON.parse(raw) : null;
+  } catch {
+    incident = null; // fall through → a down state pages rather than going silent
+  }
+
+  const decision = livenessAlertDecision(incident, down, nowMs, LIVENESS_BACKOFF_MIN);
+
+  try {
+    if (env.QUOTA) {
+      if (decision.incident) {
+        await env.QUOTA.put("liveness:incident", JSON.stringify(decision.incident), {
+          expirationTtl: LIVENESS_INCIDENT_TTL_SEC
+        });
+      } else {
+        await env.QUOTA.delete("liveness:incident");
+      }
+    }
+  } catch { /* don't let a KV write swallow the page/recovery below */ }
+
+  if (decision.page) {
+    const inc = decision.incident;
+    const prefix = inc && inc.count > 1
+      ? `[still down ${humanDuration(nowMs - inc.firstMs)}, alert #${inc.count}] `
+      : "";
+    await notify(env, `pipeline liveness: ${prefix}${detail}`);
+  } else if (decision.recovered) {
+    const downFor = incident ? humanDuration(nowMs - incident.firstMs) : "unknown";
+    await notify(env, `pipeline liveness recovered — documents flowing again after ${downFor}. ${detail}`, {
+      emoji: ":white_check_mark:",
+      label: "recovered"
+    });
   }
 }
 
@@ -8890,6 +8987,9 @@ export {
   supabaseGetAccount,
   verifyJwt,
   pipelineStaleness,
+  livenessAlertDecision,
+  humanDuration,
+  LIVENESS_BACKOFF_MIN,
   normalizeOlcScope,
   parseOlcPlan,
   parseOlcSynthesis,
