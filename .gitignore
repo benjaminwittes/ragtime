@@ -12,3 +12,11 @@ node_modules/
 .claude/
 .sandbox-partial-pull/
 .DS_Store
+
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+
+# Local load-test harness — operational, not source
+loadtest/
