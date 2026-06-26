@@ -2811,6 +2811,113 @@ export async function runSemanticSearch(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/<slug>/more-like-this — "More like this" pivot (briefs §3, decision #1)
+ *
+ * The seed document supplies the semantic anchor; the user's "in what way?"
+ * axis answer (`prompt`) routes the search. The Worker classifies internally:
+ *   - meaning  — overall similarity, seed-centroid kNN (zero model cost). Sent
+ *                explicitly via the "overall similarity" chip (route:"meaning")
+ *                or implied by an empty prompt.
+ *   - compound — a stated theory / holding / event / topic. One model call reads
+ *                the seed through that lens, extrapolates a feature query, and
+ *                runs semantic search. Chosen by the router, never by the client
+ *                (the client only ever sends "auto" or "meaning").
+ *
+ * Gated behind AI access like AMA (resolveCorpusAuth runs even for the meaning
+ * route — product-coherence per decision #1 — and applies the per-IP limit).
+ * ------------------------------------------------------------------------- */
+
+/** A spoke that participates in "more like this". Mirrors the Worker's
+ *  MORE_LIKE_THIS_CORPORA map; litigation pivots on the per-case digest. */
+export type MoreLikeThisCorpus =
+  | 'litigation'
+  | 'olc'
+  | 'frus'
+  | 'lawfare'
+  | 'presidential'
+
+export type MoreLikeThisRoute = 'meaning' | 'compound'
+
+export type MoreLikeThisResultItem = {
+  id: string
+  title: string
+  /** Corpus-appropriate context line (OLC: source; FRUS: place/volume; etc.). */
+  context: string | null
+  date: string | null
+  /** Cosine similarity of the best-matching chunk. */
+  similarity: number | null
+  /** Best-matching chunk text, structural header stripped. */
+  snippet: string | null
+}
+
+export type MoreLikeThisResult = {
+  slug: string
+  corpus: string
+  /** What the Worker actually did — a compound prompt can resolve to meaning. */
+  route: MoreLikeThisRoute
+  seed: { id: string; title: string | null }
+  /** One sentence naming what the results are matched on — shown to the user. */
+  lens: string
+  prompt: string | null
+  results: MoreLikeThisResultItem[]
+  /** True when the result set is full at the current k and k < the 50 max. */
+  widen_available: boolean
+  /** Honesty caveat — set when the axis implies a relation (cites/agrees/
+   *  responds-to) or style that similarity genuinely can't see (brief §5). */
+  note?: string
+  /** Compound route only: the extrapolated feature query the Worker searched. */
+  query?: string
+  /** Compound route only: exact literal terms worth matching verbatim. */
+  keywords?: string
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type MoreLikeThisRequest = {
+  slug: MoreLikeThisCorpus
+  /** The seed document id (OLC opinion id, FRUS doc id, litigation cl_id, …). */
+  seedId: number
+  /** The user's "more like this in what way?" answer. Empty → overall similarity. */
+  prompt?: string
+  /** "auto" lets the router classify; "meaning" forces zero-model overall
+   *  similarity. "compound" is chosen internally by the router, never sent. */
+  route?: 'auto' | 'meaning'
+  /** Result count (Worker default 25, max 50). "Widen" re-runs at the max. */
+  k?: number
+}
+
+export async function runMoreLikeThis(
+  req: MoreLikeThisRequest,
+  auth: AuthArg,
+): Promise<MoreLikeThisResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/${req.slug}/more-like-this`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      seed_id: req.seedId,
+      prompt: req.prompt ?? '',
+      route: req.route ?? 'auto',
+      ...(req.k != null ? { k: req.k } : {}),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    // Reuse WorkerAmaError so spoke UIs surface error.message/code uniformly
+    // (MLT bills like AMA and shares the same auth/error envelope).
+    throw new WorkerAmaError(
+      body.error?.message ?? `More like this failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as MoreLikeThisResult
+}
+
+/* ----------------------------------------------------------------------------
  * Helpers
  * ------------------------------------------------------------------------- */
 
