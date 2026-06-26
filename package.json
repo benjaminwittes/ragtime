@@ -6,9 +6,12 @@
   "description": "RAGtime — test harness for the Cloudflare Worker (ragtimeproxy). The deployed app is worker/index.js + index.html; this package.json exists for the vitest test suite and CI.",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "devDependencies": {
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "wrangler": "^4.100.0"
   }
 }
