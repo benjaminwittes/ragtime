@@ -116,6 +116,7 @@ export type UsageLogRecord = {
     | 'read'
     | 'analyze'
     | 'semantic_search'
+    | 'more_like_this'
   question?: string | null
   output_mode?: string | null
   plan?: unknown

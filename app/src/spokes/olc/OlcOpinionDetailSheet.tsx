@@ -41,10 +41,13 @@ export function OlcOpinionDetailSheet({
   row,
   open,
   onOpenChange,
+  onMoreLikeThis,
 }: {
   row: OlcOpinionDisplayRow | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Pivot to "more like this opinion" (briefs §3). Omitted = button hidden. */
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -53,7 +56,11 @@ export function OlcOpinionDetailSheet({
         className="!w-full !max-w-2xl flex h-full flex-col gap-0 p-0"
       >
         {row ? (
-          <OlcOpinionDetailBody key={row.id} row={row} />
+          <OlcOpinionDetailBody
+            key={row.id}
+            row={row}
+            onMoreLikeThis={onMoreLikeThis}
+          />
         ) : (
           <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
             No opinion selected.
@@ -64,7 +71,13 @@ export function OlcOpinionDetailSheet({
   )
 }
 
-function OlcOpinionDetailBody({ row }: { row: OlcOpinionDisplayRow }) {
+function OlcOpinionDetailBody({
+  row,
+  onMoreLikeThis,
+}: {
+  row: OlcOpinionDisplayRow
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
+}) {
   const auth = useAuth()
   const paid = usePaid()
   const [detail, setDetail] = useState<OlcOpinionDetail | null>(null)
@@ -153,6 +166,29 @@ function OlcOpinionDetailBody({ row }: { row: OlcOpinionDisplayRow }) {
         )}
       </SheetHeader>
       <div className="flex-1 overflow-y-auto p-5">
+        {onMoreLikeThis && (
+          <div className="mb-4 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!auth.hasAuth}
+              title={
+                auth.hasAuth
+                  ? 'Find opinions similar to this one'
+                  : 'Configure AI access (header, top right) to enable.'
+              }
+              onClick={() =>
+                onMoreLikeThis({
+                  id: row.id,
+                  title: detail?.title ?? row.title ?? null,
+                })
+              }
+            >
+              More like this
+            </Button>
+          </div>
+        )}
         {loading && (
           <p className="text-sm text-muted-foreground">Loading opinion…</p>
         )}

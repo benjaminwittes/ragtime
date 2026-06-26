@@ -38,6 +38,9 @@ import { downloadCsv } from '@/lib/export-csv'
 import { downloadNarrativePdf } from '@/lib/export-pdf'
 import { OLC_COLUMNS } from '@/lib/export-columns'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { useMoreLikeThis, type MltSeed } from '../more-like-this/useMoreLikeThis'
+import { MoreLikeThisPrompt } from '../more-like-this/MoreLikeThisPrompt'
+import { MoreLikeThisView } from '../more-like-this/MoreLikeThisView'
 import { OlcAmaResult } from './OlcAmaResult'
 import { OlcFilterForm } from './OlcFilterForm'
 import { OlcOpinionDetailSheet } from './OlcOpinionDetailSheet'
@@ -299,6 +302,57 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
+  // ── "More like this" pivot stack (briefs §3) ───────────────────────────
+  // Stashes this spoke view and opens a new stack seeded with similar
+  // opinions; back-navigation returns here (the shell stays mounted, so the
+  // filter/AMA state above is preserved verbatim).
+  const [mltOpeningId, setMltOpeningId] = useState<string | null>(null)
+  const mlt = useMoreLikeThis({
+    slug: 'olc',
+    auth: auth.auth,
+    stashedLabel: 'OLC search',
+    onBalance: paid.applyBalanceFromWorker,
+    onResult: (page) => {
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'olc',
+          mode: 'more_like_this',
+          question: page.prompt || '(overall similarity)',
+          plan: {
+            seed_id: page.seed.id,
+            route: page.result.route,
+            lens: page.result.lens,
+            query: page.result.query,
+          },
+          cited_ids: page.result.results.map((r) => r.id),
+          cost_cents: page.result._cost_cents,
+        },
+        auth.auth,
+      )
+    },
+  })
+
+  /** Detail-sheet "More like this" → close the sheet, open the ask-UI. */
+  function handleMoreLikeThis(seed: MltSeed) {
+    setDetailOpen(false)
+    mlt.requestPivot(seed)
+  }
+
+  /** Open an MLT result in the detail sheet (resolve id → full row, same as
+   *  the semantic pane's open path). */
+  async function handleOpenMltResult(id: string) {
+    setMltOpeningId(id)
+    try {
+      const full = await fetchOlcItemsByIds([Number(id)])
+      if (full.length > 0) handleOpenOpinion(full[0])
+    } catch {
+      // Best-effort.
+    } finally {
+      setMltOpeningId(null)
+    }
+  }
+
   // Overlap sets for the cross-pane badges (brief #9 decision 3). Keyword
   // side uses the FULL matching-id list, so a semantic card is badged even
   // when its keyword rank is beyond the displayed rows.
@@ -453,6 +507,15 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={facetsLoading}
         error={facetsError}
       />
+      {mlt.active ? (
+        <MoreLikeThisView
+          controller={mlt}
+          documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'opinion'}
+          onOpenResult={handleOpenMltResult}
+          openingId={mltOpeningId}
+        />
+      ) : (
+      <>
       <ModeRow
         modes={spoke.queryModes}
         activeMode={activeMode}
@@ -572,11 +635,22 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           }}
         />
       )}
+      </>
+      )}
 
+      <MoreLikeThisPrompt
+        seed={mlt.pendingSeed}
+        documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'opinion'}
+        similarityHints={spoke.moreLikeThis?.similarityHints ?? []}
+        loading={mlt.loading}
+        onSubmit={mlt.submitPivot}
+        onCancel={mlt.cancelPivot}
+      />
       <OlcOpinionDetailSheet
         row={openOpinion}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onMoreLikeThis={handleMoreLikeThis}
       />
       <AmaPreflight
         plan={pendingPlan?.plan ?? null}

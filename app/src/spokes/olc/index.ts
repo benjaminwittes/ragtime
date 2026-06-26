@@ -72,4 +72,17 @@ export const olcSpoke: CorpusSpoke = {
   facets: [],
   defaultSearchDepth: 'full-doc',
   semanticSearch: true,
+  moreLikeThis: {
+    documentUnit: { label: 'opinion' },
+    // Pre-fill chips for the "in what way?" prompt. Free-form input always
+    // wins; these are corpus-shaped starting points (an "overall similarity"
+    // chip is added by the prompt UI itself → route:"meaning").
+    similarityHints: [
+      'the same legal question',
+      'the constitutional authority it relies on',
+      'opinions reaching the opposite conclusion',
+    ],
+    supportsMultiSelect: false,
+    permitsCrossCorpusPivot: false,
+  },
 }
