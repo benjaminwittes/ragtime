@@ -26,7 +26,7 @@ import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
-import { type UsageLogRecord } from '@/lib/usage-log'
+import { type UsageLogRecord, newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AmaPreflight } from './components/AmaPreflight'
@@ -37,6 +37,9 @@ import { downloadNarrativePdf } from '@/lib/export-pdf'
 import { LITIGATION_BASE_COLUMNS } from '@/lib/export-columns'
 import { Breadcrumb } from './components/Breadcrumb'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
+import { useMoreLikeThis, type MltSeed } from './more-like-this/useMoreLikeThis'
+import { MoreLikeThisPrompt } from './more-like-this/MoreLikeThisPrompt'
+import { MoreLikeThisView } from './more-like-this/MoreLikeThisView'
 import { ClaudeAmaForm, type AmaLogLine } from './components/ClaudeAmaForm'
 import { ClaudeAnalysisForm } from './components/ClaudeAnalysisForm'
 import { ClaudeReadForm } from './components/ClaudeReadForm'
@@ -663,6 +666,59 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setDetailOpen(true)
   }
 
+  // ── "More like this" pivot stack (briefs §3) ───────────────────────────
+  // Litigation pivots on the per-case digest (worker slug litigation ->
+  // doc_chunks corpus litigation_digest, keyed by cl_id). The pivot stashes
+  // this spoke view and opens a new stack seeded with similar cases; back
+  // returns here (the shell stays mounted, so the operation stack above is
+  // preserved verbatim).
+  const [mltOpeningId, setMltOpeningId] = useState<string | null>(null)
+  const mlt = useMoreLikeThis({
+    slug: 'litigation',
+    auth: auth.auth,
+    stashedLabel: 'Litigation search',
+    onBalance: paid.applyBalanceFromWorker,
+    onResult: (page) => {
+      void postUsageLog(
+        {
+          interaction_id: newInteractionId(),
+          surface: 'litigation',
+          mode: 'more_like_this',
+          question: page.prompt || '(overall similarity)',
+          plan: {
+            seed_id: page.seed.id,
+            route: page.result.route,
+            lens: page.result.lens,
+            query: page.result.query,
+          },
+          cited_ids: page.result.results.map((r) => r.id),
+          cost_cents: page.result._cost_cents,
+        },
+        auth.auth,
+      )
+    },
+  })
+
+  /** Detail-sheet "More like this" → close the sheet, open the ask-UI. */
+  function handleMoreLikeThis(seed: MltSeed) {
+    setDetailOpen(false)
+    mlt.requestPivot(seed)
+  }
+
+  /** Open an MLT result (a similar case) in the detail sheet — resolve the
+   *  cl_id to a full row via items-by-ids, same path as a results-list open. */
+  async function handleOpenMltResult(id: string) {
+    setMltOpeningId(id)
+    try {
+      const rows = await fetchCasesByIds([Number(id)])
+      if (rows.length > 0) handleOpenCase(rows[0])
+    } catch {
+      // Best-effort.
+    } finally {
+      setMltOpeningId(null)
+    }
+  }
+
   /** Discard the tip (the last operation) and return to the previous layer —
    *  the scope from which it was derived becomes active again. Restores the
    *  legacy "← Back to previous page" affordance lost in the React port. The
@@ -713,6 +769,15 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={holdingsLoading}
         error={holdingsError}
       />
+      {mlt.active ? (
+        <MoreLikeThisView
+          controller={mlt}
+          documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'case'}
+          onOpenResult={handleOpenMltResult}
+          openingId={mltOpeningId}
+        />
+      ) : (
+      <>
       <ModeRow
         modes={spoke.queryModes}
         activeMode={activeMode}
@@ -856,10 +921,21 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           record={litigationRecordFromPage(viewingPage)}
         />
       )}
+      </>
+      )}
+      <MoreLikeThisPrompt
+        seed={mlt.pendingSeed}
+        documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'case'}
+        similarityHints={spoke.moreLikeThis?.similarityHints ?? []}
+        loading={mlt.loading}
+        onSubmit={mlt.submitPivot}
+        onCancel={mlt.cancelPivot}
+      />
       <CaseDetailSheet
         case={openCase}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onMoreLikeThis={handleMoreLikeThis}
       />
       <AmaPreflight
         plan={pendingPlan?.plan ?? null}
