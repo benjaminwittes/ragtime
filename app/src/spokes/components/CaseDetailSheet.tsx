@@ -7,6 +7,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/lib/use-auth'
 import {
   type CaseDisplayRow,
   type DocketEntryRow,
@@ -30,11 +32,14 @@ export function CaseDetailSheet({
   case: theCase,
   open,
   onOpenChange,
+  onMoreLikeThis,
 }: {
   /** The case to show. `null` when no case is selected (sheet stays closed). */
   case: CaseDisplayRow | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Pivot to "more like this case" (briefs §3). Omitted = button hidden. */
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -49,13 +54,26 @@ export function CaseDetailSheet({
             opens a different case. That way state (entries / loading /
             error) starts fresh per case, without resetting it via a
             setState-in-effect. */}
-        {theCase && <CaseDetailBody key={theCase.cl_id} theCase={theCase} />}
+        {theCase && (
+          <CaseDetailBody
+            key={theCase.cl_id}
+            theCase={theCase}
+            onMoreLikeThis={onMoreLikeThis}
+          />
+        )}
       </SheetContent>
     </Sheet>
   )
 }
 
-function CaseDetailBody({ theCase }: { theCase: CaseDisplayRow }) {
+function CaseDetailBody({
+  theCase,
+  onMoreLikeThis,
+}: {
+  theCase: CaseDisplayRow
+  onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
+}) {
+  const auth = useAuth()
   // Because the parent passes a unique `key` per case, this component is
   // mounted fresh per case — initial state needs no reset effect.
   const [entries, setEntries] = useState<DocketEntryRow[] | undefined>(undefined)
@@ -105,6 +123,29 @@ function CaseDetailBody({ theCase }: { theCase: CaseDisplayRow }) {
 
       <ScrollArea className="flex-1">
         <div className="p-5">
+          {onMoreLikeThis && (
+            <div className="mb-4 flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!auth.hasAuth}
+                title={
+                  auth.hasAuth
+                    ? 'Find cases similar to this one'
+                    : 'Configure AI access (header, top right) to enable.'
+                }
+                onClick={() =>
+                  onMoreLikeThis({
+                    id: theCase.cl_id,
+                    title: theCase.case_name ?? null,
+                  })
+                }
+              >
+                More like this
+              </Button>
+            </div>
+          )}
           <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Docket entries
             {entries && (
