@@ -22,10 +22,11 @@ import { courtDisplayName } from '@/spokes/litigation/court-names'
  * here since the four presets map cleanly to the well-known circuit-vs-
  * district taxonomy in `isCircuitCourt`).
  *
- * Defaults (brief #6 §6): `from` = 2025-01-20, courts = all-courts preset.
+ * Defaults: `from` = blank (no date floor — so historical collections like
+ * the J6 library, whose cases predate the 2025-01-20 litigation coverage
+ * floor, return results without the user having to clear the date), courts =
+ * all-courts preset.
  */
-
-const LITIGATION_FLOOR = '2025-01-20'
 
 type FacetData = {
   courts: readonly string[]
@@ -62,7 +63,7 @@ export function FilterForm({
   const [caseType, setCaseType] = useState<'' | 'cv' | 'cr' | 'mj' | 'mc'>('')
   const [collection, setCollection] = useState('')
   const [cause, setCause] = useState('')
-  const [from, setFrom] = useState(LITIGATION_FLOOR)
+  const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
   // Court state. `undefined` = user hasn't touched the courts; default to
@@ -107,7 +108,7 @@ export function FilterForm({
     setCaseType('')
     setCollection('')
     setCause('')
-    setFrom(LITIGATION_FLOOR)
+    setFrom('')
     setTo('')
     // Reset back to the "default = all courts from facetData" state.
     setUserCourtsSel(undefined)
