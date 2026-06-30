@@ -50,6 +50,10 @@ export type StackPage = {
   scopeSql?: string
   /** Provenance object that drives ResultsList's rendering. */
   source: ResultSource
+  /** For manual_filter pages with a keyword search: the raw search term, used
+   *  to lazily fetch per-row match snippets (highlighted `ts_headline`). Absent
+   *  for non-search filters and AI-produced pages. */
+  searchTerm?: string
 }
 
 /* ----------------------------------------------------------------------------

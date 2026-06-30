@@ -6,6 +6,7 @@ import type {
   AnalysisAnnotation,
   CaseDisplayRow,
 } from '@/lib/worker-client'
+import { SNIPPET_HL_START, SNIPPET_HL_STOP } from '@/lib/worker-client'
 
 /**
  * How a result page was produced. Drives the "How this was produced"
@@ -89,6 +90,7 @@ export function ResultsList({
   error,
   hasRun,
   source,
+  snippets,
   onOpenCase,
 }: {
   rows: readonly CaseDisplayRow[] | undefined
@@ -100,6 +102,11 @@ export function ResultsList({
   /** How the current result page was produced. Undefined on pre-run or
    *  when the previous run errored without producing SQL. */
   source?: ResultSource
+  /** Per-case keyword-match snippets, keyed by cl_id. Present only for
+   *  manual_filter pages produced by a keyword search; rendered under the
+   *  case name with matched terms highlighted. Lazily loaded, so a row may
+   *  have no entry yet (or ever, beyond the fetched cap). */
+  snippets?: Record<number, string>
   /** Click handler for "open this case in the detail sheet". v1 just opens
    *  the sheet inline; the stack runtime (PR 4g) will replace this with
    *  a stack-push that records the detail as its own page. */
@@ -232,6 +239,11 @@ export function ResultsList({
                     <span className="font-medium text-foreground">
                       {r.case_name ?? '(no name)'}
                     </span>
+                    {snippets?.[r.cl_id] && (
+                      <span className="mt-0.5 block max-w-md text-xs leading-snug text-muted-foreground">
+                        {renderSnippet(snippets[r.cl_id])}
+                      </span>
+                    )}
                   </Td>
                   <Td className="font-mono text-xs text-muted-foreground">
                     {r.docket_number ?? '—'}
@@ -466,6 +478,42 @@ function Td({
 function shortCause(c: string | null | undefined): string {
   if (!c) return '—'
   return c.length > 40 ? c.substring(0, 38) + '…' : c
+}
+
+/**
+ * Render a match snippet, wrapping the Worker's highlight-delimited spans
+ * (SNIPPET_HL_START … SNIPPET_HL_STOP) in <mark>. Splitting + rendering the
+ * pieces as React string children means React escapes the (external, untrusted)
+ * docket text for us — no dangerouslySetInnerHTML, no XSS. A leading ellipsis
+ * hints the fragment is excerpted from a longer docket entry.
+ */
+function renderSnippet(snippet: string): React.ReactNode {
+  const nodes: React.ReactNode[] = ['… ']
+  let i = 0
+  let key = 0
+  while (i < snippet.length) {
+    const start = snippet.indexOf(SNIPPET_HL_START, i)
+    if (start === -1) {
+      nodes.push(snippet.slice(i))
+      break
+    }
+    if (start > i) nodes.push(snippet.slice(i, start))
+    const stop = snippet.indexOf(SNIPPET_HL_STOP, start + 1)
+    if (stop === -1) {
+      nodes.push(snippet.slice(start + 1))
+      break
+    }
+    nodes.push(
+      <mark
+        key={key++}
+        className="rounded-sm bg-primary/15 px-0.5 font-medium text-foreground"
+      >
+        {snippet.slice(start + 1, stop)}
+      </mark>,
+    )
+    i = stop + 1
+  }
+  return nodes
 }
 
 function amaTitle(source: Extract<ResultSource, { kind: 'claude_ama' }>): string {

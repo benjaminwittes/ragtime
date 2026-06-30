@@ -15,6 +15,7 @@ import {
   confirmClaudeSql,
   fetchCasesByIds,
   fetchCorpusFacets,
+  fetchMatchSnippets,
   runClaudeAnalysis,
   runClaudeExecute,
   runClaudePlan,
@@ -181,6 +182,42 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   // because they operate on the active scope, not a past one.
   const scopeSize = tipPage?.rows.length ?? 0
 
+  // ── Match snippets (lazy, per viewed page) ─────────────────────────────
+  // For manual_filter pages produced by a keyword search, fetch a highlighted
+  // ts_headline fragment per case showing WHY it matched. Bounded to the first
+  // SNIPPET_ROW_CAP rows (the table renders them top-first and a snippet over
+  // the full ≤10k set would hammer the corpus DB). Cached per page id so
+  // breadcrumb hops don't refetch. Failures are swallowed — snippets are an
+  // enhancement, never a gate on the results. The map is derived from the cache
+  // ref during render; the effect only does the async fetch + a version bump.
+  const SNIPPET_ROW_CAP = 60
+  const snippetCacheRef = useRef<Map<string, Record<number, string>>>(new Map())
+  const [, bumpSnippetVersion] = useState(0)
+  const snippetPage =
+    viewingPage?.source.kind === 'manual_filter' && viewingPage.searchTerm
+      ? viewingPage
+      : undefined
+  const snippets = snippetPage
+    ? (snippetCacheRef.current.get(snippetPage.id) ?? {})
+    : {}
+  useEffect(() => {
+    const term = snippetPage?.searchTerm
+    if (!snippetPage || !term || snippetCacheRef.current.has(snippetPage.id))
+      return
+    let cancelled = false
+    const ids = snippetPage.rows
+      .slice(0, SNIPPET_ROW_CAP)
+      .map((r) => r.cl_id)
+    void fetchMatchSnippets(ids, term).then((map) => {
+      if (cancelled) return
+      snippetCacheRef.current.set(snippetPage.id, map)
+      bumpSnippetVersion((v) => v + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [snippetPage])
+
   /** Push a new page onto the stack and move viewing to it. */
   function pushPage(p: Omit<StackPage, 'id'>) {
     const newPage: StackPage = { ...p, id: crypto.randomUUID() }
@@ -251,6 +288,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         clIds: r.cl_ids,
         scopeSql: r.executed_sql,
         source: { kind: 'manual_filter', generatedSql: r.generated_sql },
+        searchTerm: fields.search?.trim() || undefined,
       })
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
@@ -913,6 +951,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         error={queryError}
         hasRun={hasStack}
         source={viewingPage?.source}
+        snippets={snippets}
         onOpenCase={handleOpenCase}
       />
       {viewingPage && (

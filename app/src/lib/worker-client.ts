@@ -207,6 +207,48 @@ export async function runManualFilter(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/snippets — lazy per-page match highlights
+ * ------------------------------------------------------------------------- */
+
+/** Highlight delimiters the Worker wraps around matched terms in each snippet
+ *  (Unicode Private-Use chars that never occur in docket text). The renderer
+ *  splits on these to wrap matches in <mark>. Kept in sync with the Worker's
+ *  SNIPPET_HL_START / SNIPPET_HL_STOP. */
+export const SNIPPET_HL_START = '\uE000'
+export const SNIPPET_HL_STOP = '\uE001'
+
+/**
+ * Fetch keyword-match snippets for a set of cases. Given the cl_ids the user is
+ * currently looking at + the keyword that produced them, the Worker returns one
+ * highlighted `ts_headline` fragment per case (where a snippet exists). Computed
+ * lazily for the visible rows only — see the Worker's corpusSnippetsHandler for
+ * why this isn't folded into /corpus/filter. Returns {} on any error (snippets
+ * are a non-essential enhancement; a failure must never block the results).
+ */
+export async function fetchMatchSnippets(
+  clIds: number[],
+  search: string,
+): Promise<Record<number, string>> {
+  if (!search.trim() || clIds.length === 0) return {}
+  try {
+    const r = await fetch(`${WORKER_URL}/corpus/snippets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cl_ids: clIds, search }),
+    })
+    if (!r.ok) return {}
+    const data = (await r.json()) as { snippets?: Record<string, string> }
+    const out: Record<number, string> = {}
+    for (const [k, v] of Object.entries(data.snippets ?? {})) {
+      if (typeof v === 'string' && v) out[Number(k)] = v
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/sql — AI-writes-SQL ("claude_sql" mode)
  * ------------------------------------------------------------------------- */
 
