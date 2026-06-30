@@ -19,8 +19,12 @@ export const litigationSpoke: CorpusSpoke = {
     'Federal district court and appellate dockets, with full docket entries and OCR text of attached filings.',
   status: 'active',
 
-  plainEnglishDisclosure:
-    'Federal cases filed since January 20, 2025. Current as of [last_synced_at].',
+  // Intentionally blank. The old "filed since 2025-01-20" line is stale:
+  // comprehensive coverage now reaches back to Q4 2024, and curated collections
+  // (J6 → 2021, AI-liability) go earlier still. Holdings detail belongs in the
+  // docs; the header stays silent until coverage harmonizes as the backfill
+  // pushes the comprehensive floor backward.
+  plainEnglishDisclosure: '',
 
   getHoldings: async () => {
     const f = await fetchCorpusFacets()

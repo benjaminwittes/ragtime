@@ -43,7 +43,9 @@ export function SpokeHeader({
             </p>
           </div>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">{disclosure}</p>
+        {disclosure && (
+          <p className="mt-2 text-sm text-muted-foreground">{disclosure}</p>
+        )}
 
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <Stat
