@@ -137,26 +137,39 @@ export type UsageLogRecord = {
  * internal dev build's toggle is on. Public paid/BYOK sessions never log, so the
  * privacy policy's "our code does not log them" holds for the public; the Worker
  * enforces the same gate server-side (usageLoggingAllowed).
+ *
+ * The toggle path is INDEPENDENT of a session credential: on the internal build
+ * with the toggle on, logging is active even with no auth, so FREE
+ * (unauthenticated) searches — keyword / semantic / hub-AMA plan — are captured
+ * too. The Worker accepts these credential-free via the shared token
+ * (usageLogTokenOnly). DEMO still records identity.
  */
 export function usageLogActiveFor(auth: AuthArg | null | undefined): boolean {
-  return !!auth && (auth.mode === 'demo' || isUsageLogEnabled())
+  if (auth && auth.mode === 'demo') return true
+  return isUsageLogEnabled()
 }
 
 /**
  * Upsert an interaction record. No-op (returns false) when logging isn't active
- * for this session or auth is absent. Never throws — logging must not break UI.
+ * for this session. Sends credential-free when there's no auth (the internal
+ * build's shared token still rides along and authorizes the write server-side).
+ * Never throws — logging must not break UI.
  */
 export async function postUsageLog(
   record: UsageLogRecord,
   auth: AuthArg | null | undefined,
 ): Promise<boolean> {
-  if (!auth || !usageLogActiveFor(auth)) return false
+  if (!usageLogActiveFor(auth)) return false
   try {
     const r = await fetch(`${WORKER_URL}/corpus/feedback/log`, {
       method: 'POST',
-      headers: { ...authHeaders(auth), 'X-Usage-Log-Token': LOG_TOKEN },
+      headers: {
+        'content-type': 'application/json',
+        'X-Usage-Log-Token': LOG_TOKEN,
+        ...(auth ? authHeaders(auth) : {}),
+      },
       body: JSON.stringify({
-        ...authCredentialBody(auth),
+        ...(auth ? authCredentialBody(auth) : {}),
         client_ts: new Date().toISOString(),
         ...record,
       }),
