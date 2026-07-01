@@ -5,7 +5,7 @@ import { AccessSettings } from '@/llm/AccessSettings'
 import { toHref } from '@/lib/routing'
 import { spokes } from '@/spokes/registry'
 import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
-import { HubKeywordSearch } from './HubKeywordSearch'
+import { HubSearch } from './HubSearch'
 
 /**
  * Hub landing surface — brief #1 (general AMA hub).
@@ -27,7 +27,7 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
       <HubHeader />
       <div className="mx-auto max-w-5xl px-6 pb-16">
         <HubHero />
-        <HubKeywordSearch onNavigate={onNavigate} />
+        <HubSearch onNavigate={onNavigate} />
         <SpokeGrid onNavigate={onNavigate} />
         <AboutPanel />
         <HubFooter onNavigate={onNavigate} />

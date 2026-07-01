@@ -91,6 +91,146 @@ export async function runHubKeyword(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/hub/ama/{plan,execute} (features stream #3, step 3) — cross-corpus
+ * semantic Hub AMA.
+ *
+ * The semantic counterpart to /corpus/hub/keyword. Because every corpus lives
+ * in one embedding space, cosine similarity is comparable ACROSS corpora, so
+ * the hub returns a single unified cross-corpus ranking (the keyword hub can
+ * only group, never merge). Two-call free-base / paid-report split, mirroring
+ * the spoke plan/execute:
+ *
+ *   plan    — FREE + IP-rate-limited. Embeds the question once, fans
+ *             semantic_search across the embedded corpora, returns the unified
+ *             ranking (+ per-corpus groups + routing counts) and a one-shot
+ *             token. No model call.
+ *   execute — AUTH-GATED + CHARGED. Synthesizes a cited, grouped-by-corpus
+ *             report (research-librarian voice) over exactly the passages the
+ *             plan surfaced; sources are filtered to the supplied set so the
+ *             model can't cite anything the user didn't see.
+ *
+ * `output_mode` classifies the question shape server-side: "question" warrants
+ * a synthesized report; "lookup" is a bare term that should show docs only.
+ * ------------------------------------------------------------------------- */
+
+/** One responsive document in the unified cross-corpus ranking. */
+export type HubAmaResultItem = {
+  corpus: HubCorpusSlug
+  /** Corpus-native PK, serialized as text (bigint-safe). */
+  id: string
+  /** Cosine similarity in [0,1] — comparable across corpora. */
+  similarity: number
+  title: string
+  context: string | null
+  date: string | null
+  /** Leading passage text (≤320 chars server-side). */
+  snippet: string | null
+}
+
+/** Per-corpus group — the same items, bucketed by corpus for grouped display
+ *  and the routing/handoff chips. `error` is set (with empty items) when that
+ *  corpus's retrieval branch failed; other corpora still return. */
+export type HubAmaGroup = {
+  corpus: HubCorpusSlug
+  count: number
+  error: string | null
+  items: HubAmaResultItem[]
+}
+
+export type HubAmaPlanResponse = {
+  /** One-shot token the execute leg synthesizes over (KV TTL ~15 min). */
+  token: string
+  question: string
+  /** "question" → a report is warranted; "lookup" → show docs only. */
+  output_mode: 'question' | 'lookup'
+  groups: HubAmaGroup[]
+  /** The unified cross-corpus ranking (the free base layer). */
+  results: HubAmaResultItem[]
+  /** Count of responsive docs per corpus, for the handoff chips. */
+  routing: Partial<Record<HubCorpusSlug, number>>
+}
+
+export type HubAmaSource = { corpus: HubCorpusSlug; id: string }
+
+export type HubAmaReport = {
+  /** The cited answer, Markdown. */
+  answer_markdown: string
+  /** Every passage the model cited — filtered server-side to the plan set. */
+  sources: HubAmaSource[]
+  /** Gaps / caveats / contested points the model flagged. */
+  candor_notes: string[]
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Thrown by hubAmaExecute on a non-2xx; `code` carries the Worker's error
+ *  code (e.g. "plan_expired" on a 410) so the UI can offer a re-run. */
+export class HubAmaError extends Error {
+  status: number
+  code?: string
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'HubAmaError'
+    this.status = status
+    this.code = code
+  }
+}
+
+/** FREE: embed + cross-corpus retrieve. No auth. Optional `corpora` narrows
+ *  the span (unknown/unembedded slugs are dropped server-side). */
+export async function hubAmaPlan(
+  question: string,
+  corpora?: readonly HubCorpusSlug[],
+): Promise<HubAmaPlanResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/hub/ama/plan`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      question,
+      ...(corpora && corpora.length > 0 ? { corpora } : {}),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new HubAmaError(
+      body.error?.message ?? `/corpus/hub/ama/plan failed (${r.status})`,
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as HubAmaPlanResponse
+}
+
+/** CHARGED: synthesize the cited report over a plan token. The plan fixed the
+ *  responsive set; only the token + auth credential travel here. */
+export async function hubAmaExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<HubAmaReport> {
+  const r = await fetch(`${WORKER_URL}/corpus/hub/ama/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      token,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new HubAmaError(
+      body.error?.message ?? `Report failed (${r.status})`,
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as HubAmaReport
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/facets
  * ------------------------------------------------------------------------- */
 
