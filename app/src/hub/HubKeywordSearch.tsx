@@ -339,6 +339,8 @@ function shortLabel(slug: CorpusSlug): string {
       return 'Lawfare'
     case 'presidential':
       return 'Presidential'
+    case 'fr':
+      return 'Fed. Register'
   }
 }
 
@@ -359,5 +361,7 @@ function longLabel(slug: CorpusSlug): string {
       return 'Lawfare'
     case 'presidential':
       return 'Presidential Documents'
+    case 'fr':
+      return 'Federal Register'
   }
 }
