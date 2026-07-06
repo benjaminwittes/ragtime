@@ -1701,6 +1701,304 @@ export async function summarizePresidentialDocument(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/fr/* — Federal Register spoke (brief #12)
+ *
+ * The daily journal of the executive branch: rules, proposed rules, and
+ * notices, 1994→present (the FR API's digital floor). Rules + proposed
+ * rules are complete; notices load in targeted waves (OFAC sanctions and
+ * State Department designations first). The operative facts researchers
+ * need — effective dates, comment windows, EO citations, CFR references —
+ * ride on every row.
+ * ------------------------------------------------------------------------- */
+
+export type FrFacetCount = {
+  value: string
+  count: number
+}
+
+export type FrAgencyCount = {
+  slug: string
+  name: string
+  count: number
+}
+
+export type FrFacets = {
+  document_count: number
+  earliest: string
+  latest: string
+  doc_types: FrFacetCount[]
+  /** Top ~40 agencies by document count. */
+  agencies: FrAgencyCount[]
+  significant_count: number
+  /** Documents whose comment window is still open (comments_close_on >= today). */
+  open_for_comment_count: number
+}
+
+export async function fetchFrFacets(): Promise<FrFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/fr/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fr/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FrFacets
+}
+
+export type FrDocumentDisplayRow = {
+  id: number
+  /** 'rule' | 'proposed_rule' | 'notice'. */
+  doc_type: string | null
+  subtype: string | null
+  /** FR document number — '2025-12760'. */
+  document_number: string | null
+  title: string | null
+  agency_names: string[] | null
+  significant: boolean | null
+  regulation_id_numbers: string[] | null
+  publication_date: string | null
+  effective_on: string | null
+  /** Comment-window close date — the operative fact when >= today. */
+  comments_close_on: string | null
+  /** '90 FR 30205'. */
+  fr_citation: string | null
+  text_length: number | null
+  html_url: string | null
+  pdf_url: string | null
+}
+
+export type FrFilterFields = {
+  search?: string
+  /** Exact: rule | proposed_rule | notice. */
+  docType?: string
+  /** Exact agency slug ('environmental-protection-agency'). */
+  agencySlug?: string
+  /** True = significant regulatory actions only (EO 12866). */
+  significant?: boolean
+  /** Regulation Identifier Number — '2060-AV09'. */
+  rin?: string
+  /** CFR reference containment — title number (e.g. 31). */
+  cfrTitle?: number
+  /** CFR reference containment — part (e.g. 594). */
+  cfrPart?: number | string
+  /** True = comment window still open (comments_close_on >= today). */
+  openForComment?: boolean
+  /** Publication-date range. */
+  from?: string
+  to?: string
+  /** Effective-date range. */
+  effectiveFrom?: string
+  effectiveTo?: string
+}
+
+export type FrFilterResult = {
+  ids: number[]
+  display_rows: FrDocumentDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runFrFilter(
+  fields: FrFilterFields,
+): Promise<FrFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/fr/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fr/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FrFilterResult
+}
+
+/** One CFR reference — rendered as "31 CFR 594". */
+export type FrCfrReference = {
+  title: number | null
+  part: string | null
+  chapter: string | null
+  citation_url: string | null
+}
+
+export type FrDocumentDetail = {
+  id: number
+  source_key: string | null
+  document_number: string | null
+  doc_type: string | null
+  subtype: string | null
+  title: string | null
+  abstract: string | null
+  /** The document's ACTION line — 'Final rule.', 'Notice of proposed rulemaking.'. */
+  action: string | null
+  fr_citation: string | null
+  volume: number | null
+  start_page: number | null
+  end_page: number | null
+  publication_date: string | null
+  effective_on: string | null
+  comments_close_on: string | null
+  /** Raw DATES section text — the honest fallback when the parsed dates are null. */
+  dates_text: string | null
+  agency_names: string[] | null
+  agency_slugs: string[] | null
+  regulation_id_numbers: string[] | null
+  docket_ids: string[] | null
+  topics: string[] | null
+  cfr_references: FrCfrReference[] | null
+  significant: boolean | null
+  /** Executive orders cited — numbers as strings ('14024'). */
+  eo_citations: string[] | null
+  text_quality: string | null
+  body_text: string | null
+  text_length: number | null
+  html_url: string | null
+  body_xml_url: string | null
+  raw_text_url: string | null
+  pdf_url: string | null
+}
+
+export type FrDocumentResponse = {
+  document: FrDocumentDetail
+}
+
+export async function fetchFrDocument(id: number): Promise<FrDocumentResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/fr/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fr/document failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FrDocumentResponse
+}
+
+export type FrAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type FrAmaSynthesis = {
+  answer_markdown: string
+  document_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type FrAmaScope = {
+  document_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runFrPlan(
+  question: string,
+  scope: FrAmaScope,
+  auth: AuthArg,
+): Promise<FrAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/fr/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Federal Register plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FrAmaPlan
+}
+
+export async function runFrExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<FrAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/fr/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Federal Register execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FrAmaSynthesis
+}
+
+export type FrDocumentSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function runFrSummarizeDocument(
+  id: number,
+  auth: AuthArg,
+): Promise<FrDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/fr/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Federal Register summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FrDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/clemency/* — clemency grants (the Presidential Documents corpus's
  * second table; brief #11 §7). Person-shaped pardon/commutation records,
  * sourced from Pardonpedia (CC BY 4.0). Surfaced inside the Presidential
@@ -2934,6 +3232,15 @@ export function fetchPresidentialItemsByIds(
   )
 }
 
+export function fetchFrItemsByIds(
+  ids: readonly number[],
+): Promise<FrDocumentDisplayRow[]> {
+  return fetchItemsByIds<FrDocumentDisplayRow>(
+    `${WORKER_URL}/corpus/fr/items-by-ids`,
+    ids,
+  )
+}
+
 /* ----------------------------------------------------------------------------
  * Semantic search (brief #9) — vector retrieval over the pgvector chunk
  * store, pilot corpora only. The spoke UI's segregated view calls this with
@@ -2942,7 +3249,7 @@ export function fetchPresidentialItemsByIds(
  * planner use.
  * ------------------------------------------------------------------------- */
 
-export type SemanticCorpus = 'olc' | 'frus' | 'lawfare' | 'presidential'
+export type SemanticCorpus = 'olc' | 'frus' | 'lawfare' | 'presidential' | 'fr'
 
 export type SemanticSearchRow = {
   id: string
@@ -3017,6 +3324,7 @@ export type MoreLikeThisCorpus =
   | 'frus'
   | 'lawfare'
   | 'presidential'
+  | 'fr'
 
 export type MoreLikeThisRoute = 'meaning' | 'compound'
 

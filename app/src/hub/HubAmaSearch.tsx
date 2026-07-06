@@ -42,6 +42,7 @@ const SEMANTIC_HUB_CORPORA: readonly CorpusSlug[] = [
   'frus',
   'lawfare',
   'presidential',
+  'fr',
   'usc',
   'cfr',
 ] as const
@@ -447,6 +448,8 @@ function shortLabel(slug: CorpusSlug): string {
       return 'Lawfare'
     case 'presidential':
       return 'Presidential'
+    case 'fr':
+      return 'Fed. Register'
   }
 }
 
@@ -467,6 +470,8 @@ function longLabel(slug: CorpusSlug): string {
       return 'Lawfare'
     case 'presidential':
       return 'Presidential Docs'
+    case 'fr':
+      return 'Federal Register'
   }
 }
 

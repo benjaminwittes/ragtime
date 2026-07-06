@@ -12,6 +12,7 @@ import type {
   CaseDisplayRow,
   CfrSectionDisplayRow,
   ClemencyGrantDisplayRow,
+  FrDocumentDisplayRow,
   FrusDocumentDisplayRow,
   LawfareArticleDisplayRow,
   OlcOpinionDisplayRow,
@@ -107,6 +108,23 @@ export const PRESIDENTIAL_COLUMNS: CsvColumn<PresidentialDocumentDisplayRow>[] =
   { header: 'agencies', value: (r) => (r.agencies ?? []).join('; ') },
   { header: 'text_quality', value: (r) => r.text_quality },
   { header: 'federalregister_url', value: (r) => r.html_url },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const FR_COLUMNS: CsvColumn<FrDocumentDisplayRow>[] = [
+  { header: 'fr_citation', value: (r) => r.fr_citation },
+  { header: 'title', value: (r) => r.title },
+  { header: 'doc_type', value: (r) => r.doc_type },
+  { header: 'document_number', value: (r) => r.document_number },
+  { header: 'agencies', value: (r) => (r.agency_names ?? []).join('; ') },
+  { header: 'significant', value: (r) => r.significant },
+  { header: 'rin', value: (r) => (r.regulation_id_numbers ?? []).join('; ') },
+  { header: 'publication_date', value: (r) => r.publication_date },
+  { header: 'effective_on', value: (r) => r.effective_on },
+  { header: 'comments_close_on', value: (r) => r.comments_close_on },
+  { header: 'federalregister_url', value: (r) => r.html_url },
+  { header: 'pdf_url', value: (r) => r.pdf_url },
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
 ]
