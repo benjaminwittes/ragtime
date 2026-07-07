@@ -45,6 +45,10 @@ const SEMANTIC_HUB_CORPORA: readonly CorpusSlug[] = [
   'fr',
   'usc',
   'cfr',
+  // Congress is accepted by the Worker's hub-AMA fan-out; it contributes 0
+  // passages until the corpus embed lands (queued behind FR), then lights up
+  // with no further frontend change.
+  'congress',
 ] as const
 
 export function HubAmaSearch({
@@ -450,6 +454,8 @@ function shortLabel(slug: CorpusSlug): string {
       return 'Presidential'
     case 'fr':
       return 'Fed. Register'
+    case 'congress':
+      return 'Congress'
   }
 }
 
@@ -472,6 +478,8 @@ function longLabel(slug: CorpusSlug): string {
       return 'Presidential Docs'
     case 'fr':
       return 'Federal Register'
+    case 'congress':
+      return 'Congress'
   }
 }
 

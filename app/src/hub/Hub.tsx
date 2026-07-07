@@ -73,6 +73,7 @@ const HUB_STATS: { num: string; label: string }[] = [
   { num: '23k', label: 'Lawfare pieces' },
   { num: '12.7k', label: 'presidential documents' },
   { num: '207k', label: 'Federal Register docs' },
+  { num: '1.2M', label: 'congressional documents' },
 ]
 
 function HubHero() {
