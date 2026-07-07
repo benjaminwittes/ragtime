@@ -1999,6 +1999,494 @@ export async function runFrSummarizeDocument(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/congress/* — Congress spoke (brief #13)
+ *
+ * One spoke over five collections of the legislative record: public laws
+ * (1789→), bills (108th Congress→; full text from the 113th), hearing
+ * transcripts (1933→, with per-speaker turn attribution), the Congressional
+ * Record (1994→), and written witness testimony (House, 118th–119th).
+ * Every filter/document/items-by-ids call carries a `collection`
+ * discriminator; the turns endpoint is the hearings collection's
+ * "who said what" sub-surface.
+ * ------------------------------------------------------------------------- */
+
+export type CongressCollection =
+  | 'laws'
+  | 'bills'
+  | 'hearings'
+  | 'record'
+  | 'testimony'
+
+export type CongressCollectionStat = {
+  count: number
+  earliest: string
+  latest: string
+}
+
+export type CongressCommitteeCount = {
+  committee: string
+  count: number
+}
+
+export type CongressFacets = {
+  collections: Record<CongressCollection, CongressCollectionStat>
+  /** Total hearing speaker turns in the attribution table (~7M). */
+  turn_count: number
+  /** Top committees by hearing count. */
+  top_committees: CongressCommitteeCount[]
+  /** Congress numbers present across collections. */
+  congresses: number[]
+  /** Congressional Record granule classes (HOUSE/SENATE/EXTENSIONS/DAILYDIGEST). */
+  granule_classes: { value: string; count: number }[]
+}
+
+export async function fetchCongressFacets(): Promise<CongressFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/congress/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/congress/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CongressFacets
+}
+
+export type CongressLawDisplayRow = {
+  id: number
+  law_key: string | null
+  /** 'Public Law 95-511'. */
+  pl_number: string | null
+  congress: number | null
+  law_number: number | null
+  /** 'public' | 'private'. */
+  law_kind: string | null
+  title: string | null
+  /** '92 Stat. 1783'. */
+  statute_citation: string | null
+  statute_volume: number | null
+  approved_date: string | null
+  /** 'statute' | 'plaw' — which GPO collection the text came from. */
+  provenance: string | null
+  citable_as: string[] | null
+  text_length: number | null
+}
+
+export type CongressBillDisplayRow = {
+  id: number
+  /** '114hr2454'. */
+  source_key: string | null
+  congress: number | null
+  /** 'hr' | 's' | 'hres' | 'sres' | 'hjres' | 'sjres' | 'hconres' | 'sconres'. */
+  bill_type: string | null
+  bill_number: string | null
+  origin_chamber: string | null
+  title: string | null
+  introduced_date: string | null
+  policy_area: string | null
+  sponsor_names: string[] | null
+  cosponsor_count: number | null
+  committee_names: string[] | null
+  latest_action_date: string | null
+  latest_action_text: string | null
+  became_law: boolean | null
+  law_refs: string[] | null
+  text_length: number | null
+}
+
+export type CongressHearingDisplayRow = {
+  id: number
+  /** 'CHRG-118shrg58969'. */
+  source_key: string | null
+  title: string | null
+  congress: number | null
+  chamber: string | null
+  held_date: string | null
+  committee_names: string[] | null
+  witness_names: string[] | null
+  year: number | null
+  text_length: number | null
+}
+
+export type CongressRecordDisplayRow = {
+  id: number
+  /** 'CREC-2006-09-28-pt2-PgH7853'. */
+  source_key: string | null
+  title: string | null
+  /** 'HOUSE' | 'SENATE' | 'EXTENSIONS' | 'DAILYDIGEST'. */
+  granule_class: string | null
+  member_names: string[] | null
+  bill_refs: string[] | null
+  record_date: string | null
+  text_length: number | null
+}
+
+export type CongressTestimonyDisplayRow = {
+  id: number
+  /** 'HHRG-118-JU08-Wstate-GoiteinE-20230714'. */
+  source_key: string | null
+  congress: number | null
+  committee_code: string | null
+  doc_type: string | null
+  witness: string | null
+  statement_date: string | null
+  text_length: number | null
+  url: string | null
+}
+
+export type CongressDisplayRowMap = {
+  laws: CongressLawDisplayRow
+  bills: CongressBillDisplayRow
+  hearings: CongressHearingDisplayRow
+  record: CongressRecordDisplayRow
+  testimony: CongressTestimonyDisplayRow
+}
+
+export type CongressAnyDisplayRow = CongressDisplayRowMap[CongressCollection]
+
+export type CongressFilterFields = {
+  collection: CongressCollection
+  search?: string
+  congress?: number
+  /** 'House' | 'Senate' (bills origin chamber; hearings chamber). */
+  chamber?: string
+  /** Full committee name — 'Committee on the Judiciary'. */
+  committee?: string
+  /** Member bioguide id — 'R000584'. */
+  bioguideId?: string
+  /** Witness name fragment (testimony collection). */
+  witness?: string
+  /** Bills only: enacted bills. */
+  becameLaw?: boolean
+  /** Record only: granule class. */
+  granuleClass?: string
+  /** Laws only: 'public' | 'private'. */
+  lawKind?: string
+  /** Bills only: CRS policy area ('Law', 'Health', …). */
+  policyArea?: string
+  /** Collection-appropriate date range (approved/introduced/held/record/statement). */
+  from?: string
+  to?: string
+}
+
+export type CongressFilterResult = {
+  collection: CongressCollection
+  ids: number[]
+  display_rows: CongressAnyDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runCongressFilter(
+  fields: CongressFilterFields,
+): Promise<CongressFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/congress/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/congress/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CongressFilterResult
+}
+
+/** One entry in a bill's actions timeline (jsonb from congress.gov). */
+export type CongressBillAction = {
+  text?: string
+  type?: string
+  actionDate?: string
+}
+
+export type CongressHearingMember = {
+  name?: string
+  role?: string
+  party?: string
+  state?: string
+  chamber?: string
+  last_name?: string
+  bioguideId?: string
+}
+
+export type CongressHearingWitness = {
+  name?: string
+  display?: string
+  last_name?: string
+  affiliation?: string
+}
+
+export type CongressHearingCommittee = {
+  name?: string
+  chamber?: string
+  authorityId?: string
+}
+
+export type CongressLawDetail = CongressLawDisplayRow & {
+  source_key: string | null
+  source_key_plaw: string | null
+  source_key_statute: string | null
+  body_text: string | null
+}
+
+export type CongressBillDetail = CongressBillDisplayRow & {
+  sponsor_bioguide_ids: string[] | null
+  subjects: string[] | null
+  /** CRS summary (may contain HTML entities). */
+  summary: string | null
+  bill_version: string | null
+  actions: CongressBillAction[] | null
+  body_text: string | null
+}
+
+export type CongressHearingDetail = CongressHearingDisplayRow & {
+  jacket: string | null
+  member_names: string[] | null
+  member_bioguide_ids: string[] | null
+  members: CongressHearingMember[] | null
+  witnesses: CongressHearingWitness[] | null
+  committees: CongressHearingCommittee[] | null
+  body_text: string | null
+}
+
+export type CongressRecordDetail = CongressRecordDisplayRow & {
+  member_bioguide_ids: string[] | null
+  body_text: string | null
+}
+
+export type CongressTestimonyDetail = CongressTestimonyDisplayRow & {
+  event_id: string | null
+  body_text: string | null
+}
+
+export type CongressDetailMap = {
+  laws: CongressLawDetail
+  bills: CongressBillDetail
+  hearings: CongressHearingDetail
+  record: CongressRecordDetail
+  testimony: CongressTestimonyDetail
+}
+
+export type CongressDocumentResponse<
+  C extends CongressCollection = CongressCollection,
+> = {
+  collection: C
+  document: CongressDetailMap[C]
+  /** Hearings only: speaker-turn attribution stats. */
+  turns_count?: number
+  attributed_turns_count?: number
+  has_turns?: boolean
+}
+
+export async function fetchCongressDocument<C extends CongressCollection>(
+  collection: C,
+  id: number,
+): Promise<CongressDocumentResponse<C>> {
+  const r = await fetch(`${WORKER_URL}/corpus/congress/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ collection, id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/congress/document failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CongressDocumentResponse<C>
+}
+
+export type CongressTurnsFields = {
+  /** FTS over the turn text. */
+  search?: string
+  /** Member bioguide id — exact ('R000584'). */
+  bioguideId?: string
+  /** Witness name fragment (matches witness-type speakers). */
+  witnessName?: string
+  /** 'member' | 'witness' | 'ambiguous' — attribution-quality browsing. */
+  speakerType?: string
+  /** Restrict to one hearing ('CHRG-118shrg58969'). */
+  hearingSourceKey?: string
+  /** Pair each turn with the question it answers (Q→A cards). */
+  withQuestion?: boolean
+}
+
+export type CongressTurn = {
+  id: number
+  hearing_source_key: string
+  turn_index: number
+  speaker_raw: string | null
+  /** 'member' | 'witness' | 'ambiguous' | … — ambiguous speakers are
+   * flagged, never guessed (the corpus's attribution candor rule). */
+  speaker_type: string | null
+  resolved_name: string | null
+  bioguide_id: string | null
+  party: string | null
+  affiliation: string | null
+  excerpt: string | null
+  text_length: number | null
+  hearing_title: string | null
+  held_date: string | null
+  hearing_committees: string[] | null
+  /** Present when withQuestion=true: the preceding question turn. */
+  question_speaker_raw?: string | null
+  question_speaker_type?: string | null
+  question_speaker?: string | null
+  question_bioguide_id?: string | null
+  question_excerpt?: string | null
+}
+
+export type CongressTurnsResult = {
+  turns: CongressTurn[]
+  count: number
+  capped: boolean
+  with_question: boolean
+  generated_sql: string
+}
+
+export async function runCongressTurns(
+  fields: CongressTurnsFields,
+): Promise<CongressTurnsResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/congress/turns`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/congress/turns failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CongressTurnsResult
+}
+
+export type CongressAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type CongressAmaSynthesis = {
+  answer_markdown: string
+  /** Cited ids. May be collection-qualified strings ('bills:75567') or bare
+   * numbers, depending on what the planner touched — the UI parses both. */
+  document_ids: Array<string | number> | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type CongressAmaScope = {
+  /** Present when a filter narrows the AMA — the active collection's ids. */
+  document_ids?: number[] | null
+  /** Which collection the ids belong to. */
+  collection?: CongressCollection
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runCongressPlan(
+  question: string,
+  scope: CongressAmaScope,
+  auth: AuthArg,
+): Promise<CongressAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/congress/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Congress plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CongressAmaPlan
+}
+
+export async function runCongressExecute(
+  token: string,
+  auth: AuthArg,
+): Promise<CongressAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/congress/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Congress execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CongressAmaSynthesis
+}
+
+export type CongressDocumentSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function runCongressSummarizeDocument(
+  collection: CongressCollection,
+  id: number,
+  auth: AuthArg,
+): Promise<CongressDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/congress/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      collection,
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Congress summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CongressDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/clemency/* — clemency grants (the Presidential Documents corpus's
  * second table; brief #11 §7). Person-shaped pardon/commutation records,
  * sourced from Pardonpedia (CC BY 4.0). Surfaced inside the Presidential
@@ -3241,6 +3729,31 @@ export function fetchFrItemsByIds(
   )
 }
 
+/**
+ * Congress variant — the endpoint additionally needs the `collection`
+ * discriminator (five collections share one spoke), so it doesn't go
+ * through the shared ids-only helper above.
+ */
+export async function fetchCongressItemsByIds<C extends CongressCollection>(
+  collection: C,
+  ids: readonly number[],
+): Promise<CongressDisplayRowMap[C][]> {
+  if (ids.length === 0) return []
+  const r = await fetch(`${WORKER_URL}/corpus/congress/items-by-ids`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ collection, ids }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(
+      `/corpus/congress/items-by-ids failed (${r.status}): ${msg}`,
+    )
+  }
+  const body = (await r.json()) as { display_rows: CongressDisplayRowMap[C][] }
+  return body.display_rows
+}
+
 /* ----------------------------------------------------------------------------
  * Semantic search (brief #9) — vector retrieval over the pgvector chunk
  * store, pilot corpora only. The spoke UI's segregated view calls this with
@@ -3249,7 +3762,13 @@ export function fetchFrItemsByIds(
  * planner use.
  * ------------------------------------------------------------------------- */
 
-export type SemanticCorpus = 'olc' | 'frus' | 'lawfare' | 'presidential' | 'fr'
+export type SemanticCorpus =
+  | 'olc'
+  | 'frus'
+  | 'lawfare'
+  | 'presidential'
+  | 'fr'
+  | 'congress'
 
 export type SemanticSearchRow = {
   id: string
@@ -3325,6 +3844,14 @@ export type MoreLikeThisCorpus =
   | 'lawfare'
   | 'presidential'
   | 'fr'
+  // Congress pivots are per-collection — the Worker's MORE_LIKE_THIS_CORPORA
+  // map keys the five collections as compound slugs (verified live: the
+  // error envelope lists them; /corpus/congress:laws/more-like-this routes).
+  | 'congress:laws'
+  | 'congress:bills'
+  | 'congress:hearings'
+  | 'congress:record'
+  | 'congress:testimony'
 
 export type MoreLikeThisRoute = 'meaning' | 'compound'
 
