@@ -526,16 +526,26 @@ function HearingSections({
             Witnesses
           </h3>
           <ul className="mt-1 space-y-0.5 text-sm text-foreground/90">
-            {witnesses.map((w, i) => (
-              <li key={i}>
-                {w.display ?? w.name ?? '—'}
-                {w.affiliation && w.affiliation !== w.display && (
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    — {w.affiliation}
-                  </span>
-                )}
-              </li>
-            ))}
+            {witnesses.map((w, i) => {
+              const display = w.display ?? w.name ?? '—'
+              // Source-data quirk: affiliation sometimes carries a fragment
+              // of the name ('Abbate, Paul' + affiliation 'Paul') — skip it
+              // when the display line already contains it.
+              const affiliation =
+                w.affiliation && !display.includes(w.affiliation)
+                  ? w.affiliation
+                  : null
+              return (
+                <li key={i}>
+                  {display}
+                  {affiliation && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      — {affiliation}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
