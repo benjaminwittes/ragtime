@@ -7,6 +7,7 @@ import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
 import { TermsOfService } from '@/legal/TermsOfService'
 import { SpokeShell } from '@/spokes/SpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
+import { CongressSpokeShell } from '@/spokes/congress/CongressSpokeShell'
 import { FrSpokeShell } from '@/spokes/fr/FrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
 import { LawfareSpokeShell } from '@/spokes/lawfare/LawfareSpokeShell'
@@ -126,6 +127,8 @@ function activeSpokeShell(spoke: CorpusSpoke) {
       <PresidentialSpokeShell spoke={spoke} />
     ) : spoke.slug === 'fr' ? (
       <FrSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'congress' ? (
+      <CongressSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )

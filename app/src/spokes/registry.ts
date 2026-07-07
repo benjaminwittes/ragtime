@@ -1,5 +1,6 @@
 import type { CorpusSpoke, CorpusSlug } from './types'
 import { cfrSpoke } from './cfr'
+import { congressSpoke } from './congress'
 import { frSpoke } from './fr'
 import { frusSpoke } from './frus'
 import { lawfareSpoke } from './lawfare'
@@ -35,6 +36,7 @@ export const spokes: readonly CorpusSpoke[] = [
   lawfareSpoke,
   presidentialSpoke,
   frSpoke,
+  congressSpoke,
 ]
 
 export function getSpokeBySlug(slug: CorpusSlug): CorpusSpoke | undefined {

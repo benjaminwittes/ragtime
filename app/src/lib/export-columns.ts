@@ -12,6 +12,12 @@ import type {
   CaseDisplayRow,
   CfrSectionDisplayRow,
   ClemencyGrantDisplayRow,
+  CongressBillDisplayRow,
+  CongressCollection,
+  CongressHearingDisplayRow,
+  CongressLawDisplayRow,
+  CongressRecordDisplayRow,
+  CongressTestimonyDisplayRow,
   FrDocumentDisplayRow,
   FrusDocumentDisplayRow,
   LawfareArticleDisplayRow,
@@ -128,6 +134,85 @@ export const FR_COLUMNS: CsvColumn<FrDocumentDisplayRow>[] = [
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
 ]
+
+export const CONGRESS_LAWS_COLUMNS: CsvColumn<CongressLawDisplayRow>[] = [
+  { header: 'pl_number', value: (r) => r.pl_number },
+  { header: 'title', value: (r) => r.title },
+  { header: 'law_kind', value: (r) => r.law_kind },
+  { header: 'congress', value: (r) => r.congress },
+  { header: 'approved_date', value: (r) => r.approved_date },
+  { header: 'statute_citation', value: (r) => r.statute_citation },
+  { header: 'provenance', value: (r) => r.provenance },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const CONGRESS_BILLS_COLUMNS: CsvColumn<CongressBillDisplayRow>[] = [
+  { header: 'source_key', value: (r) => r.source_key },
+  { header: 'congress', value: (r) => r.congress },
+  { header: 'bill_type', value: (r) => r.bill_type },
+  { header: 'bill_number', value: (r) => r.bill_number },
+  { header: 'title', value: (r) => r.title },
+  { header: 'origin_chamber', value: (r) => r.origin_chamber },
+  { header: 'sponsors', value: (r) => (r.sponsor_names ?? []).join('; ') },
+  { header: 'cosponsor_count', value: (r) => r.cosponsor_count },
+  { header: 'committees', value: (r) => (r.committee_names ?? []).join('; ') },
+  { header: 'policy_area', value: (r) => r.policy_area },
+  { header: 'introduced_date', value: (r) => r.introduced_date },
+  { header: 'latest_action_date', value: (r) => r.latest_action_date },
+  { header: 'latest_action_text', value: (r) => r.latest_action_text },
+  { header: 'became_law', value: (r) => r.became_law },
+  { header: 'law_refs', value: (r) => (r.law_refs ?? []).join('; ') },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const CONGRESS_HEARINGS_COLUMNS: CsvColumn<CongressHearingDisplayRow>[] = [
+  { header: 'source_key', value: (r) => r.source_key },
+  { header: 'title', value: (r) => r.title },
+  { header: 'congress', value: (r) => r.congress },
+  { header: 'chamber', value: (r) => r.chamber },
+  { header: 'held_date', value: (r) => r.held_date },
+  { header: 'committees', value: (r) => (r.committee_names ?? []).join('; ') },
+  { header: 'witnesses', value: (r) => (r.witness_names ?? []).join('; ') },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const CONGRESS_RECORD_COLUMNS: CsvColumn<CongressRecordDisplayRow>[] = [
+  { header: 'source_key', value: (r) => r.source_key },
+  { header: 'title', value: (r) => r.title },
+  { header: 'granule_class', value: (r) => r.granule_class },
+  { header: 'record_date', value: (r) => r.record_date },
+  { header: 'member_count', value: (r) => (r.member_names ?? []).length },
+  { header: 'bill_refs', value: (r) => (r.bill_refs ?? []).join('; ') },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const CONGRESS_TESTIMONY_COLUMNS: CsvColumn<CongressTestimonyDisplayRow>[] = [
+  { header: 'source_key', value: (r) => r.source_key },
+  { header: 'witness', value: (r) => r.witness },
+  { header: 'doc_type', value: (r) => r.doc_type },
+  { header: 'congress', value: (r) => r.congress },
+  { header: 'committee_code', value: (r) => r.committee_code },
+  { header: 'statement_date', value: (r) => r.statement_date },
+  { header: 'url', value: (r) => r.url },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+/** Congress exports are keyed by the active collection — five row shapes
+ * share one spoke, so the shell looks the column set up at download time. */
+export const CONGRESS_COLUMNS_BY_COLLECTION: {
+  [C in CongressCollection]: readonly CsvColumn<never>[]
+} = {
+  laws: CONGRESS_LAWS_COLUMNS,
+  bills: CONGRESS_BILLS_COLUMNS,
+  hearings: CONGRESS_HEARINGS_COLUMNS,
+  record: CONGRESS_RECORD_COLUMNS,
+  testimony: CONGRESS_TESTIMONY_COLUMNS,
+}
 
 export const CLEMENCY_COLUMNS: CsvColumn<ClemencyGrantDisplayRow>[] = [
   { header: 'recipient', value: (r) => r.person_name },
