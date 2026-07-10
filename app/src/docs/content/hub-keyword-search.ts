@@ -15,12 +15,13 @@ export const hubKeywordSearchEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 2,
   content: `
-**What it is.** The plain-language box at the top of the hub. Type a
-question or a topic; the system fires six parallel full-text searches
-(one per corpus — Federal litigation, USC, CFR, OLC, FRUS, and Lawfare)
-and returns the top-5 results from each, plus the total count per corpus.
-Free, no AI. (Five of the six are primary sources; Lawfare returns its own
-published commentary — handy for "has anyone written about this?")
+**What it is.** The plain-language box at the top of the hub, on its
+"Search" (keyword) setting. Type a question or a topic; the system fires a
+parallel full-text search across every loaded corpus — nine today, from
+federal litigation to the Congressional Record — and returns the top-5
+results from each, plus the total count per corpus. Free, no AI. (All but
+one are primary sources; Lawfare returns its own published commentary —
+handy for "has anyone written about this?")
 
 **Why grouped by corpus, not one merged list?** Each corpus's relevance
 scores come from its own full-text index and aren't comparable across
@@ -42,11 +43,11 @@ that takes you to that corpus's full surface. In the workspace you can:
 - Use the corpus-specific AI mode (Ask, narrative synthesis, legal
   analysis) where available.
 
-**What's deferred.** This is the keyword tier. The brief's paid AI
-synthesis layer — a cited cross-corpus answer written from these search
-results — needs semantic retrieval (pgvector) to provide a single
-comparable relevance score across the tables. That lands later. For
-now, the keyword tier stands on its own.
+**The Ask toggle.** Keyword search is one of the hub's two modes. The
+default "Ask" mode is semantic: one unified cross-corpus ranking by
+meaning, with an optional cited synthesis on top. Use Ask when you have a
+question; use Search when you have a phrase, a name, or a citation you
+expect to appear verbatim.
 
 **Why this matters.** Most real research questions span corpora — "Where
 does this credible-fear standard come from in immigration law?" pulls

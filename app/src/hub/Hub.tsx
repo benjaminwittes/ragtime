@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
+import { getHoldingsCached } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
 import { spokes } from '@/spokes/registry'
 import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
@@ -17,7 +18,7 @@ import { HubSearch } from './HubSearch'
  *
  * The cross-corpus keyword search (brief #1 §3 free tier) sits above the
  * spoke grid: a single plain-language input fires parallel FTS queries
- * across all 6 corpora and surfaces grouped-by-corpus results inline.
+ * across all loaded corpora and surfaces grouped-by-corpus results inline.
  * The paid AI synthesis layer (brief #1 Phase 2) lands later — needs
  * pgvector to provide a single comparable relevance score across tables.
  */
@@ -61,37 +62,83 @@ function HubHeader() {
   )
 }
 
-/** The six loaded corpora as a quiet credibility strip under the hero.
+/** The loaded corpora as a quiet credibility strip under the hero.
  * Rounded, impressionistic figures; the exact, sourced counts live on each
- * corpus card below (and inside each spoke's holdings band). */
-const HUB_STATS: { num: string; label: string }[] = [
-  { num: '1.1M', label: 'court cases' },
-  { num: '60k', label: 'U.S. Code §§' },
-  { num: '228k', label: 'CFR §§' },
-  { num: '2,145', label: 'OLC opinions' },
-  { num: '314k', label: 'FRUS documents' },
-  { num: '23k', label: 'Lawfare pieces' },
-  { num: '12.7k', label: 'presidential documents' },
-  { num: '207k', label: 'Federal Register docs' },
-  { num: '1.2M', label: 'congressional documents' },
+ * corpus card below (and inside each spoke's holdings band).
+ *
+ * Numbers resolve live from each spoke's `getHoldings()` (shared with the
+ * cards via the holdings cache); the `fallback` string renders immediately
+ * and survives a Worker outage. `pick` selects the headline count from the
+ * spoke's corpus-specific `counts` record. */
+const HUB_STATS: {
+  slug: string
+  label: string
+  fallback: string
+  pick: (counts: Record<string, number>) => number | undefined
+}[] = [
+  { slug: 'litigation', label: 'court cases', fallback: '1.5M', pick: (c) => c.cases },
+  { slug: 'usc', label: 'U.S. Code §§', fallback: '60.4k', pick: (c) => c.sections },
+  { slug: 'cfr', label: 'CFR §§', fallback: '228k', pick: (c) => c.sections },
+  { slug: 'olc', label: 'OLC opinions', fallback: '2,147', pick: (c) => c.opinions },
+  { slug: 'frus', label: 'FRUS documents', fallback: '314k', pick: (c) => c.documents },
+  { slug: 'lawfare', label: 'Lawfare pieces', fallback: '22.7k', pick: (c) => c.items },
+  { slug: 'presidential', label: 'presidential documents', fallback: '12.7k', pick: (c) => c.documents },
+  { slug: 'fr', label: 'Federal Register docs', fallback: '512k', pick: (c) => c.documents },
+  { slug: 'congress', label: 'congressional documents', fallback: '1.2M', pick: (c) => c.documents },
 ]
 
+/** 2,147 → '2,147'; 12,666 → '12.7k'; 227,728 → '228k'; 1,468,759 → '1.5M'.
+ * Impressionistic on purpose — the strip is a credibility signal, not a
+ * ledger; exact figures live on the cards below. */
+function formatHubStat(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (n >= 100_000) return `${Math.round(n / 1_000)}k`
+  if (n >= 10_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`
+  return n.toLocaleString()
+}
+
 function HubHero() {
+  // Live headline figures, keyed by spoke slug; fallbacks render until (and
+  // unless) the live fetch resolves.
+  const [live, setLive] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    for (const spoke of spokes) {
+      const stat = HUB_STATS.find((s) => s.slug === spoke.slug)
+      if (!stat) continue
+      void getHoldingsCached(spoke)
+        .then((h) => {
+          const n = stat.pick(h.counts)
+          if (!cancelled && typeof n === 'number' && n > 0) {
+            setLive((prev) => ({ ...prev, [spoke.slug]: n }))
+          }
+        })
+        .catch(() => {
+          // Quiet fallback — the static figure stays up.
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <section className="pt-14 pb-2 text-center">
       <h1 className="mx-auto max-w-3xl font-serif text-[2.6rem] font-medium leading-[1.12] tracking-tight text-foreground">
         The Hub: One Search to Rule Them All
       </h1>
       <p className="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary">
-        Statutes, regulations, executive-branch opinions, diplomatic history,
-        the federal litigation that interprets them — and Lawfare's analysis
-        of all of it — together.
+        Statutes, regulations, presidential documents, the Federal Register,
+        congressional hearings and debates, executive-branch legal opinions,
+        diplomatic history, the federal litigation that interprets them all —
+        and Lawfare's analysis of the whole — together.
       </p>
       <dl className="mx-auto mt-8 flex max-w-3xl flex-wrap items-baseline justify-center gap-x-7 gap-y-3">
         {HUB_STATS.map((s) => (
           <div key={s.label} className="flex items-baseline gap-1.5">
             <dt className="font-serif text-2xl font-semibold text-lawfare-teal">
-              {s.num}
+              {live[s.slug] !== undefined ? formatHubStat(live[s.slug]) : s.fallback}
             </dt>
             <dd className="text-xs text-lawfare-muted">{s.label}</dd>
           </div>
@@ -236,7 +283,7 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
     let cancelled = false
     void (async () => {
       try {
-        const h = await spoke.getHoldings()
+        const h = await getHoldingsCached(spoke)
         if (!cancelled) setHoldings(h)
       } catch {
         if (!cancelled) setErrored(true)

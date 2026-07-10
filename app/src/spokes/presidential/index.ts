@@ -22,9 +22,9 @@ import { fetchPresidentialFacets } from '@/lib/worker-client'
  * - Summarize-one-document on the detail sheet (the disposition trail
  *   rides along so status is stated honestly).
  *
- * Counts: 12,654 documents (EOs 5,898 back to 1940; proclamations 4,394;
- * memoranda 803; determinations 790; notices 769). Live counts come from
- * /corpus/presidential/facets.
+ * Counts: 12,666 documents as of 2026-07-10 (EOs 5,901 back to 1940;
+ * proclamations 4,398; memoranda 803; determinations 793; notices 771).
+ * Live counts come from /corpus/presidential/facets.
  */
 export const presidentialSpoke: CorpusSpoke = {
   slug: 'presidential',
@@ -58,13 +58,13 @@ export const presidentialSpoke: CorpusSpoke = {
       }
     } catch {
       return {
-        counts: { documents: 12654 },
+        counts: { documents: 12666 },
         coverage: '1940 → present',
-        lastUpdated: '2026-06-12',
+        lastUpdated: '2026-07-10',
         provenance: {
-          executive_orders: 5898,
-          proclamations: 4394,
-          with_full_text: 11186,
+          executive_orders: 5901,
+          proclamations: 4398,
+          with_full_text: 11582,
         },
       }
     }
