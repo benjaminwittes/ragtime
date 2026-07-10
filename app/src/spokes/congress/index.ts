@@ -17,9 +17,9 @@ import { fetchCongressFacets } from '@/lib/worker-client'
  * - claude_ama: plan→execute→synthesize across the five tables.
  * - Summarize-one-document on every detail sheet.
  *
- * Counts (live from /corpus/congress/facets; snapshot 2026-07-07):
- * laws 93,959 · bills 154,651 · hearings 35,361 · record 883,436 ·
- * testimony 14,874 — ~1.18M documents.
+ * Counts (live from /corpus/congress/facets; snapshot 2026-07-10):
+ * laws 94,301 · bills 170,991 · hearings 35,361 · record 904,210 ·
+ * testimony 14,874 — ~1.22M documents.
  */
 export const congressSpoke: CorpusSpoke = {
   slug: 'congress',
@@ -62,14 +62,14 @@ export const congressSpoke: CorpusSpoke = {
       }
     } catch {
       return {
-        counts: { documents: 1182281 },
+        counts: { documents: 1219737 },
         coverage: 'Laws to 1789 · hearings 1933 → · record 1994 → · bills 2003 →',
-        lastUpdated: '2026-06-30',
+        lastUpdated: '2026-07-10',
         provenance: {
-          laws: 93959,
-          bills: 154651,
+          laws: 94301,
+          bills: 170991,
           hearings: 35361,
-          record: 883436,
+          record: 904210,
           testimony: 14874,
         },
         knownGaps,

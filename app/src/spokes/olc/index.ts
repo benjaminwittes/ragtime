@@ -56,10 +56,10 @@ export const olcSpoke: CorpusSpoke = {
       }
     } catch {
       return {
-        counts: { opinions: 2145 },
+        counts: { opinions: 2147 },
         coverage: '1934 → present',
-        lastUpdated: '2026-05-24',
-        provenance: { doj_published: 1439, knight_foia: 706 },
+        lastUpdated: '2026-06-10',
+        provenance: { doj_published: 1441, knight_foia: 706 },
       }
     }
   },

@@ -15,9 +15,10 @@ export const aboutPresidentialEntry: DocsEntry = {
   content: `
 **What's in it.** The formal signed instruments by which the President
 directs the executive branch and the public, as published in the Federal
-Register: executive orders (5,898, reaching back to 1940), proclamations
-(4,394), memoranda (803), determinations (790), and notices (769) — 12,654
-documents in all, updated daily.
+Register: executive orders (5,900+, reaching back to 1940), proclamations
+(4,400), memoranda (800), determinations (790), and notices (770) — about
+12,700 documents in all, updated daily. (Exact live counts appear on the
+corpus card and in the spoke's holdings band.)
 
 **The lineage graph.** The Office of the Federal Register tracks what each
 document does to earlier ones — revokes, amends, supersedes — and this

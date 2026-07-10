@@ -44,7 +44,11 @@ filter-bounded set, use Keyword mode or read the semantic pane knowing
 it spans the whole corpus.
 
 **Where it's available.** Corpora whose documents have been embedded:
-OLC opinions, FRUS, and Lawfare today; more as embedding coverage grows.
-Searches in any mode are free.
+OLC opinions, FRUS, Lawfare, Presidential Documents, the Federal
+Register, and Congress today; more as embedding coverage grows. On
+corpora still being loaded (Federal Register notices, parts of the
+Congressional Record), newly added documents become semantically
+searchable as the embedding queue catches up — keyword search covers
+them immediately. Searches in any mode are free.
 `,
 }

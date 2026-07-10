@@ -14,7 +14,8 @@ export const aboutCfrEntry: DocsEntry = {
   order: 9,
   content: `
 **What's in it.** The entire Code of Federal Regulations — all 49 titles,
-227,554 sections — the codified rules of the federal executive agencies.
+more than 227,000 sections — the codified rules of the federal executive
+agencies.
 
 **Currency is per-section.** Each section carries its own
 "up-to-date-as-of" date (shown on the section), because the CFR is amended

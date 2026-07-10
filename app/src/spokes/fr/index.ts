@@ -19,8 +19,9 @@ import { fetchFrFacets } from '@/lib/worker-client'
  *   implementation questions.
  * - Summarize-one-document on the detail sheet.
  *
- * Counts: ~207,000 documents (rules ~118.6k; proposed rules ~76.3k;
- * notices loading). Live counts come from /corpus/fr/facets.
+ * Counts: ~512,000 documents as of 2026-07-10 (rules ~118.7k; proposed
+ * rules ~76.3k; notices ~317k with the broad sweep still harvesting).
+ * Live counts come from /corpus/fr/facets.
  */
 export const frSpoke: CorpusSpoke = {
   slug: 'fr',
@@ -30,7 +31,7 @@ export const frSpoke: CorpusSpoke = {
   status: 'active',
 
   plainEnglishDisclosure:
-    'The Federal Register is the daily journal of the executive branch — rules, proposed rules, and notices. Rules and proposed rules are complete from 1994 to present; notices are loading in targeted waves (sanctions and designations first).',
+    'The Federal Register is the daily journal of the executive branch — rules, proposed rules, and notices. Rules and proposed rules are complete from 1994 to present; notices are loading in waves — sanctions and designations landed first, and the broad historical sweep is in progress.',
 
   getHoldings: async () => {
     try {
@@ -47,22 +48,22 @@ export const frSpoke: CorpusSpoke = {
           notices: byType('notice'),
         },
         knownGaps: [
-          'Notices are partial: targeted wave loaded (OFAC sanctions, State Dept designations, USCIS, significant notices); bulk notices to come',
+          'Notices are partial: the broad historical sweep is loading now (sanctions, designations, USCIS, and significant notices landed first); newly loaded notices become semantically searchable as the embedding queue catches up',
           'Pre-1994 documents are outside the corpus (FR API digital floor)',
         ],
       }
     } catch {
       return {
-        counts: { documents: 207289 },
+        counts: { documents: 512194 },
         coverage: '1994-01-03 → present',
-        lastUpdated: '2026-07-06',
+        lastUpdated: '2026-07-10',
         provenance: {
-          rules: 118643,
-          proposed_rules: 76276,
-          notices: 8169,
+          rules: 118669,
+          proposed_rules: 76298,
+          notices: 317227,
         },
         knownGaps: [
-          'Notices are partial: targeted wave loaded (OFAC sanctions, State Dept designations, USCIS, significant notices); bulk notices to come',
+          'Notices are partial: the broad historical sweep is loading now (sanctions, designations, USCIS, and significant notices landed first); newly loaded notices become semantically searchable as the embedding queue catches up',
           'Pre-1994 documents are outside the corpus (FR API digital floor)',
         ],
       }
