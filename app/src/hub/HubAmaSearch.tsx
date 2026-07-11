@@ -142,6 +142,18 @@ export function HubAmaSearch({
             candor_notes: r.candor_notes,
             cited_ids: r.sources,
             cost_cents: r._cost_cents ?? null,
+            // Router trace: which branch answered + branch B's executed
+            // queries (label/SQL/counts — the rows themselves stay client-side).
+            query_summary: {
+              branch: r.branch ?? 'synthesis',
+              handoff: r.handoff ?? null,
+              queries: (r.queries ?? []).map((q) => ({
+                label: q.label,
+                sql: q.sql,
+                total_rows: q.total_rows,
+                error: q.error,
+              })),
+            },
           },
           auth,
         )
@@ -328,6 +340,8 @@ function HubAmaResults({
           loading={reportLoading}
           error={reportError}
           onGenerate={onGenerateReport}
+          question={plan.question}
+          onNavigate={onNavigate}
         />
       )}
 
@@ -410,18 +424,27 @@ function ReportPanel({
   loading,
   error,
   onGenerate,
+  question,
+  onNavigate,
 }: {
   hasAuth: boolean
   report: HubAmaReport | null
   loading: boolean
   error: string | null
   onGenerate: () => void
+  question: string
+  onNavigate: (path: string) => void
 }) {
   if (report) {
+    const branch = report.branch ?? 'synthesis'
     return (
       <section className="rounded-lg border border-primary/40 bg-card px-5 py-4">
         <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-lawfare-teal">
-          Cross-corpus synthesis
+          {branch === 'count'
+            ? 'Cross-corpus computation'
+            : branch === 'honesty'
+              ? 'Cross-corpus synthesis — open question'
+              : 'Cross-corpus synthesis'}
         </h3>
         {report.candor_notes.length > 0 && (
           <aside className="mb-3 rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
@@ -439,6 +462,62 @@ function ReportPanel({
             {report.answer_markdown}
           </ReactMarkdown>
         </article>
+
+        {/* Branch B's dual output: the counted dataset — every query, its
+            count, and the rows it counted. The number is checkable, not
+            merely asserted. */}
+        {branch === 'count' && report.queries && report.queries.length > 0 && (
+          <section className="mt-4 border-t border-border pt-3">
+            <h4 className="mb-1 font-mono text-[10px] uppercase tracking-wider text-lawfare-teal">
+              The counted dataset
+            </h4>
+            {report.approach_summary && (
+              <p className="mb-2 text-xs italic text-muted-foreground">
+                {report.approach_summary}
+              </p>
+            )}
+            <div className="space-y-2">
+              {report.queries.map((q, i) => (
+                <details
+                  key={i}
+                  className="rounded-md border border-border bg-background px-3 py-2"
+                >
+                  <summary className="cursor-pointer text-xs font-medium text-foreground">
+                    {q.label}
+                    <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+                      {q.error
+                        ? `failed — ${q.error}`
+                        : `${q.total_rows.toLocaleString()} row${q.total_rows === 1 ? '' : 's'}${q.was_truncated ? ` (showing ${q.rows.length})` : ''}`}
+                    </span>
+                  </summary>
+                  <pre className="mt-2 overflow-x-auto rounded bg-muted px-2 py-1.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                    {q.sql}
+                  </pre>
+                  {q.rows.length > 0 && <CountRowsTable rows={q.rows} />}
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Confidence-gated spoke handoff — offered, never forced. */}
+        {report.handoff && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {report.handoff.reason ? `${report.handoff.reason} — ` : ''}
+            <a
+              href={toHref(handoffHref(report.handoff.corpus, question))}
+              onClick={(e) => {
+                if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+                  e.preventDefault()
+                  onNavigate(handoffHref(report.handoff!.corpus, question))
+                }
+              }}
+              className="text-primary hover:underline"
+            >
+              likely a better answer in the {longLabel(report.handoff.corpus)} workspace →
+            </a>
+          </p>
+        )}
         {typeof report._cost_cents === 'number' && (
           <p className="mt-3 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
             {`cost ${(report._cost_cents / 100).toFixed(3)}`}
@@ -478,6 +557,54 @@ function ReportPanel({
         {loading ? 'Synthesizing…' : 'Generate report'}
       </button>
     </section>
+  )
+}
+
+/** Spoke path for a routing handoff (clemency lives inside the Presidential spoke). */
+function handoffHref(corpus: HubCorpusSlug, question: string): string {
+  const spoke = corpus === 'clemency' ? 'presidential' : corpus
+  return `/corpus/${spoke}?q=${encodeURIComponent(question)}`
+}
+
+/**
+ * Generic table over one branch-B query's rows — the drillable half of the
+ * dual output. Columns come from the row keys; display capped at 25 rows
+ * (total_rows stays honest in the summary line).
+ */
+function CountRowsTable({ rows }: { rows: Record<string, unknown>[] }) {
+  const display = rows.slice(0, 25)
+  const cols = Object.keys(display[0] ?? {})
+  if (cols.length === 0) return null
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-left font-mono text-[11px]">
+        <thead>
+          <tr className="border-b border-border text-muted-foreground">
+            {cols.map((c) => (
+              <th key={c} className="py-1 pr-4 font-medium">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {display.map((r, i) => (
+            <tr key={i} className="border-b border-border/40 align-top">
+              {cols.map((c) => (
+                <td key={c} className="py-1 pr-4 text-foreground">
+                  {r[c] == null ? '—' : String(r[c]).slice(0, 200)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 25 && (
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+          …and {(rows.length - 25).toLocaleString()} more returned rows
+        </p>
+      )}
+    </div>
   )
 }
 

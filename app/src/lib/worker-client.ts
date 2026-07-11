@@ -158,6 +158,25 @@ export type HubAmaPlanResponse = {
 
 export type HubAmaSource = { corpus: HubCorpusSlug; id: string }
 
+/** Which machinery the worker's query-type router dispatched to (brief #1 §3a). */
+export type HubAmaBranch = 'synthesis' | 'count' | 'honesty'
+
+/** Confidence-gated single-corpus routing hint — offered, never forced. */
+export type HubAmaHandoff = { corpus: HubCorpusSlug; reason: string | null }
+
+/**
+ * One executed branch-B query: the dual-output invariant means an aggregate
+ * answer always ships its queries, row counts, and the counted rows.
+ */
+export type HubAmaCountQuery = {
+  label: string
+  sql: string
+  total_rows: number
+  was_truncated: boolean
+  error: string | null
+  rows: Record<string, unknown>[]
+}
+
 export type HubAmaReport = {
   /** The cited answer, Markdown. */
   answer_markdown: string
@@ -165,6 +184,12 @@ export type HubAmaReport = {
   sources: HubAmaSource[]
   /** Gaps / caveats / contested points the model flagged. */
   candor_notes: string[]
+  /** Router fields — absent from pre-router worker responses (optional for
+   *  deploy-order safety; treat absence as 'synthesis' with no extras). */
+  branch?: HubAmaBranch
+  handoff?: HubAmaHandoff | null
+  queries?: HubAmaCountQuery[] | null
+  approach_summary?: string | null
   _cost_cents?: number
   _balance_cents?: number
 }
