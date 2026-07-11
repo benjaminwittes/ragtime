@@ -313,7 +313,12 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setSemError(undefined)
     setSemHasRun(true)
     try {
-      const r = await runSemanticSearch('congress', query, { mode: 'semantic' })
+      // Scope the vector search to the ACTIVE collection tab — the bare
+      // 'congress' slug fans across all five collections (the hub's shape),
+      // which leaked laws/bills into a Hearings-tab search (7/11 bug).
+      const r = await runSemanticSearch(`congress:${collection}`, query, {
+        mode: 'semantic',
+      })
       setSemRows(r.results)
       void postUsageLog(
         {
