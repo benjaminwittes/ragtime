@@ -40,7 +40,13 @@ const WORKER_URL =
  * carries an `error` string and other corpora's results still render.
  * ------------------------------------------------------------------------- */
 
-export type HubCorpusSlug = CorpusSlug
+/**
+ * Corpora addressable on the hub surfaces. Superset of the spoke slugs:
+ * "clemency" is a semantic corpus in its own right (chunks keyed on
+ * pardon_id) but has no spoke of its own — it lives inside the Presidential
+ * spoke, so hub handoffs for it route there.
+ */
+export type HubCorpusSlug = CorpusSlug | 'clemency'
 
 export type HubKeywordResultItem = {
   /** Corpus-native primary key, serialized as text so JS doesn't lose

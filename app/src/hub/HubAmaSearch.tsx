@@ -11,9 +11,9 @@ import {
   hubAmaExecute,
   hubAmaPlan,
 } from '@/lib/worker-client'
-import type { CorpusSlug } from '@/spokes/types'
 import { useAuth } from '@/lib/use-auth'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { UsageLogAnnotation } from '@/spokes/components/UsageLogAnnotation'
 
 /**
  * Hub cross-corpus semantic AMA (features stream #3, step 3 — the "ask across
@@ -34,20 +34,22 @@ import { newInteractionId, postUsageLog } from '@/lib/usage-log'
  *      passages. Gated on auth (BYOK / paid / demo); charged.
  *
  * The corpus set mirrors the Worker's SEMANTIC_CORPORA (litigation is
- * digest-only and excluded; federal_register + clemency are embedded but not
- * yet wired server-side).
+ * digest-only and excluded). "lawfare" is deliberately NOT yet swapped for
+ * the Worker's "commentary" fan-out slug: Executive Functions has no chunks
+ * until its embed lands and the commentary spoke has no frontend route, so
+ * the swap rides the commentary-spoke cutover, not this list.
  */
-const SEMANTIC_HUB_CORPORA: readonly CorpusSlug[] = [
+const SEMANTIC_HUB_CORPORA: readonly HubCorpusSlug[] = [
   'olc',
   'frus',
   'lawfare',
   'presidential',
+  // Clemency is its own semantic corpus (18,914 chunks) surfaced inside the
+  // Presidential spoke — its handoff chip routes there.
+  'clemency',
   'fr',
   'usc',
   'cfr',
-  // Congress is accepted by the Worker's hub-AMA fan-out; it contributes 0
-  // passages until the corpus embed lands (queued behind FR), then lights up
-  // with no further frontend change.
   'congress',
 ] as const
 
@@ -58,19 +60,23 @@ export function HubAmaSearch({
 }) {
   const { auth, hasAuth } = useAuth()
   const [query, setQuery] = useState('')
-  const [activeCorpora, setActiveCorpora] = useState<Set<CorpusSlug>>(
+  const [activeCorpora, setActiveCorpora] = useState<Set<HubCorpusSlug>>(
     () => new Set(SEMANTIC_HUB_CORPORA),
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [plan, setPlan] = useState<HubAmaPlanResponse | null>(null)
+  // One interaction id per submitted question: the plan auto-log and the
+  // report log upsert onto the SAME usage_log row (merge by interaction_id),
+  // and the annotation bar joins its rating/note to it too.
+  const [interactionId, setInteractionId] = useState<string | null>(null)
 
   // Report (execute) state — kept alongside the plan it was synthesized from.
   const [report, setReport] = useState<HubAmaReport | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState<string | null>(null)
 
-  function toggleCorpus(slug: CorpusSlug) {
+  function toggleCorpus(slug: HubCorpusSlug) {
     setActiveCorpora((prev) => {
       const next = new Set(prev)
       if (next.has(slug)) next.delete(slug)
@@ -88,14 +94,14 @@ export function HubAmaSearch({
     setReport(null)
     setReportError(null)
     try {
-      const corpora = SEMANTIC_HUB_CORPORA.filter((c) =>
-        activeCorpora.has(c),
-      ) as HubCorpusSlug[]
+      const corpora = SEMANTIC_HUB_CORPORA.filter((c) => activeCorpora.has(c))
       const r = await hubAmaPlan(q, corpora)
       setPlan(r)
+      const iid = newInteractionId()
+      setInteractionId(iid)
       void postUsageLog(
         {
-          interaction_id: newInteractionId(),
+          interaction_id: iid,
           surface: 'hub',
           mode: 'ama',
           question: q,
@@ -123,6 +129,23 @@ export function HubAmaSearch({
     try {
       const r = await hubAmaExecute(plan.token, auth)
       setReport(r)
+      // Merge the paid synthesis onto the plan's usage_log row (same
+      // interaction_id) — before this, hub reports left no trace at all.
+      if (interactionId) {
+        void postUsageLog(
+          {
+            interaction_id: interactionId,
+            surface: 'hub',
+            mode: 'ama',
+            question: plan.question,
+            answer_markdown: r.answer_markdown,
+            candor_notes: r.candor_notes,
+            cited_ids: r.sources,
+            cost_cents: r._cost_cents ?? null,
+          },
+          auth,
+        )
+      }
     } catch (err) {
       if (err instanceof HubAmaError && err.code === 'plan_expired') {
         setReportError('This search expired — re-run the question to generate a report.')
@@ -202,6 +225,26 @@ export function HubAmaSearch({
           onGenerateReport={handleGenerateReport}
         />
       )}
+
+      {/* Inline ★/note — joins the logger's assessment to this interaction's
+          trace (internal builds / demo only; renders nothing otherwise). Keyed
+          by interaction so the bar resets with each new question. */}
+      {plan && interactionId && (
+        <UsageLogAnnotation
+          key={interactionId}
+          record={{
+            interaction_id: interactionId,
+            surface: 'hub',
+            mode: 'ama',
+            question: plan.question,
+            answer_markdown: report?.answer_markdown ?? null,
+            candor_notes: report?.candor_notes,
+            cited_ids: report?.sources,
+            cost_cents: report?._cost_cents ?? null,
+          }}
+          auth={auth}
+        />
+      )}
     </section>
   )
 }
@@ -212,7 +255,7 @@ function CorpusChip({
   active,
   onToggle,
 }: {
-  slug: CorpusSlug
+  slug: HubCorpusSlug
   label: string
   active: boolean
   onToggle: () => void
@@ -324,7 +367,10 @@ function HubAmaResults({
         <div className="flex flex-wrap items-center gap-2 border-t border-lawfare-line pt-3">
           <span className="text-[11px] text-lawfare-muted">Keep digging:</span>
           {corporaWithHits.map((c) => {
-            const href = `/corpus/${c}?q=${encodeURIComponent(plan.question)}`
+            // Clemency has no spoke of its own — it lives inside the
+            // Presidential spoke, so its handoff routes there.
+            const spoke = c === 'clemency' ? 'presidential' : c
+            const href = `/corpus/${spoke}?q=${encodeURIComponent(plan.question)}`
             return (
               <a
                 key={c}
@@ -436,7 +482,7 @@ function ReportPanel({
 }
 
 /** Short label for chips and the routing summary. */
-function shortLabel(slug: CorpusSlug): string {
+function shortLabel(slug: HubCorpusSlug): string {
   switch (slug) {
     case 'litigation':
       return 'litigation'
@@ -452,6 +498,8 @@ function shortLabel(slug: CorpusSlug): string {
       return 'Lawfare'
     case 'presidential':
       return 'Presidential'
+    case 'clemency':
+      return 'Clemency'
     case 'fr':
       return 'Fed. Register'
     case 'congress':
@@ -460,7 +508,7 @@ function shortLabel(slug: CorpusSlug): string {
 }
 
 /** Longer label for the routing/handoff chips. */
-function longLabel(slug: CorpusSlug): string {
+function longLabel(slug: HubCorpusSlug): string {
   switch (slug) {
     case 'litigation':
       return 'Federal litigation'
@@ -476,6 +524,8 @@ function longLabel(slug: CorpusSlug): string {
       return 'Lawfare'
     case 'presidential':
       return 'Presidential Docs'
+    case 'clemency':
+      return 'Clemency grants'
     case 'fr':
       return 'Federal Register'
     case 'congress':
