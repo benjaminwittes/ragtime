@@ -3800,6 +3800,15 @@ export type SemanticCorpus =
   | 'presidential'
   | 'fr'
   | 'congress'
+  // Collection-scoped congress slugs: gate the semantic pane to the spoke's
+  // ACTIVE collection tab (bare 'congress' fans across all five — the hub's
+  // shape, but a leak inside a collection tab: searching Hearings returned
+  // laws and bills too, found 7/11).
+  | 'congress:laws'
+  | 'congress:bills'
+  | 'congress:hearings'
+  | 'congress:record'
+  | 'congress:testimony'
 
 export type SemanticSearchRow = {
   id: string
