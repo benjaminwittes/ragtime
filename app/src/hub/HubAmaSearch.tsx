@@ -144,16 +144,23 @@ export function HubAmaSearch({
             cost_cents: r._cost_cents ?? null,
             // Router trace: which branch answered + branch B's executed
             // queries (label/SQL/counts — the rows themselves stay client-side).
-            query_summary: {
-              branch: r.branch ?? 'synthesis',
-              handoff: r.handoff ?? null,
-              queries: (r.queries ?? []).map((q) => ({
+            // MUST be an ARRAY: the Worker's log validator drops non-array
+            // query_summary (found via the 7/11 tire kicks — branch was null
+            // on every logged row). Row 0 is the router; rows 1+ the queries,
+            // mirroring the spoke convention.
+            query_summary: [
+              {
+                label: '__router__',
+                branch: r.branch ?? 'synthesis',
+                handoff_corpus: r.handoff?.corpus ?? null,
+              },
+              ...(r.queries ?? []).map((q) => ({
                 label: q.label,
                 sql: q.sql,
                 total_rows: q.total_rows,
                 error: q.error,
               })),
-            },
+            ],
           },
           auth,
         )
@@ -518,9 +525,12 @@ function ReportPanel({
             </a>
           </p>
         )}
-        {typeof report._cost_cents === 'number' && (
+        {/* Cost line only when there was a real ledger charge — demo and BYOK
+            sessions return 0 (demo isn't billed; BYOK bills the user's own
+            provider key), where "cost 0.000" just reads as broken. */}
+        {typeof report._cost_cents === 'number' && report._cost_cents > 0 && (
           <p className="mt-3 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
-            {`cost ${(report._cost_cents / 100).toFixed(3)}`}
+            {`cost $${(report._cost_cents / 100).toFixed(3)}`}
             {typeof report._balance_cents === 'number'
               ? ` · balance $${(report._balance_cents / 100).toFixed(2)}`
               : ''}
