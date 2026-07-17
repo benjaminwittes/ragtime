@@ -25,6 +25,8 @@ import type {
   LawfareArticleDisplayRow,
   OlcOpinionDisplayRow,
   PresidentialDocumentDisplayRow,
+  SanctionsEntityDisplayRow,
+  SanctionsGuidanceDisplayRow,
   UscSectionDisplayRow,
 } from './worker-client'
 
@@ -167,6 +169,38 @@ export const FBI_COLUMNS: CsvColumn<FbiDocumentDisplayRow>[] = [
   { header: 'page_count', value: (r) => r.page_count },
   { header: 'vault_url', value: (r) => r.source_url },
   { header: 'pdf_url', value: (r) => r.pdf_url },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+/** Sanctions entities: the publish_date column is deliberately headed
+ * `list_publish_date` — it is the copy's freshness stamp (one value
+ * corpus-wide), NOT a designation date, and the exported dataset should not
+ * invite that misreading. ofac_uid makes every row auditable against OFAC's
+ * own Sanctions List Search. */
+export const SANCTIONS_ENTITY_COLUMNS: CsvColumn<SanctionsEntityDisplayRow>[] = [
+  { header: 'primary_name', value: (r) => r.primary_name },
+  { header: 'entity_type', value: (r) => r.entity_type },
+  { header: 'aliases', value: (r) => (r.aliases ?? []).join('; ') },
+  { header: 'programs', value: (r) => (r.programs ?? []).join('; ') },
+  { header: 'eo_numbers', value: (r) => (r.eo_numbers ?? []).join('; ') },
+  { header: 'list_type', value: (r) => r.list_type },
+  { header: 'list_publish_date', value: (r) => r.publish_date },
+  { header: 'ofac_uid', value: (r) => r.ofac_uid },
+  { header: 'id', value: (r) => r.id },
+]
+
+/** OFAC guidance: 31 docs have no issued_date — the empty cell is the honest
+ * value. source_url is the ofac.treasury.gov original. */
+export const SANCTIONS_GUIDANCE_COLUMNS: CsvColumn<SanctionsGuidanceDisplayRow>[] = [
+  { header: 'title', value: (r) => r.title },
+  { header: 'guidance_type', value: (r) => r.guidance_type },
+  { header: 'guidance_number', value: (r) => r.guidance_number },
+  { header: 'programs', value: (r) => (r.programs ?? []).join('; ') },
+  { header: 'eo_numbers', value: (r) => (r.eo_numbers ?? []).join('; ') },
+  { header: 'issued_date', value: (r) => r.issued_date },
+  { header: 'ocr_quality', value: (r) => r.ocr_quality },
+  { header: 'source_url', value: (r) => r.source_url },
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
 ]

@@ -50,6 +50,8 @@ import { aboutCongressEntry } from './content/about-congress'
 import { aboutFbiEntry } from './content/about-fbi'
 import { fbiNarrativeSynthesisEntry } from './content/fbi-narrative-synthesis'
 import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
+// Sanctions spoke.
+import { aboutSanctionsEntry } from './content/about-sanctions'
 
 /**
  * Central docs registry.
@@ -122,6 +124,8 @@ export const docsEntries: readonly DocsEntry[] = [
   aboutFbiEntry,
   fbiNarrativeSynthesisEntry,
   fbiDocumentSummaryEntry,
+  // Sanctions
+  aboutSanctionsEntry,
 ]
 
 /**
