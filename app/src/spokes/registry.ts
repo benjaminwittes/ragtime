@@ -1,9 +1,9 @@
 import type { CorpusSpoke, CorpusSlug } from './types'
 import { cfrSpoke } from './cfr'
+import { commentarySpoke } from './commentary'
 import { congressSpoke } from './congress'
 import { frSpoke } from './fr'
 import { frusSpoke } from './frus'
-import { lawfareSpoke } from './lawfare'
 import { litigationSpoke } from './litigation'
 import { olcSpoke } from './olc'
 import { presidentialSpoke } from './presidential'
@@ -21,8 +21,8 @@ import { uscSpoke } from './usc'
  * Order here = order shown on the hub. We lead with litigation (the one
  * active spoke) and then group the reference corpora (USC, CFR), the
  * opinion corpus (OLC), the historical-narrative corpus (FRUS), and the
- * commentary corpus (Lawfare — the platform's first commentary spoke,
- * placed last as it's a different kind of source than the primary-source
+ * commentary corpus (Commentary — the federated Lawfare + Executive Functions
+ * spoke, placed here as it's a different kind of source than the primary-source
  * corpora above it). Collection sub-spokes (per brief #7) will land in a
  * separate registry that inherits from this one when the collections
  * architecture ships.
@@ -33,7 +33,7 @@ export const spokes: readonly CorpusSpoke[] = [
   uscSpoke,
   cfrSpoke,
   frusSpoke,
-  lawfareSpoke,
+  commentarySpoke,
   presidentialSpoke,
   frSpoke,
   congressSpoke,

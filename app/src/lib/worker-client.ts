@@ -2935,6 +2935,373 @@ export async function summarizeLawfareArticle(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/commentary/* — Commentary (federated publications) spoke
+ *
+ * The unified COMMENTARY spoke — ONE slug ("commentary") fanning out over TWO
+ * publication tables: Lawfare (~22.7K articles / podcasts / newsletters,
+ * 2010→present) and Executive Functions (~540 essays / podcasts / roundups,
+ * Dec 2024→present, the Bob Bauer + Jack Goldsmith publication). REPLACES the
+ * standalone Lawfare spoke above; Lawfare becomes a Publication filter value.
+ *
+ * Paradigmatically analytical/narrative, like Lawfare: "what has been written
+ * or argued about X", synthesized WITH per-author, per-piece, per-PUBLICATION
+ * attribution — the corpus surfaces what authors said, never adjudicates which
+ * view is right.
+ *
+ * Contract asymmetries vs. Lawfare (build to these):
+ *  - facets returns per-publication counts (no top-level document_count) —
+ *    aggregate across publications yourself.
+ *  - filter ids are publication-qualified strings ('lawfare:123') when BOTH
+ *    publications are queried, plain numbers when one; display_rows ALWAYS
+ *    carry `publication` (string) + `id` (number) — drive the results list and
+ *    detail navigation off the rows, not the ids array.
+ *  - document / summarize-document / items-by-ids take BOTH { publication, id }.
+ *  - synthesis returns `cited: [{publication,id}] | null` (not article_ids).
+ *  - Executive Functions rows have no topic_names / series / body_html — render
+ *    defensively.
+ * ------------------------------------------------------------------------- */
+
+/** The two federated publications. Discriminates every row + citation. */
+export type CommentaryPublication = 'lawfare' | 'executive_functions'
+
+/** Per-publication facet — label + count + coverage window. */
+export type CommentaryPublicationFacet = {
+  label: string
+  count: number
+  earliest: string | null
+  latest: string | null
+}
+
+/** A top author facet — commentary authors are matched by NAME substring
+ *  (there is no slug), so this is just name + count. */
+export type CommentaryAuthorFacet = {
+  name: string
+  count: number
+}
+
+/** A post-type facet, scoped to its publication (lawfare content_type /
+ *  ef post_type). */
+export type CommentaryPostTypeFacet = {
+  publication: string
+  value: string
+  count: number
+}
+
+export type CommentaryFacets = {
+  /** Per-publication counts + coverage (keys 'lawfare' / 'executive_functions').
+   *  No top-level totals — aggregate across publications. */
+  publications: Record<string, CommentaryPublicationFacet>
+  /** Most-published authors, merged across both publications by display name. */
+  top_authors: CommentaryAuthorFacet[]
+  /** Content/post types with per-publication counts. */
+  post_types: CommentaryPostTypeFacet[]
+}
+
+export async function fetchCommentaryFacets(): Promise<CommentaryFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CommentaryFacets
+}
+
+/**
+ * A union display row. Both publications normalize into this shape; the
+ * Lawfare-only columns (topic_names / series) are null on Executive Functions
+ * rows. `publication` + `id` together identify the piece for detail navigation.
+ */
+export type CommentaryDisplayRow = {
+  publication: CommentaryPublication
+  id: number
+  title: string | null
+  subtitle: string | null
+  authors: string[] | null
+  published_date: string | null
+  post_type: string | null
+  /** Lawfare only — null on Executive Functions rows. */
+  topic_names: string[] | null
+  /** Lawfare only — null on Executive Functions rows. */
+  series: string | null
+  /** The link-back — always present (canonical_url on Lawfare, source_url on EF). */
+  source_url: string | null
+  text_length: number | null
+}
+
+export type CommentaryFilterFields = {
+  /** FTS over body text + title + subtitle/dek. */
+  search?: string
+  /** Restrict to one publication; omit for both. */
+  publication?: CommentaryPublication
+  /** Case-insensitive author-NAME substring (spans both publications). */
+  author?: string
+  /** Exact content/post-type match. */
+  postType?: string
+  /** ISO YYYY-MM-DD lower bound on published_date. */
+  from?: string
+  /** ISO YYYY-MM-DD upper bound. */
+  to?: string
+}
+
+export type CommentaryFilterResult = {
+  /** The single publication queried, or null when both were unioned. */
+  publication: string | null
+  /** Publication-qualified strings ('lawfare:123') when both publications are
+   *  queried; plain numbers when one. Use `display_rows` for navigation. */
+  ids: Array<string | number>
+  display_rows: CommentaryDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runCommentaryFilter(
+  fields: CommentaryFilterFields,
+): Promise<CommentaryFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CommentaryFilterResult
+}
+
+/**
+ * Full single-document detail. Columns differ per publication: Lawfare carries
+ * slug / author_slugs / topic_names / topic_slugs / series / body_html /
+ * quality; Executive Functions carries source_key and no topics/series/html.
+ * Render defensively for the fields the other publication lacks.
+ */
+export type CommentaryDocumentDetail = {
+  publication: CommentaryPublication
+  id: number
+  title: string | null
+  subtitle: string | null
+  authors: string[] | null
+  published_date: string | null
+  post_type: string | null
+  source_url: string | null
+  body_text: string | null
+  text_length: number | null
+  // Lawfare-only fields:
+  slug?: string | null
+  author_slugs?: string[] | null
+  topic_names?: string[] | null
+  topic_slugs?: string[] | null
+  series?: string | null
+  search_tier?: string | null
+  body_html?: string | null
+  quality?: string | null
+  // Executive Functions-only field:
+  source_key?: string | null
+}
+
+export async function fetchCommentaryDocument(
+  publication: CommentaryPublication,
+  id: number,
+): Promise<CommentaryDocumentDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ publication, id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/document failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as {
+    publication: CommentaryPublication
+    document: CommentaryDocumentDetail
+  }
+  return body.document
+}
+
+/**
+ * items-by-ids for a SINGLE publication (the endpoint takes one publication +
+ * a plain numeric id list). Used to render semantic / more-like-this / AMA
+ * cited results as the same display-row shape the filter returns.
+ */
+export async function fetchCommentaryItemsByIds(
+  publication: CommentaryPublication,
+  ids: Array<string | number>,
+): Promise<CommentaryDisplayRow[]> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/items-by-ids`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ publication, ids }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/items-by-ids failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { display_rows: CommentaryDisplayRow[] }
+  return body.display_rows
+}
+
+/* ----------------------------------------------------------------------------
+ * Commentary AI modes — narrative synthesis + summarize-one-document
+ *
+ * Same plan/execute shape as Lawfare, EXCEPT the synthesis return carries
+ * `cited: [{publication,id}] | null` (per-publication citations) instead of
+ * Lawfare's `article_ids: string[]`, and the scope payload is per-publication
+ * `document_ids` (publication-qualified strings or a single-publication numeric
+ * list — mirrors what the union filter returns).
+ * ------------------------------------------------------------------------- */
+
+/** Commentary plan returned by /corpus/commentary/plan. Same shape as Lawfare's. */
+export type CommentaryAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** A per-publication citation the synthesis returns for list/hybrid modes. */
+export type CommentaryCitation = {
+  publication: CommentaryPublication
+  id: number
+}
+
+/** Commentary synthesis returned by /corpus/commentary/execute. `cited`
+ *  ({publication,id} objects) for list/hybrid modes; null for narrative. */
+export type CommentaryAmaSynthesis = {
+  answer_markdown: string
+  cited: CommentaryCitation[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/**
+ * Scope payload accepted by /corpus/commentary/plan. `document_ids` for a
+ * narrowed scope — publication-qualified strings ('lawfare:123') straight from
+ * the union filter, or plain numbers alongside a `publication`; otherwise the
+ * full corpus (is_full_db).
+ */
+export type CommentaryAmaScope = {
+  document_ids?: Array<string | number>
+  publication?: CommentaryPublication
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runCommentaryPlan(
+  question: string,
+  scope: CommentaryAmaScope,
+  auth: AuthArg,
+): Promise<CommentaryAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Commentary plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CommentaryAmaPlan
+}
+
+export async function runCommentaryExecute(
+  token: string,
+  auth: AuthArg,
+  /** Client-generated id so the Worker's server-side trace log joins the same
+   *  usage_log row the inline annotation later upserts onto. */
+  interactionId?: string,
+): Promise<CommentaryAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(interactionId ? { interaction_id: interactionId } : {}),
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Commentary execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CommentaryAmaSynthesis
+}
+
+/** Summary returned by /corpus/commentary/summarize-document. `was_truncated`
+ *  is true when the piece's text exceeded the worker's input cap. */
+export type CommentaryDocumentSummary = {
+  publication: CommentaryPublication
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizeCommentaryDocument(
+  publication: CommentaryPublication,
+  id: number,
+  auth: AuthArg,
+): Promise<CommentaryDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      publication,
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Commentary summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CommentaryDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/frus/* — FRUS (Foreign Relations of the United States) spoke
  *
  * Final v1 spoke. Two tables in the corpus: frus_documents (314K docs) +
@@ -3797,6 +4164,10 @@ export type SemanticCorpus =
   | 'olc'
   | 'frus'
   | 'lawfare'
+  // Commentary spoke slug: ONE slug fanning over BOTH publication chunk corpora
+  // (lawfare + executive_functions); ids come back publication-qualified
+  // ('lawfare:123'). Replaces the standalone 'lawfare' slug for the spoke pane.
+  | 'commentary'
   | 'presidential'
   | 'fr'
   | 'congress'
@@ -3882,6 +4253,11 @@ export type MoreLikeThisCorpus =
   | 'olc'
   | 'frus'
   | 'lawfare'
+  // Commentary pivots are PER-PUBLICATION — the Worker's MORE_LIKE_THIS_CORPORA
+  // map keys the two publications as compound slugs (seed ids are plain
+  // per-publication numbers; results carry source_url for the link-back).
+  | 'commentary:lawfare'
+  | 'commentary:executive_functions'
   | 'presidential'
   | 'fr'
   // Congress pivots are per-collection — the Worker's MORE_LIKE_THIS_CORPORA
