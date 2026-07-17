@@ -14,6 +14,7 @@ import { FrSpokeShell } from '@/spokes/fr/FrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
 import { PresidentialSpokeShell } from '@/spokes/presidential/PresidentialSpokeShell'
+import { SanctionsSpokeShell } from '@/spokes/sanctions/SanctionsSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import { toHref, toLogical } from '@/lib/routing'
@@ -132,6 +133,8 @@ function activeSpokeShell(spoke: CorpusSpoke) {
       <CongressSpokeShell spoke={spoke} />
     ) : spoke.slug === 'fbi' ? (
       <FbiSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'sanctions' ? (
+      <SanctionsSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )

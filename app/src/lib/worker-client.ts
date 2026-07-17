@@ -3602,6 +3602,505 @@ export async function runFbiSummarizeDocument(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/sanctions/* — Sanctions spoke (brief #15)
+ *
+ * The FIRST CROSS-CORPUS SPOKE. Three data legs behind one slug:
+ *   1. ofac_sdn_entities — OFAC's SDN + consolidated lists (~19.6K entries),
+ *      synced nightly. The dedicated ENTITY PANE (locked decision #2).
+ *   2. ofac_guidance — 1,475 OFAC-published documents (FAQs, enforcement
+ *      actions, general licenses). The spoke's own document corpus.
+ *   3. The FR SANCTIONS SLICE — federal_register_documents queried IN PLACE
+ *      with a versioned predicate (~4.2K docs). Slice rows are FR display
+ *      rows; document detail + items-by-ids REUSE /corpus/fr/*.
+ *
+ * The candor stack every surface here respects:
+ * - SCREENING CANDOR: the Worker returns `screening_note` (the pinned note +
+ *   the LIVE data-as-of date) on every entity-leg response — render it
+ *   visibly, never buried. OFAC's official Sanctions List Search is the
+ *   authoritative screening source; our copy lags it.
+ * - publish_date is the COPY-FRESHNESS stamp (one value corpus-wide), NOT a
+ *   designation date. Never render it as "listed on"/"since"; designation
+ *   dates live in FR designation notices.
+ * - CURRENT-LIST-ONLY coverage: delisted entities vanish. Absence here is
+ *   never clearance.
+ * ------------------------------------------------------------------------- */
+
+export type SanctionsFacetCount = {
+  value: string
+  count: number
+}
+
+export type SanctionsEoCount = {
+  value: number
+  count: number
+}
+
+export type SanctionsEntityFacets = {
+  entity_count: number
+  /** max(publish_date) — the live copy-freshness stamp. Surface prominently. */
+  data_as_of: string | null
+  /** The pinned screening candor note with the data-as-of appended (Worker-
+   *  composed; unit-test-pinned server-side — render verbatim). */
+  screening_note: string
+  /** 'sdn' | 'consolidated' with counts. */
+  list_types: SanctionsFacetCount[]
+  /** 'entity' | 'individual' | 'vessel' | 'aircraft' with counts. */
+  entity_types: SanctionsFacetCount[]
+  /** Top ~40 program tags ('SDGT', 'RUSSIA-EO14024', …). */
+  programs: SanctionsFacetCount[]
+  /** Top ~30 executive orders behind listings. */
+  eo_numbers: SanctionsEoCount[]
+}
+
+export async function fetchSanctionsEntityFacets(): Promise<SanctionsEntityFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/entity-facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/entity-facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsEntityFacets
+}
+
+export type SanctionsEntityDisplayRow = {
+  id: number
+  /** OFAC's own stable identifier — links to sanctionssearch.ofac.treas.gov. */
+  ofac_uid: string | null
+  primary_name: string | null
+  /** 'entity' | 'individual' | 'vessel' | 'aircraft'. */
+  entity_type: string | null
+  /** a.k.a. names — the alias line is core to reading a sanctions hit. */
+  aliases: string[] | null
+  programs: string[] | null
+  eo_numbers: number[] | null
+  /** 'sdn' | 'consolidated'. */
+  list_type: string | null
+  /** ⚠ COPY-FRESHNESS stamp (when OFAC published the list data we hold) —
+   *  NOT a designation date. Never render as "listed on". */
+  publish_date: string | null
+}
+
+export type SanctionsEntityFilterFields = {
+  /** Alias-aware name search (FTS + substring over the search blob). */
+  search?: string
+  /** Exact program tag ('SDGT', 'RUSSIA-EO14024', …). */
+  program?: string
+  /** Executive order number (14024). */
+  eoNumber?: number
+  /** 'sdn' | 'consolidated'. */
+  listType?: string
+  /** 'entity' | 'individual' | 'vessel' | 'aircraft'. */
+  entityType?: string
+}
+
+export type SanctionsEntityFilterResult = {
+  ids: number[]
+  display_rows: SanctionsEntityDisplayRow[]
+  count: number
+  data_as_of: string | null
+  screening_note: string
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runSanctionsEntityFilter(
+  fields: SanctionsEntityFilterFields,
+): Promise<SanctionsEntityFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/entity-filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/entity-filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsEntityFilterResult
+}
+
+/** Full entity card — the heavyweight jsonb columns load here only. The
+ *  jsonb shapes come from OFAC's Sanctions List Service; the UI renders them
+ *  defensively (unknown keys tolerated). */
+export type SanctionsEntityDetail = {
+  id: number
+  ofac_uid: string | null
+  primary_name: string | null
+  entity_type: string | null
+  aliases: string[] | null
+  addresses: unknown
+  programs: string[] | null
+  eo_numbers: number[] | null
+  list_type: string | null
+  list_names: string[] | null
+  sanctions_programs_detail: unknown
+  features: unknown
+  identity_documents: unknown
+  relationships: unknown
+  remarks: string | null
+  publish_date: string | null
+}
+
+export type SanctionsEntityResponse = {
+  entity: SanctionsEntityDetail
+  data_as_of: string | null
+  screening_note: string
+}
+
+export async function fetchSanctionsEntity(
+  ref: { id: number } | { ofac_uid: string },
+): Promise<SanctionsEntityResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/entity`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(ref),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/entity failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsEntityResponse
+}
+
+/* ── Guidance leg ─────────────────────────────────────────────────────────── */
+
+export type SanctionsGuidanceFacets = {
+  document_count: number
+  earliest: string | null
+  latest: string | null
+  /** 31 docs carry no issued_date — any date bound silently excludes them;
+   *  the count keeps that visible. */
+  undated_count: number
+  /** 'faq' | 'enforcement_action' | 'general_license' with counts. */
+  guidance_types: SanctionsFacetCount[]
+  programs: SanctionsFacetCount[]
+  eo_numbers: SanctionsEoCount[]
+}
+
+export async function fetchSanctionsGuidanceFacets(): Promise<SanctionsGuidanceFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsGuidanceFacets
+}
+
+export type SanctionsGuidanceDisplayRow = {
+  id: number
+  source_key: string | null
+  /** 'faq' | 'enforcement_action' | 'general_license'. */
+  guidance_type: string | null
+  /** OFAC's own number — FAQ 401, General License 8A, … */
+  guidance_number: string | null
+  title: string | null
+  programs: string[] | null
+  eo_numbers: number[] | null
+  /** NULL on 31 docs — render as undated, never hide the row. */
+  issued_date: string | null
+  ocr_quality: string | null
+  text_length: number | null
+  source_url: string | null
+}
+
+export type SanctionsGuidanceFilterFields = {
+  search?: string
+  /** 'faq' | 'enforcement_action' | 'general_license'. */
+  guidanceType?: string
+  program?: string
+  eoNumber?: number
+  /** issued_date bounds (ISO). NOTE: bounds exclude the 31 undated docs. */
+  from?: string
+  to?: string
+}
+
+export type SanctionsGuidanceFilterResult = {
+  ids: number[]
+  display_rows: SanctionsGuidanceDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runSanctionsGuidanceFilter(
+  fields: SanctionsGuidanceFilterFields,
+): Promise<SanctionsGuidanceFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsGuidanceFilterResult
+}
+
+export type SanctionsGuidanceDetail = {
+  id: number
+  source_key: string | null
+  guidance_type: string | null
+  guidance_number: string | null
+  title: string | null
+  programs: string[] | null
+  eo_numbers: number[] | null
+  issued_date: string | null
+  source_url: string | null
+  body_text: string | null
+  text_length: number | null
+  ocr_quality: string | null
+  metadata: unknown
+}
+
+export type SanctionsGuidanceDocumentResponse = {
+  document: SanctionsGuidanceDetail
+}
+
+export async function fetchSanctionsGuidanceDocument(
+  id: number,
+): Promise<SanctionsGuidanceDocumentResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/document failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsGuidanceDocumentResponse
+}
+
+/* ── FR-slice leg ─────────────────────────────────────────────────────────── */
+
+export type SanctionsFrAgencyCount = {
+  slug: string
+  name: string | null
+  count: number
+}
+
+export type SanctionsFrFacets = {
+  document_count: number
+  earliest: string | null
+  latest: string | null
+  /** Version of the Worker's curated program/EO predicate. */
+  predicate_version: number
+  doc_types: SanctionsFacetCount[]
+  agencies: SanctionsFrAgencyCount[]
+  eo_numbers: SanctionsEoCount[]
+}
+
+export async function fetchSanctionsFrFacets(): Promise<SanctionsFrFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/fr-facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/fr-facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsFrFacets
+}
+
+export type SanctionsFrFilterFields = {
+  search?: string
+  /** 'rule' | 'proposed_rule' | 'notice'. */
+  docType?: string
+  /** Agency slug within the slice. */
+  agencySlug?: string
+  /** A single cited EO number. */
+  eoNumber?: number
+  /** publication_date bounds (ISO). */
+  from?: string
+  to?: string
+}
+
+/** Slice rows ARE Federal Register display rows (the Worker reuses
+ *  FR_DISPLAY_COLS) — detail views go through /corpus/fr/document. */
+export type SanctionsFrFilterResult = {
+  ids: number[]
+  display_rows: FrDocumentDisplayRow[]
+  count: number
+  predicate_version: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runSanctionsFrFilter(
+  fields: SanctionsFrFilterFields,
+): Promise<SanctionsFrFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/fr-filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/fr-filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsFrFilterResult
+}
+
+/* ── AMA: the 3-branch router (plan/execute) ──────────────────────────────── */
+
+export type SanctionsAmaBranch = 'entity' | 'prose' | 'count'
+
+/** One retrieved passage in the prose branch's responsive set (returned at
+ *  plan time — retrieval is free; synthesis is the charged step). Ids are
+ *  leg-qualified: 'guidance:123' | 'fr:456'. */
+export type SanctionsProseItem = {
+  id: string
+  title: string
+  context: string | null
+  date: string | null
+  matched?: 'semantic' | 'keyword' | 'both'
+  similarity: number | null
+  snippet: string | null
+  source_url?: string
+}
+
+/** Plan returned by /corpus/sanctions/plan. Branch-shaped:
+ *  - entity: output_mode + queries (the guarded SDN SQL).
+ *  - count:  queries (the guarded aggregate SQL); output_mode null.
+ *  - prose:  items (the responsive passage set); queries null.
+ *  Router/planning failures degrade to prose server-side, with the
+ *  degradation note riding in candor_notes. */
+export type SanctionsAmaPlan = {
+  token: string
+  branch: SanctionsAmaBranch
+  /** The router's one-clause classification reason. */
+  reason: string | null
+  output_mode: AmaOutputMode | null
+  approach_summary: string | null
+  queries: AmaPlanQuery[] | null
+  items: SanctionsProseItem[] | null
+  candor_notes: string[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** One executed count-branch query, dual-output: the number AND the counted
+ *  rows ship so the user can audit what was counted. */
+export type SanctionsCountQueryResult = {
+  label: string
+  sql: string
+  total_rows: number
+  was_truncated: boolean
+  error: string | null
+  rows: Record<string, unknown>[]
+}
+
+export type SanctionsEntityAmaSynthesis = {
+  branch: 'entity'
+  answer_markdown: string
+  entity_ids: number[] | null
+  /** Leads with the pinned screening note + live data-as-of (server-appended). */
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  data_as_of: string | null
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type SanctionsCountAmaSynthesis = {
+  branch: 'count'
+  answer_markdown: string
+  candor_notes: string[]
+  approach_summary: string | null
+  queries: SanctionsCountQueryResult[]
+  data_as_of: string | null
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type SanctionsProseAmaSynthesis = {
+  branch: 'prose'
+  answer_markdown: string
+  /** The cited subset of the plan's items, by qualified id. */
+  source_ids: string[]
+  candor_notes: string[]
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type SanctionsAmaSynthesis =
+  | SanctionsEntityAmaSynthesis
+  | SanctionsCountAmaSynthesis
+  | SanctionsProseAmaSynthesis
+
+/** v1 AMA is full-corpus — the endpoint takes no scope (deliberate worker
+ *  deferral; scope narrowing revisits with v2). */
+export async function runSanctionsPlan(
+  question: string,
+  auth: AuthArg,
+): Promise<SanctionsAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Sanctions plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as SanctionsAmaPlan
+}
+
+export async function runSanctionsExecute(
+  token: string,
+  auth: AuthArg,
+  /** Client-generated id so the Worker's server-side trace log joins the same
+   *  usage_log row the inline annotation later upserts onto. */
+  interactionId?: string,
+): Promise<SanctionsAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(interactionId ? { interaction_id: interactionId } : {}),
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Sanctions execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as SanctionsAmaSynthesis
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/frus/* — FRUS (Foreign Relations of the United States) spoke
  *
  * Final v1 spoke. Two tables in the corpus: frus_documents (314K docs) +
@@ -4436,6 +4935,28 @@ export function fetchFbiItemsByIds(
   )
 }
 
+/** Entity rows for the sanctions AMA's cited-entity list — same display shape
+ *  as the entity filter, caller order preserved. */
+export function fetchSanctionsEntitiesByIds(
+  ids: readonly number[],
+): Promise<SanctionsEntityDisplayRow[]> {
+  return fetchItemsByIds<SanctionsEntityDisplayRow>(
+    `${WORKER_URL}/corpus/sanctions/entities-by-ids`,
+    ids,
+  )
+}
+
+/** Guidance rows by id (semantic-pane opens, MLT opens, prose citations).
+ *  FR-slice rows go through fetchFrItemsByIds — the slice reuses /corpus/fr/*. */
+export function fetchSanctionsGuidanceItemsByIds(
+  ids: readonly number[],
+): Promise<SanctionsGuidanceDisplayRow[]> {
+  return fetchItemsByIds<SanctionsGuidanceDisplayRow>(
+    `${WORKER_URL}/corpus/sanctions/items-by-ids`,
+    ids,
+  )
+}
+
 /**
  * Congress variant — the endpoint additionally needs the `collection`
  * discriminator (five collections share one spoke), so it doesn't go
@@ -4492,6 +5013,11 @@ export type SemanticCorpus =
   // FBI Records: fully embedded before the spoke shipped (1.3M chunks under
   // corpus 'fbi') — the semantic pane is live from day one.
   | 'fbi'
+  // Sanctions: ONE slug fanning over the ofac_guidance chunk corpus (embed
+  // campaign in flight — degrades gracefully until chunks land) + the fr
+  // corpus's chunks post-filtered to the sanctions slice. Ids come back
+  // leg-qualified ('guidance:123' / 'fr:456'); entities have no chunks.
+  | 'sanctions'
 
 export type SemanticSearchRow = {
   id: string
@@ -4582,6 +5108,11 @@ export type MoreLikeThisCorpus =
   | 'congress:testimony'
   // FBI Records: spoke slug and doc_chunks corpus are both 'fbi'.
   | 'fbi'
+  // Sanctions pivots are GUIDANCE-ONLY: the compound slug maps to the
+  // ofac_guidance chunk corpus (seed ids are plain guidance ids). Entities
+  // have no chunks (nothing to pivot on); FR-slice docs pivot through the fr
+  // spoke's own 'fr' key.
+  | 'sanctions:guidance'
 
 export type MoreLikeThisRoute = 'meaning' | 'compound'
 

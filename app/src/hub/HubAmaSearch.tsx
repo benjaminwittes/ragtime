@@ -647,6 +647,8 @@ function shortLabel(slug: HubCorpusSlug): string {
       return 'Congress'
     case 'fbi':
       return 'FBI'
+    case 'sanctions':
+      return 'Sanctions'
   }
 }
 
@@ -676,6 +678,11 @@ function longLabel(slug: HubCorpusSlug): string {
       return 'Congress'
     case 'fbi':
       return 'FBI Records'
+    // Sanctions is NOT in SEMANTIC_HUB_CORPORA (the Worker excludes it from
+    // the hub fan — its semantic space overlaps the fr card's), but the
+    // label covers the slug for handoff chips should the Worker route there.
+    case 'sanctions':
+      return 'Sanctions'
   }
 }
 
