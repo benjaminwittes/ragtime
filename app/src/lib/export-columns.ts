@@ -18,6 +18,7 @@ import type {
   CongressLawDisplayRow,
   CongressRecordDisplayRow,
   CongressTestimonyDisplayRow,
+  CommentaryDisplayRow,
   FrDocumentDisplayRow,
   FrusDocumentDisplayRow,
   LawfareArticleDisplayRow,
@@ -86,6 +87,19 @@ export const LAWFARE_COLUMNS: CsvColumn<LawfareArticleDisplayRow>[] = [
   { header: 'series', value: (r) => r.series },
   { header: 'topics', value: (r) => r.topic_names.join('; ') },
   { header: 'canonical_url', value: (r) => r.canonical_url },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+export const COMMENTARY_COLUMNS: CsvColumn<CommentaryDisplayRow>[] = [
+  { header: 'publication', value: (r) => r.publication },
+  { header: 'title', value: (r) => r.title },
+  { header: 'authors', value: (r) => (r.authors ?? []).join('; ') },
+  { header: 'published_date', value: (r) => r.published_date },
+  { header: 'post_type', value: (r) => r.post_type },
+  { header: 'series', value: (r) => r.series },
+  { header: 'topics', value: (r) => (r.topic_names ?? []).join('; ') },
+  { header: 'source_url', value: (r) => r.source_url },
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
 ]

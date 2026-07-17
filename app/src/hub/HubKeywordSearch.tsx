@@ -336,7 +336,8 @@ function shortLabel(slug: CorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential'
     case 'fr':
@@ -360,7 +361,8 @@ function longLabel(slug: CorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential Documents'
     case 'fr':

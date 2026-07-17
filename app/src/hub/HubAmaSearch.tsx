@@ -34,15 +34,15 @@ import { UsageLogAnnotation } from '@/spokes/components/UsageLogAnnotation'
  *      passages. Gated on auth (BYOK / paid / demo); charged.
  *
  * The corpus set mirrors the Worker's SEMANTIC_CORPORA (litigation is
- * digest-only and excluded). "lawfare" is deliberately NOT yet swapped for
- * the Worker's "commentary" fan-out slug: Executive Functions has no chunks
- * until its embed lands and the commentary spoke has no frontend route, so
- * the swap rides the commentary-spoke cutover, not this list.
+ * digest-only and excluded). "commentary" is the Worker's federated fan-out
+ * slug over both publications (Lawfare + Executive Functions) — swapped in for
+ * the standalone "lawfare" slug alongside the commentary-spoke cutover, so hub
+ * results route to /corpus/commentary.
  */
 const SEMANTIC_HUB_CORPORA: readonly HubCorpusSlug[] = [
   'olc',
   'frus',
-  'lawfare',
+  'commentary',
   'presidential',
   // Clemency is its own semantic corpus (18,914 chunks) surfaced inside the
   // Presidential spoke — its handoff chip routes there.
@@ -632,7 +632,8 @@ function shortLabel(slug: HubCorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential'
     case 'clemency':
@@ -658,7 +659,8 @@ function longLabel(slug: HubCorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential Docs'
     case 'clemency':

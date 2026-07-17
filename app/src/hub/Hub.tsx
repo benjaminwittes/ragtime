@@ -81,7 +81,7 @@ const HUB_STATS: {
   { slug: 'cfr', label: 'CFR §§', fallback: '228k', pick: (c) => c.sections },
   { slug: 'olc', label: 'OLC opinions', fallback: '2,147', pick: (c) => c.opinions },
   { slug: 'frus', label: 'FRUS documents', fallback: '314k', pick: (c) => c.documents },
-  { slug: 'lawfare', label: 'Lawfare pieces', fallback: '22.7k', pick: (c) => c.items },
+  { slug: 'commentary', label: 'Commentary pieces', fallback: '23.3k', pick: (c) => c.items },
   { slug: 'presidential', label: 'presidential documents', fallback: '12.7k', pick: (c) => c.documents },
   { slug: 'fr', label: 'Federal Register docs', fallback: '512k', pick: (c) => c.documents },
   { slug: 'congress', label: 'congressional documents', fallback: '1.2M', pick: (c) => c.documents },

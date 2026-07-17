@@ -22,7 +22,10 @@ export type CorpusSlug =
   | 'usc'
   | 'cfr'
   | 'frus'
+  // 'lawfare' retained in the union so the (now-unreferenced) Lawfare spoke +
+  // worker-client Lawfare types still compile; the live spoke is 'commentary'.
   | 'lawfare'
+  | 'commentary'
   | 'presidential'
   | 'fr'
   | 'congress'
