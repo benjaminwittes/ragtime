@@ -1,14 +1,6 @@
 import type { CommentaryDisplayRow } from '@/lib/worker-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
-
-/** Publication-qualified key ('lawfare:123') — the shape the semantic pane and
- *  the union filter share, used for cross-pane overlap badging and React keys. */
-export function commentaryRowKey(r: {
-  publication: string
-  id: number
-}): string {
-  return `${r.publication}:${r.id}`
-}
+import { commentaryRowKey } from './commentary-format'
 
 /**
  * Commentary manual-filter results list.

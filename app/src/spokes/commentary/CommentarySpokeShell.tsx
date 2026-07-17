@@ -49,7 +49,8 @@ import {
   type CommentaryMltSeed,
 } from './CommentaryDocumentDetailSheet'
 import { CommentaryFilterForm } from './CommentaryFilterForm'
-import { CommentaryResultsList, commentaryRowKey } from './CommentaryResultsList'
+import { CommentaryResultsList } from './CommentaryResultsList'
+import { commentaryRowKey } from './commentary-format'
 
 /**
  * Commentary spoke shell — the federated two-publication COMMENTARY corpus
