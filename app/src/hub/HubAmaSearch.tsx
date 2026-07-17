@@ -327,7 +327,7 @@ function HubAmaResults({
       <div className="flex items-baseline justify-between gap-4">
         <h2 className="font-serif text-lg font-semibold">
           {total > 0
-            ? `${total.toLocaleString()} responsive passage${total === 1 ? '' : 's'}`
+            ? `Top ${total.toLocaleString()} passage${total === 1 ? '' : 's'} by semantic relevance`
             : 'No matches'}
         </h2>
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
