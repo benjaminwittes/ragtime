@@ -46,6 +46,10 @@ import { aboutClemencyEntry } from './content/about-clemency'
 import { aboutFrEntry } from './content/about-fr'
 // Congress spoke.
 import { aboutCongressEntry } from './content/about-congress'
+// FBI Records spoke.
+import { aboutFbiEntry } from './content/about-fbi'
+import { fbiNarrativeSynthesisEntry } from './content/fbi-narrative-synthesis'
+import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
 
 /**
  * Central docs registry.
@@ -114,6 +118,10 @@ export const docsEntries: readonly DocsEntry[] = [
   aboutFrEntry,
   // Congress
   aboutCongressEntry,
+  // FBI Records
+  aboutFbiEntry,
+  fbiNarrativeSynthesisEntry,
+  fbiDocumentSummaryEntry,
 ]
 
 /**

@@ -51,6 +51,9 @@ const SEMANTIC_HUB_CORPORA: readonly HubCorpusSlug[] = [
   'usc',
   'cfr',
   'congress',
+  // FBI Records arrived fully embedded (1.3M chunks) — in the fan-out from
+  // day one; its handoff chip routes to /corpus/fbi.
+  'fbi',
 ] as const
 
 export function HubAmaSearch({
@@ -642,6 +645,8 @@ function shortLabel(slug: HubCorpusSlug): string {
       return 'Fed. Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI'
   }
 }
 
@@ -669,6 +674,8 @@ function longLabel(slug: HubCorpusSlug): string {
       return 'Federal Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI Records'
   }
 }
 

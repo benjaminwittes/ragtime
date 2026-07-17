@@ -9,6 +9,7 @@ import { SpokeShell } from '@/spokes/SpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
 import { CommentarySpokeShell } from '@/spokes/commentary/CommentarySpokeShell'
 import { CongressSpokeShell } from '@/spokes/congress/CongressSpokeShell'
+import { FbiSpokeShell } from '@/spokes/fbi/FbiSpokeShell'
 import { FrSpokeShell } from '@/spokes/fr/FrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
@@ -129,6 +130,8 @@ function activeSpokeShell(spoke: CorpusSpoke) {
       <FrSpokeShell spoke={spoke} />
     ) : spoke.slug === 'congress' ? (
       <CongressSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'fbi' ? (
+      <FbiSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )
