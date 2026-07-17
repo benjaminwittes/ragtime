@@ -344,6 +344,8 @@ function shortLabel(slug: CorpusSlug): string {
       return 'Fed. Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI'
   }
 }
 
@@ -369,5 +371,7 @@ function longLabel(slug: CorpusSlug): string {
       return 'Federal Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI Records'
   }
 }

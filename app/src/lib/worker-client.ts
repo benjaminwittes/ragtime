@@ -3302,6 +3302,306 @@ export async function summarizeCommentaryDocument(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/fbi/* — FBI Records spoke (brief #14)
+ *
+ * The FBI's own FOIA reading room (the Vault) as this project preserved it:
+ * 10,746 documents across 1,755 subject collections — 9,119 provenance='live'
+ * plus 1,627 provenance='wayback-recovered' (removed from the Vault, recovered
+ * from the Wayback Machine with wayback_timestamp + original_url).
+ *
+ * Two corpus quirks every surface here respects (locked decisions, 7/17):
+ * - NO DATE AXIS. doc_date is NULL on every row — no date fields ride on any
+ *   row shape, no date filter exists, nothing sorts by date. Unique among
+ *   spokes. Where other spokes show a date, this one shows the collection.
+ * - MESSY COLLECTION NAMES. Raw values mix slugs ('rosenberg-case') and human
+ *   titles ('Kansas City Massacre'), some with trailing whitespace. The Worker
+ *   adds `collection_display` (trimmed, de-slugged) on every display row;
+ *   filters always round-trip the RAW value.
+ * ------------------------------------------------------------------------- */
+
+export type FbiFacetCount = {
+  value: string
+  count: number
+}
+
+/** One collection facet/typeahead entry — `value` is the RAW stored string
+ *  (filter with this, trailing whitespace and all); `display` is the Worker's
+ *  normalized form for rendering. */
+export type FbiCollectionCount = {
+  value: string
+  display: string | null
+  count: number
+}
+
+export type FbiFacets = {
+  document_count: number
+  collection_count: number
+  /** Two rows: 'live' + 'wayback-recovered' with counts. */
+  provenance: FbiFacetCount[]
+  /** Top ~40 collections by size; the full 1,755 live behind the typeahead. */
+  collections: FbiCollectionCount[]
+  /** 'clean' | 'normalized' | 'degraded' with counts. */
+  ocr_quality: FbiFacetCount[]
+}
+
+export async function fetchFbiFacets(): Promise<FbiFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FbiFacets
+}
+
+/** Collections typeahead (locked decision #2: facet + typeahead ONLY — no
+ *  browse page). Matches the raw value AND its de-slugged form, so typing
+ *  "rosenberg case" still finds "rosenberg-case". Empty q → top collections. */
+export async function fetchFbiCollections(
+  q: string,
+  limit = 20,
+): Promise<FbiCollectionCount[]> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/collections`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ q, limit }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/collections failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { collections: FbiCollectionCount[] }
+  return body.collections
+}
+
+export type FbiDocumentDisplayRow = {
+  id: number
+  title: string | null
+  /** RAW stored collection value — use for filtering. */
+  collection: string | null
+  /** Worker-normalized display form (trimmed, de-slugged) — use for rendering. */
+  collection_display: string | null
+  /** 'Part N of M' for multi-part Vault files. */
+  part_label: string | null
+  /** 'live' | 'wayback-recovered'. Recovered = removed from the Vault,
+   *  recovered from a Wayback Machine capture (the quiet provenance badge). */
+  provenance: string
+  /** Recovered docs only: when the Wayback Machine captured our copy. */
+  wayback_timestamp: string | null
+  /** Recovered docs only: the Vault URL the capture preserved. */
+  original_url: string | null
+  /** 'clean' | 'normalized' | 'degraded'. */
+  ocr_quality: string | null
+  page_count: number | null
+  text_length: number | null
+  /** The Vault page (vault.fbi.gov). */
+  source_url: string | null
+  /** The original scan PDF — present on every row. */
+  pdf_url: string | null
+}
+
+export type FbiFilterFields = {
+  search?: string
+  /** RAW collection value (exact match server-side — pass the typeahead's
+   *  `value`, never its `display`). */
+  collection?: string
+  /** 'live' | 'wayback-recovered'. */
+  provenance?: string
+}
+
+export type FbiFilterResult = {
+  ids: number[]
+  display_rows: FbiDocumentDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runFbiFilter(
+  fields: FbiFilterFields,
+): Promise<FbiFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FbiFilterResult
+}
+
+export type FbiDocumentDetail = {
+  id: number
+  source: string | null
+  source_ref: string | null
+  title: string | null
+  collection: string | null
+  collection_display: string | null
+  part_label: string | null
+  provenance: string
+  wayback_timestamp: string | null
+  original_url: string | null
+  ocr_quality: string | null
+  page_count: number | null
+  byte_size: number | null
+  /** When WE fetched the document — a preservation fact, not a document date. */
+  fetched_at: string | null
+  text_content: string | null
+  text_length: number | null
+  source_url: string | null
+  pdf_url: string | null
+  cover_letter_url: string | null
+}
+
+export type FbiDocumentResponse = {
+  document: FbiDocumentDetail
+}
+
+export async function fetchFbiDocument(id: number): Promise<FbiDocumentResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/document failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FbiDocumentResponse
+}
+
+export type FbiAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type FbiAmaSynthesis = {
+  answer_markdown: string
+  document_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Scope for /corpus/fbi/plan. Omit `description` for the full corpus — the
+ *  Worker's default scope line carries the no-document-dates candor. */
+export type FbiAmaScope = {
+  document_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runFbiPlan(
+  question: string,
+  scope: FbiAmaScope,
+  auth: AuthArg,
+): Promise<FbiAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FBI Records plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FbiAmaPlan
+}
+
+export async function runFbiExecute(
+  token: string,
+  auth: AuthArg,
+  /** Client-generated id so the Worker's server-side trace log joins the same
+   *  usage_log row the inline annotation later upserts onto. */
+  interactionId?: string,
+): Promise<FbiAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(interactionId ? { interaction_id: interactionId } : {}),
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FBI Records execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FbiAmaSynthesis
+}
+
+export type FbiDocumentSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function runFbiSummarizeDocument(
+  id: number,
+  auth: AuthArg,
+): Promise<FbiDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FBI Records summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FbiDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/frus/* — FRUS (Foreign Relations of the United States) spoke
  *
  * Final v1 spoke. Two tables in the corpus: frus_documents (314K docs) +
@@ -4127,6 +4427,15 @@ export function fetchFrItemsByIds(
   )
 }
 
+export function fetchFbiItemsByIds(
+  ids: readonly number[],
+): Promise<FbiDocumentDisplayRow[]> {
+  return fetchItemsByIds<FbiDocumentDisplayRow>(
+    `${WORKER_URL}/corpus/fbi/items-by-ids`,
+    ids,
+  )
+}
+
 /**
  * Congress variant — the endpoint additionally needs the `collection`
  * discriminator (five collections share one spoke), so it doesn't go
@@ -4180,6 +4489,9 @@ export type SemanticCorpus =
   | 'congress:hearings'
   | 'congress:record'
   | 'congress:testimony'
+  // FBI Records: fully embedded before the spoke shipped (1.3M chunks under
+  // corpus 'fbi') — the semantic pane is live from day one.
+  | 'fbi'
 
 export type SemanticSearchRow = {
   id: string
@@ -4268,6 +4580,8 @@ export type MoreLikeThisCorpus =
   | 'congress:hearings'
   | 'congress:record'
   | 'congress:testimony'
+  // FBI Records: spoke slug and doc_chunks corpus are both 'fbi'.
+  | 'fbi'
 
 export type MoreLikeThisRoute = 'meaning' | 'compound'
 

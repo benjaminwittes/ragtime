@@ -85,6 +85,7 @@ const HUB_STATS: {
   { slug: 'presidential', label: 'presidential documents', fallback: '12.7k', pick: (c) => c.documents },
   { slug: 'fr', label: 'Federal Register docs', fallback: '512k', pick: (c) => c.documents },
   { slug: 'congress', label: 'congressional documents', fallback: '1.2M', pick: (c) => c.documents },
+  { slug: 'fbi', label: 'FBI Records', fallback: '10.7k', pick: (c) => c.documents },
 ]
 
 /** 2,147 → '2,147'; 12,666 → '12.7k'; 227,728 → '228k'; 1,468,759 → '1.5M'.

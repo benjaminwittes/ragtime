@@ -19,6 +19,7 @@ import type {
   CongressRecordDisplayRow,
   CongressTestimonyDisplayRow,
   CommentaryDisplayRow,
+  FbiDocumentDisplayRow,
   FrDocumentDisplayRow,
   FrusDocumentDisplayRow,
   LawfareArticleDisplayRow,
@@ -144,6 +145,27 @@ export const FR_COLUMNS: CsvColumn<FrDocumentDisplayRow>[] = [
   { header: 'effective_on', value: (r) => r.effective_on },
   { header: 'comments_close_on', value: (r) => r.comments_close_on },
   { header: 'federalregister_url', value: (r) => r.html_url },
+  { header: 'pdf_url', value: (r) => r.pdf_url },
+  { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+/** FBI Records: no date columns exist (doc_date NULL corpus-wide); the
+ * provenance trio (provenance / wayback_timestamp / original_url) makes the
+ * removed-from-the-Vault story auditable in the exported dataset. Both the
+ * display collection and the raw stored value ride along — the raw value is
+ * what round-trips into a filter. */
+export const FBI_COLUMNS: CsvColumn<FbiDocumentDisplayRow>[] = [
+  { header: 'title', value: (r) => r.title },
+  { header: 'collection', value: (r) => r.collection_display ?? r.collection },
+  { header: 'collection_raw', value: (r) => r.collection },
+  { header: 'part_label', value: (r) => r.part_label },
+  { header: 'provenance', value: (r) => r.provenance },
+  { header: 'wayback_timestamp', value: (r) => r.wayback_timestamp },
+  { header: 'original_url', value: (r) => r.original_url },
+  { header: 'ocr_quality', value: (r) => r.ocr_quality },
+  { header: 'page_count', value: (r) => r.page_count },
+  { header: 'vault_url', value: (r) => r.source_url },
   { header: 'pdf_url', value: (r) => r.pdf_url },
   { header: 'text_length', value: (r) => r.text_length },
   { header: 'id', value: (r) => r.id },
