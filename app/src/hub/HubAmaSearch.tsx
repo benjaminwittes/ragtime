@@ -34,15 +34,15 @@ import { UsageLogAnnotation } from '@/spokes/components/UsageLogAnnotation'
  *      passages. Gated on auth (BYOK / paid / demo); charged.
  *
  * The corpus set mirrors the Worker's SEMANTIC_CORPORA (litigation is
- * digest-only and excluded). "lawfare" is deliberately NOT yet swapped for
- * the Worker's "commentary" fan-out slug: Executive Functions has no chunks
- * until its embed lands and the commentary spoke has no frontend route, so
- * the swap rides the commentary-spoke cutover, not this list.
+ * digest-only and excluded). "commentary" is the Worker's federated fan-out
+ * slug over both publications (Lawfare + Executive Functions) — swapped in for
+ * the standalone "lawfare" slug alongside the commentary-spoke cutover, so hub
+ * results route to /corpus/commentary.
  */
 const SEMANTIC_HUB_CORPORA: readonly HubCorpusSlug[] = [
   'olc',
   'frus',
-  'lawfare',
+  'commentary',
   'presidential',
   // Clemency is its own semantic corpus (18,914 chunks) surfaced inside the
   // Presidential spoke — its handoff chip routes there.
@@ -51,6 +51,9 @@ const SEMANTIC_HUB_CORPORA: readonly HubCorpusSlug[] = [
   'usc',
   'cfr',
   'congress',
+  // FBI Records arrived fully embedded (1.3M chunks) — in the fan-out from
+  // day one; its handoff chip routes to /corpus/fbi.
+  'fbi',
 ] as const
 
 export function HubAmaSearch({
@@ -327,7 +330,7 @@ function HubAmaResults({
       <div className="flex items-baseline justify-between gap-4">
         <h2 className="font-serif text-lg font-semibold">
           {total > 0
-            ? `${total.toLocaleString()} responsive passage${total === 1 ? '' : 's'}`
+            ? `Top ${total.toLocaleString()} passage${total === 1 ? '' : 's'} by semantic relevance`
             : 'No matches'}
         </h2>
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -632,7 +635,8 @@ function shortLabel(slug: HubCorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential'
     case 'clemency':
@@ -641,6 +645,10 @@ function shortLabel(slug: HubCorpusSlug): string {
       return 'Fed. Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI'
+    case 'sanctions':
+      return 'Sanctions'
   }
 }
 
@@ -658,7 +666,8 @@ function longLabel(slug: HubCorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential Docs'
     case 'clemency':
@@ -667,6 +676,13 @@ function longLabel(slug: HubCorpusSlug): string {
       return 'Federal Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI Records'
+    // Sanctions is NOT in SEMANTIC_HUB_CORPORA (the Worker excludes it from
+    // the hub fan — its semantic space overlaps the fr card's), but the
+    // label covers the slug for handoff chips should the Worker route there.
+    case 'sanctions':
+      return 'Sanctions'
   }
 }
 

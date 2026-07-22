@@ -35,6 +35,16 @@ import { newInteractionId, postUsageLog } from '@/lib/usage-log'
  *     filter already populated.
  *   - The paid AI synthesis layer (brief #1 Phase 2; needs pgvector).
  */
+
+/**
+ * The spokes the hub keyword fan searches. Sanctions is registry-listed (it
+ * has a corpus card) but EXCLUDED here, mirroring the Worker's HUB_CORPORA:
+ * its keyword union includes the same federal_register documents the fr
+ * card already surfaces, so fanning both would double-surface every FR
+ * sanctions doc under two id schemes (the commentary/lawfare lesson).
+ */
+const HUB_KEYWORD_SPOKES = spokes.filter((s) => s.slug !== 'sanctions')
+
 export function HubKeywordSearch({
   onNavigate,
 }: {
@@ -43,7 +53,7 @@ export function HubKeywordSearch({
   const auth = useAuth()
   const [query, setQuery] = useState('')
   const [activeCorpora, setActiveCorpora] = useState<Set<CorpusSlug>>(
-    () => new Set(spokes.map((s) => s.slug)),
+    () => new Set(HUB_KEYWORD_SPOKES.map((s) => s.slug)),
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -132,7 +142,7 @@ export function HubKeywordSearch({
           <span className="text-[11px] text-lawfare-muted">
             Free cross-corpus keyword search — in:
           </span>
-          {spokes.map((spoke) => (
+          {HUB_KEYWORD_SPOKES.map((spoke) => (
             <CorpusChip
               key={spoke.slug}
               slug={spoke.slug}
@@ -336,13 +346,18 @@ function shortLabel(slug: CorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential'
     case 'fr':
       return 'Fed. Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI'
+    case 'sanctions':
+      return 'Sanctions'
   }
 }
 
@@ -360,12 +375,17 @@ function longLabel(slug: CorpusSlug): string {
     case 'frus':
       return 'FRUS'
     case 'lawfare':
-      return 'Lawfare'
+    case 'commentary':
+      return 'Commentary'
     case 'presidential':
       return 'Presidential Documents'
     case 'fr':
       return 'Federal Register'
     case 'congress':
       return 'Congress'
+    case 'fbi':
+      return 'FBI Records'
+    case 'sanctions':
+      return 'Sanctions'
   }
 }

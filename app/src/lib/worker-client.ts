@@ -2935,6 +2935,1172 @@ export async function summarizeLawfareArticle(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/commentary/* — Commentary (federated publications) spoke
+ *
+ * The unified COMMENTARY spoke — ONE slug ("commentary") fanning out over TWO
+ * publication tables: Lawfare (~22.7K articles / podcasts / newsletters,
+ * 2010→present) and Executive Functions (~540 essays / podcasts / roundups,
+ * Dec 2024→present, the Bob Bauer + Jack Goldsmith publication). REPLACES the
+ * standalone Lawfare spoke above; Lawfare becomes a Publication filter value.
+ *
+ * Paradigmatically analytical/narrative, like Lawfare: "what has been written
+ * or argued about X", synthesized WITH per-author, per-piece, per-PUBLICATION
+ * attribution — the corpus surfaces what authors said, never adjudicates which
+ * view is right.
+ *
+ * Contract asymmetries vs. Lawfare (build to these):
+ *  - facets returns per-publication counts (no top-level document_count) —
+ *    aggregate across publications yourself.
+ *  - filter ids are publication-qualified strings ('lawfare:123') when BOTH
+ *    publications are queried, plain numbers when one; display_rows ALWAYS
+ *    carry `publication` (string) + `id` (number) — drive the results list and
+ *    detail navigation off the rows, not the ids array.
+ *  - document / summarize-document / items-by-ids take BOTH { publication, id }.
+ *  - synthesis returns `cited: [{publication,id}] | null` (not article_ids).
+ *  - Executive Functions rows have no topic_names / series / body_html — render
+ *    defensively.
+ * ------------------------------------------------------------------------- */
+
+/** The two federated publications. Discriminates every row + citation. */
+export type CommentaryPublication = 'lawfare' | 'executive_functions'
+
+/** Per-publication facet — label + count + coverage window. */
+export type CommentaryPublicationFacet = {
+  label: string
+  count: number
+  earliest: string | null
+  latest: string | null
+}
+
+/** A top author facet — commentary authors are matched by NAME substring
+ *  (there is no slug), so this is just name + count. */
+export type CommentaryAuthorFacet = {
+  name: string
+  count: number
+}
+
+/** A post-type facet, scoped to its publication (lawfare content_type /
+ *  ef post_type). */
+export type CommentaryPostTypeFacet = {
+  publication: string
+  value: string
+  count: number
+}
+
+export type CommentaryFacets = {
+  /** Per-publication counts + coverage (keys 'lawfare' / 'executive_functions').
+   *  No top-level totals — aggregate across publications. */
+  publications: Record<string, CommentaryPublicationFacet>
+  /** Most-published authors, merged across both publications by display name. */
+  top_authors: CommentaryAuthorFacet[]
+  /** Content/post types with per-publication counts. */
+  post_types: CommentaryPostTypeFacet[]
+}
+
+export async function fetchCommentaryFacets(): Promise<CommentaryFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CommentaryFacets
+}
+
+/**
+ * A union display row. Both publications normalize into this shape; the
+ * Lawfare-only columns (topic_names / series) are null on Executive Functions
+ * rows. `publication` + `id` together identify the piece for detail navigation.
+ */
+export type CommentaryDisplayRow = {
+  publication: CommentaryPublication
+  id: number
+  title: string | null
+  subtitle: string | null
+  authors: string[] | null
+  published_date: string | null
+  post_type: string | null
+  /** Lawfare only — null on Executive Functions rows. */
+  topic_names: string[] | null
+  /** Lawfare only — null on Executive Functions rows. */
+  series: string | null
+  /** The link-back — always present (canonical_url on Lawfare, source_url on EF). */
+  source_url: string | null
+  text_length: number | null
+}
+
+export type CommentaryFilterFields = {
+  /** FTS over body text + title + subtitle/dek. */
+  search?: string
+  /** Restrict to one publication; omit for both. */
+  publication?: CommentaryPublication
+  /** Case-insensitive author-NAME substring (spans both publications). */
+  author?: string
+  /** Exact content/post-type match. */
+  postType?: string
+  /** ISO YYYY-MM-DD lower bound on published_date. */
+  from?: string
+  /** ISO YYYY-MM-DD upper bound. */
+  to?: string
+}
+
+export type CommentaryFilterResult = {
+  /** The single publication queried, or null when both were unioned. */
+  publication: string | null
+  /** Publication-qualified strings ('lawfare:123') when both publications are
+   *  queried; plain numbers when one. Use `display_rows` for navigation. */
+  ids: Array<string | number>
+  display_rows: CommentaryDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runCommentaryFilter(
+  fields: CommentaryFilterFields,
+): Promise<CommentaryFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as CommentaryFilterResult
+}
+
+/**
+ * Full single-document detail. Columns differ per publication: Lawfare carries
+ * slug / author_slugs / topic_names / topic_slugs / series / body_html /
+ * quality; Executive Functions carries source_key and no topics/series/html.
+ * Render defensively for the fields the other publication lacks.
+ */
+export type CommentaryDocumentDetail = {
+  publication: CommentaryPublication
+  id: number
+  title: string | null
+  subtitle: string | null
+  authors: string[] | null
+  published_date: string | null
+  post_type: string | null
+  source_url: string | null
+  body_text: string | null
+  text_length: number | null
+  // Lawfare-only fields:
+  slug?: string | null
+  author_slugs?: string[] | null
+  topic_names?: string[] | null
+  topic_slugs?: string[] | null
+  series?: string | null
+  search_tier?: string | null
+  body_html?: string | null
+  quality?: string | null
+  // Executive Functions-only field:
+  source_key?: string | null
+}
+
+export async function fetchCommentaryDocument(
+  publication: CommentaryPublication,
+  id: number,
+): Promise<CommentaryDocumentDetail> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ publication, id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/document failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as {
+    publication: CommentaryPublication
+    document: CommentaryDocumentDetail
+  }
+  return body.document
+}
+
+/**
+ * items-by-ids for a SINGLE publication (the endpoint takes one publication +
+ * a plain numeric id list). Used to render semantic / more-like-this / AMA
+ * cited results as the same display-row shape the filter returns.
+ */
+export async function fetchCommentaryItemsByIds(
+  publication: CommentaryPublication,
+  ids: Array<string | number>,
+): Promise<CommentaryDisplayRow[]> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/items-by-ids`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ publication, ids }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/commentary/items-by-ids failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { display_rows: CommentaryDisplayRow[] }
+  return body.display_rows
+}
+
+/* ----------------------------------------------------------------------------
+ * Commentary AI modes — narrative synthesis + summarize-one-document
+ *
+ * Same plan/execute shape as Lawfare, EXCEPT the synthesis return carries
+ * `cited: [{publication,id}] | null` (per-publication citations) instead of
+ * Lawfare's `article_ids: string[]`, and the scope payload is per-publication
+ * `document_ids` (publication-qualified strings or a single-publication numeric
+ * list — mirrors what the union filter returns).
+ * ------------------------------------------------------------------------- */
+
+/** Commentary plan returned by /corpus/commentary/plan. Same shape as Lawfare's. */
+export type CommentaryAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** A per-publication citation the synthesis returns for list/hybrid modes. */
+export type CommentaryCitation = {
+  publication: CommentaryPublication
+  id: number
+}
+
+/** Commentary synthesis returned by /corpus/commentary/execute. `cited`
+ *  ({publication,id} objects) for list/hybrid modes; null for narrative. */
+export type CommentaryAmaSynthesis = {
+  answer_markdown: string
+  cited: CommentaryCitation[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/**
+ * Scope payload accepted by /corpus/commentary/plan. `document_ids` for a
+ * narrowed scope — publication-qualified strings ('lawfare:123') straight from
+ * the union filter, or plain numbers alongside a `publication`; otherwise the
+ * full corpus (is_full_db).
+ */
+export type CommentaryAmaScope = {
+  document_ids?: Array<string | number>
+  publication?: CommentaryPublication
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runCommentaryPlan(
+  question: string,
+  scope: CommentaryAmaScope,
+  auth: AuthArg,
+): Promise<CommentaryAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Commentary plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CommentaryAmaPlan
+}
+
+export async function runCommentaryExecute(
+  token: string,
+  auth: AuthArg,
+  /** Client-generated id so the Worker's server-side trace log joins the same
+   *  usage_log row the inline annotation later upserts onto. */
+  interactionId?: string,
+): Promise<CommentaryAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(interactionId ? { interaction_id: interactionId } : {}),
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Commentary execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CommentaryAmaSynthesis
+}
+
+/** Summary returned by /corpus/commentary/summarize-document. `was_truncated`
+ *  is true when the piece's text exceeded the worker's input cap. */
+export type CommentaryDocumentSummary = {
+  publication: CommentaryPublication
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function summarizeCommentaryDocument(
+  publication: CommentaryPublication,
+  id: number,
+  auth: AuthArg,
+): Promise<CommentaryDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/commentary/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      publication,
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Commentary summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as CommentaryDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
+ * /corpus/fbi/* — FBI Records spoke (brief #14)
+ *
+ * The FBI's own FOIA reading room (the Vault) as this project preserved it:
+ * 10,746 documents across 1,755 subject collections — 9,119 provenance='live'
+ * plus 1,627 provenance='wayback-recovered' (removed from the Vault, recovered
+ * from the Wayback Machine with wayback_timestamp + original_url).
+ *
+ * Two corpus quirks every surface here respects (locked decisions, 7/17):
+ * - NO DATE AXIS. doc_date is NULL on every row — no date fields ride on any
+ *   row shape, no date filter exists, nothing sorts by date. Unique among
+ *   spokes. Where other spokes show a date, this one shows the collection.
+ * - MESSY COLLECTION NAMES. Raw values mix slugs ('rosenberg-case') and human
+ *   titles ('Kansas City Massacre'), some with trailing whitespace. The Worker
+ *   adds `collection_display` (trimmed, de-slugged) on every display row;
+ *   filters always round-trip the RAW value.
+ * ------------------------------------------------------------------------- */
+
+export type FbiFacetCount = {
+  value: string
+  count: number
+}
+
+/** One collection facet/typeahead entry — `value` is the RAW stored string
+ *  (filter with this, trailing whitespace and all); `display` is the Worker's
+ *  normalized form for rendering. */
+export type FbiCollectionCount = {
+  value: string
+  display: string | null
+  count: number
+}
+
+export type FbiFacets = {
+  document_count: number
+  collection_count: number
+  /** Two rows: 'live' + 'wayback-recovered' with counts. */
+  provenance: FbiFacetCount[]
+  /** Top ~40 collections by size; the full 1,755 live behind the typeahead. */
+  collections: FbiCollectionCount[]
+  /** 'clean' | 'normalized' | 'degraded' with counts. */
+  ocr_quality: FbiFacetCount[]
+}
+
+export async function fetchFbiFacets(): Promise<FbiFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FbiFacets
+}
+
+/** Collections typeahead (locked decision #2: facet + typeahead ONLY — no
+ *  browse page). Matches the raw value AND its de-slugged form, so typing
+ *  "rosenberg case" still finds "rosenberg-case". Empty q → top collections. */
+export async function fetchFbiCollections(
+  q: string,
+  limit = 20,
+): Promise<FbiCollectionCount[]> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/collections`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ q, limit }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/collections failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { collections: FbiCollectionCount[] }
+  return body.collections
+}
+
+export type FbiDocumentDisplayRow = {
+  id: number
+  title: string | null
+  /** RAW stored collection value — use for filtering. */
+  collection: string | null
+  /** Worker-normalized display form (trimmed, de-slugged) — use for rendering. */
+  collection_display: string | null
+  /** 'Part N of M' for multi-part Vault files. */
+  part_label: string | null
+  /** 'live' | 'wayback-recovered'. Recovered = removed from the Vault,
+   *  recovered from a Wayback Machine capture (the quiet provenance badge). */
+  provenance: string
+  /** Recovered docs only: when the Wayback Machine captured our copy. */
+  wayback_timestamp: string | null
+  /** Recovered docs only: the Vault URL the capture preserved. */
+  original_url: string | null
+  /** 'clean' | 'normalized' | 'degraded'. */
+  ocr_quality: string | null
+  page_count: number | null
+  text_length: number | null
+  /** The Vault page (vault.fbi.gov). */
+  source_url: string | null
+  /** The original scan PDF — present on every row. */
+  pdf_url: string | null
+}
+
+export type FbiFilterFields = {
+  search?: string
+  /** RAW collection value (exact match server-side — pass the typeahead's
+   *  `value`, never its `display`). */
+  collection?: string
+  /** 'live' | 'wayback-recovered'. */
+  provenance?: string
+}
+
+export type FbiFilterResult = {
+  ids: number[]
+  display_rows: FbiDocumentDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runFbiFilter(
+  fields: FbiFilterFields,
+): Promise<FbiFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FbiFilterResult
+}
+
+export type FbiDocumentDetail = {
+  id: number
+  source: string | null
+  source_ref: string | null
+  title: string | null
+  collection: string | null
+  collection_display: string | null
+  part_label: string | null
+  provenance: string
+  wayback_timestamp: string | null
+  original_url: string | null
+  ocr_quality: string | null
+  page_count: number | null
+  byte_size: number | null
+  /** When WE fetched the document — a preservation fact, not a document date. */
+  fetched_at: string | null
+  text_content: string | null
+  text_length: number | null
+  source_url: string | null
+  pdf_url: string | null
+  cover_letter_url: string | null
+}
+
+export type FbiDocumentResponse = {
+  document: FbiDocumentDetail
+}
+
+export async function fetchFbiDocument(id: number): Promise<FbiDocumentResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fbi/document failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as FbiDocumentResponse
+}
+
+export type FbiAmaPlan = {
+  token: string
+  output_mode: AmaOutputMode
+  approach_summary: string
+  candor_notes: string[]
+  queries: AmaPlanQuery[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type FbiAmaSynthesis = {
+  answer_markdown: string
+  document_ids: number[] | null
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** Scope for /corpus/fbi/plan. Omit `description` for the full corpus — the
+ *  Worker's default scope line carries the no-document-dates candor. */
+export type FbiAmaScope = {
+  document_ids?: number[] | null
+  is_full_db?: boolean
+  count?: number
+  description?: string
+}
+
+export async function runFbiPlan(
+  question: string,
+  scope: FbiAmaScope,
+  auth: AuthArg,
+): Promise<FbiAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+      scope,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FBI Records plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FbiAmaPlan
+}
+
+export async function runFbiExecute(
+  token: string,
+  auth: AuthArg,
+  /** Client-generated id so the Worker's server-side trace log joins the same
+   *  usage_log row the inline annotation later upserts onto. */
+  interactionId?: string,
+): Promise<FbiAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(interactionId ? { interaction_id: interactionId } : {}),
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FBI Records execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FbiAmaSynthesis
+}
+
+export type FbiDocumentSummary = {
+  summary_markdown: string
+  candor_notes: string[]
+  was_truncated: boolean
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export async function runFbiSummarizeDocument(
+  id: number,
+  auth: AuthArg,
+): Promise<FbiDocumentSummary> {
+  const r = await fetch(`${WORKER_URL}/corpus/fbi/summarize-document`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      id,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `FBI Records summarize failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as FbiDocumentSummary
+}
+
+/* ----------------------------------------------------------------------------
+ * /corpus/sanctions/* — Sanctions spoke (brief #15)
+ *
+ * The FIRST CROSS-CORPUS SPOKE. Three data legs behind one slug:
+ *   1. ofac_sdn_entities — OFAC's SDN + consolidated lists (~19.6K entries),
+ *      synced nightly. The dedicated ENTITY PANE (locked decision #2).
+ *   2. ofac_guidance — 1,475 OFAC-published documents (FAQs, enforcement
+ *      actions, general licenses). The spoke's own document corpus.
+ *   3. The FR SANCTIONS SLICE — federal_register_documents queried IN PLACE
+ *      with a versioned predicate (~4.2K docs). Slice rows are FR display
+ *      rows; document detail + items-by-ids REUSE /corpus/fr/*.
+ *
+ * The candor stack every surface here respects:
+ * - SCREENING CANDOR: the Worker returns `screening_note` (the pinned note +
+ *   the LIVE data-as-of date) on every entity-leg response — render it
+ *   visibly, never buried. OFAC's official Sanctions List Search is the
+ *   authoritative screening source; our copy lags it.
+ * - publish_date is the COPY-FRESHNESS stamp (one value corpus-wide), NOT a
+ *   designation date. Never render it as "listed on"/"since"; designation
+ *   dates live in FR designation notices.
+ * - CURRENT-LIST-ONLY coverage: delisted entities vanish. Absence here is
+ *   never clearance.
+ * ------------------------------------------------------------------------- */
+
+export type SanctionsFacetCount = {
+  value: string
+  count: number
+}
+
+export type SanctionsEoCount = {
+  value: number
+  count: number
+}
+
+export type SanctionsEntityFacets = {
+  entity_count: number
+  /** max(publish_date) — the live copy-freshness stamp. Surface prominently. */
+  data_as_of: string | null
+  /** The pinned screening candor note with the data-as-of appended (Worker-
+   *  composed; unit-test-pinned server-side — render verbatim). */
+  screening_note: string
+  /** 'sdn' | 'consolidated' with counts. */
+  list_types: SanctionsFacetCount[]
+  /** 'entity' | 'individual' | 'vessel' | 'aircraft' with counts. */
+  entity_types: SanctionsFacetCount[]
+  /** Top ~40 program tags ('SDGT', 'RUSSIA-EO14024', …). */
+  programs: SanctionsFacetCount[]
+  /** Top ~30 executive orders behind listings. */
+  eo_numbers: SanctionsEoCount[]
+}
+
+export async function fetchSanctionsEntityFacets(): Promise<SanctionsEntityFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/entity-facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/entity-facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsEntityFacets
+}
+
+export type SanctionsEntityDisplayRow = {
+  id: number
+  /** OFAC's own stable identifier — links to sanctionssearch.ofac.treas.gov. */
+  ofac_uid: string | null
+  primary_name: string | null
+  /** 'entity' | 'individual' | 'vessel' | 'aircraft'. */
+  entity_type: string | null
+  /** a.k.a. names — the alias line is core to reading a sanctions hit. */
+  aliases: string[] | null
+  programs: string[] | null
+  eo_numbers: number[] | null
+  /** 'sdn' | 'consolidated'. */
+  list_type: string | null
+  /** ⚠ COPY-FRESHNESS stamp (when OFAC published the list data we hold) —
+   *  NOT a designation date. Never render as "listed on". */
+  publish_date: string | null
+}
+
+export type SanctionsEntityFilterFields = {
+  /** Alias-aware name search (FTS + substring over the search blob). */
+  search?: string
+  /** Exact program tag ('SDGT', 'RUSSIA-EO14024', …). */
+  program?: string
+  /** Executive order number (14024). */
+  eoNumber?: number
+  /** 'sdn' | 'consolidated'. */
+  listType?: string
+  /** 'entity' | 'individual' | 'vessel' | 'aircraft'. */
+  entityType?: string
+}
+
+export type SanctionsEntityFilterResult = {
+  ids: number[]
+  display_rows: SanctionsEntityDisplayRow[]
+  count: number
+  data_as_of: string | null
+  screening_note: string
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runSanctionsEntityFilter(
+  fields: SanctionsEntityFilterFields,
+): Promise<SanctionsEntityFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/entity-filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/entity-filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsEntityFilterResult
+}
+
+/** Full entity card — the heavyweight jsonb columns load here only. The
+ *  jsonb shapes come from OFAC's Sanctions List Service; the UI renders them
+ *  defensively (unknown keys tolerated). */
+export type SanctionsEntityDetail = {
+  id: number
+  ofac_uid: string | null
+  primary_name: string | null
+  entity_type: string | null
+  aliases: string[] | null
+  addresses: unknown
+  programs: string[] | null
+  eo_numbers: number[] | null
+  list_type: string | null
+  list_names: string[] | null
+  sanctions_programs_detail: unknown
+  features: unknown
+  identity_documents: unknown
+  relationships: unknown
+  remarks: string | null
+  publish_date: string | null
+}
+
+export type SanctionsEntityResponse = {
+  entity: SanctionsEntityDetail
+  data_as_of: string | null
+  screening_note: string
+}
+
+export async function fetchSanctionsEntity(
+  ref: { id: number } | { ofac_uid: string },
+): Promise<SanctionsEntityResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/entity`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(ref),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/entity failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsEntityResponse
+}
+
+/* ── Guidance leg ─────────────────────────────────────────────────────────── */
+
+export type SanctionsGuidanceFacets = {
+  document_count: number
+  earliest: string | null
+  latest: string | null
+  /** 31 docs carry no issued_date — any date bound silently excludes them;
+   *  the count keeps that visible. */
+  undated_count: number
+  /** 'faq' | 'enforcement_action' | 'general_license' with counts. */
+  guidance_types: SanctionsFacetCount[]
+  programs: SanctionsFacetCount[]
+  eo_numbers: SanctionsEoCount[]
+}
+
+export async function fetchSanctionsGuidanceFacets(): Promise<SanctionsGuidanceFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsGuidanceFacets
+}
+
+export type SanctionsGuidanceDisplayRow = {
+  id: number
+  source_key: string | null
+  /** 'faq' | 'enforcement_action' | 'general_license'. */
+  guidance_type: string | null
+  /** OFAC's own number — FAQ 401, General License 8A, … */
+  guidance_number: string | null
+  title: string | null
+  programs: string[] | null
+  eo_numbers: number[] | null
+  /** NULL on 31 docs — render as undated, never hide the row. */
+  issued_date: string | null
+  ocr_quality: string | null
+  text_length: number | null
+  source_url: string | null
+}
+
+export type SanctionsGuidanceFilterFields = {
+  search?: string
+  /** 'faq' | 'enforcement_action' | 'general_license'. */
+  guidanceType?: string
+  program?: string
+  eoNumber?: number
+  /** issued_date bounds (ISO). NOTE: bounds exclude the 31 undated docs. */
+  from?: string
+  to?: string
+}
+
+export type SanctionsGuidanceFilterResult = {
+  ids: number[]
+  display_rows: SanctionsGuidanceDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runSanctionsGuidanceFilter(
+  fields: SanctionsGuidanceFilterFields,
+): Promise<SanctionsGuidanceFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsGuidanceFilterResult
+}
+
+export type SanctionsGuidanceDetail = {
+  id: number
+  source_key: string | null
+  guidance_type: string | null
+  guidance_number: string | null
+  title: string | null
+  programs: string[] | null
+  eo_numbers: number[] | null
+  issued_date: string | null
+  source_url: string | null
+  body_text: string | null
+  text_length: number | null
+  ocr_quality: string | null
+  metadata: unknown
+}
+
+export type SanctionsGuidanceDocumentResponse = {
+  document: SanctionsGuidanceDetail
+}
+
+export async function fetchSanctionsGuidanceDocument(
+  id: number,
+): Promise<SanctionsGuidanceDocumentResponse> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/document failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsGuidanceDocumentResponse
+}
+
+/* ── FR-slice leg ─────────────────────────────────────────────────────────── */
+
+export type SanctionsFrAgencyCount = {
+  slug: string
+  name: string | null
+  count: number
+}
+
+export type SanctionsFrFacets = {
+  document_count: number
+  earliest: string | null
+  latest: string | null
+  /** Version of the Worker's curated program/EO predicate. */
+  predicate_version: number
+  doc_types: SanctionsFacetCount[]
+  agencies: SanctionsFrAgencyCount[]
+  eo_numbers: SanctionsEoCount[]
+}
+
+export async function fetchSanctionsFrFacets(): Promise<SanctionsFrFacets> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/fr-facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/fr-facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsFrFacets
+}
+
+export type SanctionsFrFilterFields = {
+  search?: string
+  /** 'rule' | 'proposed_rule' | 'notice'. */
+  docType?: string
+  /** Agency slug within the slice. */
+  agencySlug?: string
+  /** A single cited EO number. */
+  eoNumber?: number
+  /** publication_date bounds (ISO). */
+  from?: string
+  to?: string
+}
+
+/** Slice rows ARE Federal Register display rows (the Worker reuses
+ *  FR_DISPLAY_COLS) — detail views go through /corpus/fr/document. */
+export type SanctionsFrFilterResult = {
+  ids: number[]
+  display_rows: FrDocumentDisplayRow[]
+  count: number
+  predicate_version: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runSanctionsFrFilter(
+  fields: SanctionsFrFilterFields,
+): Promise<SanctionsFrFilterResult> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/fr-filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/sanctions/fr-filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as SanctionsFrFilterResult
+}
+
+/* ── AMA: the 3-branch router (plan/execute) ──────────────────────────────── */
+
+export type SanctionsAmaBranch = 'entity' | 'prose' | 'count'
+
+/** One retrieved passage in the prose branch's responsive set (returned at
+ *  plan time — retrieval is free; synthesis is the charged step). Ids are
+ *  leg-qualified: 'guidance:123' | 'fr:456'. */
+export type SanctionsProseItem = {
+  id: string
+  title: string
+  context: string | null
+  date: string | null
+  matched?: 'semantic' | 'keyword' | 'both'
+  similarity: number | null
+  snippet: string | null
+  source_url?: string
+}
+
+/** Plan returned by /corpus/sanctions/plan. Branch-shaped:
+ *  - entity: output_mode + queries (the guarded SDN SQL).
+ *  - count:  queries (the guarded aggregate SQL); output_mode null.
+ *  - prose:  items (the responsive passage set); queries null.
+ *  Router/planning failures degrade to prose server-side, with the
+ *  degradation note riding in candor_notes. */
+export type SanctionsAmaPlan = {
+  token: string
+  branch: SanctionsAmaBranch
+  /** The router's one-clause classification reason. */
+  reason: string | null
+  output_mode: AmaOutputMode | null
+  approach_summary: string | null
+  queries: AmaPlanQuery[] | null
+  items: SanctionsProseItem[] | null
+  candor_notes: string[]
+  estimated_cost_cents: number
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+/** One executed count-branch query, dual-output: the number AND the counted
+ *  rows ship so the user can audit what was counted. */
+export type SanctionsCountQueryResult = {
+  label: string
+  sql: string
+  total_rows: number
+  was_truncated: boolean
+  error: string | null
+  rows: Record<string, unknown>[]
+}
+
+export type SanctionsEntityAmaSynthesis = {
+  branch: 'entity'
+  answer_markdown: string
+  entity_ids: number[] | null
+  /** Leads with the pinned screening note + live data-as-of (server-appended). */
+  candor_notes: string[]
+  output_mode: AmaOutputMode
+  query_summary: Array<{
+    label: string
+    total_rows: number
+    was_truncated: boolean
+  }>
+  data_as_of: string | null
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type SanctionsCountAmaSynthesis = {
+  branch: 'count'
+  answer_markdown: string
+  candor_notes: string[]
+  approach_summary: string | null
+  queries: SanctionsCountQueryResult[]
+  data_as_of: string | null
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type SanctionsProseAmaSynthesis = {
+  branch: 'prose'
+  answer_markdown: string
+  /** The cited subset of the plan's items, by qualified id. */
+  source_ids: string[]
+  candor_notes: string[]
+  _cost_cents?: number
+  _balance_cents?: number
+}
+
+export type SanctionsAmaSynthesis =
+  | SanctionsEntityAmaSynthesis
+  | SanctionsCountAmaSynthesis
+  | SanctionsProseAmaSynthesis
+
+/** v1 AMA is full-corpus — the endpoint takes no scope (deliberate worker
+ *  deferral; scope narrowing revisits with v2). */
+export async function runSanctionsPlan(
+  question: string,
+  auth: AuthArg,
+): Promise<SanctionsAmaPlan> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/plan`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      ...authBody(auth),
+      question,
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Sanctions plan failed (${r.status})`,
+      'plan',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as SanctionsAmaPlan
+}
+
+export async function runSanctionsExecute(
+  token: string,
+  auth: AuthArg,
+  /** Client-generated id so the Worker's server-side trace log joins the same
+   *  usage_log row the inline annotation later upserts onto. */
+  interactionId?: string,
+): Promise<SanctionsAmaSynthesis> {
+  const r = await fetch(`${WORKER_URL}/corpus/sanctions/execute`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      token,
+      ...(interactionId ? { interaction_id: interactionId } : {}),
+      ...authCredentialBody(auth),
+    }),
+  })
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string }
+    }
+    throw new WorkerAmaError(
+      body.error?.message ?? `Sanctions execute failed (${r.status})`,
+      'execute',
+      r.status,
+      body.error?.code,
+    )
+  }
+  return (await r.json()) as SanctionsAmaSynthesis
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/frus/* — FRUS (Foreign Relations of the United States) spoke
  *
  * Final v1 spoke. Two tables in the corpus: frus_documents (314K docs) +
@@ -3760,6 +4926,37 @@ export function fetchFrItemsByIds(
   )
 }
 
+export function fetchFbiItemsByIds(
+  ids: readonly number[],
+): Promise<FbiDocumentDisplayRow[]> {
+  return fetchItemsByIds<FbiDocumentDisplayRow>(
+    `${WORKER_URL}/corpus/fbi/items-by-ids`,
+    ids,
+  )
+}
+
+/** Entity rows for the sanctions AMA's cited-entity list — same display shape
+ *  as the entity filter, caller order preserved. */
+export function fetchSanctionsEntitiesByIds(
+  ids: readonly number[],
+): Promise<SanctionsEntityDisplayRow[]> {
+  return fetchItemsByIds<SanctionsEntityDisplayRow>(
+    `${WORKER_URL}/corpus/sanctions/entities-by-ids`,
+    ids,
+  )
+}
+
+/** Guidance rows by id (semantic-pane opens, MLT opens, prose citations).
+ *  FR-slice rows go through fetchFrItemsByIds — the slice reuses /corpus/fr/*. */
+export function fetchSanctionsGuidanceItemsByIds(
+  ids: readonly number[],
+): Promise<SanctionsGuidanceDisplayRow[]> {
+  return fetchItemsByIds<SanctionsGuidanceDisplayRow>(
+    `${WORKER_URL}/corpus/sanctions/items-by-ids`,
+    ids,
+  )
+}
+
 /**
  * Congress variant — the endpoint additionally needs the `collection`
  * discriminator (five collections share one spoke), so it doesn't go
@@ -3797,6 +4994,10 @@ export type SemanticCorpus =
   | 'olc'
   | 'frus'
   | 'lawfare'
+  // Commentary spoke slug: ONE slug fanning over BOTH publication chunk corpora
+  // (lawfare + executive_functions); ids come back publication-qualified
+  // ('lawfare:123'). Replaces the standalone 'lawfare' slug for the spoke pane.
+  | 'commentary'
   | 'presidential'
   | 'fr'
   | 'congress'
@@ -3809,6 +5010,14 @@ export type SemanticCorpus =
   | 'congress:hearings'
   | 'congress:record'
   | 'congress:testimony'
+  // FBI Records: fully embedded before the spoke shipped (1.3M chunks under
+  // corpus 'fbi') — the semantic pane is live from day one.
+  | 'fbi'
+  // Sanctions: ONE slug fanning over the ofac_guidance chunk corpus (embed
+  // campaign in flight — degrades gracefully until chunks land) + the fr
+  // corpus's chunks post-filtered to the sanctions slice. Ids come back
+  // leg-qualified ('guidance:123' / 'fr:456'); entities have no chunks.
+  | 'sanctions'
 
 export type SemanticSearchRow = {
   id: string
@@ -3882,6 +5091,11 @@ export type MoreLikeThisCorpus =
   | 'olc'
   | 'frus'
   | 'lawfare'
+  // Commentary pivots are PER-PUBLICATION — the Worker's MORE_LIKE_THIS_CORPORA
+  // map keys the two publications as compound slugs (seed ids are plain
+  // per-publication numbers; results carry source_url for the link-back).
+  | 'commentary:lawfare'
+  | 'commentary:executive_functions'
   | 'presidential'
   | 'fr'
   // Congress pivots are per-collection — the Worker's MORE_LIKE_THIS_CORPORA
@@ -3892,6 +5106,13 @@ export type MoreLikeThisCorpus =
   | 'congress:hearings'
   | 'congress:record'
   | 'congress:testimony'
+  // FBI Records: spoke slug and doc_chunks corpus are both 'fbi'.
+  | 'fbi'
+  // Sanctions pivots are GUIDANCE-ONLY: the compound slug maps to the
+  // ofac_guidance chunk corpus (seed ids are plain guidance ids). Entities
+  // have no chunks (nothing to pivot on); FR-slice docs pivot through the fr
+  // spoke's own 'fr' key.
+  | 'sanctions:guidance'
 
 export type MoreLikeThisRoute = 'meaning' | 'compound'
 

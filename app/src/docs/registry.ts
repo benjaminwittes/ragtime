@@ -28,7 +28,12 @@ import { uscSectionSummaryEntry } from './content/usc-section-summary'
 import { aboutCfrEntry } from './content/about-cfr'
 import { cfrAiSynthesisEntry } from './content/cfr-ai-synthesis'
 import { cfrSectionSummaryEntry } from './content/cfr-section-summary'
-// Lawfare spoke.
+// Commentary spoke (federated Lawfare + Executive Functions; replaces the
+// standalone Lawfare spoke). The Lawfare-scoped entries below are retained but
+// no longer surface, since the Lawfare spoke is not registered.
+import { aboutCommentaryEntry } from './content/about-commentary'
+import { commentaryNarrativeSynthesisEntry } from './content/commentary-narrative-synthesis'
+import { commentaryDocumentSummaryEntry } from './content/commentary-document-summary'
 import { aboutLawfareEntry } from './content/about-lawfare'
 import { lawfareNarrativeSynthesisEntry } from './content/lawfare-narrative-synthesis'
 import { lawfareArticleSummaryEntry } from './content/lawfare-article-summary'
@@ -41,6 +46,12 @@ import { aboutClemencyEntry } from './content/about-clemency'
 import { aboutFrEntry } from './content/about-fr'
 // Congress spoke.
 import { aboutCongressEntry } from './content/about-congress'
+// FBI Records spoke.
+import { aboutFbiEntry } from './content/about-fbi'
+import { fbiNarrativeSynthesisEntry } from './content/fbi-narrative-synthesis'
+import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
+// Sanctions spoke.
+import { aboutSanctionsEntry } from './content/about-sanctions'
 
 /**
  * Central docs registry.
@@ -92,7 +103,11 @@ export const docsEntries: readonly DocsEntry[] = [
   aboutCfrEntry,
   cfrAiSynthesisEntry,
   cfrSectionSummaryEntry,
-  // Lawfare
+  // Commentary (federated Lawfare + Executive Functions)
+  aboutCommentaryEntry,
+  commentaryNarrativeSynthesisEntry,
+  commentaryDocumentSummaryEntry,
+  // Lawfare (legacy, unreferenced — spoke retired into Commentary)
   aboutLawfareEntry,
   lawfareNarrativeSynthesisEntry,
   lawfareArticleSummaryEntry,
@@ -105,6 +120,12 @@ export const docsEntries: readonly DocsEntry[] = [
   aboutFrEntry,
   // Congress
   aboutCongressEntry,
+  // FBI Records
+  aboutFbiEntry,
+  fbiNarrativeSynthesisEntry,
+  fbiDocumentSummaryEntry,
+  // Sanctions
+  aboutSanctionsEntry,
 ]
 
 /**

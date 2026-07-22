@@ -7,12 +7,14 @@ import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
 import { TermsOfService } from '@/legal/TermsOfService'
 import { SpokeShell } from '@/spokes/SpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
+import { CommentarySpokeShell } from '@/spokes/commentary/CommentarySpokeShell'
 import { CongressSpokeShell } from '@/spokes/congress/CongressSpokeShell'
+import { FbiSpokeShell } from '@/spokes/fbi/FbiSpokeShell'
 import { FrSpokeShell } from '@/spokes/fr/FrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
-import { LawfareSpokeShell } from '@/spokes/lawfare/LawfareSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
 import { PresidentialSpokeShell } from '@/spokes/presidential/PresidentialSpokeShell'
+import { SanctionsSpokeShell } from '@/spokes/sanctions/SanctionsSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import { toHref, toLogical } from '@/lib/routing'
@@ -121,14 +123,18 @@ function activeSpokeShell(spoke: CorpusSpoke) {
       <OlcSpokeShell spoke={spoke} />
     ) : spoke.slug === 'frus' ? (
       <FrusSpokeShell spoke={spoke} />
-    ) : spoke.slug === 'lawfare' ? (
-      <LawfareSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'commentary' ? (
+      <CommentarySpokeShell spoke={spoke} />
     ) : spoke.slug === 'presidential' ? (
       <PresidentialSpokeShell spoke={spoke} />
     ) : spoke.slug === 'fr' ? (
       <FrSpokeShell spoke={spoke} />
     ) : spoke.slug === 'congress' ? (
       <CongressSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'fbi' ? (
+      <FbiSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'sanctions' ? (
+      <SanctionsSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )

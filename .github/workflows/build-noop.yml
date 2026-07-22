@@ -1,0 +1,20 @@
+name: Build App (non-app no-op)
+
+# Companion to build-app.yml. The required "build" check is path-filtered to
+# app code, so a PR touching only docs/config would sit on an "Expected"
+# check forever and could never merge. This supplies a same-name instant
+# pass on the inverse paths, keeping the check required everywhere.
+# Context: discussion on PR #141.
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'app/**'
+      - 'index.html'
+      - '.github/workflows/build-app.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No app changes in this PR — build not required."
