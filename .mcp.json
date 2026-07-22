@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rt-board": {
+      "command": "rt",
+      "args": ["mcp"]
+    }
+  }
+}
