@@ -66,6 +66,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Inside the `build` job on purpose. Branch protection requires a check
+      # literally named `build` (build-noop.yml exists to keep that satisfiable
+      # on doc-only PRs), so a separate `test` job would need its own noop twin
+      # to avoid blocking them. Folding the step in here inherits that for free.
+      - name: Test
+        run: npm test
+
       - name: Build
         # Custom-domain cutover (2026-06-02): the app now serves from the
         # origin root at https://ragtime.lawfaremedia.org, so the Vite base is
