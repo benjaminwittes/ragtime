@@ -28,6 +28,7 @@ import {
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
+import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
@@ -463,6 +464,11 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     void handleEntitySubmit({ search: carryover })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Explorer document handoff (`/corpus/sanctions/<leg:id>`, the target of an
+  // `rt://` citation): open once on mount through the leg-qualified resolver
+  // the semantic pane and prose sources use (a bare id is a guidance id).
+  useOpenDeepLinkedDocument((doc) => openQualifiedId(doc.id))
 
   // ── AMA (full-corpus v1; branch-shaped results) ──────────────────────────
   const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])

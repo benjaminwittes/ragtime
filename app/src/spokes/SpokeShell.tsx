@@ -25,6 +25,7 @@ import {
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
+import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { type UsageLogRecord, newInteractionId, postUsageLog } from '@/lib/usage-log'
@@ -313,6 +314,11 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     // Mount-only: handleFilterSubmit + carryover are stable for this mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Explorer document handoff (`/corpus/litigation/<cl_id>`, the target of
+  // an `rt://` citation): open the case sheet once on mount through the
+  // resolver the more-like-this results use.
+  useOpenDeepLinkedDocument((doc) => handleOpenMltResult(doc.id))
 
   // A heavy Claude-SQL query the user can opt to "run anyway" (90s). Non-null
   // means the warning card is shown; cleared on Run-it / Refine / new submit.

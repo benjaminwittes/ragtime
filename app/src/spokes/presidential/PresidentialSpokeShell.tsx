@@ -17,6 +17,7 @@ import {
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
+import { useDeepLink, useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
@@ -127,8 +128,13 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   // AMA state.
   // The Presidential Documents corpus has two tables (brief #11 §7): the FR
   // documents and the clemency grants. A section toggle swaps the body
-  // between them; the cross-table AMA lives in the documents section.
-  const [section, setSection] = useState<'documents' | 'clemency'>('documents')
+  // between them; the cross-table AMA lives in the documents section. The
+  // Worker registers the grants as their own corpus (`clemency`), so a deep
+  // link into it lands here with the Clemency section up.
+  const deepLink = useDeepLink()
+  const [section, setSection] = useState<'documents' | 'clemency'>(
+    deepLink?.slug === 'clemency' ? 'clemency' : 'documents',
+  )
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
   const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
   const [pendingPlan, setPendingPlan] = useState<{
@@ -184,6 +190,14 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     void handleSubmit({ search: carryover })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Explorer document handoff (`/corpus/presidential/<id>`, the target of an
+  // `rt://` citation): open the document sheet once on mount through the
+  // resolver the more-like-this results use. A `clemency` link is the
+  // ClemencySurface's to open — it reads the same deep link.
+  useOpenDeepLinkedDocument((doc) => {
+    if (doc.slug !== 'clemency') return handleOpenMltResult(doc.id)
+  })
 
   async function handleSubmit(fields: PresidentialFilterFields) {
     const wantKeyword = searchMode !== 'semantic'
