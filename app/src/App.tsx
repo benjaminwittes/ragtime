@@ -17,6 +17,8 @@ import { PresidentialSpokeShell } from '@/spokes/presidential/PresidentialSpokeS
 import { SanctionsSpokeShell } from '@/spokes/sanctions/SanctionsSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
+import { spokeSlugFor } from '@/lib/deep-link'
+import { parse } from '@/lib/links'
 import { toHref, toLogical } from '@/lib/routing'
 import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
 
@@ -26,9 +28,17 @@ import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
  * Routes:
  *   `/`                          → hub (multi-spoke landing per brief #1)
  *   `/corpus/<slug>` (active)    → full `SpokeShell`
+ *   `/corpus/<slug>/<id>`        → the same shell, which opens that
+ *                                  document's detail sheet on mount (the
+ *                                  Explorer's document handoff; see
+ *                                  `readDeepLink` in lib/routing.ts)
  *   `/corpus/<slug>` (coming-    → `ComingSoonSpoke` landing page
  *                     soon)
  *   anything else                → "not found"
+ *
+ * The `/corpus/…` shapes are the deep-link grammar in `lib/links.ts`; the
+ * query string (`?q=`, facets, `ids=`, `mode=`) is read by the spoke, not
+ * here — routing stays pathname-based.
  *
  * No router library yet — premature given the small route surface. The
  * History API is wired manually so in-app navigation doesn't full-reload;
@@ -45,14 +55,19 @@ type Route =
 
 function parseRoute(pathname: string): Route {
   // Strip any query string / hash — routing is pathname-based; the `?q=`
-  // carryover is read separately by the spoke (see readCarryoverQuery).
+  // carryover and the rest of the deep link are read separately by the
+  // spoke (see readCarryoverQuery / readDeepLink).
   pathname = pathname.split('?')[0].split('#')[0]
   if (pathname === '/' || pathname === '') return { kind: 'hub' }
   if (pathname === '/privacy') return { kind: 'privacy' }
   if (pathname === '/terms') return { kind: 'terms' }
-  const m = pathname.match(/^\/corpus\/([^/]+)\/?$/)
-  if (m) {
-    const slug = m[1] as CorpusSlug
+  const link = parse(pathname)
+  if (link) {
+    // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
+    // shell reads the id itself. A collection-qualified slug
+    // (`congress:laws`) routes to its corpus, and a Worker corpus this app
+    // hosts inside another spoke (`clemency`) routes to that spoke.
+    const slug = spokeSlugFor(link.slug) as CorpusSlug
     if (getSpokeBySlug(slug)) return { kind: 'spoke', slug }
   }
   return { kind: 'not-found', pathname }

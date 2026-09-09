@@ -17,6 +17,7 @@ import {
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
+import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
@@ -188,6 +189,11 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     void handleSubmit({ search: carryover })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Explorer document handoff (`/corpus/fbi/<id>`, the target of an `rt://`
+  // citation): open the document sheet once on mount through the resolver
+  // the more-like-this results use.
+  useOpenDeepLinkedDocument((doc) => handleOpenMltResult(doc.id))
 
   async function handleSubmit(fields: FbiFilterFields) {
     const wantKeyword = searchMode !== 'semantic'

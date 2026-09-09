@@ -11,6 +11,8 @@
  * translate between logical paths and real URLs at the single seam in App.tsx.
  */
 
+import { links, type ParsedLink } from './links'
+
 // `/ragtime/` or `/` — guaranteed leading+trailing slash by Vite.
 const BASE = import.meta.env.BASE_URL
 // `/ragtime` or `` (empty when mounted at root).
@@ -40,4 +42,20 @@ export function toLogical(pathname: string): string {
 export function readCarryoverQuery(): string | null {
   const q = new URLSearchParams(window.location.search).get('q')
   return q && q.trim() ? q.trim() : null
+}
+
+/**
+ * The deep link this page was opened on, read once by a spoke shell on mount.
+ * The grammar (`lib/links.ts`) is what the Explorer's handoffs and `rt://`
+ * citations resolve to:
+ *
+ *   /corpus/:slug?q=…&<facet>=<value>…&ids=<id,…>&mode=manual_filter|claude_ama
+ *   /corpus/:slug/:id                 → open that document's detail sheet
+ *
+ * Returns null off the grammar (the hub, `/privacy`, a not-found path). The
+ * `?q=` carryover above is this link's `q`; it keeps its own reader because
+ * every shell already calls it and its trim/blank rule is its own.
+ */
+export function readDeepLink(): ParsedLink | null {
+  return links.parse(toLogical(window.location.pathname) + window.location.search)
 }

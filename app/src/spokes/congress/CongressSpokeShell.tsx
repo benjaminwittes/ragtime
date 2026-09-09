@@ -19,6 +19,8 @@ import {
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
+import { qualifiedId } from '@/lib/deep-link'
+import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
@@ -243,6 +245,13 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     void handleSubmit({ collection, search: carryover })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Explorer document handoff (`/corpus/congress/<collection:id>` or
+  // `/corpus/congress:<collection>/<id>`, the target of an `rt://` citation):
+  // open once on mount through the same collection-qualified resolver the
+  // semantic and more-like-this results use. A bare id lands on the default
+  // collection, as it does for those.
+  useOpenDeepLinkedDocument((doc) => openByAnyId(qualifiedId(doc)))
 
   async function handleSubmit(fields: CongressFilterFields) {
     const wantKeyword = searchMode !== 'semantic'

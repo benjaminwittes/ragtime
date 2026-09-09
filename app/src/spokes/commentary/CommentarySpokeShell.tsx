@@ -19,6 +19,7 @@ import {
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
+import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
@@ -222,6 +223,18 @@ export function CommentarySpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     void handleSubmit({ search: carryover })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Explorer document handoff (the target of an `rt://` citation): the Worker
+  // qualifies commentary ids by publication (`/corpus/commentary/lawfare:123`),
+  // and its legacy `lawfare` slug — hosted by this spoke — leaves them bare
+  // (`/corpus/lawfare/123`). Open once on mount through items-by-ids, as the
+  // more-like-this results do.
+  useOpenDeepLinkedDocument(async (doc) => {
+    const parsed = parseQualifiedId(doc.slug === 'lawfare' ? 'lawfare:' + doc.id : doc.id)
+    if (!parsed) return
+    const full = await fetchCommentaryItemsByIds(parsed.publication, [parsed.id])
+    if (full.length > 0) handleOpenDocument(full[0])
+  })
 
   async function handleSubmit(fields: CommentaryFilterFields) {
     // Both panes off one submit (brief #9). Commentary's free-text field is

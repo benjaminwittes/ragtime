@@ -4,9 +4,11 @@ import {
   type ClemencyFilterFields,
   type ClemencyGrantDisplayRow,
   fetchClemencyFacets,
+  fetchClemencyGrant,
   runClemencyFilter,
 } from '@/lib/worker-client'
 import { useAuth } from '@/lib/use-auth'
+import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { ExportBar } from '../components/ExportBar'
 import { downloadCsv } from '@/lib/export-csv'
@@ -81,6 +83,15 @@ export function ClemencySurface() {
     setOpenGrant(row)
     setDetailOpen(true)
   }
+
+  // Explorer document handoff (`/corpus/clemency/<pardon_id>`, the target of
+  // an `rt://` citation): there is no items-by-ids for grants, but the grant
+  // detail is a superset of the display row, so the single fetch opens the
+  // sheet once on mount. The documents section's link is the shell's.
+  useOpenDeepLinkedDocument(async (doc) => {
+    if (doc.slug !== 'clemency') return
+    handleOpenGrant(await fetchClemencyGrant(Number(doc.id)))
+  })
 
   function downloadFilterCsv() {
     if (!rows || rows.length === 0) return
