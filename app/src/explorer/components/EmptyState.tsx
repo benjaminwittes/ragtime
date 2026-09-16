@@ -1,6 +1,7 @@
 import type { CorpusRegistry } from '@lawfare/ragtime-client'
 
 import { EXAMPLE_QUESTIONS } from '../model/examples.ts'
+import { useExampleCount } from '../tune.ts'
 
 type Props = {
   registry: CorpusRegistry | null
@@ -17,6 +18,11 @@ type Props = {
  */
 export function EmptyState({ registry, pinned, disabled, onAsk, onTogglePin }: Props) {
   const corpora = registry ? registry.corpora.slice().sort(byHubOrder) : []
+  // Three, unless someone is tuning. The count is a design parameter — how much
+  // of the first screen is worked example and how much is the reader's own
+  // question — so it is a knob rather than a literal (`../tune.ts`).
+  const exampleCount = useExampleCount()
+  const examples = EXAMPLE_QUESTIONS.slice(0, exampleCount)
   return (
     <div className="empty">
       <h2>Ask the federal record a question.</h2>
@@ -25,7 +31,7 @@ export function EmptyState({ registry, pinned, disabled, onAsk, onTogglePin }: P
         Research spends against the brief, and the trail shows every step and what it cost.
       </p>
       <div className="examples">
-        {EXAMPLE_QUESTIONS.map((q) => (
+        {examples.map((q) => (
           <button key={q.text} type="button" className="example" onClick={() => onAsk(q.text)} disabled={disabled}>
             <span className="example-shape">{q.shape}</span>
             {q.text}

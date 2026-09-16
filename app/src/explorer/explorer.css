@@ -40,9 +40,25 @@
   --sans: var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   --serif: var(--font-serif, 'EB Garamond', Garamond, Georgia, serif);
   --mono: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+
+  /* Structure, promoted from the literals the rules below used to carry, so the
+   * tuning panel can move them while the page is open (`src/explorer/tune.ts`,
+   * `src/tune/`). Each one is still the value it was — a promotion changes where
+   * the number is written, not what it is. Promote another the same way: name it
+   * here, reference it below, declare the knob in tune.ts. */
+  --x-measure: 80ch;            /* the answer's measure */
+  --x-empty-measure: 72ch;      /* the empty state's, narrower on purpose */
+  --x-base-size: 15px;          /* the interface's base size, not the answer's */
+  --x-pad-y: 18px;
+  --x-pad-x: 20px;
+  --x-radius: 8px;              /* buttons, inputs */
+  --x-radius-card: 12px;        /* bubbles, the brief, examples (−2px) */
+  --x-trail-left: 1.45fr;       /* the conversation's share while the trail is open */
+  --x-trail-min: 300px;         /* the trail's floor before the layout stacks */
+  --x-bubble-indent: 15%;       /* how far the reader's own turn sits in */
 }
 
-.explorer { font: 15px/1.5 var(--sans); color: var(--ink); background: var(--bg); }
+.explorer { font: var(--x-base-size)/1.5 var(--sans); color: var(--ink); background: var(--bg); }
 .explorer a { color: var(--accent); }
 .explorer button, .explorer input, .explorer select, .explorer textarea { font: inherit; color: inherit; }
 .explorer button { cursor: pointer; }
@@ -61,17 +77,17 @@
  * answer pays for on every look, whether or not the trail is ever opened; `with-trail`
  * is set by the toggle in the strip, so the second column exists only while it is read. */
 .explorer .main { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-height: 0; }
-.explorer .main.with-trail { grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr); }
+.explorer .main.with-trail { grid-template-columns: minmax(0, var(--x-trail-left)) minmax(var(--x-trail-min), 1fr); }
 .explorer .left, .explorer .right { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .explorer .with-trail .left { border-right: 1px solid var(--line); }
 .explorer .scroll { flex: 1; overflow: auto; min-height: 0; }
-.explorer .left .scroll { padding: 18px 20px; }
+.explorer .left .scroll { padding: var(--x-pad-y) var(--x-pad-x); }
 .explorer .right .scroll { padding: 10px 14px; font-size: 13px; }
 /* The narrow layout is one block at the end of this file — see there. */
 
 /* Buttons and chips */
-.explorer .primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 8px; padding: 8px 14px; }
-.explorer .secondary { background: var(--card); color: var(--accent); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-size: 13px; }
+.explorer .primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: var(--x-radius); padding: 8px 14px; }
+.explorer .secondary { background: var(--card); color: var(--accent); border: 1px solid var(--line); border-radius: var(--x-radius); padding: 6px 12px; font-size: 13px; }
 .explorer .link { background: none; border: 0; color: var(--accent); padding: 0; font-size: 13px; text-decoration: underline; }
 .explorer .pill { display: inline-block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
 .explorer .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -90,25 +106,25 @@
 .explorer .hint.warn { color: var(--warn); }
 .explorer .label { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
 .explorer .field { display: block; margin: 10px 0; }
-.explorer .field input:not(.chip-input) { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--card); margin-top: 4px; }
+.explorer .field input:not(.chip-input) { width: 100%; border: 1px solid var(--line); border-radius: var(--x-radius); padding: 7px 10px; background: var(--card); margin-top: 4px; }
 .explorer .field input:focus, .explorer textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
 /* Empty state */
-.explorer .empty { max-width: 72ch; margin: 24px auto; }
+.explorer .empty { max-width: var(--x-empty-measure); margin: 24px auto; }
 .explorer .empty h2 { font: 600 26px/1.2 var(--serif); margin: 0 0 8px; }
 .explorer .lede { color: var(--dim); margin: 0 0 18px; }
 .explorer .examples { display: grid; gap: 8px; margin-bottom: 22px; }
-.explorer .example { text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
+.explorer .example { text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: calc(var(--x-radius-card) - 2px); padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
 .explorer .example:hover:not(:disabled) { border-color: var(--accent); }
 .explorer .example-shape { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); min-width: 68px; }
 .explorer .pins .label { margin-bottom: 8px; }
 
 /* Conversation */
-.explorer .conversation { max-width: 80ch; margin: 0 auto; }
+.explorer .conversation { max-width: var(--x-measure); margin: 0 auto; }
 .explorer .turn { margin-bottom: 18px; }
-.explorer .bubble { padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; }
-.explorer .bubble.user { background: var(--accent-soft); margin-left: 15%; }
-.explorer .bubble.user.reply { margin-left: 30%; }
+.explorer .bubble { padding: 10px 14px; border-radius: var(--x-radius-card); white-space: pre-wrap; word-wrap: break-word; }
+.explorer .bubble.user { background: var(--accent-soft); margin-left: var(--x-bubble-indent); }
+.explorer .bubble.user.reply { margin-left: calc(var(--x-bubble-indent) * 2); }
 .explorer .marker { color: var(--faint); font-size: 12px; text-align: center; margin: 6px 0 10px; letter-spacing: 0.04em; }
 .explorer .narration { color: var(--faint); font-size: 14px; margin: 8px 0; }
 .explorer .narration p { margin: 0 0 4px; }
@@ -126,7 +142,7 @@
 .explorer .error { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; border-radius: 6px; margin: 8px 0; font-size: 14px; }
 
 /* Brief card */
-.explorer .brief { border: 1px solid #f1d9b0; background: var(--warn-soft); border-radius: 12px; padding: 12px 16px; margin: 12px 0; }
+.explorer .brief { border: 1px solid #f1d9b0; background: var(--warn-soft); border-radius: var(--x-radius-card); padding: 12px 16px; margin: 12px 0; }
 .explorer .brief-compact { padding: 10px 14px; }
 .explorer .brief-head { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
 .explorer .brief-title { font-weight: 700; }
@@ -137,7 +153,7 @@
 .explorer .brief-bar { padding: 10px 20px 0; }
 /* The same measure as `.conversation`, so the brief a turn ran against sits over the
    answer it produced instead of spanning whatever width the trail left behind. */
-.explorer .brief-bar .brief { margin: 0 auto; max-width: 80ch; }
+.explorer .brief-bar .brief { margin: 0 auto; max-width: var(--x-measure); }
 .explorer .brief-summary { cursor: pointer; }
 .explorer .brief-summary .brief-title { margin-right: 8px; }
 .explorer .brief-goal-line { color: var(--dim); }

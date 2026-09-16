@@ -1,0 +1,280 @@
+/* The tuning panel's own look.
+ *
+ * Deliberately written in literal values and system fonts, using none of the
+ * app's tokens and none of Tailwind's utilities. The panel is the instrument,
+ * not the subject: set the corner radius to 40px or the ink to pale grey and
+ * the page should answer while the panel stays legible enough to put it back.
+ * A panel built out of the tokens it tunes goes down with the ship.
+ *
+ * Only loaded in a tuning-enabled build (`mount.tsx`).
+ */
+
+.rt-tune,
+.rt-tune * {
+  box-sizing: border-box;
+  border-color: #dcdcdc;
+  font-family: ui-sans-serif, -apple-system, 'Segoe UI', system-ui, sans-serif;
+}
+
+.rt-tune {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 352px;
+  max-width: 100vw;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: #1c1c1c;
+  border-left: 1px solid #d8d8d8;
+  box-shadow: -8px 0 24px rgb(0 0 0 / 12%);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* The handle, when the panel is closed. Faint by default so it is out of the
+ * way, and absent entirely on a page opened with a preset in its URL — that is
+ * a page being photographed. */
+.rt-tune-handle {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2147483000;
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  border: 1px solid #c9c9c9;
+  background: #ffffff;
+  color: #555555;
+  font: 600 11px/1 ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  opacity: 0.35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rt-tune-handle:hover {
+  opacity: 1;
+}
+
+.rt-tune-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e6e6e6;
+  background: #fafafa;
+}
+.rt-tune-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.rt-tune-count {
+  color: #8a6d1f;
+  font-size: 11px;
+}
+.rt-tune-grow {
+  flex: 1;
+}
+.rt-tune-x {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: #666666;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.rt-tune-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+  flex-wrap: wrap;
+}
+.rt-tune-tab {
+  border: 1px solid #d8d8d8;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #333333;
+}
+.rt-tune-tab.on {
+  border-color: #1c1c1c;
+  background: #1c1c1c;
+  color: #ffffff;
+}
+.rt-tune-tab.off-page {
+  color: #999999;
+}
+
+.rt-tune-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 12px 16px;
+}
+
+.rt-tune-group {
+  margin-top: 12px;
+}
+.rt-tune-group-name {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8c8c8c;
+  border-bottom: 1px solid #ededed;
+  padding-bottom: 3px;
+  margin-bottom: 6px;
+}
+
+.rt-tune-row {
+  padding: 5px 0;
+}
+.rt-tune-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.rt-tune-label span:first-child {
+  flex: 1;
+  color: #333333;
+}
+.rt-tune-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: #c08a1e;
+  display: inline-block;
+}
+.rt-tune-reset {
+  border: 0;
+  background: none;
+  color: #999999;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+}
+.rt-tune-reset:hover {
+  color: #1c1c1c;
+}
+
+.rt-tune-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+.rt-tune-control input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: #444444;
+}
+.rt-tune-control input[type='text'],
+.rt-tune-control input[type='number'],
+.rt-tune-control select {
+  border: 1px solid #d5d5d5;
+  border-radius: 4px;
+  padding: 2px 5px;
+  font: 11px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+  background: #ffffff;
+  color: #1c1c1c;
+  min-width: 0;
+}
+.rt-tune-control input[type='number'] {
+  width: 68px;
+}
+.rt-tune-control input.rt-tune-wide {
+  flex: 1;
+}
+.rt-tune-control input[type='color'] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #d5d5d5;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+.rt-tune-note {
+  color: #8c8c8c;
+  font-size: 10.5px;
+  margin-top: 2px;
+}
+.rt-tune-derived {
+  color: #8a6d1f;
+}
+
+.rt-tune-foot {
+  border-top: 1px solid #e6e6e6;
+  background: #fafafa;
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rt-tune-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rt-tune-btn {
+  border: 1px solid #cfcfcf;
+  background: #ffffff;
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #1c1c1c;
+}
+.rt-tune-btn:hover:not(:disabled) {
+  border-color: #1c1c1c;
+}
+.rt-tune-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rt-tune-btn.primary {
+  background: #1c1c1c;
+  border-color: #1c1c1c;
+  color: #ffffff;
+}
+.rt-tune-status {
+  font-size: 10.5px;
+  color: #666666;
+  min-height: 14px;
+}
+.rt-tune-status.bad {
+  color: #a52a2a;
+}
+.rt-tune-preset-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.rt-tune-preset-row select,
+.rt-tune-preset-row input {
+  border: 1px solid #d5d5d5;
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 11px;
+  background: #ffffff;
+  color: #1c1c1c;
+  min-width: 0;
+}
+.rt-tune-preset-row select {
+  flex: 1;
+}
+.rt-tune-preset-row input {
+  width: 96px;
+}
+
+.rt-tune-empty {
+  color: #8c8c8c;
+  padding: 18px 0;
+}

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { toHref } from '@/lib/routing'
+import { useCellChars, usePreviewRows } from './tune'
 import {
   type HubAmaPlanResponse,
   type HubAmaReport,
@@ -585,7 +586,11 @@ function handoffHref(corpus: HubCorpusSlug, question: string): string {
  * (total_rows stays honest in the summary line).
  */
 function CountRowsTable({ rows }: { rows: Record<string, unknown>[] }) {
-  const display = rows.slice(0, 25)
+  // Both caps are design parameters — how much of an answer a preview owes the
+  // reader before the workspace — so they are knobs, not literals (`./tune.ts`).
+  const previewRows = usePreviewRows()
+  const cellChars = useCellChars()
+  const display = rows.slice(0, previewRows)
   const cols = Object.keys(display[0] ?? {})
   if (cols.length === 0) return null
   return (
@@ -605,16 +610,16 @@ function CountRowsTable({ rows }: { rows: Record<string, unknown>[] }) {
             <tr key={i} className="border-b border-border/40 align-top">
               {cols.map((c) => (
                 <td key={c} className="py-1 pr-4 text-foreground">
-                  {r[c] == null ? '—' : String(r[c]).slice(0, 200)}
+                  {r[c] == null ? '—' : String(r[c]).slice(0, cellChars)}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
-      {rows.length > 25 && (
+      {rows.length > previewRows && (
         <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-          …and {(rows.length - 25).toLocaleString()} more returned rows
+          …and {(rows.length - previewRows).toLocaleString()} more returned rows
         </p>
       )}
     </div>

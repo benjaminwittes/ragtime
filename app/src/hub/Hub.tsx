@@ -24,9 +24,12 @@ import { HubSearch } from './HubSearch'
  */
 export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
-    <main className="min-h-screen bg-lawfare-paper text-foreground">
+    // `data-tune` marks the hub as a tunable surface: `hub.css` declares the
+    // three properties the utilities below read, and the panel treats this
+    // attribute being in the DOM as "the hub is what you are looking at".
+    <main data-tune="hub" className="min-h-screen bg-lawfare-paper text-foreground">
       <HubHeader onNavigate={onNavigate} />
-      <div className="mx-auto max-w-5xl px-6 pb-16">
+      <div className="mx-auto max-w-[var(--hub-measure)] px-[var(--hub-gutter)] pb-16">
         <HubHero />
         <HubSearch onNavigate={onNavigate} />
         <SpokeGrid onNavigate={onNavigate} />
@@ -41,9 +44,11 @@ function HubHeader({ onNavigate }: { onNavigate: (path: string) => void }) {
   const explorerHref = toHref('/explorer')
   return (
     <header className="border-b border-lawfare-line bg-lawfare-paper">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+      <div className="mx-auto flex max-w-[var(--hub-measure)] items-center justify-between gap-4 px-[var(--hub-gutter)] py-4">
         <div className="flex items-baseline gap-3">
-          <span className="font-serif text-3xl font-semibold tracking-tight text-foreground">
+          {/* text-3xl, split: the size is the knob, the line-height it used to
+              carry is pinned so tuning the size cannot move the masthead's height. */}
+          <span className="font-serif text-[length:var(--hub-wordmark)] leading-[2.25rem] font-semibold tracking-tight text-foreground">
             RAGtime
           </span>
           <span className="hidden font-serif text-[15px] italic text-lawfare-text-secondary sm:inline">
