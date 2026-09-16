@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchCfrFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchCfrFacets } from '@lawfare/ragtime-client'
 
 /**
  * CFR (Code of Federal Regulations) spoke.

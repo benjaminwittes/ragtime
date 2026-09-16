@@ -4,7 +4,7 @@ import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { setAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import { cn } from '@/lib/utils'
-import type { AmaPlan } from '@/lib/worker-client'
+import type { AmaPlan } from '@lawfare/ragtime-client'
 
 /**
  * Pre-flight modal shown between AMA planning and execution. PR 4w fires

@@ -11,7 +11,9 @@
  * translate between logical paths and real URLs at the single seam in App.tsx.
  */
 
-import { links, type ParsedLink } from './links'
+import { links, type ParsedLink } from '@lawfare/ragtime-client'
+
+import { inAppHref } from './in-app-href.ts'
 
 // `/ragtime/` or `/` — guaranteed leading+trailing slash by Vite.
 const BASE = import.meta.env.BASE_URL
@@ -31,6 +33,29 @@ export function toLogical(pathname: string): string {
     return rest === '' ? '/' : rest
   }
   return pathname
+}
+
+/**
+ * An `href` → the logical path to navigate to in-app, or `null` when the browser should
+ * have it. The inverse of `toHref` for the links the app did not write itself — the
+ * markdown of an answer, where a corpus citation and an outbound article sit side by side.
+ * The rule is `in-app-href.ts`; this binds it to this deploy's mount point.
+ */
+export function toLogicalHref(href: string): string | null {
+  return inAppHref(href, BASE_PREFIX)
+}
+
+/**
+ * Go to a logical path without reloading: the History API, then the `popstate` App's
+ * router already listens for. The one writer of in-app navigation for everything that is
+ * not handed App's own `navigate` — the masthead, the way back to the hub, and every link
+ * inside an Explorer answer.
+ */
+export function navigateTo(logicalPath: string): void {
+  const here = toLogical(window.location.pathname) + window.location.search
+  if (here === logicalPath) return
+  window.history.pushState(null, '', toHref(logicalPath))
+  window.dispatchEvent(new PopStateEvent('popstate'))
 }
 
 /**

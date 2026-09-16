@@ -17,16 +17,19 @@ import { PresidentialSpokeShell } from '@/spokes/presidential/PresidentialSpokeS
 import { SanctionsSpokeShell } from '@/spokes/sanctions/SanctionsSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
+import { ExplorerPage } from '@/explorer/ExplorerPage'
 import { spokeSlugFor } from '@/lib/deep-link'
-import { parse } from '@/lib/links'
 import { toHref, toLogical } from '@/lib/routing'
-import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
+import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-client'
 
 /**
  * Top-level app shell + minimal pathname router.
  *
  * Routes:
  *   `/`                          → hub (multi-spoke landing per brief #1)
+ *   `/explorer`                  → the Explorer: a conversation that orients,
+ *                                  proposes a brief, researches, and hands off
+ *                                  into the spokes (`src/explorer/`)
  *   `/corpus/<slug>` (active)    → full `SpokeShell`
  *   `/corpus/<slug>/<id>`        → the same shell, which opens that
  *                                  document's detail sheet on mount (the
@@ -36,7 +39,8 @@ import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
  *                     soon)
  *   anything else                → "not found"
  *
- * The `/corpus/…` shapes are the deep-link grammar in `lib/links.ts`; the
+ * The `/corpus/…` shapes are the deep-link grammar — `links` in the client
+ * package (`packages/client`), the one writer and reader of those URLs; the
  * query string (`?q=`, facets, `ids=`, `mode=`) is read by the spoke, not
  * here — routing stays pathname-based.
  *
@@ -48,6 +52,7 @@ import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
 
 type Route =
   | { kind: 'hub' }
+  | { kind: 'explorer' }
   | { kind: 'privacy' }
   | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
@@ -61,7 +66,8 @@ function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { kind: 'hub' }
   if (pathname === '/privacy') return { kind: 'privacy' }
   if (pathname === '/terms') return { kind: 'terms' }
-  const link = parse(pathname)
+  if (pathname === '/explorer') return { kind: 'explorer' }
+  const link = links.parse(pathname)
   if (link) {
     // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
     // shell reads the id itself. A collection-qualified slug
@@ -99,7 +105,9 @@ function App() {
   // lands on after Stripe redirect (typically the hub at "/", but any
   // signed-in path is valid).
   const surface =
-    route.kind === 'spoke'
+    route.kind === 'explorer'
+      ? <ExplorerRoute />
+      : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
           if (!spoke) return <NotFound pathname={`/corpus/${route.slug}`} onNavigate={navigate} />
@@ -160,6 +168,22 @@ function activeSpokeShell(spoke: CorpusSpoke) {
       <SiteMasthead />
       {shell}
     </>
+  )
+}
+
+/**
+ * `/explorer`. On its own site the Explorer was the whole window and scrolled
+ * inside itself; here it is the rest of one. The route is a viewport-high
+ * column — the masthead, then the page taking what is left — so the
+ * conversation still scrolls within its own pane and the composer stays put
+ * (explorer.css, "Under the masthead").
+ */
+function ExplorerRoute() {
+  return (
+    <div className="flex h-dvh flex-col">
+      <SiteMasthead />
+      <ExplorerPage />
+    </div>
   )
 }
 

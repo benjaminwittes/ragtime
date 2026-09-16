@@ -1,4 +1,4 @@
-import type { FbiDocumentDisplayRow } from '@/lib/worker-client'
+import type { FbiDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import {
   fbiCollectionLabel,

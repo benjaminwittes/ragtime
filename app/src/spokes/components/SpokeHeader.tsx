@@ -1,6 +1,6 @@
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
-import type { CorpusHoldings, CorpusSpoke } from '../types'
+import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
 import { BackToHubLink } from './BackToHubLink'
 
 /**

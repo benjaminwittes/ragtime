@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { SemanticSearchRow } from '@/lib/worker-client'
+import type { SemanticSearchRow } from '@lawfare/ragtime-client'
 import { cn } from '@/lib/utils'
 
 /**

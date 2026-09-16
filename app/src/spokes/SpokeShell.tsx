@@ -22,7 +22,10 @@ import {
   runClaudeRead,
   runClaudeSql,
   runManualFilter,
-} from '@/lib/worker-client'
+  type CorpusHoldings,
+  type CorpusSpoke,
+  type QueryMode,
+} from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
 import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
@@ -58,11 +61,6 @@ import {
   buildClaudeSqlLabel,
   buildManualFilterLabel,
 } from './stack'
-import type {
-  CorpusHoldings,
-  CorpusSpoke,
-  QueryMode,
-} from './types'
 
 /**
  * Generic spoke renderer chassis (per the SPEC.md design rationale).

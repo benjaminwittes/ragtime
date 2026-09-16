@@ -24,7 +24,7 @@ import {
   type CongressTestimonyDetail,
   fetchCongressDocument,
   runCongressSummarizeDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { BecameLawChip, QuietBadge } from './CongressResultsList'
 import {
   billCitation,

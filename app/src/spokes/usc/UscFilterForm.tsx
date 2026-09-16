@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import type { UscFilterFields, UscTitle } from '@/lib/worker-client'
+import type { UscFilterFields, UscTitle } from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the USC spoke (v1 alpha).

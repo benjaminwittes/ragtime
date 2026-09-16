@@ -1,4 +1,4 @@
-import type { PresidentialDocumentDisplayRow } from '@/lib/worker-client'
+import type { PresidentialDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 /**

@@ -11,7 +11,7 @@ import {
   type ClemencyGrantDetail,
   type ClemencyGrantDisplayRow,
   fetchClemencyGrant,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import {
   ClemencyTypeBadge,
   ProvenanceBadge,

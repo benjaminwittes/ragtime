@@ -1,4 +1,4 @@
-import type { CommentaryDisplayRow } from '@/lib/worker-client'
+import type { CommentaryDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { commentaryRowKey } from './commentary-format'
 

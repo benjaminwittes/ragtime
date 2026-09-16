@@ -7,7 +7,7 @@ import {
   type UscAmaSynthesis,
   type UscSectionDisplayRow,
   fetchUscItemsByIds,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { TruncationBanner } from '../components/TruncationBanner'
 import { filterTruncationMarker } from '../components/truncation-marker'
 import { UscSectionRowsTable } from './UscResultsList'

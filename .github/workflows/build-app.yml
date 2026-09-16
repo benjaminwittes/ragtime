@@ -25,12 +25,18 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'index.html'
       - '.github/workflows/build-app.yml'
   push:
     branches: [main]
     paths:
       - 'app/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'index.html'
       - '.github/workflows/build-app.yml'
   workflow_dispatch:
@@ -58,9 +64,13 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: package-lock.json
 
+      # The repo is an npm workspace (`app/` + `packages/client`, the client
+      # package the app reads by source), so the one lockfile and the install
+      # live at the root; the app's own scripts still run from `app/`.
       - name: Install deps
+        working-directory: .
         run: npm ci
 
       - name: Lint
@@ -70,7 +80,11 @@ jobs:
       # literally named `build` (build-noop.yml exists to keep that satisfiable
       # on doc-only PRs), so a separate `test` job would need its own noop twin
       # to avoid blocking them. Folding the step in here inherits that for free.
+      # Run from the root so both workspaces' suites run: the package's
+      # `node --test` pins the link grammar and the turn stream, the app's
+      # vitest the rest.
       - name: Test
+        working-directory: .
         run: npm test
 
       - name: Build

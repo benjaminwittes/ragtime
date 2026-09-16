@@ -18,13 +18,6 @@
  *
  * Paths are origin-relative. The app prefixes its own origin when it needs a
  * full URL; the model never sees a URL at all (it writes rt://).
- *
- * Twin: `packages/client/src/links.ts` in thomkav/ragtime-explorer, the
- * `@ragtime/client` package the Explorer page reads through. Until this app
- * consumes that package, the two files are kept identical below this
- * paragraph and pinned by the same tests (`links.test.ts` here, `test/links.test.ts`
- * there). In this app the readers are `parseRoute` (App.tsx) and the spoke
- * shells, via `readDeepLink` in `lib/routing.ts`.
  */
 
 export type LinkMode = 'manual_filter' | 'claude_ama'

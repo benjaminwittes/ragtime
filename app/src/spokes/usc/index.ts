@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchUscFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchUscFacets } from '@lawfare/ragtime-client'
 
 /**
  * USC (United States Code) spoke.

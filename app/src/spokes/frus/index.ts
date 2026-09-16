@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchFrusFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchFrusFacets } from '@lawfare/ragtime-client'
 
 /**
  * FRUS (Foreign Relations of the United States) spoke.

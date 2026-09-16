@@ -8,7 +8,7 @@ import {
   type CongressAnyDisplayRow,
   type CongressCollection,
   fetchCongressItemsByIds,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { TruncationBanner } from '../components/TruncationBanner'
 import { filterTruncationMarker } from '../components/truncation-marker'
 import { CongressRowsTable } from './CongressResultsList'

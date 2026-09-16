@@ -20,7 +20,7 @@ import {
   type CommentaryPublication,
   fetchCommentaryDocument,
   summarizeCommentaryDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /** Seed for a "more like this" pivot — carries publication because commentary
  *  MLT is per-publication (the Worker keys it 'commentary:<publication>'). */

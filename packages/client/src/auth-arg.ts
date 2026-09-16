@@ -1,4 +1,11 @@
-import type { Provider } from '@/llm/byok-context'
+/**
+ * LLM providers the worker's BYOK path accepts.
+ *
+ * Declared here rather than in the frontend's React context because this package carries
+ * no React, and the frontend now re-exports this one — it was a copy while both existed,
+ * which is a thing to keep in step by hand and therefore a thing that eventually is not.
+ */
+export type Provider = 'anthropic' | 'openai' | 'google'
 
 /**
  * Discriminated union of auth modes accepted by the Worker's billed

@@ -52,5 +52,28 @@ Your next top-up clears the small deficit.
 **Why a cost estimate on every AI action?** AI calls over large document
 sets cost real money. Showing the estimate up front keeps the tool honest
 and lets you narrow the set first if the number looks high.
+
+## The Explorer's two limits
+
+The Explorer has two separate limits, and they are easy to mistake for each
+other.
+
+**The conversation cap.** One conversation spends at most 25¢. This is a
+cap on the thread you are in, not on your day — start over and you get a
+fresh one.
+
+**The daily allowance.** A number of model calls per day, which covers your
+network rather than this tab: another tab, or another person on the same
+network, draws on the same pool. It resets at 00:00 UTC. If you reach the
+site through a shared access code, everyone holding that code draws on one
+pool, so the calls you spend are calls someone else cannot.
+
+Neither applies to a paid balance, which is metered on the balance itself.
+
+Both numbers live in the **trail** — the control in the band at the top of
+the Explorer, which also lists every tool call and what it cost. They are
+kept there rather than on screen at all times so that a page you are reading
+is the thing you asked for. The control names the number itself when a
+limit is close, and a turn that is refused says which limit refused it.
 `.trim(),
 }

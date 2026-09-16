@@ -24,7 +24,8 @@
     /* Path aliases (TypeScript 6 deprecated baseUrl; relative paths resolve
      * against the tsconfig location, which is what we want here) */
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@lawfare/ragtime-client": ["../packages/client/src/index.ts"]
     }
   },
   "include": ["src"],

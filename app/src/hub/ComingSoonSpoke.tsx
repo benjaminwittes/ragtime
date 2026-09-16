@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { toHref } from '@/lib/routing'
-import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
+import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
 
 /**
  * Landing page shown when the user navigates directly to a coming-soon

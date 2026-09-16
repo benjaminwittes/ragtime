@@ -28,7 +28,16 @@ import {
  * fast-refresh contract intact).
  */
 
-export type Provider = 'anthropic' | 'openai' | 'google'
+/**
+ * Declared by `@lawfare/ragtime-client` and re-exported here, so the app's own imports
+ * keep reading it from the context that owns the configuration. It used to be spelled out
+ * in both places and kept in step by hand: the package's copy exists because the package
+ * carries no React, not because the two are allowed to differ — a provider this file
+ * accepted and the client did not would be a request refused at the edge.
+ */
+import type { Provider } from '@lawfare/ragtime-client'
+
+export type { Provider }
 
 export type ByokConfig = {
   provider: Provider

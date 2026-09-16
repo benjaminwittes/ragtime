@@ -12,7 +12,7 @@ import {
   type SanctionsGuidanceDetail,
   type SanctionsGuidanceDisplayRow,
   fetchSanctionsGuidanceDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { guidanceTypeLabel } from './sanctions-format'
 import { ProgramChips } from './SanctionsEntityResultsList'
 

@@ -8,7 +8,7 @@ import type {
   CommentaryPostTypeFacet,
   CommentaryPublication,
   CommentaryPublicationFacet,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the Commentary spoke.

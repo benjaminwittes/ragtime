@@ -1,0 +1,23 @@
+/* The hub's tunable structure.
+ *
+ * The hub is written in Tailwind utilities, which is the right way to write it
+ * and the wrong way to tune it: `max-w-5xl` is a decision about the page's
+ * measure, but it is spelled the same as every other utility and there is
+ * nothing to take hold of. So the three that are decisions rather than details
+ * are promoted to custom properties here and referenced from the markup as
+ * `max-w-[var(--hub-measure)]` — the same value, one indirection, and a knob
+ * the panel can move while the page is open (`src/hub/tune.ts`, `src/tune/`).
+ *
+ * Scoped to `[data-tune="hub"]`, the attribute on the hub's own `<main>`. That
+ * attribute is also how the panel knows the hub is the surface you are looking
+ * at, so it is load-bearing in two directions: keep it on the element that
+ * wraps the page.
+ *
+ * Imported once from `src/index.css`.
+ */
+
+[data-tune='hub'] {
+  --hub-measure: 64rem; /* was max-w-5xl */
+  --hub-gutter: 1.5rem; /* was px-6 */
+  --hub-wordmark: 1.875rem; /* was text-3xl */
+}

@@ -10,6 +10,9 @@ on:
   pull_request:
     paths-ignore:
       - 'app/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'index.html'
       - '.github/workflows/build-app.yml'
 

@@ -1,4 +1,4 @@
-import type { LawfareArticleDisplayRow } from '@/lib/worker-client'
+import type { LawfareArticleDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 /**

@@ -6,7 +6,7 @@ import type {
   PresidentialFacetCount,
   PresidentialFilterFields,
   PresidentialPresidentCount,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the Presidential Documents spoke (brief #11 §2).

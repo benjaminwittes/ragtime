@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { DeepLinkedDocument } from './deep-link'
-import type { ParsedLink } from './links'
+import type { ParsedLink } from '@lawfare/ragtime-client'
 import { readDeepLink } from './routing'
 
 /** The deep link this shell was mounted on, read once (see `readDeepLink`). */

@@ -21,7 +21,7 @@
  *   the longer-form "how to use this" content.
  */
 
-import type { CorpusSlug } from '@/spokes/types'
+import type { CorpusSlug } from '@lawfare/ragtime-client'
 
 /**
  * Where in the navigation tree this docs entry applies. Global entries

@@ -3,7 +3,7 @@ import { Dialog } from 'radix-ui'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { startCheckout, type TopupBlock } from '@/lib/worker-client'
+import { startCheckout, type TopupBlock } from '@lawfare/ragtime-client'
 import { usePaid } from './use-paid'
 
 /**

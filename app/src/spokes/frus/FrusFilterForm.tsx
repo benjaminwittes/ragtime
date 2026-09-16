@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import type {
   FrusClassificationCount,
   FrusFilterFields,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the FRUS spoke (v1 alpha).

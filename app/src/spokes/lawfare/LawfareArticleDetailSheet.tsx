@@ -19,7 +19,7 @@ import {
   type LawfareArticleSummary,
   fetchLawfareArticle,
   summarizeLawfareArticle,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Side sheet that reads one Lawfare piece in full — an ARTICLE READER.

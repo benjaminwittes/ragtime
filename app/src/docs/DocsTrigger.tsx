@@ -15,7 +15,11 @@ export function DocsTrigger() {
       onClick={() => open()}
       aria-label="Open documentation overlay"
     >
-      <span className="font-mono mr-1">?</span> Docs
+      {/* The word goes at phone width, the glyph does not: `?` is also the keyboard
+          shortcut that opens this, so the button and the key read the same. `aria-label`
+          carries the meaning either way. */}
+      <span className="font-mono">?</span>
+      <span className="ml-1 hidden sm:inline">Docs</span>
     </Button>
   )
 }

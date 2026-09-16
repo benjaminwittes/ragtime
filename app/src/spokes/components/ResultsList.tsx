@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type {
-  AmaOutputMode,
-  AnalysisAnnotation,
-  CaseDisplayRow,
-} from '@/lib/worker-client'
-import { SNIPPET_HL_START, SNIPPET_HL_STOP } from '@/lib/worker-client'
+import {
+  type AmaOutputMode,
+  type AnalysisAnnotation,
+  type CaseDisplayRow,
+  SNIPPET_HL_START,
+  SNIPPET_HL_STOP,
+} from '@lawfare/ragtime-client'
 
 /**
  * How a result page was produced. Drives the "How this was produced"

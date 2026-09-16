@@ -20,7 +20,7 @@ import {
   type FrusPerson,
   fetchFrusDocument,
   summarizeFrusDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Side sheet showing one FRUS document's full text + provenance.

@@ -19,7 +19,7 @@ import {
   type OlcOpinionSummary,
   fetchOlcOpinion,
   summarizeOlcOpinion,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Side sheet showing one OLC opinion's full text + metadata + provenance.

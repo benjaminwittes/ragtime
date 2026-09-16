@@ -19,7 +19,7 @@ import {
   type FrDocumentSummary,
   fetchFrDocument,
   runFrSummarizeDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { DocTypeBadge } from './FrResultsList'
 import { isTodayOrLater } from './fr-format'
 
