@@ -6,11 +6,10 @@
  * repo — reviewable in a diff, openable by anyone on the branch, and nameable
  * in a URL (`#tune=<name>`) so the screenshot rig can shoot it.
  *
- * This file is rewritten wholesale by the dev middleware when you press
- * "Commit preset" (`app/vite-plugin-tune.ts`). Hand-editing is fine — it is
- * just data — but expect the panel to reformat it on the next commit. It is
- * imported only by the panel, which is dynamically imported only when tuning is
- * enabled, so committed presets never reach a production bundle.
+ * Rewritten wholesale by the dev middleware on "Commit preset"
+ * (`app/vite-plugin-tune.ts`). Hand-editing is fine — it is just data — but
+ * expect the panel to reformat it. Imported only by the panel, which is itself
+ * loaded only when tuning is enabled, so this never reaches a production build.
  */
 
 import type { TunePresets } from './store'

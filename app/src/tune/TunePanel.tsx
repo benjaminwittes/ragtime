@@ -48,7 +48,9 @@ export function TunePanel() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.altKey && (event.key === 't' || event.key === 'T')) {
+      // `code`, not `key`: on macOS Option+T is typed as "†", so a handler
+      // written against `key` never fires on the machine this is used on.
+      if (event.altKey && event.code === 'KeyT') {
         event.preventDefault()
         setOpen((v) => !v)
       }

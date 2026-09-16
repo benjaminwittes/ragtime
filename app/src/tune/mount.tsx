@@ -7,12 +7,7 @@ import './tune.css'
 import './knobs'
 import { installTuneOverlay } from './overlay'
 import { repoPresets } from './presets'
-import {
-  applyTuneOverrides,
-  localPresets,
-  readTuneHash,
-  tuneOverrides,
-} from './store'
+import { applyTuneOverrides, hydrateFromUrl, localPresets } from './store'
 import { TunePanel } from './TunePanel'
 
 /**
@@ -29,14 +24,18 @@ export function startTuning() {
   installTuneOverlay()
 
   // A named preset may live in `presets.ts`, which the store cannot see (it is
-  // dev-only, and the store ships). If the URL named one and the store came up
-  // with nothing, resolve it here.
-  const hash = readTuneHash()
-  if (hash && !hash.startsWith('~') && Object.keys(tuneOverrides()).length === 0) {
-    const preset = repoPresets[hash] ?? localPresets()[hash]
+  // dev-only, and the store ships). The store reports the name it could not
+  // resolve; finish the job here, on boot and on every hash change — editing
+  // `#tune=` in the address bar is how two tunings get compared, and that
+  // navigation never reloads the document.
+  const resolveNamed = (unresolved: string | null) => {
+    if (!unresolved) return
+    const preset = repoPresets[unresolved] ?? localPresets()[unresolved]
     if (preset) applyTuneOverrides(preset, false)
-    else console.warn(`[tune] no preset named "${hash}"`)
+    else console.warn(`[tune] no preset named "${unresolved}"`)
   }
+  resolveNamed(hydrateFromUrl())
+  window.addEventListener('hashchange', () => resolveNamed(hydrateFromUrl()))
 
   const host = document.createElement('div')
   host.id = 'rt-tune-root'

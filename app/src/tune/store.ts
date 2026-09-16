@@ -251,14 +251,39 @@ export function urlPresetName(): string | null {
  * rather than a flash of untuned content, because the CSS overlay lands in the
  * same tick as the panel.
  */
-if (TUNE_ENABLED) {
+/**
+ * Read the URL and apply what it names. Returns the preset name it could not
+ * resolve, so a caller with more presets to hand (the panel, which can see the
+ * committed ones) can finish the job.
+ *
+ * Also called on `hashchange`, because editing `#tune=` in the address bar is
+ * how two tunings get compared, and a hash-only navigation does not reload the
+ * document — without this the URL would change and the page would not.
+ */
+export function hydrateFromUrl(): string | null {
   const hash = readTuneHash()
-  if (hash) {
-    urlPreset = hash.startsWith('~') ? '(url)' : hash
-    const values = hash.startsWith('~')
-      ? decodeTuneState(hash)
-      : (localPresets()[hash] ?? null)
-    if (values) applyTuneOverrides(values, false)
+  const was = urlPreset
+  if (!hash) {
+    urlPreset = null
+    // Deleting `#tune=…` from the address bar is how the handle comes back.
+    if (was !== null) notify()
+    return null
+  }
+  urlPreset = hash.startsWith('~') ? '(url)' : hash
+  const values = hash.startsWith('~')
+    ? decodeTuneState(hash)
+    : (localPresets()[hash] ?? null)
+  if (values) {
+    applyTuneOverrides(values, false)
+    return null
+  }
+  notify() // the handle hides on a preset URL even before the values resolve
+  return hash.startsWith('~') ? null : hash
+}
+
+if (TUNE_ENABLED) {
+  if (readTuneHash()) {
+    hydrateFromUrl()
   } else {
     try {
       const raw = localStorage.getItem(SESSION_KEY)
