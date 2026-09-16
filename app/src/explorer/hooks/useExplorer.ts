@@ -3,8 +3,12 @@
  * history the worker hands back, and the one running turn. Everything the
  * page decides about phases lives here (design item 8): a follow-up after
  * research stays in research with the same brief; only an edited brief
- * starts a new research phase; "start over" is the only way to a new
- * conversation. No automatic re-orient in beta.
+ * starts a new research phase. No automatic re-orient in beta.
+ *
+ * And the conversations either side of it. `startNew` sets this one aside
+ * rather than destroying it, `open` goes back to one, and `forget` is the
+ * only verb here that loses anything — `model/conversations.ts` holds the
+ * rules and this file does the reading and writing.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -22,8 +26,21 @@ import {
 
 import { explainRefusal } from '../model/allowance.ts'
 import { mergePinnedCorpora, normalizeBrief } from '../model/brief.ts'
-import { DRAFT_KEY, PERSIST_VERSION, STORAGE_KEY, pack, restore, type Saved } from '../model/persist.ts'
-import { readLocal, removeLocal, writeLocal } from '../storage.ts'
+import {
+  CONVERSATION_PREFIX,
+  INDEX_KEY,
+  conversationKey,
+  evict,
+  readIndex,
+  reconcile,
+  spendOf,
+  summarize,
+  upsert,
+  type Index,
+  type Summary,
+} from '../model/conversations.ts'
+import { DRAFT_KEY, PERSIST_VERSION, STORAGE_KEY, fit, restore, type Saved } from '../model/persist.ts'
+import { keysLocal, readLocal, removeLocal, writeLocal } from '../storage.ts'
 import { applyEvent, newTurn, type PromptKind, type Turn } from '../model/turn.ts'
 
 export type Refusal = { status: number; code: string | null; message: string }
@@ -40,14 +57,79 @@ export type Explorer = {
   refusal: Refusal | null
   registry: CorpusRegistry | null
   pinned: string[]
+  /** The conversation on the screen. */
+  cid: string
+  /** Every conversation on this device, newest first — this one among them. */
+  conversations: Summary[]
   ask(text: string): Promise<void>
   accept(brief: ExplorerBrief): Promise<void>
-  startOver(): void
+  /** Set this conversation aside and begin another. Nothing is destroyed. */
+  startNew(): void
+  /** Return to one that was set aside. */
+  open(cid: string): void
+  /** Throw one away on purpose — the only thing here that destroys. */
+  forget(cid: string): void
   togglePin(slug: string): void
 }
 
 const ACCEPT_PROMPT = 'Proceed with the brief as shown.'
 const NO_CREDENTIAL = 'Sign in, add an Anthropic key, or enter the demo password to ask.'
+
+/** An id for a conversation. Only has to be unique on one device. */
+function newConversationId(): string {
+  try {
+    return crypto.randomUUID().slice(0, 8)
+  } catch {
+    return Math.random().toString(36).slice(2, 10)
+  }
+}
+
+/**
+ * What this device already has, read once before the first paint.
+ *
+ * Three things happen here and each is a way a reader could otherwise lose work. The
+ * index is **reconciled** against the blobs actually present, so no row in the list opens
+ * an empty page. Any blob with no row is **adopted**, which is what makes the index a
+ * cache — lose it and the conversations are still found. And the **legacy** single
+ * conversation, the one key this page used before there was a list, becomes the first
+ * conversation of that list rather than being orphaned by the rename.
+ */
+function boot(now: number): { cid: string; index: Index; saved: Saved | null } {
+  const prefix = CONVERSATION_PREFIX + ':'
+  const present = keysLocal(prefix).map((k) => k.slice(prefix.length))
+  let index = reconcile(readIndex(readLocal(INDEX_KEY)), (cid) => present.includes(cid))
+
+  for (const cid of present) {
+    if (index.items.some((i) => i.cid === cid)) continue
+    const raw = readLocal(conversationKey(cid))
+    const s = raw ? restore(raw, now) : null
+    if (s && raw) index = upsert(index, summarize(cid, s, raw.length, spendOf(s.turns)))
+    else removeLocal(conversationKey(cid))
+  }
+
+  const legacy = readLocal(STORAGE_KEY)
+  if (legacy) {
+    const s = restore(legacy, now)
+    if (s) {
+      const cid = newConversationId()
+      if (writeLocal(conversationKey(cid), legacy)) {
+        index = { ...upsert(index, summarize(cid, s, legacy.length, spendOf(s.turns))), current: cid }
+        removeLocal(STORAGE_KEY)
+      }
+    } else {
+      removeLocal(STORAGE_KEY)
+    }
+  }
+
+  const current = index.current && index.items.some((i) => i.cid === index.current) ? index.current : null
+  if (current) {
+    const s = restore(readLocal(conversationKey(current)), now)
+    if (s) return { cid: current, index, saved: s }
+  }
+  // Nothing to resume. A new id, and the ones set aside still listed beside it.
+  const cid = newConversationId()
+  return { cid, index: { ...index, current: cid }, saved: null }
+}
 
 export type ExplorerOptions = {
   /** The worker origin. */
@@ -65,7 +147,10 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
   // Read once, at the first render, rather than in an effect: an effect would paint the
   // empty state first and then replace it, so a reader coming back would watch their own
   // conversation appear to be gone before it appeared to return.
-  const [saved] = useState<Saved | null>(() => restore(readLocal(STORAGE_KEY), Date.now()))
+  const [booted] = useState(() => boot(Date.now()))
+  const saved = booted.saved
+  const [cid, setCid] = useState(booted.cid)
+  const [conversations, setConversations] = useState<Summary[]>(booted.index.items)
   const [turns, setTurns] = useState<Turn[]>(() => saved?.turns ?? [])
   const [brief, setBrief] = useState<ExplorerBrief | null>(() => saved?.brief ?? null)
   const [proposed, setProposed] = useState<ExplorerBrief | null>(() => saved?.proposed ?? null)
@@ -99,16 +184,42 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
     stateRef.current = { turns, brief, proposed, pinned }
   }, [turns, brief, proposed, pinned])
 
+  // The same reason `stateRef` exists: `pagehide` fires long after the render that knew
+  // which conversation was open and what else was on the device.
+  const cidRef = useRef(cid)
+  useEffect(() => {
+    cidRef.current = cid
+  }, [cid])
+  const indexRef = useRef<Index>(booted.index)
+
+  /** The index, to the device and to the list, in one place so the two cannot disagree. */
+  const writtenRef = useRef<string | null>(null)
+  const commitIndex = useCallback((next: Index) => {
+    indexRef.current = next
+    const raw = JSON.stringify(next)
+    // A first visit with nothing on it still runs the save effect once, and every settled
+    // turn commits again. Writing a byte-identical index is a write nobody asked for.
+    if (raw !== writtenRef.current) {
+      writtenRef.current = raw
+      writeLocal(INDEX_KEY, raw)
+    }
+    setConversations(next.items)
+  }, [])
+
   const saveNow = useCallback(() => {
     const s = stateRef.current
+    const c = cidRef.current
     // Pins with no turns are still a conversation being set up, and worth keeping. Only
-    // an empty everything clears the key — otherwise "start over" and "never started"
-    // would be told apart by nothing.
+    // an empty everything clears the key — otherwise "started and emptied" and "never
+    // started" would be told apart by nothing. An empty conversation is not listed
+    // either: a row that opens nothing is worse than no row.
     if (!s.turns.length && !s.pinned.length && !s.brief) {
-      removeLocal(STORAGE_KEY)
+      removeLocal(conversationKey(c))
+      commitIndex({ ...indexRef.current, current: c, items: indexRef.current.items.filter((i) => i.cid !== c) })
       return
     }
-    const raw = pack({
+    const savedAt = Date.now()
+    const packed = fit({
       v: PERSIST_VERSION,
       turns: s.turns,
       brief: s.brief,
@@ -116,10 +227,31 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
       pinned: s.pinned,
       messages: conv.current.messages,
       envelope: conv.current.envelope,
-      savedAt: Date.now(),
+      savedAt,
     })
-    if (raw) writeLocal(STORAGE_KEY, raw)
-  }, [])
+    if (!packed) return
+    // Summarised from what was actually written, never from what was offered: over budget
+    // `fit` drops the oldest turns, and a list promising turns the blob no longer holds
+    // would be the same lie this whole file exists to stop telling.
+    const summary = summarize(c, packed.saved, packed.raw.length, spendOf(packed.saved.turns))
+    let next = upsert({ ...indexRef.current, current: c }, summary)
+
+    if (!writeLocal(conversationKey(c), packed.raw)) {
+      // The origin is full. What the reader is doing now is worth more than what they
+      // did last week, so the oldest go and the write is tried once more — under a
+      // budget of nothing, which asks for every conversation but this one.
+      const { index: freed, drop } = evict(next, 0, 1)
+      for (const d of drop) removeLocal(conversationKey(d))
+      next = freed
+      if (!writeLocal(conversationKey(c), packed.raw)) {
+        commitIndex({ ...next, items: next.items.filter((i) => i.cid !== c) })
+        return
+      }
+    }
+    const { index: kept, drop } = evict(next)
+    for (const d of drop) removeLocal(conversationKey(d))
+    commitIndex(kept)
+  }, [commitIndex])
 
   // Saved when a turn settles, not while it streams: a running turn writes on every token,
   // and the thing being written is the whole conversation.
@@ -250,26 +382,82 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
     [run],
   )
 
-  const startOver = useCallback(() => {
+  /** Put whatever is on the screen into `state`, and stop whatever is running. */
+  const show = useCallback((s: Saved | null) => {
     abort.current?.abort()
     abort.current = null
-    turnsRef.current = []
-    setTurns([])
-    setBrief(null)
-    setProposed(null)
+    turnsRef.current = s?.turns ?? []
+    pinnedRef.current = s?.pinned ?? []
+    setTurns(s?.turns ?? [])
+    setBrief(s?.brief ?? null)
+    setProposed(s?.proposed ?? null)
+    setPinned(s?.pinned ?? [])
     setRefusal(null)
     setBusy(false)
-    conv.current = { messages: [], envelope: null }
-    // Start over is the only thing that forgets, so it has to forget on the device too —
-    // otherwise the next visit restores the conversation the reader just discarded. The
-    // draft goes with it: it was typed at that conversation, not at the next one.
-    removeLocal(STORAGE_KEY)
+    conv.current = { messages: s?.messages ?? [], envelope: s?.envelope ?? null }
+    // The draft was typed at the conversation being left, not at the one being opened.
     removeLocal(DRAFT_KEY)
   }, [])
+
+  /**
+   * Begin another conversation.
+   *
+   * This is what "start over" used to be, and the difference is the whole point: the one
+   * being left is written down first and stays in the list. A research turn costs real
+   * money, and the old behaviour threw the answer away on one tap with no confirmation
+   * and no way back.
+   */
+  const startNew = useCallback(() => {
+    saveNow()
+    const next = newConversationId()
+    setCid(next)
+    cidRef.current = next
+    commitIndex({ ...indexRef.current, current: next })
+    show(null)
+  }, [commitIndex, saveNow, show])
+
+  /** Return to one that was set aside. The one being left is written down first. */
+  const open = useCallback(
+    (target: string) => {
+      if (target === cidRef.current) return
+      saveNow()
+      const s = restore(readLocal(conversationKey(target)), Date.now())
+      if (!s) {
+        // The row outlived its blob. Drop it rather than opening an empty page.
+        commitIndex({ ...indexRef.current, items: indexRef.current.items.filter((i) => i.cid !== target) })
+        return
+      }
+      setCid(target)
+      cidRef.current = target
+      commitIndex({ ...indexRef.current, current: target })
+      show(s)
+    },
+    [commitIndex, saveNow, show],
+  )
+
+  /** Throw one away. The only thing here that destroys, and it is always asked for. */
+  const forget = useCallback(
+    (target: string) => {
+      removeLocal(conversationKey(target))
+      const items = indexRef.current.items.filter((i) => i.cid !== target)
+      if (target !== cidRef.current) {
+        commitIndex({ ...indexRef.current, items })
+        return
+      }
+      // Forgetting the one on the screen leaves the page on a conversation that no longer
+      // exists, so it becomes a new one — which is what the reader asked for by emptying it.
+      const next = newConversationId()
+      setCid(next)
+      cidRef.current = next
+      commitIndex({ ...indexRef.current, current: next, items })
+      show(null)
+    },
+    [commitIndex, show],
+  )
 
   const togglePin = useCallback((slug: string) => {
     setPinned((p) => (p.includes(slug) ? p.filter((x) => x !== slug) : p.concat(slug)))
   }, [])
 
-  return { turns, brief, proposed, phase, awaitingReply, busy, refusal, registry, pinned, ask, accept, startOver, togglePin }
+  return { turns, brief, proposed, phase, awaitingReply, busy, refusal, registry, pinned, cid, conversations, ask, accept, startNew, open, forget, togglePin }
 }

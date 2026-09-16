@@ -91,10 +91,23 @@ export function settle(t: Turn, now: number): Turn {
  * written, because a blob that cannot hold one turn cannot hold a conversation.
  */
 export function pack(s: Saved): string | null {
+  return fit(s)?.raw ?? null
+}
+
+/**
+ * The same trim, with the trimmed conversation handed back alongside its bytes.
+ *
+ * The conversation list summarises what a reader will actually get back — a turn count
+ * and a spend — and `pack` alone cannot tell it, because the turns it dropped are gone by
+ * the time it returns a string. Reading them back out of the string would mean parsing a
+ * megabyte on every save; this is the same loop, returning what it already knows.
+ */
+export function fit(s: Saved): { saved: Saved; raw: string } | null {
   let turns = s.turns
   for (;;) {
-    const raw = JSON.stringify({ ...s, turns })
-    if (raw.length <= BUDGET_BYTES) return raw
+    const saved = { ...s, turns }
+    const raw = JSON.stringify(saved)
+    if (raw.length <= BUDGET_BYTES) return { saved, raw }
     if (turns.length <= 1) return null
     turns = turns.slice(1)
   }

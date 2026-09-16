@@ -26,6 +26,24 @@ export function writeLocal(key: string, value: string): boolean {
   }
 }
 
+/**
+ * Every key under a prefix. What makes the conversation index a cache rather than a
+ * record: the blobs can be enumerated, so an index that is lost, half-written or out of
+ * step with them can be rebuilt from what is actually there.
+ */
+export function keysLocal(prefix: string): string[] {
+  try {
+    const out: string[] = []
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i)
+      if (k && k.startsWith(prefix)) out.push(k)
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
 export function removeLocal(key: string): void {
   try {
     window.localStorage.removeItem(key)

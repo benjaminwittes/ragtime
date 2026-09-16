@@ -23,6 +23,27 @@ export function plural(n: number, word: string, words?: string): string {
   return n + ' ' + (n === 1 ? word : (words ?? word + 's'))
 }
 
+/**
+ * When a conversation was last worked on, for the list.
+ *
+ * Coarse on purpose. The reader is picking between a handful of rows, and "3 days ago"
+ * separates them as well as a timestamp would while reading as something a person would
+ * say. Past a week the date is the useful thing, because "23 days ago" is arithmetic the
+ * reader then has to do.
+ */
+export function ago(then: number, now: number): string {
+  const ms = now - then
+  if (!Number.isFinite(ms) || ms < 60_000) return 'just now'
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 60) return plural(minutes, 'min') + ' ago'
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return plural(hours, 'hour') + ' ago'
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'yesterday'
+  if (days < 7) return days + ' days ago'
+  return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
 const TOOL_LABELS: Record<string, string> = {
   search_keyword: 'keyword search',
   search_semantic: 'semantic search',

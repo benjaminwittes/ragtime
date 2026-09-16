@@ -17,6 +17,7 @@ import { EmptyState } from './components/EmptyState.tsx'
 import { Meter } from './components/Meter.tsx'
 import { Point } from './components/Point.tsx'
 import { Trail } from './components/Trail.tsx'
+import { Conversations } from './Conversations.tsx'
 
 /**
  * `/explorer` — the Explorer as a page of this app.
@@ -137,22 +138,28 @@ export function ExplorerPage() {
               {trail.label}
             </Button>
           )}
-          {started && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // Closing the trail is not tidiness, it is the way back. Starting over
-                // empties the turns, which unmounts the control above — and below 900px
-                // an open trail hides the conversation, so leaving it open would strand
-                // the reader on an empty panel with nothing left to press.
+          {(started || x.conversations.length > 0) && (
+            <Conversations
+              conversations={x.conversations}
+              current={x.cid}
+              disabled={x.busy}
+              onNew={() => {
+                // Closing the trail is not tidiness, it is the way back. A new
+                // conversation empties the turns, which unmounts the control above — and
+                // below 900px an open trail hides the conversation, so leaving it open
+                // would strand the reader on an empty panel with nothing left to press.
                 setTrailOpen(false)
-                x.startOver()
+                x.startNew()
               }}
-            >
-              Start over
-            </Button>
+              onOpen={(cid) => {
+                setTrailOpen(false)
+                x.open(cid)
+              }}
+              onForget={(cid) => {
+                setTrailOpen(false)
+                x.forget(cid)
+              }}
+            />
           )}
           <AccessSettings />
           <DocsTrigger />
