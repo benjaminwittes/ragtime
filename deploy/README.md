@@ -70,14 +70,31 @@ that before flipping the cloud, not after.
 
 ## DNS, and the order that keeps a way back
 
-Stage on a second hostname first. `ragtime.lawfaremedia.org` keeps pointing at
-GitHub Pages until the box is proven on its own name.
+Prove the box under a real certificate on a second hostname first.
+`ragtime.lawfaremedia.org` keeps pointing at GitHub Pages until it passes.
+
+The box is the replacement; the second hostname is not. It exists only so the
+certificate, the headers and the routing can be checked before the live name
+moves, and it is **deleted at cutover** — see the warning below.
 
 1. `A ragtime-app.lawfaremedia.org → <box ip>`, **DNS only / grey cloud**.
 2. Deploy, then check the box on that hostname: headers present, a deep link
    returns 200, `/assets/*` is immutable, `/legacy.html` still resolves.
 3. Lower the TTL on `ragtime.lawfaremedia.org` well ahead of the move.
-4. Repoint `ragtime.lawfaremedia.org` at the box.
+4. Repoint `ragtime.lawfaremedia.org` from `CNAME benjaminwittes.github.io` to
+   `A <box ip>`, grey cloud.
+5. **Delete the `ragtime-app` record.** Not tidiness. If the live name is ever
+   orange-clouded, a second grey-clouded record on the same box publishes the
+   origin address, and anyone who reaches the origin directly has bypassed the
+   proxy completely. Leaving it is how people come to believe they are behind a
+   CDN when they are not.
+
+Record annotations: this zone tags rather than comments — the other RAGtime
+records carry `cf_tags=ragtime`, so these should too. A comment should answer
+what a stranger asks on finding a record they did not create: what is at the
+other end, why the cloud is set as it is, and where the runbook lives. Cloudflare
+caps comments at 100 characters, and zone exports get shared, so nothing
+sensitive goes in one.
 
 **Do not delete the GitHub Pages site.** Rollback is repointing that record back
 at `benjaminwittes.github.io`, and it only works while Pages is still publishing.
