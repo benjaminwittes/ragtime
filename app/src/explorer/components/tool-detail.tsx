@@ -1,6 +1,6 @@
 import { links, type ExplorerToolDetail } from '@lawfare/ragtime-client'
 
-import { toHref } from '@/lib/routing'
+import { AppLink } from '@/components/AppLink'
 import { plural } from '../model/format.ts'
 
 /**
@@ -53,9 +53,9 @@ function Detail({ detail, corpus }: { detail: ExplorerToolDetail; corpus?: strin
                     <span key={i}>
                       {i > 0 && '; '}
                       {t.id !== null ? (
-                        <a href={toHref(links.document({ slug: h.corpus, id: t.id }))} target="_blank" rel="noreferrer noopener">
+                        <AppLink to={links.document({ slug: h.corpus, id: t.id })}>
                           {t.title ?? String(t.id)}
-                        </a>
+                        </AppLink>
                       ) : (
                         t.title
                       )}
@@ -83,9 +83,9 @@ function Detail({ detail, corpus }: { detail: ExplorerToolDetail; corpus?: strin
                   {String(d.id)} — {d.error}
                 </span>
               ) : slug && d.id !== null ? (
-                <a href={toHref(links.document({ slug, id: d.id }))} target="_blank" rel="noreferrer noopener">
+                <AppLink to={links.document({ slug, id: d.id })}>
                   {d.title ?? String(d.id)}
-                </a>
+                </AppLink>
               ) : (
                 (d.title ?? String(d.id))
               )}

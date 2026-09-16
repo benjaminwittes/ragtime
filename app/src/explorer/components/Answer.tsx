@@ -1,6 +1,6 @@
 import type { ExplorerBrief } from '@lawfare/ragtime-client'
 
-import { toHref } from '@/lib/routing'
+import { AppLink } from '@/components/AppLink'
 import { detectShape, firstCitation, firstNumber, linkifyCitations, splitListAnswer } from '../model/answer-shape.ts'
 import { costLine, stopBadge } from '../model/format.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from '../model/sources.ts'
@@ -41,13 +41,7 @@ export function Answer({ turn, priorTurns, brief, now }: Props) {
           {split.cards.map((c, i) => (
             <li key={i} className="card">
               <div className="card-title">
-                {c.path ? (
-                  <a href={toHref(c.path)} target="_blank" rel="noreferrer noopener">
-                    {c.title}
-                  </a>
-                ) : (
-                  c.title
-                )}
+                {c.path ? <AppLink to={c.path}>{c.title}</AppLink> : c.title}
               </div>
               {c.body && <Markdown text={c.body} className="card-body" titles={titles} />}
             </li>
@@ -67,9 +61,9 @@ export function Answer({ turn, priorTurns, brief, now }: Props) {
           <div className="count">
             <span className="count-number">{n}</span>
             {ws && (
-              <a className="count-link" href={toHref(ws.url)} target="_blank" rel="noreferrer noopener">
-                open in the workspace ↗
-              </a>
+              <AppLink className="count-link" to={ws.url}>
+                open in the workspace →
+              </AppLink>
             )}
           </div>
         )}
@@ -81,9 +75,9 @@ export function Answer({ turn, priorTurns, brief, now }: Props) {
     body = (
       <>
         {c && (
-          <a className="document-open" href={toHref(c.path)} target="_blank" rel="noreferrer noopener">
-            Open {titles.get(c.path) ?? c.title} ↗
-          </a>
+          <AppLink className="document-open" to={c.path}>
+            Open {titles.get(c.path) ?? c.title} →
+          </AppLink>
         )}
         <Markdown text={answer} titles={titles} />
       </>
@@ -133,9 +127,7 @@ function Sources({ report }: { report: ReturnType<typeof sourcesOf> }) {
           {report.sources.map((s) => (
             <li key={s.slug + '/' + s.id} className={s.read ? 'read' : 'seen'}>
               <span className={'tag ' + (s.read ? 'tag-read' : 'tag-seen')}>{s.read ? 'read' : 'from search'}</span>
-              <a href={toHref(s.path)} target="_blank" rel="noreferrer noopener">
-                {s.title}
-              </a>
+              <AppLink to={s.path}>{s.title}</AppLink>
               <span className="source-slug">{s.slug}</span>
             </li>
           ))}
@@ -147,9 +139,7 @@ function Sources({ report }: { report: ReturnType<typeof sourcesOf> }) {
           {report.readUncited.map((s, i) => (
             <span key={s.slug + '/' + s.id}>
               {i > 0 && ', '}
-              <a href={toHref(s.path)} target="_blank" rel="noreferrer noopener">
-                {s.title}
-              </a>
+              <AppLink to={s.path}>{s.title}</AppLink>
             </span>
           ))}
         </div>

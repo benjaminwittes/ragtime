@@ -1,4 +1,5 @@
-import { toHref } from '@/lib/routing'
+import { AppLink } from '@/components/AppLink'
+
 import { cents, plural, seconds, toolLabel } from '../model/format.ts'
 import { workspaceHandoffs } from '../model/sources.ts'
 import { TERMINAL_TOOLS, lastCost, roundCosts, type TrailCall, type Turn } from '../model/turn.ts'
@@ -38,9 +39,9 @@ export function Trail({ turns }: { turns: Turn[] }) {
               </div>
             ))}
             {workspaceHandoffs(turn).map((h, i) => (
-              <a key={i} className="handoff" href={toHref(h.url)} target="_blank" rel="noreferrer noopener">
+              <AppLink key={i} className="handoff" to={h.url}>
                 {h.label || h.url}
-              </a>
+              </AppLink>
             ))}
             {!turn.running && turn.stop && turn.stop !== 'end_turn' && <div className="trail-stop">ended: {turn.stop.replace('_', ' ')}</div>}
           </section>

@@ -252,7 +252,7 @@
 .explorer .hit-miss { color: var(--faint); font-size: 12px; }
 .explorer .hit-chars { color: var(--faint); font-size: 11px; }
 .explorer .handoff { display: block; margin: 4px 0; font-size: 13px; text-decoration: none; }
-.explorer .handoff::before { content: '↗ '; }
+.explorer .handoff::before { content: '→ '; }
 .explorer .trail-stop { color: var(--warn); font-size: 12px; }
 
 /* Settings dialog */
@@ -337,6 +337,12 @@
  * found by looking (the answer's links lost their underline, markdown lists their
  * markers). Add to this block rather than editing the rules above. */
 .explorer .md a, .explorer .source-list a, .explorer .hit-top a, .explorer .sources-extra a { text-decoration: underline; text-underline-offset: 2px; }
+/* An answer mixes this site's corpora with the open web, and the two used to look alike.
+   `↗` is what the rest of the site puts on a link that leaves it (the source column in
+   every results list, the detail headers); an in-app citation wears nothing, as here. */
+/* inline-block so the link's underline stops at the word: text-decoration is drawn by the
+   ancestor across its descendants, and only an independent formatting context escapes it. */
+.explorer .md a[target='_blank']::after { content: '↗'; display: inline-block; margin-left: 0.15em; text-decoration: none; }
 .explorer .md ul { list-style: disc; }
 .explorer .md ol { list-style: decimal; }
 
