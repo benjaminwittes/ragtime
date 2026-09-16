@@ -135,7 +135,13 @@ export function ExplorerPage() {
               aria-controls="trail"
               onClick={() => setTrailOpen((open) => !open)}
             >
-              {trail.label}
+              {/* Abbreviated below `sm`, like "AI access" and "Docs" either side of it.
+                  The two labels that only appear when a limit is close were also the two
+                  too wide for the row at 390, so the band wrapped onto a second row at
+                  exactly the moment it had something to say. `attention` holds both
+                  wordings; which one is on screen is a question about the width. */}
+              <span className="sm:hidden">{trail.short}</span>
+              <span className="hidden sm:inline">{trail.label}</span>
             </Button>
           )}
           {(started || x.conversations.length > 0) && (

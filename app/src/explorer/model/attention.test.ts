@@ -11,6 +11,7 @@ function pool(patch: Partial<Allowance> = {}): Allowance {
 test('at rest it says nothing but its own name', () => {
   assert.deepEqual(attention({ spendCents: 0, capCents: 25, pool: pool({ used: 0 }) }), {
     label: 'Trail',
+    short: 'Trail',
     hot: false,
   })
 })
@@ -27,6 +28,7 @@ test('near the conversation cap it carries the number that is near', () => {
   const a = attention({ spendCents: 21, capCents: 25, pool: pool() })
   assert.equal(a.hot, true)
   assert.equal(a.label, '21¢ of 25¢')
+  assert.equal(a.short, '21/25¢')
 })
 
 test('the threshold is the stated one, and it is inclusive', () => {
@@ -40,6 +42,7 @@ test('a filling daily allowance warns about later', () => {
   const a = attention({ spendCents: 1, capCents: 25, pool: pool({ used: 54, cap: 60 }) })
   assert.equal(a.hot, true)
   assert.equal(a.label, '54 of 60 calls')
+  assert.equal(a.short, '54/60')
 })
 
 test('a spent allowance outranks a conversation near its cap', () => {
@@ -48,6 +51,26 @@ test('a spent allowance outranks a conversation near its cap', () => {
   // useful true thing to say.
   const a = attention({ spendCents: 24, capCents: 25, pool: pool({ spent: true }) })
   assert.equal(a.label, 'Allowance used up')
+  assert.equal(a.short, 'Used up')
+})
+
+test('every label a phone can be shown fits the row it has to fit', () => {
+  // The band gives this control between 74 and 85px at 390 before the row wraps, measured
+  // in Chrome by widening the label until it did (see `Attention.short`). The longest of
+  // these is "Used up" at 67px. The character count is a proxy standing in for that
+  // measurement so a lengthened string fails here rather than on somebody's phone — and it
+  // is deliberately tighter than it needs to be, because the proxy is the weak part: "No
+  // calls left" is 13 characters and 87px, and was written and measured before this said 9.
+  const cases = [
+    attention({ spendCents: 0, capCents: 25, pool: pool({ used: 0 }) }),
+    attention({ spendCents: 21, capCents: 25, pool: pool() }),
+    attention({ spendCents: 1, capCents: 25, pool: pool({ used: 54, cap: 60 }) }),
+    attention({ spendCents: 24, capCents: 25, pool: pool({ spent: true }) }),
+  ]
+  for (const a of cases) {
+    assert.ok(a.short.length <= 9, `${a.short} is ${a.short.length} characters, over budget`)
+    assert.ok(a.short.length > 0)
+  }
 })
 
 test('a paid reader has no pool, so nothing warns about one', () => {
