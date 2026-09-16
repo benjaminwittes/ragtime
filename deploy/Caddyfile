@@ -1,0 +1,65 @@
+# Caddy config for the RAGtime single-page app.
+#
+# Two environment variables, both set in /etc/default/caddy on the box:
+#   SITE_HOST   the hostname this box answers on. Staging and production use the
+#               same file; only this differs.
+#   API_ORIGIN  the Worker's origin, for connect-src. It moves when the API moves
+#               off workers.dev, and a stale value here shows up as a CSP report
+#               rather than as a broken app, because the full policy is
+#               report-only (see below).
+#
+# Root is a symlink the deploy flips, so a rollback is one `ln -sfn` and needs no
+# rebuild. See deploy/README.md.
+
+{$SITE_HOST} {
+	root * /srv/ragtime-app/current
+	encode zstd gzip
+
+	header {
+		# Enforced. HSTS without `preload`, deliberately: preload is a decision
+		# about the whole parent domain and this is one subdomain of a zone we do
+		# not own.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		Permissions-Policy        "geolocation=(), microphone=(), camera=()"
+		X-Frame-Options           "DENY"
+		-Server
+	}
+
+	# Framing is the one CSP directive shipped ENFORCED, on its own, because it
+	# cannot break a page that is never legitimately framed and it is the control
+	# the OAuth consent page actually needs — a consent screen inside someone
+	# else's iframe is consent taken from a user who cannot see what they granted.
+	# X-Frame-Options above covers the same ground for older clients.
+	header Content-Security-Policy "frame-ancestors 'none'"
+
+	# Everything else is REPORT-ONLY first. A content policy guessed from reading
+	# the source and shipped enforced is how a working app goes blank on a Sunday.
+	# Watch the reports, then promote this to the enforced header and delete the
+	# single-directive one above.
+	#   style-src needs 'unsafe-inline' because React `style={{...}}` props are
+	#   inline style attributes; removing that means removing them from the app.
+	#   Stripe needs nothing here: checkout is a top-level redirect, not Stripe.js.
+	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"
+
+	# Vite content-hashes everything under /assets, so the filename changes when
+	# the bytes do and the response can be cached for a year. GitHub Pages sent a
+	# flat max-age=600 on these, which is the whole reason the app carries an
+	# APP_VERSION cache-buster.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# The shell must never be cached, or a deploy is invisible until the TTL.
+	@shell path / /index.html /404.html
+	header @shell Cache-Control "no-cache"
+
+	# The SPA router owns unknown paths. try_files serves the shell with a 200,
+	# which is the point: GitHub Pages served the same bytes as a 404, so every
+	# deep link — including the OAuth consent URL — was a 404 to anything reading
+	# status codes rather than pixels.
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
