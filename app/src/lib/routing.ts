@@ -11,7 +11,7 @@
  * translate between logical paths and real URLs at the single seam in App.tsx.
  */
 
-import { links, type ParsedLink } from './links'
+import { links, type ParsedLink } from '@lawfare/ragtime-client'
 
 // `/ragtime/` or `/` — guaranteed leading+trailing slash by Vite.
 const BASE = import.meta.env.BASE_URL

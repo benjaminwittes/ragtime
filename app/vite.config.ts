@@ -40,6 +40,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
+      // The client package is a workspace sibling whose `exports` point at its
+      // build output — what an npm consumer installs. This app reads its source
+      // instead, so an edit there is live here and `tsc -b` checks both in one
+      // pass. The same mapping sits in tsconfig.app.json (`paths`) and in
+      // vitest.config.ts; the three must agree.
+      '@lawfare/ragtime-client': path.resolve(import.meta.dirname, '../packages/client/src/index.ts'),
     },
   },
 })

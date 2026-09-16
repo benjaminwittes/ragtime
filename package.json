@@ -1,0 +1,25 @@
+{
+  "name": "ragtime",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "RAGtime: the React app (app/) and the typed worker client it and the other browser UXs build on (packages/client, published as @lawfare/ragtime-client).",
+  "workspaces": [
+    "app",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w app",
+    "lint": "npm run lint -w app",
+    "check": "npm run check --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build -w app"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.3",
+    "typescript": "~6.0.2"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

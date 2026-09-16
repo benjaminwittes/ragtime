@@ -25,7 +25,7 @@ import { HubSearch } from './HubSearch'
 export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
     <main className="min-h-screen bg-lawfare-paper text-foreground">
-      <HubHeader />
+      <HubHeader onNavigate={onNavigate} />
       <div className="mx-auto max-w-5xl px-6 pb-16">
         <HubHero />
         <HubSearch onNavigate={onNavigate} />
@@ -37,7 +37,8 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   )
 }
 
-function HubHeader() {
+function HubHeader({ onNavigate }: { onNavigate: (path: string) => void }) {
+  const explorerHref = toHref('/explorer')
   return (
     <header className="border-b border-lawfare-line bg-lawfare-paper">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
@@ -54,6 +55,21 @@ function HubHeader() {
             a project of{' '}
             <span className="font-bold text-lawfare-text-secondary">Lawfare</span>
           </span>
+          {/* The Explorer is a route beside the hub, not a spoke: it has no card in
+              the grid below, so the way to it is here. Same click rule as the cards —
+              a real href, plain left-clicks routed in-app. */}
+          <a
+            href={explorerHref}
+            onClick={(e) => {
+              if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+                e.preventDefault()
+                onNavigate('/explorer')
+              }
+            }}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Explorer
+          </a>
           <DocsTrigger />
           <AccessSettings />
         </div>

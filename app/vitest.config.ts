@@ -19,7 +19,13 @@ import { fileURLToPath } from 'node:url'
  */
 export default defineConfig({
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // The client package by its source, as vite.config.ts and tsconfig.app.json
+      // resolve it. The Explorer's model tests (src/explorer/model) read it for
+      // types and for `links`; they sit outside the `src/lib` glob above.
+      '@lawfare/ragtime-client': fileURLToPath(new URL('../packages/client/src/index.ts', import.meta.url)),
+    },
   },
   test: {
     environment: 'node',

@@ -1,0 +1,32 @@
+{
+  "name": "@lawfare/ragtime-client",
+  "version": "0.1.0",
+  "description": "Typed client for the RAGtime worker: every corpus route the public frontend calls, the Explorer turn stream, the corpus registry, and the deep-link grammar.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benjaminwittes/ragtime.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/benjaminwittes/ragtime/tree/main/packages/client#readme",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node --test test/*.test.ts",
+    "test:live": "EXPLORER_LIVE=1 node --test test/live.test.ts"
+  },
+  "sideEffects": false
+}
