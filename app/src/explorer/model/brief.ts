@@ -25,6 +25,24 @@ export function mergePinnedCorpora(b: ExplorerBrief, pinned: readonly string[]):
   return normalizeBrief({ ...b, corpora: pinned.concat(b.corpora) })
 }
 
+/**
+ * What the collapsed "Search in" control reads.
+ *
+ * The chips fold away, so this is the whole of what a reader is told about a choice they
+ * made and can no longer see. That is the one thing collapsing an *input* has to get
+ * right — a hidden readout is merely absent, a hidden input that is silently in effect is
+ * a lie about what the next turn will do. So a pin is always named, and the control says
+ * "optional" only while it really is.
+ *
+ * Two names, then a count: three long corpus names wrap the control onto the second row
+ * this collapse exists to remove, and the count is enough to say "there is more here".
+ */
+export function pinnedSummary(names: readonly string[]): string {
+  if (!names.length) return 'Search in — optional'
+  if (names.length <= 2) return 'Search in · ' + names.join(', ')
+  return 'Search in · ' + names.slice(0, 2).join(', ') + ' +' + (names.length - 2)
+}
+
 /** Stable text for the card's JSON view and for "did the user change it". */
 export function briefJson(b: ExplorerBrief): string {
   return JSON.stringify(normalizeBrief(b), null, 2)

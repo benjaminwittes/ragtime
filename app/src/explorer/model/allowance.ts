@@ -65,23 +65,14 @@ export function allowanceLine(a: Allowance): string {
   return shareWord(a) + ' allowance — ' + a.used + ' of ' + a.cap + ' model calls today'
 }
 
-/**
- * What the line does not say on its own: who else is spending it, and when it comes back.
- * `conversationCalls` is what this page has watched itself spend, which is the only
- * honest number to give while the worker is not sending the pool's own count.
+/*
+ * `allowanceNote` used to live here: two sentences under the line saying who else draws
+ * on the pool and when it resets. It was documentation rather than a readout, and it was
+ * printed on every page view to say something that does not change. It is now a section
+ * of the "Access & Cost" docs entry, reachable from the same band as the trail. The
+ * refusal path did not depend on it — `explainRefusal` below carries the reset time in
+ * the words the reader needs at the moment a turn is actually refused.
  */
-export function allowanceNote(a: Allowance, conversationCalls: number): string {
-  const resets = 'It resets at 00:00 UTC.'
-  if (a.spent) {
-    return a.shared
-      ? 'Everyone with the access code draws on this one pool, and it is spent. ' + resets
-      : 'This network has spent its allowance. ' + resets
-  }
-  const who = a.shared ? 'Everyone with the access code draws on this one pool.' : 'It covers this network, not this tab.'
-  if (a.live) return who + ' ' + resets
-  const mine = conversationCalls > 0 ? ' This conversation has spent ' + conversationCalls + '.' : ''
-  return who + mine + ' ' + resets
-}
 
 /**
  * The refusal in words that are true where the reader is standing.

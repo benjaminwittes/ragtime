@@ -65,11 +65,10 @@
 .explorer button:disabled { cursor: default; opacity: 0.55; }
 
 .explorer .app { display: flex; flex-direction: column; height: 100%; }
-.explorer .top { display: flex; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
-.explorer .top h1 { font: 600 17px/1 var(--sans); margin: 0; }
-.explorer .beta { font-weight: 400; color: var(--dim); font-size: 12px; margin-left: 4px; }
-.explorer .grow { flex: 1; }
-.explorer .refusal { color: var(--bad); font-size: 13px; }
+/* `.top`, `.beta`, `.grow` and `.refusal` used to style the standalone Explorer's own
+ * top bar. Slice 1 replaced that bar with the app's band, in the app's own kit, and the
+ * rules outlived the markup by two commits — deleted here rather than left to be read as
+ * if something still used them. `.pill` stays: the conversation still wears one. */
 .explorer .home { font-size: 13px; text-decoration: none; white-space: nowrap; }
 .explorer .home:hover { text-decoration: underline; }
 
@@ -117,7 +116,15 @@
 .explorer .example { text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: calc(var(--x-radius-card) - 2px); padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
 .explorer .example:hover:not(:disabled) { border-color: var(--accent); }
 .explorer .example-shape { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); min-width: 68px; }
-.explorer .pins .label { margin-bottom: 8px; }
+/* The collapsed "Search in" control. Reads as a label rather than a button, because it is
+ * the same line the label used to be — pressing it is the discovery, and a second heavy
+ * control beside the examples would compete with them for the same glance. */
+.explorer .pins-toggle {
+  display: block; width: 100%; text-align: left; background: none; border: 0; padding: 4px 0;
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+}
+.explorer .pins-toggle:hover, .explorer .pins-toggle.on { color: var(--ink); }
+.explorer .pins-toggle + .chips { margin-top: 8px; }
 
 /* Conversation */
 .explorer .conversation { max-width: var(--x-measure); margin: 0 auto; }
@@ -201,34 +208,25 @@
 .explorer .composer { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--card); }
 .explorer .composer textarea { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; min-height: 44px; max-height: 180px; }
 
-/* The strip: what a member must not have to go looking for, across the top — the
- * conversation's meter, the day's allowance, and the one line that opens the trail. */
-.explorer .strip { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); background: var(--card); }
-.explorer .strip .meter { flex: 1; border-bottom: 0; border-right: 1px solid var(--line); }
-.explorer .strip .allowance { border-bottom: 0; border-right: 1px solid var(--line); min-width: 280px; }
-.explorer .trail-toggle {
-  background: none; border: 0; padding: 10px 14px; text-align: left; white-space: nowrap;
-  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
-}
-.explorer .trail-toggle:hover { color: var(--ink); }
-.explorer .trail-toggle.on { color: var(--accent); background: var(--accent-soft); }
-
-/* Meter and trail */
-.explorer .meter { padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 13px; color: var(--dim); }
+/* The meter and the allowance: the conversation's spend and the day's pool, both inside
+ * the trail. There is no strip across the top any more — they are read when asked for,
+ * and the band's trail control carries the number when a limit is close. Each is one
+ * line and a bar; the prose that used to sit under the allowance is in the
+ * "Access & Cost" docs entry. */
+.explorer .meter { font-size: 13px; color: var(--dim); }
 .explorer .meter-line { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .explorer .meter b { color: var(--ink); }
 .explorer .bar { height: 6px; background: #eeece7; border-radius: 3px; margin-top: 6px; overflow: hidden; }
 .explorer .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.3s; }
 .explorer .bar i.hot { background: var(--bad); }
 
-/* The daily allowance, beside the conversation's own meter — the pool a member could not
- * see before, and the one that is shared behind a gated mount. */
-.explorer .allowance { padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 13px; }
+.explorer .allowance { font-size: 13px; margin-top: 10px; }
 .explorer .allowance-line { color: var(--ink); }
-.explorer .allowance .hint { display: block; margin-top: 4px; }
-.explorer .allowance.spent { background: var(--bad-soft); border-color: #efc4c4; }
+.explorer .allowance.spent { padding: 8px 10px; margin-left: -10px; margin-right: -10px; background: var(--bad-soft); border-radius: 8px; }
 .explorer .allowance.spent .allowance-line { color: var(--bad); font-weight: 700; }
-.explorer .allowance.spent .hint { color: var(--bad); }
+
+/* The rule between the numbers and the work they are the total of. */
+.explorer .right .trail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 
 .explorer .trail-empty { color: var(--dim); padding: 10px 4px; }
 .explorer .trail-turn { margin-bottom: 14px; }
@@ -309,23 +307,13 @@
      unmounting, so a half-typed follow-up survives the look. */
   .explorer .main.with-trail { grid-template-columns: 1fr; }
   .explorer .main.with-trail .left { display: none; }
-  /* Side by side the strip is three panels wide, which a phone does not have. Stacked,
-     the toggle keeps its own row so the trail is reachable without a scroll. */
-  .explorer .strip { flex-direction: column; }
-  .explorer .strip .meter, .explorer .strip .allowance { border-right: 0; border-bottom: 1px solid var(--line); }
-  .explorer .strip .allowance { min-width: 0; }
-  .explorer .trail-toggle { padding: 8px 12px; }
-  .explorer .top { padding: 8px 12px; gap: 8px; row-gap: 6px; }
-  .explorer .top h1 { font-size: 16px; }
-  .explorer .top .pill { display: none; }         /* the meter below carries the phase */
   .explorer .left .scroll { padding: 14px; }
   .explorer .composer { padding: 10px 12px; }
   .explorer .brief-bar { padding: 8px 14px 0; }
   .explorer .bubble.user { margin-left: 6%; }
   .explorer .bubble.user.reply { margin-left: 14%; }
-  .explorer .meter { padding: 8px 12px; font-size: 12px; }
+  .explorer .meter { font-size: 12px; }
   .explorer .meter-line { gap: 4px 10px; }
-  .explorer .allowance { padding: 8px 12px; }
   /* A goal is one sentence but not always a short one, and the collapsed brief has to
      cost the same two lines whatever it says — otherwise a long goal takes the room
      back and the fix only holds for the examples it was tested on. */

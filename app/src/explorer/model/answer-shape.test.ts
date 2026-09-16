@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { citationsIn, detectShape, firstCitation, firstNumber, isCitationToken, linkifyCitations, splitListAnswer, titlesIn } from './answer-shape.ts'
 import { cents, seconds } from './format.ts'
-import { briefJson, mergePinnedCorpora, moveCorpus, normalizeBrief, sameBrief } from './brief.ts'
+import { briefJson, mergePinnedCorpora, moveCorpus, normalizeBrief, pinnedSummary, sameBrief } from './brief.ts'
 
 test('the answer shape presets are detected from free text, narrative by default', () => {
   assert.equal(detectShape('a list of the opinions with dates'), 'list')
@@ -133,4 +133,22 @@ test('a brief normalizes, pins the empty-state corpora first, and knows when it 
   assert.match(briefJson(b), /"goal": "Find them"/)
   assert.deepEqual(moveCorpus(['a', 'b', 'c'], 2, 0), ['c', 'a', 'b'])
   assert.deepEqual(moveCorpus(['a', 'b', 'c'], 0, 5), ['a', 'b', 'c'])
+})
+
+/**
+ * The collapsed control's own words. This matters more than it looks: the chips fold, so
+ * this string is the only thing standing between a reader and a scope they set and can no
+ * longer see.
+ */
+test('the folded Search in control names what is pinned, and says optional only when it is', () => {
+  assert.equal(pinnedSummary([]), 'Search in — optional')
+  assert.equal(pinnedSummary(['Federal litigation']), 'Search in · Federal litigation')
+  assert.equal(pinnedSummary(['Federal litigation', 'OLC opinions']), 'Search in · Federal litigation, OLC opinions')
+  // Past two, a count — three corpus names wrap the control onto the row this removes.
+  assert.equal(
+    pinnedSummary(['Federal litigation', 'OLC opinions', 'United States Code', 'Federal Register']),
+    'Search in · Federal litigation, OLC opinions +2',
+  )
+  // Whatever else it says, a pinned scope never reads as "optional".
+  assert.doesNotMatch(pinnedSummary(['Federal litigation']), /optional/)
 })

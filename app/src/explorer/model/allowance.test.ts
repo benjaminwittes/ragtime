@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import type { ExplorerCostEvent } from '@lawfare/ragtime-client'
 
-import { allowance, allowanceLine, allowanceNote, allowancePercent, explainRefusal } from './allowance.ts'
+import { accessAndCostEntry } from '@/docs/content/access-and-cost'
+import { allowance, allowanceLine, allowancePercent, explainRefusal } from './allowance.ts'
 
 function cost(patch: Partial<ExplorerCostEvent> = {}): ExplorerCostEvent {
   return {
@@ -48,16 +49,7 @@ test('behind a gate the pool is shared; on the page own model it is the network'
   const shared = allowance({ cost: cost({ ip_calls: 5, ip_cap: 60 }), fallbackCap: 60, shared: true })
   const own = allowance({ cost: cost({ ip_calls: 5, ip_cap: 60 }), fallbackCap: 60, shared: false })
   assert.match(allowanceLine(shared), /^Shared allowance/)
-  assert.match(allowanceNote(shared, 5), /Everyone with the access code draws on this one pool/)
   assert.match(allowanceLine(own), /^Daily allowance/)
-  assert.match(allowanceNote(own, 5), /this network/i)
-})
-
-test('with no count from the worker the note offers only what this page watched itself spend', () => {
-  const a = allowance({ cost: cost(), fallbackCap: 60, shared: true })
-  assert.match(allowanceNote(a, 6), /This conversation has spent 6\./)
-  // …and claims nothing when it has spent nothing.
-  assert.doesNotMatch(allowanceNote(a, 0), /This conversation has spent/)
 })
 
 test('a quota refusal reads as spent, whichever bucket refused', () => {
@@ -66,7 +58,6 @@ test('a quota refusal reads as spent, whichever bucket refused', () => {
     assert.equal(a.spent, true)
     assert.equal(allowancePercent(a), 100)
     assert.equal(allowanceLine(a), 'Shared allowance — used up for today')
-    assert.match(allowanceNote(a, 6), /it is spent/)
   }
 })
 
@@ -101,11 +92,17 @@ test('any refusal that is not a quota passes through untouched', () => {
   }
 })
 
-test('every note says when the pool comes back', () => {
-  for (const shared of [true, false]) {
-    for (const refusalCode of [null, 'ip_quota']) {
-      const a = allowance({ cost: cost({ ip_calls: 12 }), fallbackCap: 60, shared, refusalCode })
-      assert.match(allowanceNote(a, 3), /resets at 00:00 UTC/)
-    }
-  }
+/**
+ * This used to assert that every rendered allowance note said when the pool comes back.
+ * The note is gone from the screen, but the invariant is not: a reader still has to be
+ * able to find out. It survives in two places, and this pins both, because a promise
+ * moved into prose is the kind that rots without anything going red.
+ */
+test('a reader can still find out when the pool comes back', () => {
+  // At the moment it refuses, in the words the refusal itself carries.
+  assert.match(explainRefusal('ip_quota', 'anything', true), /00:00 UTC/)
+  // And at any other moment, in the docs entry the prose moved to.
+  assert.match(accessAndCostEntry.content, /00:00 UTC/)
+  assert.match(accessAndCostEntry.content, /daily allowance/i)
+  assert.match(accessAndCostEntry.content, /25¢/)
 })
