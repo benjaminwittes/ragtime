@@ -42,11 +42,12 @@
    Send button is 63px square at the bottom right, and the handle sat inside it — so the
    one gesture a tuner makes most on a phone, sending a question to look at the result,
    landed on a 26px dev control instead, and the control is deliberately faint enough that
-   nothing explains the miss. The middle of the right edge is over scrolling content on
-   every page here and over no control on any of them. */
+   nothing explains the miss. The middle of an edge is over scrolling content on every page
+   here and over no control on any of them — the left one, because the Explorer's pointing
+   widget takes the right (explorer.css) and two overlays on one strip is the same bug. */
 .rt-tune-handle {
   position: fixed;
-  right: 4px;
+  left: 4px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 2147483000;

@@ -278,20 +278,24 @@
  * the trail could start closed on a phone and open on a desk. They start closed on
  * both now, so nothing outside this file reads the breakpoint and there is no
  * second copy of it to keep in step. */
-/* The pointing widget (`components/Point.tsx`): a corner affordance, and an outline that
+/* The pointing widget (`components/Point.tsx`): an edge affordance, and an outline that
    follows a pointer while the picker is armed.
 
-   It used to say here that the corner never covers the composer. Measured on the page, it
-   covers the Send button at 390, 768 and 1440 alike — `elementFromPoint` at the dead
-   centre of Send returns this widget, so pressing Send opens the feedback panel instead.
-   Nobody has met that because the widget is dark: it renders only when VITE_POINT_URL is
-   set, and nothing in this repo or its workflows sets it. So this is a note rather than a
-   fix — where the affordance should go once it is switched on is a design call, and the
-   bottom-right corner is the one place the composer's primary action already owns. */
-.explorer .point { position: fixed; right: 16px; bottom: 16px; z-index: 40; }
+   On the right edge, vertically centred, rather than the bottom-right corner it used to
+   claim "never covers the composer". Measured on the page, the corner covers the Send
+   button at 390, 768 and 1440 alike — `elementFromPoint` at the dead centre of Send
+   returned this widget, so pressing Send opened the feedback panel instead. Nobody met
+   that only because the widget is dark: it renders when VITE_POINT_URL is set, and
+   nothing here sets it yet.
+
+   The page is viewport-locked — a band at the top, a composer at the bottom, a scroller
+   between — so the mid-right edge is the only strip that belongs to no control at any
+   width. The open panel is capped and scrolls, because centring a tall panel on a short
+   phone otherwise runs it off both ends at once. */
+.explorer .point { position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 40; max-height: calc(100dvh - 24px); display: flex; }
 .explorer .point-open { background: var(--card); color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font-size: 13px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10); }
 .explorer .point-open:hover { color: var(--ink); }
-.explorer .point-panel { width: min(22rem, calc(100vw - 32px)); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14); }
+.explorer .point-panel { width: min(22rem, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; align-content: start; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14); }
 .explorer .point-head { display: flex; align-items: baseline; justify-content: space-between; }
 .explorer .point-x { background: none; border: 0; color: var(--faint); font-size: 18px; line-height: 1; padding: 0 2px; }
 .explorer .point-nature, .explorer .point-about, .explorer .point-wrong { margin: 0; font-size: 12px; color: var(--dim); }

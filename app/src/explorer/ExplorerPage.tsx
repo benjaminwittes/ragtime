@@ -104,11 +104,15 @@ export function ExplorerPage() {
   return (
     <>
       <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
+        {/* Tighter at phone width than anywhere else, because 390px is where this row
+            runs out. Measured with a conversation open — so with Trail and Start over in
+            it — the band wrapped to a second row and cost 146px of 844 instead of 110.
+            The gap, the padding and the word "beta" below are what buy the row back. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-2 px-3 py-3 sm:gap-x-4 sm:px-6">
           {/* Sized down a step on a phone, where the band is competing with the question
               for the top of the screen and 390px does not have room for both at full size. */}
           <h1 className="font-serif text-lg font-bold tracking-tight text-foreground sm:text-2xl">
-            Explorer <span className="ml-1 font-sans text-xs font-normal text-muted-foreground">beta</span>
+            Explorer <span className="ml-1 hidden font-sans text-xs font-normal text-muted-foreground sm:inline">beta</span>
           </h1>
           {/* The phase pill was here too. It is gone rather than moved: at rest the empty
               state explains in prose what orient is and what it costs, and once there is a
