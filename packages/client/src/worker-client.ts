@@ -13,9 +13,12 @@
  *  - POST /corpus/entries — docket entries for one case (case-detail panel)
  *
  * WORKER URL: `workerUrl()` from ./config.ts — set by `createClient({ baseUrl })`
- * or `configureWorkerClient`, production by default. Lifted from the public
- * frontend's `app/src/lib/worker-client.ts` (ragtime-dev#168); the only edits
- * are the two relative imports above and this URL read.
+ * or `configureWorkerClient`, production by default.
+ *
+ * Lifted from the public frontend's `app/src/lib/worker-client.ts`
+ * (ragtime-dev#168) and, for a while, a twin of it — the two differed only in
+ * those imports and this URL read. The frontend's copy is deleted; this is the
+ * one, and the app imports it like any other consumer.
  */
 
 import {

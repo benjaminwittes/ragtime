@@ -42,9 +42,9 @@ client.links.parse('/corpus/olc?q=removal')         // the only reader
 
 | Module | What |
 |---|---|
-| `worker-client.ts` | Every typed wrapper the public frontend's `app/src/lib/worker-client.ts` has, lifted as one file. Three edits: two path-alias imports made relative, the `Provider` union copied out of a React context, and the Vite environment read for the worker URL replaced by `workerUrl()`. |
-| `auth-arg.ts` | The `AuthArg` discriminated union (BYOK / paid / demo) and the body and header builders, unchanged. |
-| `corpus-types.ts` | The frontend's `spokes/types.ts`: `CorpusSlug` and the spoke descriptor types, unchanged. |
+| `worker-client.ts` | Every typed wrapper for the worker's `/corpus/*` endpoints, as one file. Lifted from the public frontend, which imports it back from here — its own copy is gone. |
+| `auth-arg.ts` | The `AuthArg` discriminated union (BYOK / paid / demo), the body and header builders, and the `Provider` union the frontend's React context re-exports. |
+| `corpus-types.ts` | `CorpusSlug` and the spoke descriptor types — what the frontend used to call `spokes/types.ts`. |
 | `explorer.ts` | `POST /explorer/turn` as `AsyncIterable<ExplorerEvent>` — one variant per event name in the contract — plus `runExplorerTurn` (the same turn, collected) and `continueFrom`. |
 | `registry.ts` | `GET /corpus/registry`, typed. |
 | `links.ts` | The deep-link grammar: `workspace`, `document`, `fromCitation`, `parseCitation`, and `parse`, the one reader. Byte-for-byte what the worker emits in `handoff` events for the same inputs. |
@@ -57,6 +57,13 @@ it at call time. A second `createClient` with a different `baseUrl` reconfigures
 not just its own handle. That is the lift's honest limit: the corpus functions were written
 against a module constant, and threading a client through a hundred call sites is the step
 past two consumers, along with an OpenAPI description of the worker.
+
+The consequence for a consumer is that **the URL has to be set before anything calls a
+corpus function**, and setting it is not optional once the consumer has its own idea of
+where the worker is. The public frontend does this in `app/src/lib/worker-url.ts` — one
+environment read, `configureWorkerClient` at module load, imported first by `main.tsx`, so
+no other module's body can run before it. Skipping that step does not fail loudly; it sends
+every call to the production default while the developer believes otherwise.
 
 ## Running it
 

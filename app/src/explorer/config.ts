@@ -1,5 +1,3 @@
-import { DEFAULT_WORKER_URL } from '@lawfare/ragtime-client'
-
 /**
  * What the Explorer page is built knowing. On its own site the page kept a settings
  * dialog for the worker origin, the site links opened on, and a pasted password; here the
@@ -7,8 +5,12 @@ import { DEFAULT_WORKER_URL } from '@lawfare/ragtime-client'
  * (`@/lib/routing`), and the credential is whatever `useAuth()` resolves.
  */
 
-/** The worker origin, the same one every corpus call in the app is built on. No trailing slash. */
-export const WORKER_URL = ((import.meta.env.VITE_WORKER_URL as string | undefined) || DEFAULT_WORKER_URL).replace(/\/+$/, '')
+/**
+ * The worker origin, the same one every corpus call in the app is built on — re-exported
+ * rather than re-derived, because "the same one" was a claim this file used to make by
+ * repeating the environment read and hoping (`@/lib/worker-url`).
+ */
+export { WORKER_URL } from '@/lib/worker-url'
 
 /**
  * The daily allowance on model calls for a caller without a paid account:

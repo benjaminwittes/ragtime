@@ -20,7 +20,7 @@ import {
   type UscSectionSummary,
   fetchUscSection,
   summarizeUscSection,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Side sheet showing one USC section's full statutory text + hierarchy +

@@ -3,8 +3,8 @@ import {
   type MoreLikeThisCorpus,
   type MoreLikeThisResult,
   runMoreLikeThis,
-} from '@/lib/worker-client'
-import type { AuthArg } from '@/lib/auth-arg'
+  type AuthArg,
+} from '@lawfare/ragtime-client'
 
 /**
  * "More like this" stack runtime (briefs §3; stash-and-start-new semantics

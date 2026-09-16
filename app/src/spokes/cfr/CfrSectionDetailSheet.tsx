@@ -20,7 +20,7 @@ import {
   type CfrSectionSummary,
   fetchCfrSection,
   summarizeCfrSection,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Side sheet showing one CFR section's full regulatory text + hierarchy +

@@ -11,7 +11,7 @@ import {
   HubAmaError,
   hubAmaExecute,
   hubAmaPlan,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { useAuth } from '@/lib/use-auth'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { UsageLogAnnotation } from '@/spokes/components/UsageLogAnnotation'

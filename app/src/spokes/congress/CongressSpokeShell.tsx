@@ -16,7 +16,10 @@ import {
   runCongressFilter,
   runCongressPlan,
   runSemanticSearch,
-} from '@/lib/worker-client'
+  type CorpusHoldings,
+  type CorpusSpoke,
+  type QueryMode,
+} from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
 import { qualifiedId } from '@/lib/deep-link'
@@ -27,7 +30,6 @@ import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 import { isAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
-import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { BackToHubLink } from '../components/BackToHubLink'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'

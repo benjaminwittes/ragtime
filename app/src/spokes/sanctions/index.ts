@@ -1,9 +1,9 @@
-import type { CorpusSpoke } from '../types'
 import {
+  type CorpusSpoke,
   fetchSanctionsEntityFacets,
   fetchSanctionsGuidanceFacets,
   fetchSanctionsFrFacets,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Sanctions spoke (brief #15) — the FIRST CROSS-CORPUS SPOKE.

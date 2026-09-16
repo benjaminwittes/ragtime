@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchCorpusFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchCorpusFacets } from '@lawfare/ragtime-client'
 
 /**
  * Litigation spoke.

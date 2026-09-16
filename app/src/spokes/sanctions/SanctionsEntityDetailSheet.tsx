@@ -10,7 +10,7 @@ import {
   type SanctionsEntityDetail,
   type SanctionsEntityDisplayRow,
   fetchSanctionsEntity,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { ProgramChips } from './SanctionsEntityResultsList'
 import {
   entityTypeLabel,

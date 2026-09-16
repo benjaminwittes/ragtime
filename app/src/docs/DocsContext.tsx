@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { CorpusSlug } from '@/spokes/types'
+import type { CorpusSlug } from '@lawfare/ragtime-client'
 import { DocsOverlay } from './DocsOverlay'
 
 /**

@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchOlcFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchOlcFacets } from '@lawfare/ragtime-client'
 
 /**
  * OLC opinions spoke.

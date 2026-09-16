@@ -6,8 +6,8 @@ import {
   type CongressTurn,
   type CongressTurnsFields,
   runCongressTurns,
-} from '@/lib/worker-client'
-import type { AuthArg } from '@/lib/auth-arg'
+  type AuthArg,
+} from '@lawfare/ragtime-client'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { isBioguideId, speakerTypeTone } from './congress-format'
 

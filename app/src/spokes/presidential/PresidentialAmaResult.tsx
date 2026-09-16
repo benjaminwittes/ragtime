@@ -7,7 +7,7 @@ import {
   type PresidentialAmaSynthesis,
   type PresidentialDocumentDisplayRow,
   fetchPresidentialItemsByIds,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { TruncationBanner } from '../components/TruncationBanner'
 import { filterTruncationMarker } from '../components/truncation-marker'
 import { PresidentialDocumentRowsTable } from './PresidentialResultsList'

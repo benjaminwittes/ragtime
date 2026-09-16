@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   type SanctionsEntityFacets,
   type SanctionsEntityFilterFields,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { entityTypeLabel, listTypeLabel } from './sanctions-format'
 
 /**

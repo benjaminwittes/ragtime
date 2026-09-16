@@ -1,4 +1,4 @@
-import type { CorpusSpoke, CorpusSlug } from './types'
+import type { CorpusSpoke, CorpusSlug } from '@lawfare/ragtime-client'
 import { cfrSpoke } from './cfr'
 import { commentarySpoke } from './commentary'
 import { congressSpoke } from './congress'

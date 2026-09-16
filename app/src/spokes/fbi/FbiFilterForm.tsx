@@ -7,7 +7,7 @@ import {
   type FbiFacetCount,
   type FbiFilterFields,
   fetchFbiCollections,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the FBI Records spoke (brief #14).

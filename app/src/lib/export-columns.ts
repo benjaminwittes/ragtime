@@ -28,7 +28,7 @@ import type {
   SanctionsEntityDisplayRow,
   SanctionsGuidanceDisplayRow,
   UscSectionDisplayRow,
-} from './worker-client'
+} from '@lawfare/ragtime-client'
 
 export const LITIGATION_BASE_COLUMNS: CsvColumn<CaseDisplayRow>[] = [
   { header: 'cl_id', value: (r) => r.cl_id },

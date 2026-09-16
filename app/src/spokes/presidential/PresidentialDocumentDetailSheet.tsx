@@ -21,7 +21,7 @@ import {
   type PresidentialDocumentSummary,
   fetchPresidentialDocument,
   summarizePresidentialDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { TextQualityBadge } from './PresidentialResultsList'
 
 /**

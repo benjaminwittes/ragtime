@@ -1,4 +1,4 @@
-import type { FrDocumentDisplayRow } from '@/lib/worker-client'
+import type { FrDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { isTodayOrLater, prettyDocType } from './fr-format'
 

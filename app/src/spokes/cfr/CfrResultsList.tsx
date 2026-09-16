@@ -1,5 +1,5 @@
 import { buildCfrSourceUrl } from '@/lib/external-source-urls'
-import type { CfrSectionDisplayRow } from '@/lib/worker-client'
+import type { CfrSectionDisplayRow } from '@lawfare/ragtime-client'
 
 /**
  * CFR manual-filter results table.

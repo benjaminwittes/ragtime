@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import type { OlcFacetCount, OlcFilterFields } from '@/lib/worker-client'
+import type { OlcFacetCount, OlcFilterFields } from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the OLC spoke (v1 alpha).

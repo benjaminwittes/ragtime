@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { usePaid } from '@/auth/use-paid'
 import { useByok } from '@/llm/use-byok'
 import { useDemoPassword } from '@/lib/demo-access'
-import type { AuthArg } from '@/lib/auth-arg'
+import type { AuthArg } from '@lawfare/ragtime-client'
 
 /**
  * Resolve the single active auth mode the spoke should use for billed

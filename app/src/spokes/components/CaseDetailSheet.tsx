@@ -15,7 +15,7 @@ import {
   cleanEntryDescription,
   entryDeepLink,
   fetchCaseEntries,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Case-detail panel. Slide-in sheet from the right that loads and shows the

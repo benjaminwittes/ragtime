@@ -1,4 +1,4 @@
-import type { SanctionsEntityDisplayRow } from '@/lib/worker-client'
+import type { SanctionsEntityDisplayRow } from '@lawfare/ragtime-client'
 import { aliasLine, entityTypeLabel, listTypeLabel } from './sanctions-format'
 
 /**

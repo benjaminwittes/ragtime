@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   type SanctionsGuidanceFacets,
   type SanctionsGuidanceFilterFields,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { guidanceTypeLabel } from './sanctions-format'
 
 /**

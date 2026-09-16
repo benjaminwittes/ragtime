@@ -1,3 +1,7 @@
+// First, and deliberately: it tells `@lawfare/ragtime-client` which worker to call, and
+// that has to be settled before any other module's body can make a corpus call. See the
+// file itself for why this is an import rather than a statement below.
+import '@/lib/worker-url'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'

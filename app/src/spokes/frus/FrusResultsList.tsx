@@ -1,4 +1,4 @@
-import type { FrusDocumentDisplayRow } from '@/lib/worker-client'
+import type { FrusDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 /**

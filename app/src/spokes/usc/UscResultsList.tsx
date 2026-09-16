@@ -1,5 +1,5 @@
 import { buildUscSourceUrl } from '@/lib/external-source-urls'
-import type { UscSectionDisplayRow } from '@/lib/worker-client'
+import type { UscSectionDisplayRow } from '@lawfare/ragtime-client'
 
 /**
  * USC manual-filter results table.

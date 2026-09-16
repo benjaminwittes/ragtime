@@ -7,7 +7,7 @@ import {
   type CfrAmaSynthesis,
   type CfrSectionDisplayRow,
   fetchCfrItemsByIds,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { TruncationBanner } from '../components/TruncationBanner'
 import { filterTruncationMarker } from '../components/truncation-marker'
 import { CfrSectionRowsTable } from './CfrResultsList'

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { type AuthArg, authCredentialBody, authHeaders } from '@/lib/auth-arg'
+import { type AuthArg, authCredentialBody, authHeaders } from '@lawfare/ragtime-client'
 
 /**
  * Usage + annotation log (feature: ragtime-usage-log-feedback).

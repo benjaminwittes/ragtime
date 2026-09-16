@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import type { CfrFilterFields, CfrTitle } from '@/lib/worker-client'
+import type { CfrFilterFields, CfrTitle } from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the CFR spoke (v1 alpha).

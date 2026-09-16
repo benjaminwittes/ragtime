@@ -18,7 +18,7 @@ import {
   type FbiDocumentSummary,
   fetchFbiDocument,
   runFbiSummarizeDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { OcrQualityBadge } from './FbiResultsList'
 import {
   fbiCollectionLabel,

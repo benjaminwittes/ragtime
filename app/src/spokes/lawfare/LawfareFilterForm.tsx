@@ -7,7 +7,7 @@ import type {
   LawfareFacetCount,
   LawfareFilterFields,
   LawfareTopicFacet,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the Lawfare spoke.

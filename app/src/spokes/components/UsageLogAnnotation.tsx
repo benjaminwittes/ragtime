@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { AuthArg } from '@/lib/auth-arg'
+import type { AuthArg } from '@lawfare/ragtime-client'
 import {
   type UsageLogRecord,
   postUsageLog,

@@ -1,4 +1,4 @@
-import type { ClemencyGrantDisplayRow } from '@/lib/worker-client'
+import type { ClemencyGrantDisplayRow } from '@lawfare/ragtime-client'
 
 /**
  * Clemency grant results table. Columns: Recipient · Type · President ·

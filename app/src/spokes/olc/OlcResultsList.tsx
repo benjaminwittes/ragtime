@@ -1,4 +1,4 @@
-import type { OlcOpinionDisplayRow } from '@/lib/worker-client'
+import type { OlcOpinionDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 /**

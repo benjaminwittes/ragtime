@@ -6,7 +6,7 @@ import type {
   FrAgencyCount,
   FrFacetCount,
   FrFilterFields,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { prettyDocType } from './fr-format'
 
 /**

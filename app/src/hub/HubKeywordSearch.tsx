@@ -5,9 +5,9 @@ import {
   type HubCorpusSlug,
   type HubKeywordResponse,
   runHubKeyword,
-} from '@/lib/worker-client'
+  type CorpusSlug,
+} from '@lawfare/ragtime-client'
 import { spokes } from '@/spokes/registry'
-import type { CorpusSlug } from '@/spokes/types'
 import { useAuth } from '@/lib/use-auth'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 

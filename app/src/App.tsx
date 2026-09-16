@@ -20,8 +20,7 @@ import { getSpokeBySlug } from '@/spokes/registry'
 import { ExplorerPage } from '@/explorer/ExplorerPage'
 import { spokeSlugFor } from '@/lib/deep-link'
 import { toHref, toLogical } from '@/lib/routing'
-import type { CorpusSlug, CorpusSpoke } from '@/spokes/types'
-import { links } from '@lawfare/ragtime-client'
+import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-client'
 
 /**
  * Top-level app shell + minimal pathname router.

@@ -1,4 +1,4 @@
-import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
+import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
 
 /**
  * Session-scoped cache over `spoke.getHoldings()`.

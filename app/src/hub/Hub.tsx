@@ -5,7 +5,7 @@ import { AccessSettings } from '@/llm/AccessSettings'
 import { getHoldingsCached } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
 import { spokes } from '@/spokes/registry'
-import type { CorpusHoldings, CorpusSpoke } from '@/spokes/types'
+import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
 import { HubSearch } from './HubSearch'
 
 /**

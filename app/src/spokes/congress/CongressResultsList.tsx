@@ -6,7 +6,7 @@ import type {
   CongressLawDisplayRow,
   CongressRecordDisplayRow,
   CongressTestimonyDisplayRow,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import {
   billCitation,

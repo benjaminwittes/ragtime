@@ -1,4 +1,4 @@
-import type { SanctionsGuidanceDisplayRow } from '@/lib/worker-client'
+import type { SanctionsGuidanceDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { guidanceTypeLabel } from './sanctions-format'
 import { ProgramChips } from './SanctionsEntityResultsList'
