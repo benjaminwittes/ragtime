@@ -1,16 +1,16 @@
-import { links, type ExplorerToolDetail } from '@lawfare/ragtime-client'
-
 import { toHref } from '@/lib/routing'
 import { cents, plural, seconds, toolLabel } from '../model/format.ts'
 import { workspaceHandoffs } from '../model/sources.ts'
 import { TERMINAL_TOOLS, lastCost, roundCosts, type TrailCall, type Turn } from '../model/turn.ts'
+import { ToolDetail } from './tool-detail.tsx'
 
 /**
  * The trail (design item 4): tool calls with their summary, time and cost,
  * and workspace handoffs. Document handoffs are the sources under the
  * answer, not repeated here. Per-call cost lives here only (item 6), one
- * line per round. A structured `detail` (item 5) renders per tool family;
- * an older worker's plain `summary` renders as it is.
+ * line per round. A structured `detail` (item 5) renders per tool family
+ * (`tool-detail.tsx`); a plain `summary` renders as it is, and also stands in
+ * for a `detail` this build cannot read.
  */
 export function Trail({ turns }: { turns: Turn[] }) {
   if (!turns.length) return <div className="trail-empty">The trail shows every tool call and its cost as the model works.</div>
@@ -68,7 +68,7 @@ function Call({ call }: { call: TrailCall }) {
       {r ? (
         <div className="call-result">
           <span className="mark">{r.ok ? '✓' : '✗'}</span>
-          {r.detail ? <Detail detail={r.detail} corpus={r.corpus} /> : <span>{r.summary}</span>}
+          {r.detail ? <ToolDetail detail={r.detail} summary={r.summary} corpus={r.corpus} /> : <span>{r.summary}</span>}
           <span className="call-meta">
             {seconds(r.ms)}
             {r.cost_cents > 0 && ' · ' + cents(r.cost_cents) + ' tool'}
@@ -91,91 +91,4 @@ function inputLine(input: Record<string, unknown>): string {
     else parts.push(k + '=' + String(v).slice(0, 80))
   }
   return parts.join(' ')
-}
-
-function Detail({ detail, corpus }: { detail: ExplorerToolDetail; corpus?: string }) {
-  switch (detail.kind) {
-    case 'search': {
-      const hits = detail.hits.filter((h) => h.count > 0)
-      const misses = detail.hits.filter((h) => h.count === 0).map((h) => h.corpus)
-      if (!hits.length) return <span>no results{misses.length ? ' in ' + misses.join(', ') : ''}</span>
-      return (
-        <span className="detail">
-          {hits.map((h) => (
-            <span key={h.corpus} className="hit">
-              <b>
-                {h.corpus} {h.count.toLocaleString('en-US')}
-              </b>
-              {h.top.length > 0 && (
-                <span className="hit-top">
-                  {h.top.map((t, i) => (
-                    <span key={i}>
-                      {i > 0 && '; '}
-                      {t.id !== null ? (
-                        <a href={toHref(links.document({ slug: h.corpus, id: t.id }))} target="_blank" rel="noreferrer noopener">
-                          {t.title ?? String(t.id)}
-                        </a>
-                      ) : (
-                        t.title
-                      )}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </span>
-          ))}
-          {misses.length > 0 && <span className="hit-miss">none in {misses.join(', ')}</span>}
-        </span>
-      )
-    }
-    case 'documents': {
-      const slug = detail.corpus ?? corpus ?? null
-      return (
-        <span className="detail">
-          {detail.mode === 'full' ? 'read ' : 'looked up '}
-          {plural(detail.count, 'document')}:{' '}
-          {detail.documents.map((d, i) => (
-            <span key={i}>
-              {i > 0 && '; '}
-              {d.error ? (
-                <span className="hit-miss">
-                  {String(d.id)} — {d.error}
-                </span>
-              ) : slug && d.id !== null ? (
-                <a href={toHref(links.document({ slug, id: d.id }))} target="_blank" rel="noreferrer noopener">
-                  {d.title ?? String(d.id)}
-                </a>
-              ) : (
-                (d.title ?? String(d.id))
-              )}
-              {d.chars !== undefined && d.chars > 0 && <span className="hit-chars"> {(d.chars / 1000).toFixed(d.chars < 10000 ? 1 : 0)}k chars</span>}
-            </span>
-          ))}
-        </span>
-      )
-    }
-    case 'facets':
-      return (
-        <span className="detail">
-          {plural(detail.field_count, 'filterable field')}
-          {detail.fields.length > 0 && <span className="hit-top"> {detail.fields.join(', ')}</span>}
-          {detail.document_count !== null && ' · ' + detail.document_count.toLocaleString('en-US') + ' documents'}
-        </span>
-      )
-    case 'plan':
-      return (
-        <span className="detail">
-          plan: {detail.queries === 1 ? '1 query' : detail.queries + ' queries'}, about {detail.estimated_cost_cents}¢ to run
-        </span>
-      )
-    case 'answer':
-      return (
-        <span className="detail">
-          {detail.chars.toLocaleString('en-US')} characters, {plural(detail.citations, 'citation')}
-          {detail.candor > 0 && ', ' + plural(detail.candor, 'candor note')}
-        </span>
-      )
-    default:
-      return <span className="detail">{detail.chars.toLocaleString('en-US')} characters</span>
-  }
 }

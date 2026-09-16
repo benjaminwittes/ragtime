@@ -40,7 +40,6 @@ export type Explorer = {
   refusal: Refusal | null
   registry: CorpusRegistry | null
   pinned: string[]
-  totalCalls: number
   ask(text: string): Promise<void>
   accept(brief: ExplorerBrief): Promise<void>
   startOver(): void
@@ -272,7 +271,5 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
     setPinned((p) => (p.includes(slug) ? p.filter((x) => x !== slug) : p.concat(slug)))
   }, [])
 
-  const totalCalls = turns.reduce((n, t) => n + t.calls, 0)
-
-  return { turns, brief, proposed, phase, awaitingReply, busy, refusal, registry, pinned, totalCalls, ask, accept, startOver, togglePin }
+  return { turns, brief, proposed, phase, awaitingReply, busy, refusal, registry, pinned, ask, accept, startOver, togglePin }
 }

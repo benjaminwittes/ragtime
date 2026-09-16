@@ -37,10 +37,18 @@
 /* The handle, when the panel is closed. Faint by default so it is out of the
  * way, and absent entirely on a page opened with a preset in its URL — that is
  * a page being photographed. */
+/* On the right edge, vertically centred, rather than in the bottom-right corner it
+   started in. The corner is where a page puts its primary action: at 390px the Explorer's
+   Send button is 63px square at the bottom right, and the handle sat inside it — so the
+   one gesture a tuner makes most on a phone, sending a question to look at the result,
+   landed on a 26px dev control instead, and the control is deliberately faint enough that
+   nothing explains the miss. The middle of the right edge is over scrolling content on
+   every page here and over no control on any of them. */
 .rt-tune-handle {
   position: fixed;
-  right: 10px;
-  bottom: 10px;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 2147483000;
   width: 26px;
   height: 26px;

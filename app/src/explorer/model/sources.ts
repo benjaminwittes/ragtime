@@ -32,6 +32,22 @@ function key(slug: string, id: string | number): string {
   return slug + '/' + String(id)
 }
 
+/**
+ * The list a tool `detail` says it carries, when it actually carries one.
+ *
+ * These functions walk a shape the worker sent, and the contract is deliberately loose
+ * about it: the stream parser skips event names it does not know because additive
+ * deviation is allowed, and `detail` itself is documented as absent from a worker
+ * deployed before the field. So a `detail` whose `kind` we recognise but whose list is
+ * missing or is not a list is a thing that can arrive — and it used to throw here, in
+ * `knownTitles`, which runs while the *answer* renders. That is a white screen for a
+ * reader who never opened the trail, over a title lookup whose whole purpose is to make a
+ * link read better than its own URL. Nothing here is worth a page.
+ */
+function list<T>(v: readonly T[] | undefined): readonly T[] {
+  return Array.isArray(v) ? v : []
+}
+
 /** `slug/id` → title for every document read in full across the given turns. */
 export function readDocuments(turns: readonly Turn[]): Map<string, string> {
   const out = new Map<string, string>()
@@ -42,7 +58,7 @@ export function readDocuments(turns: readonly Turn[]): Map<string, string> {
         if (!d || d.kind !== 'documents' || d.mode !== 'full') continue
         const slug = d.corpus ?? (typeof call.input.corpus === 'string' ? call.input.corpus : null)
         if (!slug) continue
-        for (const doc of d.documents) {
+        for (const doc of list(d.documents)) {
           if (doc.id === null || doc.error) continue
           out.set(key(slug, doc.id), doc.title ?? String(doc.id))
         }
@@ -65,11 +81,11 @@ export function titleIndex(turns: readonly Turn[]): Map<string, string> {
         const d = call.result?.detail
         if (!d) continue
         if (d.kind === 'search') {
-          for (const h of d.hits) for (const t of h.top) if (t.id !== null && t.title) out.set(key(h.corpus, t.id), t.title)
+          for (const h of list(d.hits)) for (const t of list(h.top)) if (t.id !== null && t.title) out.set(key(h.corpus, t.id), t.title)
         } else if (d.kind === 'documents') {
           const slug = d.corpus ?? (typeof call.input.corpus === 'string' ? call.input.corpus : null)
           if (!slug) continue
-          for (const doc of d.documents) if (doc.id !== null && !doc.error && doc.title) out.set(key(slug, doc.id), doc.title)
+          for (const doc of list(d.documents)) if (doc.id !== null && !doc.error && doc.title) out.set(key(slug, doc.id), doc.title)
         }
       }
     }

@@ -278,8 +278,16 @@
  * the trail could start closed on a phone and open on a desk. They start closed on
  * both now, so nothing outside this file reads the breakpoint and there is no
  * second copy of it to keep in step. */
-/* The pointing widget (`components/Point.tsx`): a corner affordance that never covers the
-   composer, and an outline that follows a pointer while the picker is armed. */
+/* The pointing widget (`components/Point.tsx`): a corner affordance, and an outline that
+   follows a pointer while the picker is armed.
+
+   It used to say here that the corner never covers the composer. Measured on the page, it
+   covers the Send button at 390, 768 and 1440 alike — `elementFromPoint` at the dead
+   centre of Send returns this widget, so pressing Send opens the feedback panel instead.
+   Nobody has met that because the widget is dark: it renders only when VITE_POINT_URL is
+   set, and nothing in this repo or its workflows sets it. So this is a note rather than a
+   fix — where the affordance should go once it is switched on is a design call, and the
+   bottom-right corner is the one place the composer's primary action already owns. */
 .explorer .point { position: fixed; right: 16px; bottom: 16px; z-index: 40; }
 .explorer .point-open { background: var(--card); color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font-size: 13px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10); }
 .explorer .point-open:hover { color: var(--ink); }

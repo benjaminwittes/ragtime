@@ -1,8 +1,8 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
-import type { ExplorerBrief, ExplorerEvent } from '@lawfare/ragtime-client'
-import { acceptMarker, applyEvent, lastCost, newTurn, roundCosts, toolCalls, type Turn } from './turn.ts'
+import type { ExplorerBrief, ExplorerEvent, ExplorerToolResultEvent } from '@lawfare/ragtime-client'
+import { acceptMarker, applyEvent, lastCost, newTurn, roundCosts, type Turn } from './turn.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from './sources.ts'
 import { costLine, phasePill, stopBadge, workingLabel } from './format.ts'
 
@@ -158,6 +158,28 @@ test('sources: a citation that is its own link text is titled from the answer, e
   assert.equal(known.get('/corpus/olc/50'), 'Section 706')
 })
 
+test('sources: a detail whose list is missing costs a title, not the page', () => {
+  // The worker is allowed to be ahead of this build — the stream parser skips event names
+  // it does not know for exactly that reason — so a detail with a kind we read and a list
+  // we do not get is reachable. `knownTitles` runs while the answer renders, so throwing
+  // here white-screened a reader who never opened the trail.
+  const events: ExplorerEvent[] = [
+    { type: 'phase', phase: 'research' },
+    { type: 'tool_call', step: 1, id: 'a', name: 'search_keyword', input: { query: 'wireless', corpora: ['olc'] } },
+    { type: 'tool_result', step: 1, id: 'a', name: 'search_keyword', ok: true, summary: 'olc 2', cost_cents: 0, ms: 5,
+      detail: { kind: 'search' } as unknown as ExplorerToolResultEvent['detail'] },
+    { type: 'tool_call', step: 2, id: 'b', name: 'fetch_documents', input: { corpus: 'olc', mode: 'full', ids: ['1425'] } },
+    { type: 'tool_result', step: 2, id: 'b', name: 'fetch_documents', ok: true, summary: 'read 1', cost_cents: 0, ms: 5,
+      detail: { kind: 'documents', mode: 'full', corpus: 'olc', count: 1 } as unknown as ExplorerToolResultEvent['detail'] },
+    { type: 'text', delta: 'See [rt://olc/1425](rt://olc/1425).' },
+    { type: 'done', envelope: 'e.m', stop: 'end_turn', history: [], calls: 1 },
+  ]
+  const r = fold(newTurn(2, 'research', 'go', 'accept', 0), events)
+  // No title is known, because none was sent — and that is the whole cost.
+  assert.equal(knownTitles(r).size, 0)
+  assert.deepEqual(sourcesOf(r).sources.map((x) => x.title), ['olc/1425'])
+})
+
 test('sources: a bracketed or naked citation the worker made no handoff for is still a source, titled from the trail else slug/id', () => {
   const events: ExplorerEvent[] = [
     { type: 'phase', phase: 'research' },
@@ -219,16 +241,6 @@ test('the stop badge names the cap that ended the turn', () => {
   ])
   assert.equal(t.answer, 'Answer from what I have.')
   assert.equal(stopBadge(t.stop)?.tone, 'limit')
-})
-
-test('the trail summary counts tool calls across the conversation, not model calls', () => {
-  const orient = fold(newTurn(1, 'orient', 'emergency powers?', 'ask', 1000), orientEvents)
-  const research = fold(newTurn(2, 'research', '', 'accept', 3000), researchEvents, 3000)
-  assert.equal(toolCalls([]), 0)
-  // Two tool calls in orient (the search and propose_brief), whatever `done` said about model calls.
-  assert.equal(orient.calls, 3)
-  assert.equal(toolCalls([orient]), 2)
-  assert.equal(toolCalls([orient, research]), 2 + research.rounds.reduce((n, r) => n + r.calls.length, 0))
 })
 
 test('the accept marker names the edit from the second acceptance, and claims continuity only once there is an answer above', () => {
