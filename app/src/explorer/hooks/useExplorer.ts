@@ -22,6 +22,8 @@ import {
 
 import { explainRefusal } from '../model/allowance.ts'
 import { mergePinnedCorpora, normalizeBrief } from '../model/brief.ts'
+import { DRAFT_KEY, PERSIST_VERSION, STORAGE_KEY, pack, restore, type Saved } from '../model/persist.ts'
+import { readLocal, removeLocal, writeLocal } from '../storage.ts'
 import { applyEvent, newTurn, type PromptKind, type Turn } from '../model/turn.ts'
 
 export type Refusal = { status: number; code: string | null; message: string }
@@ -61,17 +63,26 @@ export type ExplorerOptions = {
 
 export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
   const client = useMemo(() => createClient({ baseUrl: workerUrl }), [workerUrl])
-  const [turns, setTurns] = useState<Turn[]>([])
-  const [brief, setBrief] = useState<ExplorerBrief | null>(null)
-  const [proposed, setProposed] = useState<ExplorerBrief | null>(null)
-  const [pinned, setPinned] = useState<string[]>([])
+  // Read once, at the first render, rather than in an effect: an effect would paint the
+  // empty state first and then replace it, so a reader coming back would watch their own
+  // conversation appear to be gone before it appeared to return.
+  const [saved] = useState<Saved | null>(() => restore(readLocal(STORAGE_KEY), Date.now()))
+  const [turns, setTurns] = useState<Turn[]>(() => saved?.turns ?? [])
+  const [brief, setBrief] = useState<ExplorerBrief | null>(() => saved?.brief ?? null)
+  const [proposed, setProposed] = useState<ExplorerBrief | null>(() => saved?.proposed ?? null)
+  const [pinned, setPinned] = useState<string[]>(() => saved?.pinned ?? [])
   const [busy, setBusy] = useState(false)
   const [refusal, setRefusal] = useState<Refusal | null>(null)
   const [registry, setRegistry] = useState<CorpusRegistry | null>(null)
 
-  const turnsRef = useRef<Turn[]>([])
-  const pinnedRef = useRef<string[]>([])
-  const conv = useRef<{ messages: ExplorerMessage[]; envelope: string | null }>({ messages: [], envelope: null })
+  const turnsRef = useRef<Turn[]>(saved?.turns ?? [])
+  const pinnedRef = useRef<string[]>(saved?.pinned ?? [])
+  // The conversation as the worker continues it, not as the page draws it. Restored
+  // together with the turns or neither is true (`model/persist.ts`).
+  const conv = useRef<{ messages: ExplorerMessage[]; envelope: string | null }>({
+    messages: saved?.messages ?? [],
+    envelope: saved?.envelope ?? null,
+  })
   const abort = useRef<AbortController | null>(null)
   useEffect(() => {
     turnsRef.current = turns
@@ -79,6 +90,66 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
   useEffect(() => {
     pinnedRef.current = pinned
   }, [pinned])
+
+  // The latest of everything worth keeping, readable from a listener that fires long after
+  // the render it belongs to — `pagehide` has no time to wait for React. Synced in an
+  // effect rather than assigned during render, like `turnsRef` above: a ref written while
+  // rendering is the thing `react-hooks/refs` refuses, and rightly.
+  const stateRef = useRef({ turns, brief, proposed, pinned })
+  useEffect(() => {
+    stateRef.current = { turns, brief, proposed, pinned }
+  }, [turns, brief, proposed, pinned])
+
+  const saveNow = useCallback(() => {
+    const s = stateRef.current
+    // Pins with no turns are still a conversation being set up, and worth keeping. Only
+    // an empty everything clears the key — otherwise "start over" and "never started"
+    // would be told apart by nothing.
+    if (!s.turns.length && !s.pinned.length && !s.brief) {
+      removeLocal(STORAGE_KEY)
+      return
+    }
+    const raw = pack({
+      v: PERSIST_VERSION,
+      turns: s.turns,
+      brief: s.brief,
+      proposed: s.proposed,
+      pinned: s.pinned,
+      messages: conv.current.messages,
+      envelope: conv.current.envelope,
+      savedAt: Date.now(),
+    })
+    if (raw) writeLocal(STORAGE_KEY, raw)
+  }, [])
+
+  // Saved when a turn settles, not while it streams: a running turn writes on every token,
+  // and the thing being written is the whole conversation.
+  useEffect(() => {
+    if (busy) return
+    saveNow()
+  }, [turns, brief, proposed, pinned, busy, saveNow])
+
+  /**
+   * And once more on the way out, which is the case this whole file exists for.
+   *
+   * `pagehide` and a `visibilitychange` to hidden, rather than `beforeunload`: iOS does not
+   * reliably fire `beforeunload`, and the way a phone loses a tab is not an unload at all —
+   * it is backgrounded, and then discarded later with no event of any kind. `hidden` is the
+   * last moment the page is certain to get, so it is the one that has to write. This is
+   * also the only path that saves a turn mid-stream, which is why `settle` exists: what it
+   * writes is a running turn, and what comes back has to be an interrupted one.
+   */
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') saveNow()
+    }
+    window.addEventListener('pagehide', saveNow)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      window.removeEventListener('pagehide', saveNow)
+      document.removeEventListener('visibilitychange', onHide)
+    }
+  }, [saveNow])
 
   useEffect(() => {
     let alive = true
@@ -190,6 +261,11 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
     setRefusal(null)
     setBusy(false)
     conv.current = { messages: [], envelope: null }
+    // Start over is the only thing that forgets, so it has to forget on the device too —
+    // otherwise the next visit restores the conversation the reader just discarded. The
+    // draft goes with it: it was typed at that conversation, not at the next one.
+    removeLocal(STORAGE_KEY)
+    removeLocal(DRAFT_KEY)
   }, [])
 
   const togglePin = useCallback((slug: string) => {
