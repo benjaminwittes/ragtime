@@ -36,6 +36,8 @@ node e2e/cross.mjs                       # the seam: a citation followed out, an
 E2E_W=1440 node e2e/cross.mjs            # the same at desktop width
 node e2e/band.mjs                        # whether the band keeps to one row
 node e2e/band.mjs --candidates           # measure wordings before choosing one
+node e2e/spokes.mjs                      # the hub and all eleven spokes, which this
+                                         #   branch changed without being about them
 ```
 
 `E2E_SHOTS` moves the screenshots; they land in `e2e/shots/`, which is gitignored.
@@ -73,7 +75,7 @@ await page.goto(EXPLORER, { waitUntil: 'networkidle' })
 process.exit(report() ? 1 : 0)
 ```
 
-Two things that will bite, both of which cost a debugging session here:
+Three things that will bite, each of which cost a debugging session here:
 
 - **An init script is serialised and run in the page.** A function closing over a variable
   in this file arrives there with that variable undefined and seeds nothing, silently. Pass
@@ -81,6 +83,16 @@ Two things that will bite, both of which cost a debugging session here:
 - **The stub's scenario table is built once, when the stub installs.** Anything that must
   differ per turn has to be substituted as the frame goes out, not read while the table is
   built. `__MARK__` is the worked example.
+- **Measure the container, not the tops of its children.** "Did this row wrap" looks like a
+  question about where the children are, and asking it that way reports a wrap on every row
+  holding an icon centred against text — they sit a few pixels apart, and on the hub as much
+  as 24px apart, inside one 28px row. A wrap is the thing that makes the *row* taller. This
+  cost eleven false failures before the check measured the right box.
+
+And when a check goes green, make it fail on purpose before believing it. `spokes.mjs`'s
+row check was confirmed by forcing a long label into the control and watching the row go
+from 28px to 154px — without that, a check that could never fail and a check that passes
+look exactly alike.
 
 ## Why `playwright-core`
 

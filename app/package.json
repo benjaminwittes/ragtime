@@ -10,7 +10,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "preview": "vite preview",
-    "e2e": "node e2e/scenarios.mjs && node e2e/conversations.mjs && node e2e/links.mjs && node e2e/cross.mjs && node e2e/band.mjs"
+    "e2e": "node e2e/scenarios.mjs && node e2e/conversations.mjs && node e2e/links.mjs && node e2e/cross.mjs && node e2e/band.mjs && node e2e/spokes.mjs"
   },
   "dependencies": {
     "@lawfare/ragtime-client": "*",
