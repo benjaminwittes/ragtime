@@ -202,9 +202,12 @@ function SpokeCard({
     // whether to open a corpus is reading the title, the count and the line of copy as
     // one thing, so that is the thing that should answer to the pointer; a link the width
     // of two or three words asked them to aim at a fraction of what they were reading.
-    // The box that says so appears only on hover, focus or press — a wash of the paper,
-    // no border and no shadow, so the page at rest is still ruled rather than boxed and a
-    // four-sided edge still means exactly one thing here: a control you are addressing.
+    // The box that says so appears only on hover, focus or press — a wash of the brand's
+    // teal tint (`lawfare-teal-bg`, the colour the focus ring already wears at full
+    // strength), no border and no shadow, so the page at rest is still ruled rather than
+    // boxed and a four-sided edge still means exactly one thing here: a control you are
+    // addressing. A shade of the paper was tried first and rejected on the live page: at
+    // the breadth of a whole entry it read as a sickly yellow rather than as paper.
     // The title stays ink for the same reason it always did — eleven teal titles down a
     // page would read as eleven controls sitting in a page of controls — and its hover
     // underline is gone, because the wash now says what the underline was saying.
@@ -257,7 +260,7 @@ function SpokeCard({
             onNavigate(href)
           }
         }}
-        className="block -mx-3 space-y-1 rounded-[var(--radius)] px-3 py-3 transition-colors duration-150 hover:bg-lawfare-paper-deep focus-visible:bg-lawfare-paper-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lawfare-teal active:bg-lawfare-paper-deep"
+        className="block -mx-3 space-y-1 rounded-[var(--radius)] px-3 py-3 transition-colors duration-150 hover:bg-lawfare-teal-bg focus-visible:bg-lawfare-teal-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lawfare-teal active:bg-lawfare-teal-bg"
       >
         {/* The title and its count share the entry's first line, the name at the left and
             the figure at the right, so an entry is read the way a line of a ledger is read
