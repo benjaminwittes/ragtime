@@ -11,7 +11,8 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  *
  * The hub is the user's entry point to RAGtime. It surfaces the loaded
  * corpora in four headed groups, two to a row, each entry a title that
- * links into its spoke, a line of copy, and its headline count.
+ * links into its spoke with its headline count at the end of the same
+ * line, and one line of copy beneath the two of them.
  *
  * One search affordance sits above the spoke grid, labelled plainly
  * "Search" ({@link HubKeywordSearch}): a single plain-language input fires
@@ -114,7 +115,7 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
         </span>
       </div>
       {groups.map((group, g) => (
-        <div key={group.heading} className={g === 0 ? 'mt-6' : 'mt-8'}>
+        <div key={group.heading} className={g === 0 ? 'mt-5' : 'mt-6'}>
           {/* The heading sits on the paper, above the first rule of its group rather
               than inside a ruled cell, so it reads as a label for what follows and not
               as another entry. It is in the serif because it names the group — "The law",
@@ -137,11 +138,13 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
               end and the page reads one rule across its whole measure. The objection this
               used to carry — that two columns of rows wrapping to different depths give
               two cadences that agree nowhere — was an objection to the old row, which was
-              a title, a description, two mono lines and a link. An entry is now three
-              fixed things, one line of copy among them, so the two columns are near
-              enough the same height on their own; and where they are not, CSS grid gives
-              a row's cells one height, which puts the next pair of rules back on the same
-              line like a ruled ledger. A group with an odd count leaves its last cell in
+              a title, a description, two mono lines and a link. An entry is now two
+              lines — a title with its count, then one line of copy — so wherever both
+              of those fit their line, which is nearly everywhere, the two columns are
+              the same height without anything being done about it; and where a long
+              title or a long description takes a second line, CSS grid gives a row's
+              cells one height, which puts the next pair of rules back on the same line
+              like a ruled ledger. A group with an odd count leaves its last cell in
               the left column at half width. That is the honest thing to show — the rule
               stops where the content stops — and spanning it would make one entry look
               like a different kind of entry. */}
@@ -205,33 +208,44 @@ function SpokeCard({
     // a group at the bottom: a rule separates rather than encloses, and the next heading
     // or the about panel brings its own.
     <div
-      className={`space-y-1 border-t border-lawfare-line py-4 ${
+      className={`space-y-1 border-t border-lawfare-line py-3 ${
         side === 'left' ? 'sm:pr-8' : 'sm:pl-8'
       }`}
       style={{ viewTransitionName: `hub-card-${index + 1}` }}
     >
-      <h4 className="font-serif text-lg font-semibold">
-        <a
-          href={realHref}
-          onClick={(e) => {
-            if (
-              e.button === 0 &&
-              !e.ctrlKey &&
-              !e.metaKey &&
-              !e.shiftKey &&
-              !e.altKey
-            ) {
-              e.preventDefault()
-              onNavigate(href)
-            }
-          }}
-          className="text-foreground underline-offset-4 hover:underline"
-        >
-          {spoke.title}
-        </a>
-      </h4>
+      {/* The title and its count share the entry's first line, the name at the left and
+          the figure at the right, so an entry is read the way a line of a ledger is read
+          and the copy sits under both of them. The two are aligned on the baseline rather
+          than on their boxes, which is what puts the first line of a title that wraps on
+          the same baseline as the figure instead of centring the pair against each other.
+          A long title wraps inside its own half of the line because the heading is allowed
+          to be narrower than its text (`min-w-0`) and the figure is not allowed to be
+          narrower than its own (`shrink-0`) — so the figure keeps its place at the right
+          edge and the title takes the second line it needs. */}
+      <div className="flex items-baseline justify-between gap-4">
+        <h4 className="min-w-0 font-serif text-lg font-semibold">
+          <a
+            href={realHref}
+            onClick={(e) => {
+              if (
+                e.button === 0 &&
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.shiftKey &&
+                !e.altKey
+              ) {
+                e.preventDefault()
+                onNavigate(href)
+              }
+            }}
+            className="text-foreground underline-offset-4 hover:underline"
+          >
+            {spoke.title}
+          </a>
+        </h4>
+        <HoldingsSummary spoke={spoke} />
+      </div>
       <p className="text-sm text-lawfare-text-warm">{spoke.description}</p>
-      <HoldingsSummary spoke={spoke} />
     </div>
   )
 }
@@ -241,6 +255,14 @@ function SpokeCard({
  * `getHoldings()` — for litigation a live Worker call, for the others values
  * the corpus ingest reports settled — rendered as the first entry of `counts`
  * and nothing more.
+ *
+ * It is rendered inline, at the right of the title's line rather than under it,
+ * so the name and the figure are read together. That placement is what decides
+ * the shape of the two placeholders: each one stands in a line that is already
+ * drawn, so neither may be taller or much wider than the figure it replaces, or
+ * the first line of every entry would be set at one width and then move as the
+ * counts land. The wait is a single mono ellipsis, and the failure is two short
+ * words.
  *
  * The hub used to show the coverage line under it as well, and that was the
  * hub restating a fact it does not own. Coverage is a claim about what is and
@@ -252,6 +274,9 @@ function SpokeCard({
  *
  * Failures stay quiet rather than blocking the entry. The hub is a navigation
  * surface; a stale or unreachable count should not keep anyone out of a spoke.
+ * Quiet is not silent, though: "count unavailable" says that a number was meant
+ * to be here and is missing, where an empty right edge would say that this
+ * corpus never had one.
  */
 function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
   const [holdings, setHoldings] = useState<CorpusHoldings | null>(null)
@@ -274,16 +299,16 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
 
   if (errored) {
     return (
-      <p className="font-mono text-xs text-lawfare-text-warm">
-        (holdings unavailable)
-      </p>
+      <span className="shrink-0 font-mono text-xs text-right text-lawfare-text-warm">
+        count unavailable
+      </span>
     )
   }
   if (!holdings) {
     return (
-      <p className="font-mono text-xs text-lawfare-text-warm">
-        Loading holdings…
-      </p>
+      <span className="shrink-0 font-mono text-xs text-right text-lawfare-text-warm">
+        …
+      </span>
     )
   }
 
@@ -296,9 +321,9 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
   const [label, value] = headline
 
   return (
-    <p className="font-mono text-xs text-lawfare-text-warm">
+    <span className="shrink-0 font-mono text-xs text-right text-lawfare-text-warm">
       {value.toLocaleString()} {label}
-    </p>
+    </span>
   )
 }
 
