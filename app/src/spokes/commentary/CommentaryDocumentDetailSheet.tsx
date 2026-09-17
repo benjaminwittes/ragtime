@@ -157,7 +157,7 @@ function CommentaryDocumentDetailBody({
 
   return (
     <>
-      <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
+      <SheetHeader className="space-y-2 border-b border-lawfare-line bg-card p-5 pr-12">
         <div className="flex flex-wrap items-baseline gap-2">
           <PublicationBadge value={publication} />
           <SheetTitle className="font-serif text-base font-semibold leading-snug">
@@ -213,7 +213,7 @@ function CommentaryDocumentDetailBody({
           <p className="text-sm text-muted-foreground">Loading piece…</p>
         )}
         {error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-sm text-destructive">
             {error}
           </p>
         )}
@@ -258,8 +258,9 @@ function CommentaryDocumentDetailBody({
                   publications; full-fidelity formatting is one click away via
                   "Read at source". (To render rich bodies later, sanitize via
                   DOMPurify first.) */}
+              {/* Un-boxed per the ruled page (7e75ba3, d27967f): rules separate content, boxes mean interactive. */}
               {detail.body_text ? (
-                <div className="mt-2 space-y-3 rounded-md border border-border bg-card p-4 text-sm leading-relaxed text-foreground">
+                <div className="mt-2 space-y-3 border-t border-lawfare-line pt-4 text-sm leading-relaxed text-foreground">
                   {detail.body_text
                     .split(/\n\s*\n/)
                     .map((para) => para.trim())
@@ -337,7 +338,7 @@ function AiSummarySection({
         : ''
 
   return (
-    <section className="rounded-md border border-border bg-card p-4">
+    <section className="border-t border-lawfare-line bg-muted/30 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -363,7 +364,7 @@ function AiSummarySection({
         </Button>
       </div>
       {error && (
-        <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="mt-3 border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-xs text-destructive">
           {error}
         </p>
       )}
@@ -372,8 +373,8 @@ function AiSummarySection({
           {summary.was_truncated && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               The piece was truncated before summarization (the cap is well above
@@ -384,8 +385,8 @@ function AiSummarySection({
           {summary.candor_notes.length > 0 && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               <h4 className="text-[10px] font-medium uppercase tracking-wider opacity-80">

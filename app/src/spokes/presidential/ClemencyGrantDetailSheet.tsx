@@ -71,7 +71,7 @@ function ClemencyGrantBody({ row }: { row: ClemencyGrantDisplayRow }) {
 
   return (
     <>
-      <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
+      <SheetHeader className="space-y-2 border-b border-lawfare-line bg-card p-5 pr-12">
         <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-serif text-base font-semibold leading-snug">
             {d?.person_name ?? row.person_name ?? '(unnamed recipient)'}
@@ -91,12 +91,12 @@ function ClemencyGrantBody({ row }: { row: ClemencyGrantDisplayRow }) {
       <div className="flex-1 overflow-y-auto p-5">
         {loading && <p className="text-sm text-muted-foreground">Loading grant…</p>}
         {error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+          <p className="border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-sm text-destructive">{error}</p>
         )}
         {d && (
           <div className="space-y-5">
             {wiki && (
-              <aside className={cn('rounded-md border px-3 py-2 text-xs', 'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200')}>
+              <aside className={cn('border-l-2 pl-3 py-2 pr-3 text-xs', 'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200')}>
                 This recipient&rsquo;s name is <strong>Wikipedia-derived</strong>.
                 DOJ recorded this clemency as a class (e.g. the January 6
                 blanket pardon), not by individual name; the name here comes
@@ -133,8 +133,9 @@ function ClemencyGrantBody({ row }: { row: ClemencyGrantDisplayRow }) {
             )}
 
             <Section title="Clemency warrant">
+              {/* Un-boxed per the ruled page (7e75ba3, d27967f): rules separate content, boxes mean interactive. */}
               {d.warrant_text ? (
-                <pre className="mt-1 whitespace-pre-wrap break-words rounded-md border border-border bg-card p-4 font-sans text-sm leading-relaxed text-foreground">{d.warrant_text}</pre>
+                <pre className="mt-1 whitespace-pre-wrap break-words border-t border-lawfare-line pt-4 font-sans text-sm leading-relaxed text-foreground">{d.warrant_text}</pre>
               ) : d.warrant_url ? (
                 <p className="text-xs text-muted-foreground">
                   Warrant text not yet extracted for this grant.{' '}
@@ -145,7 +146,7 @@ function ClemencyGrantBody({ row }: { row: ClemencyGrantDisplayRow }) {
               )}
             </Section>
 
-            <p className="border-t border-border pt-3 text-[11px] text-muted-foreground/80">
+            <p className="border-t border-lawfare-line pt-3 text-[11px] text-muted-foreground/80">
               Source: Pardonpedia (CC BY 4.0){d.source_url ? <> · <a href={d.source_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">original record ↗</a></> : null}
             </p>
           </div>

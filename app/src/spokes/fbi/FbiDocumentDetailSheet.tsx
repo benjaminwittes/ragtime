@@ -140,7 +140,7 @@ function FbiDocumentDetailBody({
 
   return (
     <>
-      <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
+      <SheetHeader className="space-y-2 border-b border-lawfare-line bg-card p-5 pr-12">
         <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-serif text-base font-semibold leading-snug">
             {title}
@@ -191,7 +191,7 @@ function FbiDocumentDetailBody({
           <p className="text-sm text-muted-foreground">Loading document…</p>
         )}
         {error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-sm text-destructive">
             {error}
           </p>
         )}
@@ -236,8 +236,9 @@ function FbiDocumentDetailBody({
                 wording may contain recognition errors; the PDF above is the
                 original.
               </p>
+              {/* Un-boxed per the ruled page (7e75ba3, d27967f): rules separate content, boxes mean interactive. */}
               {detail.text_content ? (
-                <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card p-4 font-sans text-sm leading-relaxed text-foreground">
+                <pre className="mt-2 whitespace-pre-wrap break-words border-t border-lawfare-line pt-4 font-sans text-sm leading-relaxed text-foreground">
                   {detail.text_content}
                 </pre>
               ) : (
@@ -304,7 +305,7 @@ function ProvenanceSection({ detail }: { detail: FbiDocumentDetail }) {
         Provenance
       </h3>
       {recovered ? (
-        <div className="mt-1.5 rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+        <div className="mt-1.5 border-l-2 border-amber-400 bg-amber-500/10 pl-3 py-2 pr-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
           <p>
             <span className="font-semibold">Removed from the Vault.</span> This
             document was on the FBI&rsquo;s FOIA reading room and has since been
@@ -361,7 +362,7 @@ function AiSummarySection({
         : ''
 
   return (
-    <section className="rounded-md border border-border bg-card p-4">
+    <section className="border-t border-lawfare-line bg-muted/30 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -384,7 +385,7 @@ function AiSummarySection({
         </Button>
       </div>
       {error && (
-        <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="mt-3 border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-xs text-destructive">
           {error}
         </p>
       )}
@@ -393,8 +394,8 @@ function AiSummarySection({
           {summary.was_truncated && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               Document text was truncated before summarization (the cap is
@@ -404,8 +405,8 @@ function AiSummarySection({
           {summary.candor_notes.length > 0 && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               <h4 className="text-[10px] font-medium uppercase tracking-wider opacity-80">

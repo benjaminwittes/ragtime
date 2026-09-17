@@ -124,7 +124,7 @@ function CfrSectionDetailBody({ row }: { row: CfrSectionDisplayRow }) {
 
   return (
     <>
-      <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
+      <SheetHeader className="space-y-2 border-b border-lawfare-line bg-card p-5 pr-12">
         <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-mono text-base font-semibold">
             {citation}
@@ -153,7 +153,7 @@ function CfrSectionDetailBody({ row }: { row: CfrSectionDisplayRow }) {
           <p className="text-sm text-muted-foreground">Loading section…</p>
         )}
         {error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-sm text-destructive">
             {error}
           </p>
         )}
@@ -166,8 +166,8 @@ function CfrSectionDetailBody({ row }: { row: CfrSectionDisplayRow }) {
             {isReserved && (
               <aside
                 className={cn(
-                  'rounded-md border px-3 py-2 text-xs',
-                  'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                  'border-l-2 pl-3 py-2 pr-3 text-xs',
+                  'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
                 )}
               >
                 This section is marked <strong>reserved</strong> — a
@@ -190,8 +190,9 @@ function CfrSectionDetailBody({ row }: { row: CfrSectionDisplayRow }) {
               <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Regulatory text
               </h3>
+              {/* Un-boxed per the ruled page (7e75ba3, d27967f): rules separate content, boxes mean interactive. */}
               {detail.text_content ? (
-                <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card p-4 font-sans text-sm leading-relaxed text-foreground">
+                <pre className="mt-2 whitespace-pre-wrap break-words border-t border-lawfare-line pt-4 font-sans text-sm leading-relaxed text-foreground">
                   {detail.text_content}
                 </pre>
               ) : (
@@ -206,7 +207,7 @@ function CfrSectionDetailBody({ row }: { row: CfrSectionDisplayRow }) {
                 <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Source
                 </h3>
-                <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed text-muted-foreground">
+                <pre className="mt-2 whitespace-pre-wrap break-words border-t border-lawfare-line bg-muted/30 p-3 font-mono text-xs leading-relaxed text-muted-foreground">
                   {detail.source}
                 </pre>
               </section>
@@ -259,8 +260,8 @@ function CurrencyCaveat({ detail }: { detail: CfrSectionDetail }) {
   return (
     <aside
       className={cn(
-        'rounded-md border px-3 py-2 text-xs',
-        'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+        'border-l-2 pl-3 py-2 pr-3 text-xs',
+        'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
       )}
     >
       {detail.up_to_date_as_of && (
@@ -337,7 +338,7 @@ function AiSummarySection({
         : ''
 
   return (
-    <section className="rounded-md border border-border bg-card p-4">
+    <section className="border-t border-lawfare-line bg-muted/30 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -360,7 +361,7 @@ function AiSummarySection({
         </Button>
       </div>
       {error && (
-        <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="mt-3 border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-xs text-destructive">
           {error}
         </p>
       )}
@@ -369,8 +370,8 @@ function AiSummarySection({
           {summary.was_truncated && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               Section text was truncated before summarization. The summary
@@ -381,8 +382,8 @@ function AiSummarySection({
           {summary.candor_notes.length > 0 && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               <h4 className="text-[10px] font-medium uppercase tracking-wider opacity-80">
