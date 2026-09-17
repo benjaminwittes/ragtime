@@ -1,11 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <!-- The wordmark's own first letter on the brand colour: the one artifact that leaves the
-       app and sits in a bookmark bar beside the client's site, so it wears the client's colour
-       and the serif the wordmark is set in. It is a letter, not a mark — the product has no
-       mark yet, by decision — and the corner is the app's 3px. The face is a preference list:
-       a favicon renders in whatever serif the machine has, and the letter reads in any of them. -->
-  <rect width="48" height="48" rx="3" fill="#006a72"/>
-  <text x="24" y="25" text-anchor="middle" dominant-baseline="central"
-        font-family="'EB Garamond', Garamond, 'Iowan Old Style', Georgia, 'Times New Roman', serif"
-        font-size="36" font-weight="600" fill="#ffffff">R</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- The RAGtime mark at 16px: fluting, the side of a courthouse column rendered densely.
+       Four 2px flutes in the brand teal at a 2px pitch, full height, on nothing — a tile
+       behind them read as bars in a frame, so there is no tile. Every flute is one width by
+       ruling, and every groove is 2px so a tab at any device ratio draws grooves rather than
+       a grey block, which is what sank an eleven-rule sketch at this size. The figure's
+       other cuts, and the one table they are all drawn from, live in src/components/Mark.tsx.
+       This replaces the serif R that stood in while the product had no mark. -->
+  <g fill="#006a72">
+    <rect x="1" y="0" width="2" height="16"/>
+    <rect x="5" y="0" width="2" height="16"/>
+    <rect x="9" y="0" width="2" height="16"/>
+    <rect x="13" y="0" width="2" height="16"/>
+  </g>
 </svg>

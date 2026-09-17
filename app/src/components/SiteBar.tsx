@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 import { AppLink } from '@/components/AppLink'
+import { Mark } from '@/components/Mark'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { cn } from '@/lib/utils'
@@ -55,11 +56,22 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
           labels below `sm`, a hidden "beta") are still doing that work here. */}
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 sm:gap-x-4 sm:px-6 sm:py-3">
         <div className="flex items-baseline gap-2 sm:gap-3">
+          {/* The lockup: the mark, then the wordmark, one link. The mark takes the
+              wordmark's ink rather than the brand teal, because teal is the site's accent
+              axis — links and edges — and a teal figure beside an ink word would read as
+              a control. It stands on the baseline like a letter, which is what
+              `items-baseline` does for an SVG (no baseline of its own, so its bottom edge
+              is used), at the cap height the wordmark has at each size: the 20px cut
+              beside 30px type, the 16px cut beside 20px type below `sm`. Two elements
+              rather than one scaled, because a fluted figure has a different cut per
+              size — see `Mark.tsx`. */}
           <AppLink
             to="/"
             aria-label="RAGtime — back to hub"
-            className="font-serif text-xl font-semibold leading-[2.25rem] tracking-tight text-foreground sm:text-[1.875rem]"
+            className="inline-flex items-baseline gap-2 font-serif text-xl font-semibold leading-[2.25rem] tracking-tight text-foreground sm:gap-2.5 sm:text-[1.875rem]"
           >
+            <Mark size={16} className="sm:hidden" />
+            <Mark size={20} className="hidden sm:block" />
             RAGtime
           </AppLink>
           {/* The tagline and the note at the far right are the two things here that are
