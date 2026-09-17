@@ -19,5 +19,4 @@
 [data-tune='hub'] {
   --hub-measure: 64rem; /* was max-w-5xl */
   --hub-gutter: 1.5rem; /* was px-6 */
-  --hub-wordmark: 1.875rem; /* was text-3xl */
 }
