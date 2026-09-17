@@ -37,6 +37,18 @@ export default defineConfig({
   // Overridable at build time with VITE_BASE for that future cutover.
   base: process.env.VITE_BASE ?? '/ragtime/',
   plugins: [react(), tailwindcss(), spaFallback()],
+  build: {
+    /**
+     * Never inline a font. Under Vite's 4 KB default the three smallest Lato
+     * subsets were emitted as `data:` URIs, which would force `font-src 'self'
+     * data:` into the Content-Security-Policy — the opposite of the reason the
+     * fonts were self-hosted in the first place. As real files they also pick
+     * up the origin's `/assets/*` immutable cache rule. Everything else keeps
+     * the default behaviour.
+     */
+    assetsInlineLimit: (file: string) =>
+      file.endsWith('.woff2') ? false : undefined,
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
