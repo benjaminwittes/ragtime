@@ -10,10 +10,16 @@
  * the output matches what the in-app narrative shows. The print window styles
  * standard tags (`h1`, `p`, `ul`, …) via its own `<style>` block, so we render
  * WITHOUT the in-app Tailwind component overrides.
+ *
+ * Fonts are self-hosted and injected by `printFontFaceCss()`. The print window
+ * is an about:blank document, so it inherits this page's Content-Security-
+ * Policy — it could not fetch Google Fonts once that policy is enforced — and
+ * it has no base URL of its own, so the font URLs must be absolute.
  */
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { printFontFaceCss } from './print-fonts'
 
 function esc(s: string): string {
   return s
@@ -24,7 +30,6 @@ function esc(s: string): string {
 }
 
 const PRINT_CSS = `
-@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:ital,wght@0,400;0,700&display=swap");
 @page { margin: 0.75in; }
 body { font-family: Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#303030; line-height:1.55; font-size:11pt; margin:0; padding:0; }
 .pdf-header { border-bottom: 2px solid #006A72; padding-bottom: 14pt; margin-bottom: 18pt; }
@@ -87,6 +92,7 @@ export function downloadNarrativePdf(opts: {
     '<title>' +
     esc(opts.title ?? 'RAGtime Analysis') +
     '</title><style>' +
+    printFontFaceCss() +
     PRINT_CSS +
     '</style></head><body>' +
     '<div class="pdf-header">' +
