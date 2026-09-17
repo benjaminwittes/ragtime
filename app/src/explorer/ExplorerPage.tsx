@@ -322,6 +322,14 @@ function useCarriedQuestion(
     if (!credential && !sessionSettled) return
     handled.current = true
     if (credential) void ask(carried)
+    // The latch cannot be derived during render: the branch depends on
+    // `sessionSettled`, which arrives asynchronously, and once taken it must
+    // survive the reader signing in — a derived value would drop the seeded
+    // question out of the composer at the moment access appeared, which is
+    // precisely when they want it. Same call the two auth surfaces make
+    // (`paid-context`, `CheckoutReturnGate`) and suppressed the same way, rather
+    // than restructured into a less direct pattern on the path that spends.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     else setWaiting(carried)
     const url = new URL(window.location.href)
     url.searchParams.delete('q')
