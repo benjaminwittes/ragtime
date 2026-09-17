@@ -4,12 +4,13 @@ import type { DocsEntry } from '../types'
  * Docs entry for the hub cross-corpus keyword search. Global-scope (visible
  * on every surface), because the hub search routes users into the spokes.
  *
- * It is the hub's only search affordance: it used to be the right-hand half
- * of a segmented Ask / Search toggle, and the Ask half is gone, along with
- * the chip row that let a reader pick corpora (see `hub/HubKeywordSearch.tsx`
- * for both). The fan covers every spoke except sanctions
- * (`HUB_KEYWORD_SPOKES`), so the counts below track `spokes/registry.ts` and
- * that one exclusion.
+ * This entry describes the Search mode of the hub's box, which is the mode it
+ * opens in. The other one hands the same words to the Explorer and is described
+ * where the Explorer is (`getting-started`, `explorer-*`) — the box is one
+ * field with two destinations, not two features (`hub/HubKeywordSearch.tsx`).
+ * The chip row that once let a reader pick corpora is gone; the fan covers
+ * every spoke except sanctions (`HUB_KEYWORD_SPOKES`), so the counts below
+ * track `spokes/registry.ts` and that one exclusion.
  */
 export const hubKeywordSearchEntry: DocsEntry = {
   slug: 'hub-keyword-search',
@@ -18,13 +19,20 @@ export const hubKeywordSearchEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 2,
   content: `
-**What it is.** The one search box at the top of the hub. Type a question
-or a topic; the system fires a parallel full-text search across ten
-corpora — from federal litigation to the Congressional Record — and
-returns the top-5 results from each, plus the total count per corpus.
-Free, no AI. (Nine of the ten are primary sources; the tenth is
-Commentary, which returns published analysis from Lawfare and Executive
-Functions — handy for "has anyone written about this?")
+**What it is.** The hub's one box, in **Search** mode — the mode it opens
+in, and one of the two tabs above it. Type a phrase or a topic; the system
+fires a parallel full-text search across ten corpora — from federal
+litigation to the Congressional Record — and returns the top-5 results
+from each, plus the total count per corpus. Free, no AI. (Nine of the ten
+are primary sources; the tenth is Commentary, which returns published
+analysis from Lawfare and Executive Functions — handy for "has anyone
+written about this?")
+
+**The other tab.** **Explorer** takes the same box and sends what you
+typed to the Explorer instead, where a conversation plans the research,
+runs it across the corpora, and hands you into them. That one reads with
+AI and costs money; this one does not. Switching tabs keeps whatever you
+have typed.
 
 **Ten of the eleven corpora.** Sanctions sits out the fan. Its documents
 include the Federal Register's sanctions notices, which the Federal
@@ -38,10 +46,11 @@ tables — a merged ranking would be quietly misleading. Grouping is
 honest, reads clearly, and doubles as routing ("mostly CFR → open the
 CFR workspace").
 
-**There is nothing to set.** Every query goes to all ten, and there is no
-control that narrows it. The narrowing happens after the search instead:
-each corpus is its own section with its own count, so you can see which
-ones hold your answer and open the one that does.
+**There is nothing to narrow.** The tabs choose where your words go; they
+do not choose which corpora are searched. Every query in Search mode goes
+to all ten, and no control narrows that. The narrowing happens after the
+search instead: each corpus is its own section with its own count, so you
+can see which ones hold your answer and open the one that does.
 
 **Opening a workspace.** Each corpus section has an "Open workspace →" link
 that takes you to that corpus's full surface. In the workspace you can:
@@ -52,14 +61,15 @@ that takes you to that corpus's full surface. In the workspace you can:
 - Use the corpus-specific AI mode (Ask, narrative synthesis, legal
   analysis) where available.
 
-**Search here, or ask?** This box matches words, so use it when you have a
-phrase, a name, or a citation you expect to appear verbatim
-("Youngstown", "50 U.S.C. 1702"). When the question is in your own words
-and you don't know the wording the documents use, ask it instead: the
-Explorer (linked at the top of every page) is a conversation that
-researches across the corpora and hands you off into them, and each
-corpus workspace has its own AI modes once you know where you're looking.
-Those read with AI; this box doesn't.
+**Search here, or ask?** That is what the two tabs are for. Search matches
+words, so use it when you have a phrase, a name, or a citation you expect
+to appear verbatim ("Youngstown", "50 U.S.C. 1702") — and the placeholder
+cycles through examples of exactly that, one per corpus, which Tab will
+put in the box for you. When the question is in your own words and you
+don't know the wording the documents use, switch to Explorer and ask it:
+that is a conversation which researches across the corpora and hands you
+off into them. Each corpus workspace also has its own AI modes once you
+know where you're looking. Those read with AI; Search doesn't.
 
 **Why this matters.** Most real research questions span corpora — "Where
 does this credible-fear standard come from in immigration law?" pulls

@@ -1,11 +1,12 @@
 /**
  * What the hub exposes to the tuning panel.
  *
- * Three structure knobs promoted into `hub.css`, and two behaviour knobs that
- * are not CSS at all: how many rows a count result previews, and how far a cell
- * is truncated. Both are parameters of what the page *says*, which is the half
- * of design a stylesheet cannot reach — and both were literals buried in
- * `HubAmaSearch.tsx` until a knob made them arguable.
+ * Two structure knobs promoted into `hub.css`, and three behaviour knobs that
+ * are not CSS at all: how many rows a count result previews, how far a cell is
+ * truncated, and how long the hero's title and placeholder hold before they
+ * move on. All three are parameters of what the page *says*, which is the half
+ * of design a stylesheet cannot reach — and the first two were literals buried
+ * in `HubAmaSearch.tsx` until a knob made them arguable.
  */
 
 import { defineSurface, defineTunables } from '@/tune/registry'
@@ -78,6 +79,19 @@ export const hubKnobs = defineTunables([
     source: { file: SELF },
     note: 'Characters of a cell before it is cut. Long titles are the reason the table wraps.',
   },
+  {
+    id: 'hub.tick',
+    label: 'Sample dwell',
+    group: 'Behaviour',
+    scope: 'hub',
+    kind: 'number',
+    value: 3,
+    min: 1,
+    max: 12,
+    step: 0.5,
+    source: { file: SELF },
+    note: 'Seconds a finished sample stands in the box before the next one types itself. The typing is on top of this, and is as long as the sample; a corpus holds the title for three of them.',
+  },
 ])
 
 /** How many rows of a count result the table draws. */
@@ -88,4 +102,15 @@ export function usePreviewRows(): number {
 /** How many characters of a cell survive before truncation. */
 export function useCellChars(): number {
   return useTunable<number>('hub.cellChars')
+}
+
+/**
+ * How long a finished sample holds, in seconds, before the hero types the next.
+ *
+ * In seconds rather than milliseconds because this is a number a person moves
+ * while watching the page, and "three" is the unit that sentence is thought in —
+ * and because GSAP, which the one caller hands it to, counts in seconds too.
+ */
+export function useTick(): number {
+  return useTunable<number>('hub.tick')
 }

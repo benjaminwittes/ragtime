@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { createPortal } from 'react-dom'
 
 import { AppLink } from '@/components/AppLink'
@@ -28,9 +35,39 @@ import { cn } from '@/lib/utils'
  *
  * Between the two is the slot — {@link SiteBarActions} — which is how a route puts its
  * own controls in this bar without the bar knowing anything about them.
+ *
+ * It also publishes its own height as `--site-bar-h` on the document element, which is
+ * how the hub sizes its first screen ("the viewport, less the bar"). Measured rather than
+ * assumed, because this row's height is not one number: it is taller from `sm` (`py-3`),
+ * and it *wraps* when a route puts controls in the slot at a narrow width — which is
+ * exactly the case a per-breakpoint constant would get wrong, and the case where being
+ * wrong costs the reader a scrollbar on a screen that was supposed to be one screen.
  */
 export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
   const setSlot = useContext(SlotRefContext)
+  const bar = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const el = bar.current
+    if (!el) return
+    const publish = () => {
+      document.documentElement.style.setProperty(
+        '--site-bar-h',
+        `${el.getBoundingClientRect().height}px`,
+      )
+    }
+    publish()
+    // A ResizeObserver rather than a window resize listener: the row's height
+    // changes when its *contents* change — a spoke putting a long title in the
+    // slot, the Explorer's two buttons arriving with a conversation — and no
+    // window event fires for that. The property is left standing on unmount;
+    // this bar is mounted above the router and never unmounts, and a page with
+    // no bar has nothing to size against anyway.
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
     // The first of three view transition names here, and it is set to *stop* an animation
     // rather than to start one. A route change is captured as one snapshot of the whole
@@ -47,6 +84,7 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
     // two can change while the bar around them does not. The timings are in
     // `src/transitions.css`.
     <header
+      ref={bar}
       className="border-b border-lawfare-line bg-lawfare-paper"
       style={{ viewTransitionName: 'site-bar' }}
     >

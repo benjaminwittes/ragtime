@@ -44,6 +44,18 @@ type Props = {
   rows?: number
   /** `search` on the hub, for the browser's own clear affordance. Ignored by the textarea. */
   inputType?: 'text' | 'search'
+  /**
+   * A key rule the single-line skin wants and this component has no opinion about.
+   *
+   * The multi-line skin's one key rule is written below and belongs to everyone who uses
+   * it — Enter sends, Shift+Enter is a newline — but the hub's box completes the sample
+   * it is showing when Tab is pressed in it, and that is a fact about a *rotating
+   * placeholder*, which is the hub's alone. So it arrives as a prop rather than being
+   * learned here, and it is wired to the `input` only: the composer passes none, and a
+   * second handler on the textarea would sit beside the one rule that is this
+   * component's own.
+   */
+  onFieldKeyDown?(e: KeyboardEvent<HTMLInputElement>): void
   fieldRef?: Ref<HTMLInputElement | HTMLTextAreaElement>
   /** On the `<form>`. */
   className?: string
@@ -72,6 +84,7 @@ export function AskBox({
   maxLength,
   rows,
   inputType,
+  onFieldKeyDown,
   fieldRef,
   className,
   fieldWrapClassName,
@@ -117,6 +130,7 @@ export function AskBox({
         className={fieldClassName}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onFieldKeyDown}
         placeholder={placeholder}
         disabled={disabled}
         maxLength={maxLength}

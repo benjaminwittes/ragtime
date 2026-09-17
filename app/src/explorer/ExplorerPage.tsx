@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { SiteBarActions } from '@/components/SiteBar'
+import { usePaid } from '@/auth/use-paid'
+import { readCarryoverQuery } from '@/lib/routing'
 import { useAuth } from '@/lib/use-auth'
+import type { AuthArg } from '@lawfare/ragtime-client'
 
 import { DAILY_MODEL_CALLS, WORKER_URL } from './config.ts'
 import { useExplorer } from './hooks/useExplorer.ts'
@@ -38,6 +41,10 @@ import { Conversations } from './Conversations.tsx'
  * account, a bring-your-own Anthropic key, or the demo password from the access
  * dialog — and with none of them the composer waits rather than asking for a
  * password of its own.
+ *
+ * It does own one arrival: a question typed into the hub's box in Explorer mode comes
+ * here on the URL (`?q=`), and what happens to it depends on whether anything can pay
+ * for it. See {@link useCarriedQuestion}.
  */
 export function ExplorerPage() {
   const { auth, isPaid } = useAuth()
@@ -51,6 +58,9 @@ export function ExplorerPage() {
   const [trailOpen, setTrailOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const x = useExplorer({ workerUrl: WORKER_URL, auth: credential })
+  // The hub's handoff: asked straight away when there is something to pay with,
+  // left standing in the composer when there is not.
+  const carried = useCarriedQuestion(credential, x.ask)
   // The daily allowance is the visitor's own network's (nothing here is mounted behind
   // a shared gate). A paid account is metered on its balance and has no such pool, so
   // the panel is not shown to it.
@@ -223,7 +233,16 @@ export function ExplorerPage() {
                   {refusal.message}
                 </div>
               )}
+              {/* The key is how a question that arrived after this mounted gets
+                  into it. The composer reads its text once, at mount — which is
+                  right, because it is the reader's own and nothing may overwrite
+                  it mid-sentence — so a handoff that resolves a moment later
+                  changes the key and the composer comes back up holding it. It
+                  changes at most once in the life of the page, and never while
+                  anything is typed in it. */}
               <Composer
+                key={carried === null ? 'composer' : 'carried'}
+                seed={carried ?? undefined}
                 placeholder={placeholder}
                 disabled={x.busy || waiting || (x.phase === 'orient' && !!x.proposed && !x.awaitingReply)}
                 focusKey={x.turns.filter((t) => t.question).length}
@@ -249,4 +268,65 @@ export function ExplorerPage() {
       </div>
     </>
   )
+}
+
+/**
+ * The question the hub's box was submitted with, and the one thing done with it.
+ *
+ * It arrives as `?q=` (`navigateTo('/explorer?q=…')` on the hub; `readCarryoverQuery`
+ * here — the same pair of ends the spokes' keyword carryover already uses), and it is
+ * handled exactly once, in one of two ways:
+ *
+ *   - **With a credential, it is asked.** The reader pressed send on the hub; making them
+ *     press send again here would be the page asking twice for one decision.
+ *   - **Without one, it waits in the composer.** Nothing may spend before there is
+ *     something to spend, and the sign-in line under the box already says so. It is
+ *     handed to the composer as its seed and the composer writes it to its own draft key
+ *     from there, so the question survives the reader leaving to set up access and coming
+ *     back. It wins over an older draft on purpose: a sentence typed seconds ago on the
+ *     hub is the live intent, and the stale one behind it is not.
+ *
+ * Three things are load-bearing and each has a failure it prevents:
+ *
+ *   - **The ref, not the effect's dependency list, is what makes it once.** React's
+ *     StrictMode mounts, unmounts and remounts every component in development, and a
+ *     turn costs real money; `handled` survives that, and `ask` firing twice would be
+ *     two charges for one question.
+ *   - **`?q=` is taken out of the address as soon as it is handled.** Otherwise a reload
+ *     — or Back, later — would be a fresh page with the same question on it, and it
+ *     would ask again. The question lives in the conversation now; the URL was only the
+ *     way it travelled.
+ *   - **The no-credential branch waits for `usePaid().ready`.** A signed-in session is
+ *     read off the device asynchronously, so for the first moments after a cold load
+ *     `auth` is null for a reader who is not signed out at all. Deciding then would send
+ *     a paying reader's question to the composer to sit behind a sign-in line they do not
+ *     need. Every other credential (a key, the demo password) is read synchronously, so
+ *     this is the only wait there is.
+ *
+ * Returns the question the composer should open holding, or null — which is every case
+ * but that one, including the case where it was asked.
+ */
+function useCarriedQuestion(
+  credential: AuthArg | null,
+  ask: (text: string) => Promise<void>,
+): string | null {
+  // Read at the first render, before anything can strip it, and pure — StrictMode calls
+  // an initializer twice and a read with a side effect in it would not survive that.
+  const [carried] = useState(readCarryoverQuery)
+  const { ready: sessionSettled } = usePaid()
+  const handled = useRef(false)
+  const [waiting, setWaiting] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!carried || handled.current) return
+    if (!credential && !sessionSettled) return
+    handled.current = true
+    if (credential) void ask(carried)
+    else setWaiting(carried)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('q')
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+  }, [carried, credential, sessionSettled, ask])
+
+  return waiting
 }

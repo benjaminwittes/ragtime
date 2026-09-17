@@ -10,6 +10,19 @@ type Props = {
   disabled: boolean
   /** Changes when the composer should take focus (a clarifying question arrived). */
   focusKey: number
+  /**
+   * A question typed on another surface and handed to this one — the hub's box in
+   * Explorer mode, arriving with no credential to spend, so it waits here instead of
+   * being asked (`ExplorerPage`'s `useCarriedQuestion`).
+   *
+   * A prop rather than a write to the draft key, which was tried first and lost a race:
+   * this component removes the draft in an effect whenever its text is empty, so a
+   * caller writing the key and then remounting was writing between that effect's first
+   * run and its second (React's StrictMode runs effects twice) and finding the key gone.
+   * Handed in, it simply wins over the stored draft — it is the newer of the two, typed
+   * seconds ago on the page before this one.
+   */
+  seed?: string
   onSend(text: string): void
 }
 
@@ -28,8 +41,8 @@ type Props = {
  * down as props, because `explorer.css` still styles this skin and nothing of the app's
  * kit may cross into `.explorer`.
  */
-export function Composer({ placeholder, disabled, focusKey, onSend }: Props) {
-  const [text, setText] = useState(() => readLocal(DRAFT_KEY) ?? '')
+export function Composer({ placeholder, disabled, focusKey, seed, onSend }: Props) {
+  const [text, setText] = useState(() => seed ?? readLocal(DRAFT_KEY) ?? '')
   const box = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     if (!disabled) box.current?.focus()

@@ -206,6 +206,14 @@
    * square sitting on top of the field and the composer's is a word with padding around
    * it, so the number appears once, not twice, and promoting it would have invented a
    * shared decision rather than recorded one. */
+  /* The site bar's height, as the bar itself measures it. `components/SiteBar.tsx`
+   * overwrites this on the document element with a ResizeObserver, so what is
+   * written here is only what holds for the frame before the first measurement —
+   * the phone-width row, which is the shorter of the two and therefore the one
+   * that errs toward a first screen slightly too tall rather than one that has
+   * already overflowed. The hub's hero reads it as `calc(100dvh - var(--site-bar-h))`. */
+  --site-bar-h: 3.5rem;
+
   --ask-radius: 0.1875rem; /* was rounded-lg, which is --radius; it keeps following it */
   --ask-border-width: 1.5px; /* was border-[1.5px] */
   --ask-pad-y: 1rem; /* was py-4 */

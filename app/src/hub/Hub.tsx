@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { formatCount } from '@/lib/format-count'
 import { getHoldingsCached, readHoldingsSnapshot } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
@@ -10,33 +9,42 @@ import { HubKeywordSearch } from './HubKeywordSearch'
 /**
  * Hub landing surface — brief #1 (general AMA hub).
  *
- * The hub is the user's entry point to RAGtime. It surfaces the loaded
- * corpora in four headed groups, two to a row: each entry is a title with
- * its headline count at the end of the same line and one line of copy
- * beneath the two of them, and the whole of that is the link into its
- * spoke.
+ * The hub is the user's entry point to RAGtime, and it is now two screens.
  *
- * One search affordance sits above the spoke grid, labelled plainly
- * "Search" ({@link HubKeywordSearch}): a single plain-language input fires
- * parallel FTS queries across all loaded corpora and surfaces
- * grouped-by-corpus results inline.
+ * The first is the question: a title naming one corpus at a time, the box, and
+ * the two modes it can be sent in ({@link HubKeywordSearch}) — the free keyword
+ * fan across the loaded corpora, or the same words handed to the Explorer. It
+ * fills the viewport under the site bar, and it says at its own foot that the
+ * corpora are below, which is the whole of what the fold costs a reader.
  *
- * It used to be one half of a segmented Ask / Search toggle, semantic on
- * the left and keyword on the right. Both halves are gone as a choice the
- * reader makes. Whether a query is answered semantically or lexically is a
- * property of the corpus being searched, not a setting anyone arrives here
- * with an opinion about — and the "ask across everything" moment the Ask
- * tab existed for is now the /explorer route, which does it better with a
- * tool loop and a visible cost. `HubAmaSearch.tsx` stays in the tree
- * unreferenced so that call is cheap to reverse.
+ * The second is the ledger: the corpora in four headed groups, two to a row —
+ * each entry a title with its headline count at the end of the same line and one
+ * line of copy beneath the two of them, the whole of that being the link into
+ * its spoke — then the about panel and the footer.
  *
- * The slot that toggle vacated held a second pill bar for a day — Search
- * beside a link to /explorer — and it is gone too. It was a third thing
- * claiming to be the top of the page, under a masthead that already carried
- * the way to the Explorer. The hub no longer draws a bar at all: the site's
- * one bar is mounted above every route in `App` (`components/SiteBar.tsx`),
- * so this page is its own content and nothing else.
+ * The box used to be one half of a segmented Ask / Search toggle, semantic on
+ * the left and keyword on the right, and the two tabs above it now are not that
+ * toggle coming back. That one asked whether a *corpus* should be searched
+ * semantically or lexically, which is a property of the corpus rather than a
+ * setting anyone arrives here with an opinion about. These two ask which surface
+ * takes the sentence — the index here, or the Explorer's tool loop with its
+ * visible cost — and that changes what happens next rather than how the same
+ * thing is done. `HubAmaSearch.tsx` stays in the tree unreferenced; it is not
+ * what came back.
+ *
+ * The hub draws no bar of its own: the site's one bar is mounted above every
+ * route in `App` (`components/SiteBar.tsx`), so this page is its own content and
+ * nothing else — and that bar's measured height is what the first screen is
+ * sized against (`--site-bar-h`).
  */
+
+/**
+ * Where the first screen's foot line points. Declared here, beside the section
+ * it names, and handed down to the hero — an anchor spelled in two files is an
+ * anchor that will one day be right in one of them.
+ */
+const CORPORA_ID = 'corpora'
+
 export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
     // `data-tune` marks the hub as a tunable surface: `hub.css` declares the
@@ -44,37 +52,12 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
     // attribute being in the DOM as "the hub is what you are looking at".
     <main data-tune="hub" className="min-h-screen bg-lawfare-paper text-foreground">
       <div className="mx-auto max-w-[var(--hub-measure)] px-[var(--hub-gutter)] pb-16">
-        <HubHero />
-        <HubKeywordSearch onNavigate={onNavigate} />
+        <HubKeywordSearch onNavigate={onNavigate} corporaId={CORPORA_ID} />
         <SpokeGrid onNavigate={onNavigate} />
         <AboutPanel />
         <HubFooter onNavigate={onNavigate} />
       </div>
     </main>
-  )
-}
-
-/**
- * The hub's opening. Its counterpart is the Explorer's empty state, which makes the same
- * move in the same place on the screen — so both are {@link SurfaceIntro} wearing their
- * own surface's clothes, and the browser can travel one between the two rather than
- * dissolve two into each other.
- */
-function HubHero() {
-  return (
-    <SurfaceIntro
-      level={1}
-      className="pt-14 pb-2 text-center"
-      heading="The Hub: One Search to Rule Them All"
-      headingClassName="mx-auto max-w-3xl font-serif text-[2.6rem] font-medium leading-[1.12] tracking-tight text-foreground"
-      ledeClassName="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary"
-      lede={
-        <>
-          The law, how it has been read, what government did with it, and the
-          commentary on all three.
-        </>
-      }
-    />
   )
 }
 
@@ -102,7 +85,14 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
   }))
 
   return (
-    <section className="mt-10 border-t border-lawfare-line pt-8">
+    // The id is what the first screen's foot line scrolls to. `scroll-mt-6` is
+    // air above the rule when it lands: the site bar is not sticky, so nothing
+    // has to be cleared — but a section whose own hairline is flush with the top
+    // of the window reads as a page cut off rather than a page arrived at.
+    <section
+      id={CORPORA_ID}
+      className="mt-10 scroll-mt-6 border-t border-lawfare-line pt-8"
+    >
       {/* This row leads the corpus rows out and leads them back in — see the stagger in
           `src/transitions.css`. It is named and they are named; the `<section>` around
           them is not, because a named ancestor would take the whole list out of the page

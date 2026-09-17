@@ -27,10 +27,14 @@ authors have argued — see *Primary Sources, Not Commentary*.)
 
 The shape of the tool is a **hub and spokes.**
 
-**The Hub** (the landing page) is the cross-corpus entry point: one
-keyword search that fans out across ten of the eleven at once. Use it when
-you don't yet know which corpus holds your answer. (Sanctions is the one
-the fan leaves out — search that corpus from its own workspace.)
+**The Hub** (the landing page) is the cross-corpus entry point: one box
+with two modes above it. **Search** fans a keyword query out across ten of
+the eleven corpora at once, free and without AI — use it when you don't
+yet know which corpus holds your answer. (Sanctions is the one the fan
+leaves out; search that corpus from its own workspace.) **Explorer** sends
+the same box to the Explorer, which takes a question in your own words,
+plans the research, and hands you into the corpora it used. That one reads
+with AI, so it needs a key, a balance, or a demo password.
 
 **Each spoke** is a corpus's own workspace, with the structured filters,
 the canonical document view, and the AI modes that fit that corpus.
