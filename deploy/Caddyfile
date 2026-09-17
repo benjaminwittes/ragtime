@@ -24,6 +24,10 @@
 		Referrer-Policy           "strict-origin-when-cross-origin"
 		Permissions-Policy        "geolocation=(), microphone=(), camera=()"
 		X-Frame-Options           "DENY"
+		# Resolves the `report-to csp` in the policies below. `report-uri` is
+		# deprecated but is still what Safari and older Chrome send to, so both
+		# names are given and they point at the same place.
+		Reporting-Endpoints       `csp="/csp-report"`
 		-Server
 	}
 
@@ -41,7 +45,24 @@
 	#   style-src needs 'unsafe-inline' because React `style={{...}}` props are
 	#   inline style attributes; removing that means removing them from the app.
 	#   Stripe needs nothing here: checkout is a top-level redirect, not Stripe.js.
-	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"
+	#
+	#   Two policies, because /legacy.html cannot meet the SPA's and should not
+	#   be allowed to weaken it. The deploy ships the legacy single-file app
+	#   beside the SPA (`cp ../index.html dist/legacy.html`), and that file loads
+	#   supabase-js from jsdelivr, holds the entire app in one inline <script>,
+	#   carries 58 inline event handlers, and pulls the Lawfare logo from
+	#   azureedge. Adding all of that site-wide would cost the
+	#   SPA the strict policy it actually meets, so the looser one is scoped to
+	#   the one path that needs it.
+	#
+	#   Both name /csp-report, which is a sink rather than a collector — see the
+	#   handle block below for what that does and does not tell you.
+	@legacy path /legacy.html
+	@app not path /legacy.html
+
+	header @app Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; report-uri /csp-report; report-to csp"
+
+	header @legacy Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://lawfare-assets-new.azureedge.net; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; report-uri /csp-report; report-to csp"
 
 	# Vite content-hashes everything under /assets, so the filename changes when
 	# the bytes do and the response can be cached for a year. GitHub Pages sent a
@@ -51,13 +72,26 @@
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 
 	# The shell must never be cached, or a deploy is invisible until the TTL.
-	@shell path / /index.html /404.html
+	@shell path / /index.html /404.html /legacy.html
 	header @shell Cache-Control "no-cache"
 
 	# The SPA router owns unknown paths. try_files serves the shell with a 200,
 	# which is the point: GitHub Pages served the same bytes as a 404, so every
 	# deep link — including the OAuth consent URL — was a 404 to anything reading
 	# status codes rather than pixels.
+	# The report sink. 204 and nothing else, and it is worth being plain about
+	# what that buys: Caddy does not log request bodies, so the access log
+	# records that a report arrived and for which page, never which directive
+	# was violated. That answers "is anything firing in the field, and how
+	# often" — it does not answer "what broke". For that, run
+	# `node deploy/check-csp.mjs https://<host>`, which reads each page's own
+	# bytes against the policy served for that page's own path and names the
+	# directive. Promote the report-only header on the checker being green,
+	# not on this endpoint being quiet.
+	handle /csp-report {
+		respond 204
+	}
+
 	handle {
 		try_files {path} /index.html
 		file_server

@@ -137,6 +137,10 @@ bigger rollback is the DNS record.
 curl -sS -o /dev/null -w '%{http_code}\n' https://<host>/oauth/consent   # 200, not 404
 curl -sSI https://<host>/ | grep -iE 'strict-transport|content-security|x-frame|cache-control'
 curl -sSI https://<host>/assets/<hashed>.js | grep -i cache-control      # immutable
+
+# Does the policy this box serves cover the pages this box serves? Per path,
+# read off each page's own bytes. No browser, no dependencies.
+node deploy/check-csp.mjs https://<host>
 ```
 
 ## The content policy, and why most of it is not enforced yet
@@ -148,7 +152,22 @@ page nothing legitimately frames. `X-Frame-Options: DENY` covers older clients.
 
 The rest of the policy ships as `Content-Security-Policy-Report-Only`. A policy
 derived by reading the source and shipped enforced is how a working app goes
-blank. Watch the reports, then promote it and drop the single-directive header.
+blank. Promote it on `deploy/check-csp.mjs` being green, then drop the
+single-directive header.
+
+**There are two report-only policies, split on a path matcher, because
+`/legacy.html` cannot meet the SPA's.** The deploy copies the root `index.html`
+there, and that file loads supabase-js from a CDN, keeps its whole program in one
+inline `<script>`, carries 58 inline event handlers and pulls the Lawfare logo
+from a third party. Letting the legacy page relax the site-wide policy would cost
+the SPA the strict one it actually meets, so the looser rules are scoped to that
+one path. None of this is visible from `/`, which is why the checker asks per
+path rather than once.
+
+**`/csp-report` is a sink, not a collector.** Caddy does not log request bodies,
+so the access log records that a report arrived and for which page, never which
+directive was violated. It answers *is anything firing in the field*. The
+checker answers *what broke*, and that is the question that gates promotion.
 
 Two notes for whoever promotes it. `style-src` needs `'unsafe-inline'` because
 React `style={{...}}` props are inline style attributes; removing it means
