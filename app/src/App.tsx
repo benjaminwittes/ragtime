@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
-import { SiteMasthead } from '@/components/SiteMasthead'
+import { SiteBar, SiteBarSlotProvider } from '@/components/SiteBar'
 import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
 import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
@@ -106,7 +106,7 @@ function App() {
   // signed-in path is valid).
   const surface =
     route.kind === 'explorer'
-      ? <ExplorerRoute />
+      ? <ExplorerPage />
       : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
@@ -122,11 +122,22 @@ function App() {
             ? <NotFound pathname={route.pathname} onNavigate={navigate} />
             : <Hub onNavigate={navigate} />
 
+  // One bar, mounted here rather than inside the routes, so it survives navigation
+  // instead of unmounting and remounting under the reader. Everything route-specific
+  // in it arrives through `SiteBarActions` — the provider has to wrap both ends.
+  const onExplorer = route.kind === 'explorer'
   return (
-    <>
-      {surface}
+    <SiteBarSlotProvider>
+      {/* The Explorer is the one route that is a fixed-height column rather than a
+          page that scrolls: the bar, then the conversation taking what is left, so
+          `.scroll` scrolls inside itself and the composer stays put (explorer.css,
+          "Under the masthead"). Every other surface is ordinary flow under the bar. */}
+      <div className={onExplorer ? 'flex h-dvh flex-col' : undefined}>
+        <SiteBar onExplorer={onExplorer} />
+        {surface}
+      </div>
       <CheckoutReturnGate />
-    </>
+    </SiteBarSlotProvider>
   )
 }
 
@@ -161,30 +172,10 @@ function activeSpokeShell(spoke: CorpusSpoke) {
     ) : (
       <SpokeShell spoke={spoke} />
     )
-  // The slim site masthead is injected once here so every spoke carries the
-  // RAGtime brand; each shell renders its own title/holdings band below it.
-  return (
-    <>
-      <SiteMasthead />
-      {shell}
-    </>
-  )
-}
-
-/**
- * `/explorer`. On its own site the Explorer was the whole window and scrolled
- * inside itself; here it is the rest of one. The route is a viewport-high
- * column — the masthead, then the page taking what is left — so the
- * conversation still scrolls within its own pane and the composer stays put
- * (explorer.css, "Under the masthead").
- */
-function ExplorerRoute() {
-  return (
-    <div className="flex h-dvh flex-col">
-      <SiteMasthead />
-      <ExplorerPage />
-    </div>
-  )
+  // The brand, the docs and AI access all come from the one bar in `App` now; a
+  // spoke puts its own identity up there through `SiteBarActions` and keeps only
+  // its disclosure and holdings in the page.
+  return shell
 }
 
 function NotFound({

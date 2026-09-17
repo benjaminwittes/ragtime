@@ -36,7 +36,7 @@ export const hubKnobs = defineTunables([
     max: 96,
     step: 0.5,
     source: { file: CSS, selector: SELECTOR },
-    note: 'The masthead row and the body column share it, so the wordmark stays over the grid.',
+    note: 'The hub body column. The site bar is above every route now and sets its own measure.',
   },
   {
     id: 'hub.gutter',

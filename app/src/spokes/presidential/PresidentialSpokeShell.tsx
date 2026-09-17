@@ -21,13 +21,12 @@ import {
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
 import { useDeepLink, useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
-import { DocsTrigger } from '@/docs/DocsTrigger'
-import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { isAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { BackToHubLink } from '../components/BackToHubLink'
+import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
@@ -700,22 +699,15 @@ function PresidentialHeader({
   const eo = holdings?.provenance?.executive_orders
   const withText = holdings?.provenance?.with_full_text
   return (
-    <header className="border-b border-border bg-card px-6 py-5">
+    // The band is page material now, not chrome: the title goes up to the site's
+    // one bar through SpokeIdentity, and the docs and AI-access buttons are in
+    // that bar once for the whole site. What is left is about this corpus.
+    <section className="border-b border-border bg-card px-6 py-5">
+      <SpokeIdentity spoke={spoke} />
       <BackToHubLink className="mb-3" />
-      <div className="flex items-start justify-between gap-4">
-        <div className="max-w-3xl">
-          <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
-            {spoke.title}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {spoke.plainEnglishDisclosure}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <DocsTrigger />
-          <AccessSettings />
-        </div>
-      </div>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        {spoke.plainEnglishDisclosure}
+      </p>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <HoldingTile
           label="Documents"
@@ -735,7 +727,7 @@ function PresidentialHeader({
           Could not load holdings: {error}
         </p>
       )}
-    </header>
+    </section>
   )
 }
 

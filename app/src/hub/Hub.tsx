@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { DocsTrigger } from '@/docs/DocsTrigger'
-import { AccessSettings } from '@/llm/AccessSettings'
 import { getHoldingsCached } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
 import { spokes } from '@/spokes/registry'
 import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
-import { HubSearch } from './HubSearch'
+import { HubKeywordSearch } from './HubKeywordSearch'
 
 /**
  * Hub landing surface — brief #1 (general AMA hub).
@@ -16,11 +14,26 @@ import { HubSearch } from './HubSearch'
  * each active card linking into its spoke and each coming-soon card
  * showing the holdings disclosure but no link.
  *
- * The cross-corpus keyword search (brief #1 §3 free tier) sits above the
- * spoke grid: a single plain-language input fires parallel FTS queries
- * across all loaded corpora and surfaces grouped-by-corpus results inline.
- * The paid AI synthesis layer (brief #1 Phase 2) lands later — needs
- * pgvector to provide a single comparable relevance score across tables.
+ * One search affordance sits above the spoke grid, labelled plainly
+ * "Search" ({@link HubKeywordSearch}): a single plain-language input fires
+ * parallel FTS queries across all loaded corpora and surfaces
+ * grouped-by-corpus results inline.
+ *
+ * It used to be one half of a segmented Ask / Search toggle, semantic on
+ * the left and keyword on the right. Both halves are gone as a choice the
+ * reader makes. Whether a query is answered semantically or lexically is a
+ * property of the corpus being searched, not a setting anyone arrives here
+ * with an opinion about — and the "ask across everything" moment the Ask
+ * tab existed for is now the /explorer route, which does it better with a
+ * tool loop and a visible cost. `HubAmaSearch.tsx` stays in the tree
+ * unreferenced so that call is cheap to reverse.
+ *
+ * The slot that toggle vacated held a second pill bar for a day — Search
+ * beside a link to /explorer — and it is gone too. It was a third thing
+ * claiming to be the top of the page, under a masthead that already carried
+ * the way to the Explorer. The hub no longer draws a bar at all: the site's
+ * one bar is mounted above every route in `App` (`components/SiteBar.tsx`),
+ * so this page is its own content and nothing else.
  */
 export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
@@ -28,10 +41,9 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
     // three properties the utilities below read, and the panel treats this
     // attribute being in the DOM as "the hub is what you are looking at".
     <main data-tune="hub" className="min-h-screen bg-lawfare-paper text-foreground">
-      <HubHeader onNavigate={onNavigate} />
       <div className="mx-auto max-w-[var(--hub-measure)] px-[var(--hub-gutter)] pb-16">
         <HubHero />
-        <HubSearch onNavigate={onNavigate} />
+        <HubKeywordSearch onNavigate={onNavigate} />
         <SpokeGrid onNavigate={onNavigate} />
         <AboutPanel />
         <HubFooter onNavigate={onNavigate} />
@@ -40,112 +52,7 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   )
 }
 
-function HubHeader({ onNavigate }: { onNavigate: (path: string) => void }) {
-  const explorerHref = toHref('/explorer')
-  return (
-    <header className="border-b border-lawfare-line bg-lawfare-paper">
-      <div className="mx-auto flex max-w-[var(--hub-measure)] items-center justify-between gap-4 px-[var(--hub-gutter)] py-4">
-        <div className="flex items-baseline gap-3">
-          {/* text-3xl, split: the size is the knob, the line-height it used to
-              carry is pinned so tuning the size cannot move the masthead's height. */}
-          <span className="font-serif text-[length:var(--hub-wordmark)] leading-[2.25rem] font-semibold tracking-tight text-foreground">
-            RAGtime
-          </span>
-          <span className="hidden font-serif text-[15px] italic text-lawfare-text-secondary sm:inline">
-            research across government
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="hidden text-xs text-lawfare-muted sm:inline">
-            a project of{' '}
-            <span className="font-bold text-lawfare-text-secondary">Lawfare</span>
-          </span>
-          {/* The Explorer is a route beside the hub, not a spoke: it has no card in
-              the grid below, so the way to it is here. Same click rule as the cards —
-              a real href, plain left-clicks routed in-app. */}
-          <a
-            href={explorerHref}
-            onClick={(e) => {
-              if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
-                e.preventDefault()
-                onNavigate('/explorer')
-              }
-            }}
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            Explorer
-          </a>
-          <DocsTrigger />
-          <AccessSettings />
-        </div>
-      </div>
-    </header>
-  )
-}
-
-/** The loaded corpora as a quiet credibility strip under the hero.
- * Rounded, impressionistic figures; the exact, sourced counts live on each
- * corpus card below (and inside each spoke's holdings band).
- *
- * Numbers resolve live from each spoke's `getHoldings()` (shared with the
- * cards via the holdings cache); the `fallback` string renders immediately
- * and survives a Worker outage. `pick` selects the headline count from the
- * spoke's corpus-specific `counts` record. */
-const HUB_STATS: {
-  slug: string
-  label: string
-  fallback: string
-  pick: (counts: Record<string, number>) => number | undefined
-}[] = [
-  { slug: 'litigation', label: 'court cases', fallback: '1.5M', pick: (c) => c.cases },
-  { slug: 'usc', label: 'U.S. Code §§', fallback: '60.4k', pick: (c) => c.sections },
-  { slug: 'cfr', label: 'CFR §§', fallback: '228k', pick: (c) => c.sections },
-  { slug: 'olc', label: 'OLC opinions', fallback: '2,147', pick: (c) => c.opinions },
-  { slug: 'frus', label: 'FRUS documents', fallback: '314k', pick: (c) => c.documents },
-  { slug: 'commentary', label: 'Commentary pieces', fallback: '23.3k', pick: (c) => c.items },
-  { slug: 'presidential', label: 'presidential documents', fallback: '12.7k', pick: (c) => c.documents },
-  { slug: 'fr', label: 'Federal Register docs', fallback: '512k', pick: (c) => c.documents },
-  { slug: 'congress', label: 'congressional documents', fallback: '1.2M', pick: (c) => c.documents },
-  { slug: 'fbi', label: 'FBI Records', fallback: '10.7k', pick: (c) => c.documents },
-  { slug: 'sanctions', label: 'sanctioned entities', fallback: '19.6k', pick: (c) => c.entities },
-]
-
-/** 2,147 → '2,147'; 12,666 → '12.7k'; 227,728 → '228k'; 1,468,759 → '1.5M'.
- * Impressionistic on purpose — the strip is a credibility signal, not a
- * ledger; exact figures live on the cards below. */
-function formatHubStat(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
-  if (n >= 100_000) return `${Math.round(n / 1_000)}k`
-  if (n >= 10_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`
-  return n.toLocaleString()
-}
-
 function HubHero() {
-  // Live headline figures, keyed by spoke slug; fallbacks render until (and
-  // unless) the live fetch resolves.
-  const [live, setLive] = useState<Record<string, number>>({})
-
-  useEffect(() => {
-    let cancelled = false
-    for (const spoke of spokes) {
-      const stat = HUB_STATS.find((s) => s.slug === spoke.slug)
-      if (!stat) continue
-      void getHoldingsCached(spoke)
-        .then((h) => {
-          const n = stat.pick(h.counts)
-          if (!cancelled && typeof n === 'number' && n > 0) {
-            setLive((prev) => ({ ...prev, [spoke.slug]: n }))
-          }
-        })
-        .catch(() => {
-          // Quiet fallback — the static figure stays up.
-        })
-    }
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   return (
     <section className="pt-14 pb-2 text-center">
       <h1 className="mx-auto max-w-3xl font-serif text-[2.6rem] font-medium leading-[1.12] tracking-tight text-foreground">
@@ -157,16 +64,6 @@ function HubHero() {
         diplomatic history, the federal litigation that interprets them all —
         and Lawfare's analysis of the whole — together.
       </p>
-      <dl className="mx-auto mt-8 flex max-w-3xl flex-wrap items-baseline justify-center gap-x-7 gap-y-3">
-        {HUB_STATS.map((s) => (
-          <div key={s.label} className="flex items-baseline gap-1.5">
-            <dt className="font-serif text-2xl font-semibold text-lawfare-teal">
-              {live[s.slug] !== undefined ? formatHubStat(live[s.slug]) : s.fallback}
-            </dt>
-            <dd className="text-xs text-lawfare-muted">{s.label}</dd>
-          </div>
-        ))}
-      </dl>
     </section>
   )
 }

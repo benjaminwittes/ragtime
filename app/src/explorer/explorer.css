@@ -346,13 +346,20 @@
 .explorer .md ul { list-style: disc; }
 .explorer .md ol { list-style: decimal; }
 
-/* ── Under the masthead ─────────────────────────────────────────────────────────────
+/* ── Under the site bar ─────────────────────────────────────────────────────────────
  * The Explorer was the whole window; on the site it is the rest of one. The route in
- * App.tsx is a fixed-height column (masthead, band, this), so the conversation still
- * scrolls inside `.scroll` and the composer stays on screen. */
+ * App.tsx is a fixed-height column (the one site bar, then this), so the conversation
+ * still scrolls inside `.scroll` and the composer stays on screen. The band that used
+ * to sit between the two is gone: its controls render into the bar's slot. */
 .explorer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .explorer .app { height: auto; flex: 1; min-height: 0; }
 
 /* The line above the composer while no credential is set; the access button that fixes
- * it is in the band above, outside this scope, so it keeps the app's own look. */
+ * it is in the bar above, outside this scope, so it keeps the app's own look. */
 .explorer .credential { padding: 8px 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--dim); }
+
+/* Its neighbour: the refusals that have nowhere else to be said — no credential, a bad
+ * envelope, a network that dropped. They were a line of prose in the page's own band,
+ * and a sentence is not bar content, so they read here instead, where the reader is
+ * standing when the turn they asked for did not happen. */
+.explorer .refusal { padding: 8px 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--bad); }

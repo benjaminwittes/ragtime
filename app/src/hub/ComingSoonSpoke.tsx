@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { DocsTrigger } from '@/docs/DocsTrigger'
-import { AccessSettings } from '@/llm/AccessSettings'
 import { toHref } from '@/lib/routing'
+import { SpokeIdentity } from '@/spokes/components/SpokeIdentity'
 import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
 
 /**
@@ -13,8 +12,11 @@ import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
  * page is informative rather than just a "404 / placeholder" treatment.
  * Surface area = the descriptor metadata that's already authoritative.
  *
- * Header mirrors the hub for visual continuity (same brand bar + DocsTrigger
- * + AccessSettings).
+ * It used to draw its own brand bar with the docs and AI-access buttons in it,
+ * mirroring the hub. The site has one bar now, mounted above every route, so
+ * this page draws none: the corpus's name goes up to that bar through
+ * {@link SpokeIdentity}, the same way an active spoke's does, and what is left
+ * here is the card.
  */
 export function ComingSoonSpoke({
   spoke,
@@ -25,43 +27,16 @@ export function ComingSoonSpoke({
 }) {
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3">
-          <a
-            href={toHref('/')}
-            onClick={(e) => {
-              if (
-                e.button === 0 &&
-                !e.ctrlKey &&
-                !e.metaKey &&
-                !e.shiftKey &&
-                !e.altKey
-              ) {
-                e.preventDefault()
-                onNavigate('/')
-              }
-            }}
-            className="font-serif text-2xl font-bold tracking-tight text-foreground hover:opacity-80"
-          >
-            RAGtime
-          </a>
-          <div className="flex items-center gap-4">
-            <DocsTrigger />
-            <AccessSettings />
-          </div>
-        </div>
-      </header>
+      <SpokeIdentity spoke={spoke} />
       <div className="mx-auto max-w-3xl px-6 py-10">
         <Card>
           <CardContent className="space-y-5 p-6">
-            <div className="flex items-baseline justify-between gap-3">
-              <h1 className="font-serif text-2xl font-semibold">
-                {spoke.title}
-              </h1>
-              <span className="rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                Coming soon
-              </span>
-            </div>
+            {/* The corpus is named in the bar above, once, like every other
+                `/corpus/<slug>` route. What the card has to add is that it is
+                not open yet. */}
+            <span className="inline-block rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300">
+              Coming soon
+            </span>
             <p className="text-sm text-muted-foreground">{spoke.description}</p>
             <Holdings spoke={spoke} />
             <div>

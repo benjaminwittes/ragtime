@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { DocsTrigger } from '@/docs/DocsTrigger'
+import { SiteBarActions } from '@/components/SiteBar'
 import { useAuth } from '@/lib/use-auth'
-import { AccessSettings } from '@/llm/AccessSettings'
 
 import { DAILY_MODEL_CALLS, WORKER_URL } from './config.ts'
 import { useExplorer } from './hooks/useExplorer.ts'
@@ -22,14 +21,17 @@ import { Conversations } from './Conversations.tsx'
 /**
  * `/explorer` — the Explorer as a page of this app.
  *
- * Two parts, deliberately in two languages. The band at the top is the app's: the
- * same primitives every spoke header uses (AccessSettings, DocsTrigger, Button), so
- * the credential, the docs and "start over" look and behave as they do everywhere
- * else on the site. Everything under it is the Explorer as it was written — its own
- * markup and its own stylesheet, scoped under `.explorer` (explorer.css) — so the
+ * Two parts, deliberately in two languages. The controls are the app's — the same
+ * primitives every other surface uses (Button, the conversations sheet) — and they
+ * are not on this page at all any more: they go up into the site's one bar through
+ * `SiteBarActions`, so the Explorer opens on one bar rather than the brand strip plus
+ * a band of its own. Everything under the bar is the Explorer as it was written — its
+ * own markup and its own stylesheet, scoped under `.explorer` (explorer.css) — so the
  * conversation keeps its language while the question of whether to re-express it on
  * the kit stays open, one component at a time. Nothing of the kit goes inside
- * `.explorer`: the sheet's element rules would win over the kit's utilities there.
+ * `.explorer`: the sheet's element rules would win over the kit's utilities there,
+ * which is also why the controls render through a portal into the bar rather than
+ * being drawn here.
  *
  * What the page no longer owns: the worker origin, where links open, and the
  * credential. `useAuth()` resolves the same union the turn is sent with — a signed-in
@@ -104,73 +106,66 @@ export function ExplorerPage() {
 
   return (
     <>
-      <header className="border-b border-border bg-card">
-        {/* Tighter at phone width than anywhere else, because 390px is where this row
-            runs out. Measured with a conversation open — so with Trail and Start over in
-            it — the band wrapped to a second row and cost 146px of 844 instead of 110.
-            The gap, the padding and the word "beta" below are what buy the row back. */}
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-2 px-3 py-3 sm:gap-x-4 sm:px-6">
-          {/* Sized down a step on a phone, where the band is competing with the question
-              for the top of the screen and 390px does not have room for both at full size. */}
-          <h1 className="font-serif text-lg font-bold tracking-tight text-foreground sm:text-2xl">
-            Explorer <span className="ml-1 hidden font-sans text-xs font-normal text-muted-foreground sm:inline">beta</span>
-          </h1>
-          {/* The phase pill was here too. It is gone rather than moved: at rest the empty
-              state explains in prose what orient is and what it costs, and once there is a
-              conversation every turn wears its own phase pill. Between the two there was no
-              moment it was the only thing saying so — and on a phone it was the width that
-              wrapped the band onto a second row. */}
-          <span className="flex-1" />
-          {refusal && (
-            <span className="text-sm text-destructive" role="alert">
-              {refusal.message}
-            </span>
-          )}
-          {started && (
-            <Button
-              type="button"
-              variant={trail.hot ? 'destructive' : 'outline'}
-              size="sm"
-              aria-expanded={trailOpen}
-              aria-controls="trail"
-              onClick={() => setTrailOpen((open) => !open)}
-            >
-              {/* Abbreviated below `sm`, like "AI access" and "Docs" either side of it.
-                  The two labels that only appear when a limit is close were also the two
-                  too wide for the row at 390, so the band wrapped onto a second row at
-                  exactly the moment it had something to say. `attention` holds both
-                  wordings; which one is on screen is a question about the width. */}
-              <span className="sm:hidden">{trail.short}</span>
-              <span className="hidden sm:inline">{trail.label}</span>
-            </Button>
-          )}
-          {(started || x.conversations.length > 0) && (
-            <Conversations
-              conversations={x.conversations}
-              current={x.cid}
-              disabled={x.busy}
-              onNew={() => {
-                // Closing the trail is not tidiness, it is the way back. A new
-                // conversation empties the turns, which unmounts the control above — and
-                // below 900px an open trail hides the conversation, so leaving it open
-                // would strand the reader on an empty panel with nothing left to press.
-                setTrailOpen(false)
-                x.startNew()
-              }}
-              onOpen={(cid) => {
-                setTrailOpen(false)
-                x.open(cid)
-              }}
-              onForget={(cid) => {
-                setTrailOpen(false)
-                x.forget(cid)
-              }}
-            />
-          )}
-          <AccessSettings />
-          <DocsTrigger />
-        </div>
-      </header>
+      {/* The band this page used to draw is gone into the site's one bar: the brand
+          strip sat directly above it, so the Explorer opened on two bars. What is left
+          of the band goes up through the bar's slot — the trail toggle and the
+          conversations picker, which are controls over state that lives here and cannot
+          be lifted anywhere. The title went with it: the bar's own Explorer link is
+          `aria-current` on this route, so the page is named once. */}
+      <SiteBarActions>
+        {/* The page's one heading. The bar's Explorer link names this route for anyone
+            reading the screen, and `aria-current` says it is where they are; a document
+            still wants a heading, and this is it, said once and not drawn twice. */}
+        <h1 className="sr-only">Explorer</h1>
+        {/* Still the first thing after the lockup, and still hidden below `sm`: 390px is
+            where that row runs out, and this is a marker rather than a control. */}
+        <span className="hidden font-sans text-xs text-muted-foreground sm:inline">beta</span>
+        {/* The phase pill was in the band too. It is gone rather than moved: at rest the
+            empty state explains in prose what orient is and what it costs, and once there
+            is a conversation every turn wears its own phase pill. */}
+        <span className="flex-1" />
+        {started && (
+          <Button
+            type="button"
+            variant={trail.hot ? 'destructive' : 'outline'}
+            size="sm"
+            aria-expanded={trailOpen}
+            aria-controls="trail"
+            onClick={() => setTrailOpen((open) => !open)}
+          >
+            {/* Abbreviated below `sm`, like "AI access" and "Docs" either side of it.
+                The two labels that only appear when a limit is close were also the two
+                too wide for the row at 390, so the row wrapped at exactly the moment it
+                had something to say. `attention` holds both wordings; which one is on
+                screen is a question about the width. */}
+            <span className="sm:hidden">{trail.short}</span>
+            <span className="hidden sm:inline">{trail.label}</span>
+          </Button>
+        )}
+        {(started || x.conversations.length > 0) && (
+          <Conversations
+            conversations={x.conversations}
+            current={x.cid}
+            disabled={x.busy}
+            onNew={() => {
+              // Closing the trail is not tidiness, it is the way back. A new
+              // conversation empties the turns, which unmounts the control above — and
+              // below 900px an open trail hides the conversation, so leaving it open
+              // would strand the reader on an empty panel with nothing left to press.
+              setTrailOpen(false)
+              x.startNew()
+            }}
+            onOpen={(cid) => {
+              setTrailOpen(false)
+              x.open(cid)
+            }}
+            onForget={(cid) => {
+              setTrailOpen(false)
+              x.forget(cid)
+            }}
+          />
+        )}
+      </SiteBarActions>
 
       <div className="explorer">
         <div className="app">
@@ -216,7 +211,16 @@ export function ExplorerPage() {
               {waiting && (
                 <div className="credential" role="status">
                   {wrongProvider ? 'The Explorer runs on Claude. ' : 'Nothing spends until you are signed in or have a key set. '}
-                  Use the access button in the band above.
+                  Use the access button in the bar above.
+                </div>
+              )}
+              {/* The refusals with nowhere else to appear used to be a line of prose in
+                  the band. A sentence is not bar content, so it comes down here instead —
+                  above the composer, beside the credential line, which is where the reader
+                  is standing when they read it. */}
+              {refusal && (
+                <div className="refusal" role="alert">
+                  {refusal.message}
                 </div>
               )}
               <Composer
