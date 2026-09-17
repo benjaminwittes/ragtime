@@ -12,23 +12,25 @@ export const gettingStartedEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 1,
   content: `
-RAGtime is a research tool over public records — eight primary-source
-corpora (federal court litigation, the U.S. Code, the Code of Federal
-Regulations, Justice Department legal opinions (OLC), presidential
+RAGtime is a research tool over public records. Ten of its eleven corpora
+are primary sources: federal court litigation, the U.S. Code, the Code of
+Federal Regulations, Justice Department legal opinions (OLC), presidential
 documents with their amendment/revocation graph, the Federal Register,
-congressional materials from public laws to hearing transcripts, and the
-documentary history of U.S. foreign relations (FRUS)) plus Lawfare's own
-published analysis (articles, podcasts, and newsletters) — nine corpora
-today, with more planned. Each is made searchable in one place and, where
-you want it, readable and analyzable with AI. (Lawfare is the one
-commentary corpus: there you're searching what Lawfare's authors have
-argued, not a primary source — see *Primary Sources, Not Commentary*.)
+congressional materials from public laws to hearing transcripts, the
+documentary history of U.S. foreign relations (FRUS), the FBI's released
+Vault files, and OFAC's sanctions lists and guidance. The eleventh is
+commentary — Lawfare and Executive Functions, their articles, podcasts,
+and newsletters. Each corpus is made searchable in one place and, where
+you want it, readable and analyzable with AI. (Commentary is the one
+corpus that isn't a primary source: there you're searching what named
+authors have argued — see *Primary Sources, Not Commentary*.)
 
 The shape of the tool is a **hub and spokes.**
 
-**The Hub** (the landing page) is the cross-everything entry point: one
-keyword search across all corpora at once. Use it when you don't yet know
-which corpus holds your answer.
+**The Hub** (the landing page) is the cross-corpus entry point: one
+keyword search that fans out across ten of the eleven at once. Use it when
+you don't yet know which corpus holds your answer. (Sanctions is the one
+the fan leaves out — search that corpus from its own workspace.)
 
 **Each spoke** is a corpus's own workspace, with the structured filters,
 the canonical document view, and the AI modes that fit that corpus.
