@@ -45,6 +45,12 @@
 	#   style-src needs 'unsafe-inline' because React `style={{...}}` props are
 	#   inline style attributes; removing that means removing them from the app.
 	#   Stripe needs nothing here: checkout is a top-level redirect, not Stripe.js.
+	#   The SPA names no font host because it ships its own: EB Garamond and
+	#   Lato are bundled under app/src/assets/fonts. /legacy.html still
+	#   @imports them from fonts.googleapis.com at two places in index.html,
+	#   which is why the legacy policy below keeps both hosts and this one
+	#   does not. Self-hosting them is what lets these two directives reach
+	#   'self' at all.
 	#
 	#   Two policies, because /legacy.html cannot meet the SPA's and should not
 	#   be allowed to weaken it. The deploy ships the legacy single-file app
@@ -60,7 +66,7 @@
 	@legacy path /legacy.html
 	@app not path /legacy.html
 
-	header @app Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; report-uri /csp-report; report-to csp"
+	header @app Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; report-uri /csp-report; report-to csp"
 
 	header @legacy Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://lawfare-assets-new.azureedge.net; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; report-uri /csp-report; report-to csp"
 
