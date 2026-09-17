@@ -61,11 +61,13 @@ that takes you to that corpus's full surface. In the workspace you can:
 - Use the corpus-specific AI mode (Ask, narrative synthesis, legal
   analysis) where available.
 
-**Search here, or ask?** That is what the two tabs are for. Search matches
-words, so use it when you have a phrase, a name, or a citation you expect
-to appear verbatim ("Youngstown", "50 U.S.C. 1702") — and the placeholder
-cycles through examples of exactly that, one per corpus, which Tab will
-put in the box for you. When the question is in your own words and you
+**Search here, or ask?** That is what the two tabs are for, and each one
+says so twice: the heading above the box changes its verb with the mode,
+and the caption under the tab names the cost. Search matches words, so use
+it when you have a phrase, a name, or a citation you expect to appear
+verbatim ("Freedom of Information Act", "5 U.S.C. 552") — and the
+placeholder cycles through examples of exactly that, one per corpus, which
+Tab will put in the box for you. When the question is in your own words and you
 don't know the wording the documents use, switch to Explorer and ask it:
 that is a conversation which researches across the corpora and hands you
 off into them. Each corpus workspace also has its own AI modes once you

@@ -83,9 +83,18 @@ const HUB_KEYWORD_CORPORA: CorpusSlug[] = HUB_KEYWORD_SPOKES.map((s) => s.slug)
 /** Which surface takes the sentence. Not persisted — see the note at the top. */
 type Mode = 'search' | 'explorer'
 
-const MODES: readonly { id: Mode; label: string }[] = [
-  { id: 'search', label: 'Search' },
-  { id: 'explorer', label: 'Explorer' },
+/* The two names, each with the one thing its sentence cannot say.
+ *
+ * The h1 carries what the box takes and what comes back; these captions carry
+ * what it costs, which is the half a reader needs precisely when both modes are
+ * available to them — an unlit Explorer is its own explanation, a lit one is a
+ * choice with a price. Three words each, in the muted mono the Tab hint uses, so
+ * the pair reads as annotation on the choice rather than a second line of copy.
+ * They sit under the tabs because that is where the choice is made; the sentence
+ * that used to do this job sat under the box, which is after it. */
+const MODES: readonly { id: Mode; label: string; cost: string }[] = [
+  { id: 'search', label: 'Search', cost: 'free, no AI' },
+  { id: 'explorer', label: 'Explorer', cost: 'uses AI' },
 ]
 
 /* The hub's motion, in seconds, because GSAP counts in seconds.
@@ -233,14 +242,21 @@ export function HubKeywordSearch({
           // sentence: no span, no live region, no second heading, no button.
           // What crosses between two corpora is the whole line's opacity, which
           // is also what lets it re-centre and re-wrap while nobody can see it.
-          heading={tick.set.title}
-          // 3.25rem from `sm`, where the longest of the twelve sentences is 889px
-          // against 976px of measure and every one of them holds a single line;
-          // 2.2rem below it, which is the size at which none of them takes a
-          // third line at 390. At 2.4 three of them did, and a title that is two
-          // lines for one corpus and three for the next moves the whole page
+          // The mode's own sentence, not one sentence for both: the verb is the
+          // big half of the Search/Explorer signal, so the h1 changes when the
+          // choice does. Same object either way, so the line neither re-measures
+          // nor moves the page under the reader.
+          heading={tick.set.titles[mode]}
+          // 3.25rem from `sm`, where the longest of the twenty-four sentences is
+          // 889px against 976px of measure and every one of them holds a single
+          // line; 2.2rem below it, which is the size at which none of them takes
+          // a third line at 390. At 2.4 three of them did, and a title that is
+          // two lines for one corpus and three for the next moves the whole page
           // under the reader every ninth second. Both numbers were measured in
-          // the real face rather than reasoned about.
+          // the real face rather than reasoned about — twelve when the rotation
+          // was written, twenty-four once each corpus got a second sentence for
+          // Search mode, and the widest is still the same litigation "Ask" line,
+          // so the cap did not move.
           headingClassName="mx-auto max-w-5xl font-serif text-[2.2rem] font-medium leading-[1.12] tracking-tight text-balance text-foreground sm:text-[3.25rem]"
           ledeClassName="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary"
           lede={
@@ -251,11 +267,13 @@ export function HubKeywordSearch({
           }
         />
 
-        {/* Two words in the page's reading voice, and the active one wears the
-            same accent the group headings below do: 2px of teal on the bottom
-            edge, the width of the word. The inactive one carries a transparent
-            border of the same weight so the pair sits on one baseline and
-            nothing moves when the choice changes. */}
+        {/* Two words in the page's reading voice, each over its price. The
+            active one wears the same accent the group headings below do: 2px of
+            teal on the bottom edge, the width of the word — which is why the
+            rule lives on a span around the label and not on the button, now that
+            the button is wider than its own name. The inactive one carries a
+            transparent border of the same weight so the pair sits on one
+            baseline and nothing moves when the choice changes. */}
         <div
           role="tablist"
           aria-label="What the box does"
@@ -283,14 +301,31 @@ export function HubKeywordSearch({
                 document.getElementById(`hub-mode-${next.id}`)?.focus()
               }}
               className={cn(
-                'border-b-2 pb-1 font-serif text-[16px] transition-colors duration-150',
+                'flex flex-col items-center font-serif text-[16px] transition-colors duration-150',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lawfare-teal',
                 mode === m.id
-                  ? 'border-lawfare-teal text-foreground'
-                  : 'border-transparent text-lawfare-text-secondary hover:text-lawfare-teal',
+                  ? 'text-foreground'
+                  : 'text-lawfare-text-secondary hover:text-lawfare-teal',
               )}
             >
-              {m.label}
+              <span
+                className={cn(
+                  'border-b-2 pb-1 transition-colors duration-150',
+                  mode === m.id ? 'border-lawfare-teal' : 'border-transparent',
+                )}
+              >
+                {m.label}
+              </span>
+              {/* Never the teal: teal is the accent that says *chosen*, and a
+                  price is not a choice. The active one only warms. */}
+              <span
+                className={cn(
+                  'mt-1 font-mono text-[11px] transition-colors duration-150',
+                  mode === m.id ? 'text-lawfare-text-warm' : 'text-lawfare-muted',
+                )}
+              >
+                {m.cost}
+              </span>
             </button>
           ))}
         </div>
@@ -403,14 +438,23 @@ export function HubKeywordSearch({
             Tab to use this question
           </p>
 
-          {/* What the mode actually does, in the docs' own framing, and the way
-              in for a reader who wants the longer version. Plain text: a link is
-              the one thing on this page that may be teal, and a box around it
-              would make it a third control under two tabs and a field. */}
-          <p className="mx-auto mt-1 max-w-3xl px-1 text-sm text-lawfare-text-warm">
-            {mode === 'search'
-              ? 'Matches words: a phrase, a name, a citation. Free, no AI.'
-              : 'A question in your own words. The Explorer plans, researches across the corpora, and hands you into them. Uses AI.'}{' '}
+          {/* The way in for a reader who wants the longer version, and nothing
+              else. What the mode *does* used to be spelled out here in a
+              sentence per mode, under the box — which is to say after the
+              reader had already chosen, in the smallest voice on the page, in
+              the one place they had no reason to look. That job moved up to the
+              title and the tab captions (2026-09-17, his ruling). What is left
+              is the link, which was never the explanation: plain text, because a
+              link is the one thing on this page that may be teal, and a box
+              around it would make it a third control under two tabs and a
+              field. */}
+          {/* Centred, unlike the Tab hint above it, and the split is on what the
+              two refer to: the hint describes the words in the field, so it sits
+              where those words start, and the link is a page-level way out, so
+              it sits under the middle like everything else in the hero. A lone
+              twelve-character link at the far left read as stranded once the
+              sentence that used to fill that line was gone. */}
+          <p className="mx-auto mt-1 max-w-3xl px-1 text-center text-sm">
             <button
               type="button"
               onClick={() => docs.open('getting-started')}

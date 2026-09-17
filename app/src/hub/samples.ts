@@ -73,20 +73,34 @@ export type SampleSet = {
    * actually be asked: the courts were filed in, the lists have people on them,
    * the commentary made something of it.
    *
-   * Three rules hold for all of them. Each begins "Ask", because the page is one
-   * gesture repeated and the first word is where the eye is when the rest
-   * changes. Each is honest to the spoke's declared coverage — "since 2025" on
-   * the courts is the litigation floor, and the regulations are asked what they
-   * *require* rather than what they used to. And each fits one line at 1100px in
-   * the title's face; at 390 they wrap to two and none of them to three, which
-   * was measured rather than hoped.
+   * **One sentence per mode** (2026-09-17, Thomas's ruling). The h1 used to open
+   * "Ask" in both modes, which meant the largest type on the page told a reader
+   * to ask a question while the box under it wanted keywords — the page's own
+   * biggest voice arguing against its own field. The verb now carries the
+   * difference: `explorer` asks, `search` searches, and the object says what the
+   * box takes in that corpus (a section, a part, a docket, a name). This is the
+   * *big* half of the signal; the small half is the caption under each tab,
+   * which carries the axis a sentence cannot — free versus spends.
    *
-   * `'all'` is exactly the Explorer's empty-state heading, word for word. Those
-   * two are the halves of one `surface-intro` morph, and a paraphrase would
-   * turn a sentence travelling between two surfaces into two sentences
-   * dissolving into each other.
+   * Four rules hold for all of them. Each begins with its mode's verb, because
+   * the page is one gesture repeated and the first word is where the eye is when
+   * the rest changes. Each is honest to the spoke's declared coverage — "since
+   * 2025" on the courts is the litigation floor, and the regulations are asked
+   * what they *require* rather than what they used to. Each names something the
+   * corpus genuinely has: `search` promises a *section* to the Code and a *part*
+   * to the CFR because those are its units, and promises no date anywhere the
+   * corpus has no dates. And each fits one line at 1100px in the title's face;
+   * at 390 they wrap to two and none of them to three, which was measured rather
+   * than hoped — the `explorer` twelve when they were written, and both
+   * twenty-four again when `search` was added.
+   *
+   * `explorer` on `'all'` is exactly the Explorer's empty-state heading, word
+   * for word. Those two are the halves of one `surface-intro` morph, and a
+   * paraphrase would turn a sentence travelling between two surfaces into two
+   * sentences dissolving into each other. The `search` sentence is under no such
+   * constraint: the box in that mode does not cross to the Explorer.
    */
-  title: string
+  titles: { search: string; explorer: string }
   samples: readonly [Sample, Sample, Sample]
 }
 
@@ -97,7 +111,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // word: the reader who crosses into the Explorer with one of them should
     // find the surface there saying the same thing, not a paraphrase of it.
     slug: 'all',
-    title: 'Ask the federal record a question.',
+    titles: {
+      search: 'Search the federal record for a phrase.',
+      explorer: 'Ask the federal record a question.',
+    },
     samples: [
       {
         query: 'Freedom of Information Act',
@@ -120,7 +137,10 @@ export const SAMPLES: readonly SampleSet[] = [
   /* ---- The law --------------------------------------------------------- */
   {
     slug: 'usc',
-    title: 'Ask the U.S. Code what the law says.',
+    titles: {
+      search: 'Search the U.S. Code for a section or a term.',
+      explorer: 'Ask the U.S. Code what the law says.',
+    },
     samples: [
       {
         // A citation rather than a phrase, because the box takes both and a
@@ -142,7 +162,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // Current state only — the CFR spoke tracks one edition and says so, so
     // nothing here may ask how a rule changed.
     slug: 'cfr',
-    title: 'Ask the regulations what the agencies require.',
+    titles: {
+      search: 'Search the regulations for a part or a term.',
+      explorer: 'Ask the regulations what the agencies require.',
+    },
     samples: [
       {
         query: 'environmental impact statement',
@@ -163,7 +186,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // Five collections with five coverage floors. Public laws are the only one
     // that reaches 1789; hearings begin in 1933.
     slug: 'congress',
-    title: 'Ask Congress what it passed, and what it heard.',
+    titles: {
+      search: 'Search Congress for a law, a bill, a hearing.',
+      explorer: 'Ask Congress what it passed, and what it heard.',
+    },
     samples: [
       {
         query: 'War Powers Resolution',
@@ -184,7 +210,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // Rules and proposed rules are complete from 1994; notices are still
     // arriving in waves, so these three ask about rules.
     slug: 'fr',
-    title: 'Ask the Federal Register which rules changed.',
+    titles: {
+      search: 'Search the Federal Register for a rule.',
+      explorer: 'Ask the Federal Register which rules changed.',
+    },
     samples: [
       {
         query: 'artificial intelligence',
@@ -206,7 +235,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // the President signs, rather than the office as an institution. The three
     // samples stay on the orders, which is the part that reaches furthest back.
     slug: 'presidential',
-    title: 'Ask the presidency what it ordered.',
+    titles: {
+      search: 'Search the presidency’s orders for a name.',
+      explorer: 'Ask the presidency what it ordered.',
+    },
     samples: [
       {
         query: 'federal advisory committee',
@@ -227,7 +259,10 @@ export const SAMPLES: readonly SampleSet[] = [
   /* ---- As read --------------------------------------------------------- */
   {
     slug: 'olc',
-    title: 'Ask the OLC what the executive may do.',
+    titles: {
+      search: 'Search the OLC’s opinions for a phrase.',
+      explorer: 'Ask the OLC what the executive may do.',
+    },
     samples: [
       {
         query: 'Freedom of Information Act',
@@ -247,7 +282,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // The floor is 2025-01-20 and the keyword index runs over docket-entry
     // descriptions, so the words here are the words a docket uses.
     slug: 'litigation',
-    title: 'Ask the federal courts what was filed since 2025.',
+    titles: {
+      search: 'Search the dockets for a case or a party.',
+      explorer: 'Ask the federal courts what was filed since 2025.',
+    },
     samples: [
       {
         query: 'temporary restraining order',
@@ -271,7 +309,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // memoranda of conversation, the paper a decision left behind — and it gives
     // the sentence a subject; "how it was decided" had no "it" to point to.
     slug: 'frus',
-    title: 'Ask the diplomatic record what the cables said.',
+    titles: {
+      search: 'Search the cables for a place or a name.',
+      explorer: 'Ask the diplomatic record what the cables said.',
+    },
     samples: [
       {
         query: 'Berlin',
@@ -294,7 +335,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // make the hub's resting state an accusation, which is not what a reader who
     // has typed nothing asked for.
     slug: 'fbi',
-    title: 'Ask the FBI’s Vault what it released.',
+    titles: {
+      search: 'Search the FBI’s Vault for a name or a file.',
+      explorer: 'Ask the FBI’s Vault what it released.',
+    },
     samples: [
       {
         query: 'Amelia Earhart',
@@ -325,7 +369,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // designation date, and a question shaped that way teaches the box a fact
     // the corpus cannot supply.
     slug: 'sanctions',
-    title: 'Ask the sanctions lists who is on them.',
+    titles: {
+      search: 'Search the sanctions lists for a name.',
+      explorer: 'Ask the sanctions lists who is on them.',
+    },
     samples: [
       {
         query: 'shipping',
@@ -349,7 +396,10 @@ export const SAMPLES: readonly SampleSet[] = [
     // naming one is a promise that the corpus holds them, and it is the kind of
     // promise that rots quietly when the federation changes.
     slug: 'commentary',
-    title: 'Ask the commentary what Lawfare made of it.',
+    titles: {
+      search: 'Search the commentary for a phrase or a name.',
+      explorer: 'Ask the commentary what Lawfare made of it.',
+    },
     samples: [
       {
         query: 'cybersecurity',
