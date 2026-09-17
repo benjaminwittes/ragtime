@@ -83,7 +83,8 @@ function HubHero() {
  * groups are the relation — the law, how it has been read, the record of
  * what was done, and the commentary that is not a primary source at all —
  * and `spokes/registry.ts` argues for the membership. Here they are only
- * rendered: a heading in the eyebrow voice, then that group's entries.
+ * rendered: a heading in the page's own reading voice, then that group's
+ * entries.
  */
 function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
   // One counter over headings and entries in DOM order, resolved once here rather
@@ -116,11 +117,17 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
         <div key={group.heading} className={g === 0 ? 'mt-6' : 'mt-8'}>
           {/* The heading sits on the paper, above the first rule of its group rather
               than inside a ruled cell, so it reads as a label for what follows and not
-              as another entry. Same voice as the "N loaded" count beside "Corpora":
-              small, mono, spaced — the page's way of saying something about the content
-              rather than saying content. */}
+              as another entry. It is in the serif because it names the group — "The law",
+              "As read" — in the same reading voice as everything it heads, and a mono
+              uppercase eyebrow said it in the voice of a spec sheet instead, which is the
+              one voice this page has no use for. The teal is lawfaremedia.org's own accent
+              gesture: one colour on the bottom edge, 2px, the width of the words and not
+              of the measure — so it marks the heading rather than ruling the page, and
+              four groups get one accent rather than four. `mb-3` under it keeps that rule
+              clear of the group's first hairline; nearer, and the two read as one double
+              rule. */}
           <h3
-            className="pb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+            className="mb-3 inline-block border-b-2 border-lawfare-teal pb-1 font-serif text-[17px] font-semibold text-foreground"
             style={{ viewTransitionName: `hub-card-${group.headingIndex + 1}` }}
           >
             {group.heading}
@@ -223,7 +230,7 @@ function SpokeCard({
           {spoke.title}
         </a>
       </h4>
-      <p className="text-sm text-muted-foreground">{spoke.description}</p>
+      <p className="text-sm text-lawfare-text-warm">{spoke.description}</p>
       <HoldingsSummary spoke={spoke} />
     </div>
   )
@@ -267,14 +274,14 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
 
   if (errored) {
     return (
-      <p className="font-mono text-xs text-muted-foreground">
+      <p className="font-mono text-xs text-lawfare-text-warm">
         (holdings unavailable)
       </p>
     )
   }
   if (!holdings) {
     return (
-      <p className="font-mono text-xs text-muted-foreground">
+      <p className="font-mono text-xs text-lawfare-text-warm">
         Loading holdings…
       </p>
     )
@@ -289,7 +296,7 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
   const [label, value] = headline
 
   return (
-    <p className="font-mono text-xs text-muted-foreground">
+    <p className="font-mono text-xs text-lawfare-text-warm">
       {value.toLocaleString()} {label}
     </p>
   )

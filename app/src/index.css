@@ -120,6 +120,16 @@
    * else. Never a surface, a chip or a state; it exists so a hit can be seen without the
    * brand colour having to do that job too. */
   --color-lawfare-mark: #fdf3c2;
+  /* Secondary text that belongs to warm paper. The paper is #fbfaf7 and the two hairline
+   * rules are #e3e0d8 and #cdc8ba — all three sit at hue ~90 — while `--muted-foreground`
+   * and `--color-lawfare-text-secondary` carry no chroma at all, so copy set in them is
+   * literally cold text on a warm page. Same lightness as `--muted-foreground` (0.556), so
+   * contrast against the paper is unchanged; the chroma is the hairline's own (0.012) at
+   * the hairline's own hue, which is what makes the text and the rules read as one family.
+   * Added rather than swapped: this round is hub-scoped, and the two neutral tokens are
+   * read across the whole app, so they are left exactly as they are. It exists so the hub's
+   * secondary text is warm on warm paper. */
+  --color-lawfare-text-warm: oklch(0.556 0.012 90);
 }
 
 :root {
