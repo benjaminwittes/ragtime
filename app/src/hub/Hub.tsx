@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
-import { Card, CardContent } from '@/components/ui/card'
 import { getHoldingsCached } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
 import { spokes } from '@/spokes/registry'
@@ -11,8 +10,8 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  * Hub landing surface — brief #1 (general AMA hub).
  *
  * The hub is the user's entry point to RAGtime. It surfaces the loaded
- * corpora as cards with their holdings (counts + coverage + last-updated),
- * each one linking into its spoke.
+ * corpora as ruled rows with their holdings (counts + coverage +
+ * last-updated), each one linking into its spoke.
  *
  * One search affordance sits above the spoke grid, labelled plainly
  * "Search" ({@link HubKeywordSearch}): a single plain-language input fires
@@ -90,9 +89,9 @@ function HubHero() {
 function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
     <section className="mt-10 space-y-3 border-t border-lawfare-line pt-8">
-      {/* This row leads the cards out and leads them back in — see the stagger in
+      {/* This row leads the corpus rows out and leads them back in — see the stagger in
           `src/transitions.css`. It is named and they are named; the `<section>` around
-          them is not, because a named ancestor would take the whole grid out of the page
+          them is not, because a named ancestor would take the whole list out of the page
           snapshot as one picture and there would be nothing left to stagger. */}
       <div
         className="flex items-baseline justify-between gap-4"
@@ -103,11 +102,19 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
           {spokes.length} loaded
         </span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {/* The index is the card's name for the length of the transition, and nothing
-            else: `hub-card-1` through `hub-card-N` in grid order, so the choreography can
+      {/* One column, not two, and no gap. A ruled list's argument is a regular cadence of
+          rules down one measure: two columns of rows whose descriptions wrap to different
+          depths give two cadences that agree nowhere, and every mismatch between them
+          reads as a broken rule rather than as a separated row. A gap would be the same
+          mistake in miniature — the rows have to touch for the rule between them to be
+          the thing that separates them. The width the second column used to buy is
+          recovered inside each row instead: above `sm`, the holdings and the link sit
+          beside the title rather than under it, so a row stays about three lines deep. */}
+      <div>
+        {/* The index is the row's name for the length of the transition, and nothing
+            else: `hub-card-1` through `hub-card-N` in list order, so the choreography can
             hold each one back by one more beat than the last. By position rather than by
-            slug because the stagger is about where a card is on the screen, not which
+            slug because the stagger is about where a row is on the screen, not which
             corpus it happens to be — reorder the registry and the wave still runs top to
             bottom. `transitions.css` writes its rules out to twelve; there are eleven
             spokes today, and a twelfth added here needs a line added there. */}
@@ -125,7 +132,7 @@ function SpokeCard({
   onNavigate,
 }: {
   spoke: CorpusSpoke
-  /** Position in the grid, which is this card's place in the exit wave. See `SpokeGrid`. */
+  /** Position in the list, which is this row's place in the exit wave. See `SpokeGrid`. */
   index: number
   onNavigate: (path: string) => void
 }) {
@@ -133,13 +140,29 @@ function SpokeCard({
   const realHref = toHref(href)
 
   return (
-    <Card
-      className="transition hover:border-primary/60 hover:shadow-sm"
+    // This was a bordered, rounded, shadowed card; it is now a row on the page's own
+    // paper, separated from its neighbours by a hairline rule. A box contains, and says
+    // that what is inside it is a thing apart from the page. A rule only separates, and
+    // says where one corpus stops and the next begins — which is the whole of what a
+    // corpus in a list of corpora needs said about it.
+    //
+    // The rule is `border-t` on every row rather than `divide-y` on the container, for
+    // two reasons. It gives the first row a rule too, so the cadence starts at the top of
+    // the list rather than one row late, and the heading above is separated from the list
+    // the same way the rows are separated from each other. And it puts the rule on the
+    // row itself rather than on a parent's `* + *` selector, so it travels with the row
+    // when the exit wave lifts each one out under its own name. Nothing closes the list
+    // at the bottom: a rule separates rather than encloses, and there is nothing below
+    // the last row for it to be separated from until the about panel brings its own.
+    <div
+      className="flex flex-col gap-2 border-t border-lawfare-line py-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8"
       style={{ viewTransitionName: `hub-card-${index + 1}` }}
     >
-      <CardContent className="space-y-3 p-5">
+      <div className="min-w-0 space-y-1 sm:flex-1">
         <h3 className="font-serif text-lg font-semibold">{spoke.title}</h3>
         <p className="text-sm text-muted-foreground">{spoke.description}</p>
+      </div>
+      <div className="space-y-2 sm:max-w-[50%] sm:shrink-0 sm:text-right">
         <HoldingsSummary spoke={spoke} />
         <a
           href={realHref}
@@ -155,21 +178,21 @@ function SpokeCard({
               onNavigate(href)
             }
           }}
-          className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
         >
           Open <span aria-hidden>→</span>
         </a>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
 /**
- * Holdings disclosure rendered inside each card. Counts come from the
+ * Holdings disclosure rendered inside each row. Counts come from the
  * spoke's `getHoldings()` — for litigation, that's a live Worker call;
  * for the others, hardcoded values from the corpus ingest reports.
  *
- * Failures render as a quiet "—" rather than blocking the card. The hub is
+ * Failures render as a quiet "—" rather than blocking the row. The hub is
  * a navigation surface; a stale or unreachable count shouldn't keep the
  * user from getting into the spoke.
  */
