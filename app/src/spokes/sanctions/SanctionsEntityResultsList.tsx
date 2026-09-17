@@ -97,9 +97,11 @@ export function SanctionsEntityRowsTable({
   onOpenEntity: (row: SanctionsEntityDisplayRow) => void
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    // Un-boxed to match components/ResultsList.tsx (7e75ba3): rules separate content,
+    // boxes mean interactive.
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             <Th>Name</Th>
             <Th>Type</Th>
@@ -108,7 +110,7 @@ export function SanctionsEntityRowsTable({
             <Th>List</Th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody>
           {rows.map((r) => {
             const akas = aliasLine(r.aliases)
             return (
@@ -124,7 +126,7 @@ export function SanctionsEntityRowsTable({
                   }
                 }}
                 aria-label={`Open ${r.primary_name ?? 'entry ' + r.id} in detail panel`}
-                className="cursor-pointer hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
+                className="cursor-pointer border-t border-lawfare-line hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
               >
                 <Td>
                   <span className="font-medium text-foreground">
@@ -192,11 +194,11 @@ export function ProgramChips({
 
 function ExecutedSqlDisclosure({ sql }: { sql: string }) {
   return (
-    <details className="mb-3 rounded-md border border-border bg-muted/30">
+    <details className="mb-3 border-t border-lawfare-line bg-muted/30">
       <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/60">
         Executed SQL
       </summary>
-      <div className="border-t border-border p-3">
+      <div className="border-t border-lawfare-line p-3">
         <pre className="overflow-x-auto rounded bg-background p-2 font-mono text-[11px] leading-relaxed text-foreground">
           {sql}
         </pre>

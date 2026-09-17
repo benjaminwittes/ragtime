@@ -62,9 +62,11 @@ export function ClemencyRowsTable({
   onOpenGrant: (row: ClemencyGrantDisplayRow) => void
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    // Un-boxed to match components/ResultsList.tsx (7e75ba3): rules separate content,
+    // boxes mean interactive.
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             <Th>Recipient</Th>
             <Th>Type</Th>
@@ -74,7 +76,7 @@ export function ClemencyRowsTable({
             <Th>Source</Th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody>
           {rows.map((r) => (
             <tr
               key={r.pardon_id}
@@ -85,7 +87,7 @@ export function ClemencyRowsTable({
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenGrant(r) }
               }}
               aria-label={`Open ${r.person_name ?? 'grant ' + r.pardon_id} in detail panel`}
-              className="cursor-pointer hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
+              className="cursor-pointer border-t border-lawfare-line hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
             >
               <Td>
                 <span className="font-medium text-foreground">{r.person_name ?? '(unnamed)'}</span>
