@@ -188,9 +188,20 @@ export function ResultsList({
         {(count ?? rows.length).toLocaleString()} cases · showing first{' '}
         {rows.length.toLocaleString()}
       </p>
-      <div className="overflow-x-auto rounded-md border border-border">
+      {/* This was a bordered, rounded container drawn around rows a `divide-y` had already
+          separated — a box around a list that did not need one. The box is gone and only
+          the scroll survives, because a table wider than the pane still has to move under
+          the reader's finger. What is left is the page's own paper with a hairline between
+          one case and the next: a row is separated from the row below it, not contained
+          with it. The rule sits on the row rather than on a parent's `* + *` selector, so
+          the cadence starts at the first row — and that first rule is also the one that
+          separates the column heads from the list, drawn once. Nothing closes the table at
+          the bottom; a rule separates rather than encloses. */}
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+          {/* Column heads are labels on the page, not a filled band across it — the app's
+              small-label vocabulary, the one the hub counts its corpora in. */}
+          <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             <tr>
               <Th>Case</Th>
               <Th>Docket</Th>
@@ -210,7 +221,7 @@ export function ResultsList({
               {annotationCols.includes('label') && <Th>Label</Th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody>
             {rows.map((r) => {
               const verdict =
                 source?.kind === 'claude_read'
@@ -234,7 +245,7 @@ export function ResultsList({
                     }
                   }}
                   aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
-                  className="cursor-pointer scroll-mt-20 hover:bg-muted/50 focus:bg-muted/60 focus:outline-none target:bg-primary/10"
+                  className="cursor-pointer scroll-mt-20 border-t border-lawfare-line hover:bg-muted/50 focus:bg-muted/60 focus:outline-none target:bg-primary/10"
                 >
                   <Td>
                     <span className="font-medium text-foreground">
@@ -319,15 +330,21 @@ function AnalysisNarrative({
 }) {
   const [open, setOpen] = useState(true)
   return (
+    // The answer is the page's own content, so the card it used to sit on goes: no border,
+    // no radius, no `bg-card` surface, and none of the padding only a box justified. The
+    // summary is still a control — it opens and closes — but it takes its affordance as a
+    // pointer and a colour change, sized to its own label, rather than as a full-width
+    // fill that would put back the band the column heads just lost. The body is opened by
+    // a rule instead of enclosed by a border.
     <details
       open={open}
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-      className="mb-3 rounded-md border border-border bg-card"
+      className="mb-3"
     >
-      <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/40">
+      <summary className="w-fit cursor-pointer select-none py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
         {title}
       </summary>
-      <div className="space-y-3 border-t border-border px-5 py-4 text-sm text-foreground">
+      <div className="space-y-3 border-t border-lawfare-line pt-4 text-sm text-foreground">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={MARKDOWN_COMPONENTS}
@@ -352,7 +369,7 @@ const MARKDOWN_COMPONENTS = {
   ),
   h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
     <h2
-      className="font-serif text-xl font-semibold mt-5 mb-2 border-b border-border pb-1"
+      className="font-serif text-xl font-semibold mt-5 mb-2 border-b border-lawfare-line pb-1"
       {...props}
     />
   ),
@@ -374,9 +391,13 @@ const MARKDOWN_COMPONENTS = {
   li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
     <li className="leading-relaxed" {...props} />
   ),
+  // A blockquote inside a corpus synthesis is the record's own words, quoted back. So it
+  // takes the record's face and the page's foreground ink, and a leading rule in the
+  // strong hairline marks it as quoted before a word is read — not italic, not greyed,
+  // which said "aside" about the one thing on the page that is primary source.
   blockquote: (props: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
     <blockquote
-      className="border-l-4 border-muted-foreground/30 pl-4 italic text-muted-foreground"
+      className="border-l-2 border-lawfare-line-strong pl-4 font-serif text-foreground"
       {...props}
     />
   ),
@@ -393,21 +414,26 @@ const MARKDOWN_COMPONENTS = {
     />
   ),
   hr: (props: React.HTMLAttributes<HTMLHRElement>) => (
-    <hr className="my-4 border-border" {...props} />
+    <hr className="my-4 border-lawfare-line" {...props} />
   ),
+  // A table the model wrote is the same object as the table of cases below it, so it is
+  // un-boxed the same way: the scroll stays, the border and the corner go, the heads are
+  // labels rather than a band, and the rule rides on each body row. The rule is reached
+  // through `tbody` rather than through the `tr` component because that component renders
+  // the header's row too, and a rule above the heads would open the table twice.
   table: (props: React.TableHTMLAttributes<HTMLTableElement>) => (
-    <div className="my-3 overflow-x-auto rounded-md border border-border">
+    <div className="my-3 overflow-x-auto">
       <table className="w-full text-sm" {...props} />
     </div>
   ),
   thead: (props: React.HTMLAttributes<HTMLTableSectionElement>) => (
     <thead
-      className="bg-muted text-xs uppercase tracking-wide text-muted-foreground"
+      className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
       {...props}
     />
   ),
   tbody: (props: React.HTMLAttributes<HTMLTableSectionElement>) => (
-    <tbody className="divide-y divide-border" {...props} />
+    <tbody className="[&>tr]:border-t [&>tr]:border-lawfare-line" {...props} />
   ),
   tr: (props: React.HTMLAttributes<HTMLTableRowElement>) => (
     <tr {...props} />
@@ -505,9 +531,12 @@ function renderSnippet(snippet: string): React.ReactNode {
       break
     }
     nodes.push(
+      // `--color-lawfare-mark` has one job on this surface and this is it: the wash under
+      // a term the reader searched for. Not a surface, not a state, not a chip — and no
+      // corner, because a highlighted run of words is not an object.
       <mark
         key={key++}
-        className="rounded-sm bg-primary/15 px-0.5 font-medium text-foreground"
+        className="bg-lawfare-mark px-0.5 font-medium text-foreground"
       >
         {snippet.slice(start + 1, stop)}
       </mark>,
@@ -561,15 +590,21 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
             : 'Executed SQL'
 
   return (
+    // Provenance, not content: the criterion a model read against, the SQL it wrote, the
+    // verdict it reached. The four sides and the corner go — a border on this surface now
+    // means the reader can act on the thing — but the wash stays, so the block still reads
+    // as machine working rather than as the page's own words, and a rule above it opens it
+    // the way every other block on this page is opened. Whether a state fill survives at
+    // all is Thomas's call and not this slice's; keeping it costs nothing to reverse.
     <details
       open={open}
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-      className="mb-3 rounded-md border border-border bg-muted/30"
+      className="mb-3 border-t border-lawfare-line bg-muted/30"
     >
       <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/60">
         {title}
       </summary>
-      <div className="space-y-2 border-t border-border p-3 text-xs">
+      <div className="space-y-2 border-t border-lawfare-line p-3 text-xs">
         {source.kind === 'claude_sql' && (
           <>
             <div>
