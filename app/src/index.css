@@ -106,6 +106,22 @@
   --color-lawfare-border-light: #eeeeee;
 }
 
+/* Static, because hand-written stylesheets read these by name (`explorer.css` re-points its
+ * own properties from the app's tokens) and Tailwind v4 emits a `@theme` variable only when
+ * some utility uses it — a token nobody has a class for yet would otherwise resolve to nothing. */
+@theme static {
+  /* A second hairline weight, so a rule between two rows and the edge of a control stop
+   * being one line. `line` separates content from content and never encloses; `line-strong`
+   * is the edge of something you can act on — an input, a button, a menu. Which is the
+   * rule the whole surface is moving to: a four-sided border means interactive, never
+   * container. Content that needs separating gets a rule above it, not a box around it. */
+  --color-lawfare-line-strong: #cdc8ba;
+  /* The one wash reserved for a highlighted term in a snippet — a search hit and nothing
+   * else. Never a surface, a chip or a state; it exists so a hit can be seen without the
+   * brand colour having to do that job too. */
+  --color-lawfare-mark: #fdf3c2;
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -130,7 +146,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.5rem;
+  --radius: 0.1875rem; /* 3px, from 8px; the whole rounded-* family follows */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -180,7 +196,7 @@
    * square sitting on top of the field and the composer's is a word with padding around
    * it, so the number appears once, not twice, and promoting it would have invented a
    * shared decision rather than recorded one. */
-  --ask-radius: 0.5rem; /* was rounded-lg */
+  --ask-radius: 0.1875rem; /* was rounded-lg, which is --radius; it keeps following it */
   --ask-border-width: 1.5px; /* was border-[1.5px] */
   --ask-pad-y: 1rem; /* was py-4 */
   --ask-pad-x: 1.25rem; /* was pl-5 */

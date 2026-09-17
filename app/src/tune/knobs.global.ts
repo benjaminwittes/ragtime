@@ -160,7 +160,7 @@ export const globalKnobs = defineTunables([
     group: 'Shape',
     scope: 'global',
     kind: 'length',
-    value: '0.5rem',
+    value: '0.1875rem',
     prop: '--radius',
     units: ['rem', 'px'],
     min: 0,
