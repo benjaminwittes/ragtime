@@ -11,9 +11,10 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  * Hub landing surface — brief #1 (general AMA hub).
  *
  * The hub is the user's entry point to RAGtime. It surfaces the loaded
- * corpora in four headed groups, two to a row, each entry a title that
- * links into its spoke with its headline count at the end of the same
- * line, and one line of copy beneath the two of them.
+ * corpora in four headed groups, two to a row: each entry is a title with
+ * its headline count at the end of the same line and one line of copy
+ * beneath the two of them, and the whole of that is the link into its
+ * spoke.
  *
  * One search affordance sits above the spoke grid, labelled plainly
  * "Search" ({@link HubKeywordSearch}): a single plain-language input fires
@@ -195,10 +196,30 @@ function SpokeCard({
     // paper, separated from its neighbours by a hairline rule. A box contains, and says
     // that what is inside it is a thing apart from the page. A rule only separates, and
     // says where one corpus stops and the next begins — which is the whole of what a
-    // corpus in a list of corpora needs said about it. The one thing here that may look
-    // like a control is the title, and it is a link, so it earns its underline on hover
-    // and nothing else: ink rather than the accent, because eleven accented words down a
-    // page would read as eleven buttons.
+    // corpus in a list of corpora needs said about it.
+    //
+    // The control is the whole description, not the title on its own. A reader deciding
+    // whether to open a corpus is reading the title, the count and the line of copy as
+    // one thing, so that is the thing that should answer to the pointer; a link the width
+    // of two or three words asked them to aim at a fraction of what they were reading.
+    // The box that says so appears only on hover, focus or press — a wash of the paper,
+    // no border and no shadow, so the page at rest is still ruled rather than boxed and a
+    // four-sided edge still means exactly one thing here: a control you are addressing.
+    // The title stays ink for the same reason it always did — eleven teal titles down a
+    // page would read as eleven controls sitting in a page of controls — and its hover
+    // underline is gone, because the wash now says what the underline was saying.
+    //
+    // The rule lives on the outer cell and the wash on the inner link, and the two cannot
+    // swap. The rule is a separator: it marks where this entry stops and the next begins,
+    // so it must stay exactly as wide as the column and line up end to end with its
+    // neighbour's across a grid row. The wash is a state: it has to cover the thing you
+    // are pointing at, which means bleeding a little past the text on both sides — hence
+    // `-mx-3 px-3` on the link, 12px out and 12px back, so the highlight is generous while
+    // the words stay on the same left edge as the rule above them. At the page's outer
+    // edge that 12px runs into the 24px gutter and at the column seam into `sm:pr-8` /
+    // `sm:pl-8`, so it has room on both sides and nothing overflows. The vertical `py-3`
+    // moves onto the link with it: padding the cell instead would leave a band above and
+    // below that looks like the control and does not answer.
     //
     // The rule is `border-t` on every entry rather than `divide-y` on the container, for
     // two reasons. It gives the first entry a rule too, so the cadence starts at the top
@@ -207,46 +228,54 @@ function SpokeCard({
     // on the entry itself rather than on a parent's `* + *` selector, so it travels with
     // the entry when the exit wave lifts each one out under its own name. Nothing closes
     // a group at the bottom: a rule separates rather than encloses, and the next heading
-    // or the about panel brings its own.
+    // or the about panel brings its own. The view-transition name stays here too, on the
+    // cell: the wave numbers the entries as the reader reads them, and the thing that
+    // leaves the page is the entry, not the link inside it.
     <div
-      className={`space-y-1 border-t border-lawfare-line py-3 ${
+      className={`border-t border-lawfare-line ${
         side === 'left' ? 'sm:pr-8' : 'sm:pl-8'
       }`}
       style={{ viewTransitionName: `hub-card-${index + 1}` }}
     >
-      {/* The title and its count share the entry's first line, the name at the left and
-          the figure at the right, so an entry is read the way a line of a ledger is read
-          and the copy sits under both of them. The two are aligned on the baseline rather
-          than on their boxes, which is what puts the first line of a title that wraps on
-          the same baseline as the figure instead of centring the pair against each other.
-          A long title wraps inside its own half of the line because the heading is allowed
-          to be narrower than its text (`min-w-0`) and the figure is not allowed to be
-          narrower than its own (`shrink-0`) — so the figure keeps its place at the right
-          edge and the title takes the second line it needs. */}
-      <div className="flex items-baseline justify-between gap-4">
-        <h4 className="min-w-0 font-serif text-lg font-semibold">
-          <a
-            href={realHref}
-            onClick={(e) => {
-              if (
-                e.button === 0 &&
-                !e.ctrlKey &&
-                !e.metaKey &&
-                !e.shiftKey &&
-                !e.altKey
-              ) {
-                e.preventDefault()
-                onNavigate(href)
-              }
-            }}
-            className="text-foreground underline-offset-4 hover:underline"
-          >
+      {/* A block link around a heading and a paragraph is valid HTML, and its accessible
+          name is the whole of the entry's text — the title, the count and the copy read
+          out in order, which is what a reader choosing between corpora wants to hear. It
+          is also why this is a real element rather than a stretched pseudo-element over
+          the cell: keyboard focus encloses the box the pointer highlights, so both kinds
+          of reader are told the same thing about the same shape. */}
+      <a
+        href={realHref}
+        onClick={(e) => {
+          if (
+            e.button === 0 &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.shiftKey &&
+            !e.altKey
+          ) {
+            e.preventDefault()
+            onNavigate(href)
+          }
+        }}
+        className="block -mx-3 space-y-1 rounded-[var(--radius)] px-3 py-3 transition-colors duration-150 hover:bg-lawfare-paper-deep focus-visible:bg-lawfare-paper-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lawfare-teal active:bg-lawfare-paper-deep"
+      >
+        {/* The title and its count share the entry's first line, the name at the left and
+            the figure at the right, so an entry is read the way a line of a ledger is read
+            and the copy sits under both of them. The two are aligned on the baseline rather
+            than on their boxes, which is what puts the first line of a title that wraps on
+            the same baseline as the figure instead of centring the pair against each other.
+            A long title wraps inside its own half of the line because the heading is allowed
+            to be narrower than its text (`min-w-0`) and the figure is not allowed to be
+            narrower than its own (`shrink-0`) — so the figure keeps its place at the right
+            edge and the title takes the second line it needs. */}
+        <div className="flex items-baseline justify-between gap-4">
+          <h4 className="min-w-0 font-serif text-lg font-semibold text-foreground">
             {spoke.title}
-          </a>
-        </h4>
-        <HoldingsSummary spoke={spoke} />
-      </div>
-      <p className="text-sm text-lawfare-text-warm">{spoke.description}</p>
+          </h4>
+          <HoldingsSummary spoke={spoke} />
+        </div>
+        <p className="text-sm text-lawfare-text-warm">{spoke.description}</p>
+      </a>
     </div>
   )
 }

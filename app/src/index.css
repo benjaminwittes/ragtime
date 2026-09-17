@@ -130,6 +130,19 @@
    * read across the whole app, so they are left exactly as they are. It exists so the hub's
    * secondary text is warm on warm paper. */
   --color-lawfare-text-warm: oklch(0.556 0.012 90);
+  /* The hub's hover wash — a box that appears only while the pointer is on a control,
+   * which is what a box means on this page. Everything else here is ruled, not boxed, so
+   * the wash carries the whole of "this is a thing you can act on" and only for as long
+   * as you are pointing at it.
+   * It is a shade of the paper rather than the teal tint because the highlight is broad:
+   * it covers a corpus's title, its count and its line of copy, and teal over an area
+   * that size would shout where the page wants a hand resting on a line. Hue 90, the
+   * paper's own and both hairlines', so nothing new arrives on the page — only the paper
+   * darkening. Lightness sits between the paper (0.985) and the hairline rule (0.907),
+   * nearer the paper, so the wash never reads as heavy as the rules it sits between.
+   * Not `--color-lawfare-mark`, which belongs to a search hit and nothing else, and not
+   * `--color-lawfare-teal-bg`, which is the brand colour doing a surface's job. */
+  --color-lawfare-paper-deep: oklch(0.958 0.008 90);
 }
 
 :root {
