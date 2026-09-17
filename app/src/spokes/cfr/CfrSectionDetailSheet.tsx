@@ -21,6 +21,7 @@ import {
   fetchCfrSection,
   summarizeCfrSection,
 } from '@lawfare/ragtime-client'
+import { SUMMARY_MARKDOWN_COMPONENTS } from '../components/markdown-components'
 
 /**
  * Side sheet showing one CFR section's full regulatory text + hierarchy +
@@ -408,39 +409,6 @@ function AiSummarySection({
       )}
     </section>
   )
-}
-
-const SUMMARY_MARKDOWN_COMPONENTS = {
-  h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1 className="font-serif text-lg font-semibold mt-2 mb-1.5" {...props} />
-  ),
-  h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2 className="font-serif text-base font-semibold mt-3 mb-1" {...props} />
-  ),
-  h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="font-serif text-sm font-semibold mt-2 mb-1" {...props} />
-  ),
-  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p className="leading-relaxed text-foreground/90" {...props} />
-  ),
-  strong: (props: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-foreground" {...props} />
-  ),
-  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul className="list-disc pl-5 space-y-0.5" {...props} />
-  ),
-  ol: (props: React.OlHTMLAttributes<HTMLOListElement>) => (
-    <ol className="list-decimal pl-5 space-y-0.5" {...props} />
-  ),
-  li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
-    <li className="leading-relaxed" {...props} />
-  ),
-  blockquote: (props: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
-    <blockquote
-      className="border-l-4 border-muted-foreground/30 pl-3 italic text-muted-foreground"
-      {...props}
-    />
-  ),
 }
 
 function ReservedBadge() {

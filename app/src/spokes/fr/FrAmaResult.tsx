@@ -11,6 +11,7 @@ import {
 import { TruncationBanner } from '../components/TruncationBanner'
 import { filterTruncationMarker } from '../components/truncation-marker'
 import { FrDocumentRowsTable } from './FrResultsList'
+import { MARKDOWN_COMPONENTS } from '../components/markdown-components'
 
 /**
  * AMA result panel for the Federal Register spoke. Renders the narrative +
@@ -192,59 +193,4 @@ function CandorNotes({ notes }: { notes: readonly string[] }) {
       </ul>
     </aside>
   )
-}
-
-/** Same markdown register as the other spokes' AMA panels. */
-const MARKDOWN_COMPONENTS = {
-  h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1 className="font-serif text-2xl font-semibold mt-2 mb-3" {...props} />
-  ),
-  h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2
-      className="font-serif text-xl font-semibold mt-5 mb-2 border-b border-border pb-1"
-      {...props}
-    />
-  ),
-  h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="font-serif text-base font-semibold mt-4 mb-1.5" {...props} />
-  ),
-  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p className="leading-relaxed text-foreground" {...props} />
-  ),
-  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a className="text-primary hover:underline" {...props} />
-  ),
-  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul className="list-disc pl-6 space-y-1" {...props} />
-  ),
-  ol: (props: React.OlHTMLAttributes<HTMLOListElement>) => (
-    <ol className="list-decimal pl-6 space-y-1" {...props} />
-  ),
-  li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
-    <li className="leading-relaxed" {...props} />
-  ),
-  blockquote: (props: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
-    <blockquote
-      className="border-l-4 border-muted-foreground/30 pl-4 italic text-muted-foreground"
-      {...props}
-    />
-  ),
-  code: (props: React.HTMLAttributes<HTMLElement>) => (
-    <code
-      className="rounded bg-muted px-1 py-0.5 font-mono text-[12px]"
-      {...props}
-    />
-  ),
-  table: (props: React.HTMLAttributes<HTMLTableElement>) => (
-    <table className="my-3 w-full border-collapse text-xs" {...props} />
-  ),
-  th: (props: React.ThHTMLAttributes<HTMLTableCellElement>) => (
-    <th
-      className="border border-border bg-muted/40 px-2 py-1 text-left font-medium"
-      {...props}
-    />
-  ),
-  td: (props: React.TdHTMLAttributes<HTMLTableCellElement>) => (
-    <td className="border border-border px-2 py-1 align-top" {...props} />
-  ),
 }
