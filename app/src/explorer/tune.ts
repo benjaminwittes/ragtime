@@ -3,7 +3,7 @@
  *
  * Two kinds of knob, and the split is the interesting part. The **structure**
  * knobs are the page's own promoted literals — the measure, the trail's share
- * of the width, the padding, the radii — declared at the top of `explorer.css`
+ * of the width, the padding, the radius — declared at the top of `explorer.css`
  * and referenced by the rules below it. The **state** colours are the four this
  * sheet still owns outright; the rest of its palette reads the app's tokens, so
  * those are tuned on the Globals tab and follow the theme by design.
@@ -137,7 +137,12 @@ export const explorerKnobs = defineTunables([
     note: 'A reply to a clarifying question sits at twice this.',
   },
 
-  /* ---- Shape ----------------------------------------------------------- */
+  /* ---- Shape -----------------------------------------------------------
+   * One knob, where there were two. `explorer.radiusCard` drove `--x-radius-card`,
+   * which by the end drove one rule: the brief's 12px corner. The brief is a wash
+   * with a leading rule now, so the property had nothing left to move, and a knob
+   * that moves nothing is a slider that lies about the page. Both are gone.
+   */
   {
     id: 'explorer.radius',
     label: 'Control radius',
@@ -152,21 +157,6 @@ export const explorerKnobs = defineTunables([
     step: 1,
     source: { file: CSS, selector: '.explorer' },
     note: 'Buttons, fields and menus — the things a reader acts on, which are now the only things here with corners. The app’s own radius, said again rather than referenced so this slider has a number to rest on.',
-  },
-  {
-    id: 'explorer.radiusCard',
-    label: 'Card radius',
-    group: 'Shape',
-    scope: 'explorer',
-    kind: 'length',
-    value: '12px',
-    prop: '--x-radius-card',
-    units: ['px', 'rem'],
-    min: 0,
-    max: 32,
-    step: 1,
-    source: { file: CSS, selector: '.explorer' },
-    note: 'The brief, and only the brief: the bubbles and the answer stopped being boxes, and the examples are a control now, so they follow the control radius.',
   },
 
   /* ---- Type ------------------------------------------------------------ */

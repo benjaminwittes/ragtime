@@ -61,7 +61,6 @@
    * referenced: the tuning panel parses a length knob as a number, and `var(--radius)`
    * would read as 0 on the slider — a knob whose rest position lies about the page. */
   --x-radius: 3px;              /* buttons, inputs, the pointing panel */
-  --x-radius-card: 12px;        /* the brief, and now only the brief — see below */
   --x-trail-left: 1.45fr;       /* the conversation's share while the trail is open */
   --x-trail-min: 300px;         /* the trail's floor before the layout stacks */
   --x-bubble-indent: 15%;       /* how far the reader's own turn sits in */
@@ -187,8 +186,19 @@
 @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
 .explorer .error { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; margin: 8px 0; font-size: 14px; }
 
-/* Brief card */
-.explorer .brief { border: 1px solid #f1d9b0; background: var(--warn-soft); border-radius: var(--x-radius-card); padding: 12px 16px; margin: 12px 0; }
+/* Brief card.
+ *
+ * A caution keeps its wash and loses its box. Nothing amber goes: the fill is the same, and
+ * the four-sided `#f1d9b0` hairline is replaced by a leading rule in `--warn`, which the
+ * sheet already owns — at 3px it is read as a mark rather than as an edge. What that buys is
+ * one family out of three blocks: the brief, the clarifying question and the error are now
+ * the same shape in three colours, and a four-sided border on this surface goes back to
+ * meaning only that the reader can act on the thing. The buttons inside (`.brief-actions`)
+ * are exactly that, so they keep their edges in `--line-strong` and their 3px corners. The
+ * 12px corner was `--x-radius-card`, and the brief was the last rule reading it, so the
+ * property is gone from the tokens above and its knob from `tune.ts` — a knob that moves
+ * nothing is a slider that lies about the page. */
+.explorer .brief { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 12px 16px; margin: 12px 0; }
 .explorer .brief-compact { padding: 10px 14px; }
 .explorer .brief-head { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
 .explorer .brief-title { font-weight: 700; }
@@ -283,12 +293,27 @@
 .explorer .sources-state { color: var(--dim); font-style: italic; }
 .explorer .source-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 .explorer .source-list li { display: flex; gap: 8px; align-items: baseline; }
+/* A document's name is the record's wherever it is said, so the titles in this list take the
+ * record's face, as an answer's citations already do — the sources were the last place the
+ * page named a document in its own voice. One step up with it, 14px against the list's 13px,
+ * because Garamond's x-height is the smaller of the two: the line box goes from 19.5px to
+ * 18.9px, the row is baseline-aligned, and nothing beside the title moves. The slug, the tag
+ * and the SOURCES head stay in the interface face at 13px — they are the app talking about
+ * the list, not the record naming itself. */
+.explorer .source-list a { font: 400 14px/1.35 var(--serif); }
 .explorer .source-slug { color: var(--faint); font-size: 11px; }
 .explorer .tag { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; border-radius: var(--x-radius); padding: 1px 5px; min-width: 58px; text-align: center; }
+/* The one literal this slice could not bring onto a property: `--ok` is the green ink and
+   there is no `--ok-soft` to hold a green wash, the way `--warn-soft` and `--bad-soft` do
+   for the other two states. Adding one is adding a token, which this slice does not do. */
 .explorer .tag-read { background: #e4f3e8; color: var(--ok); }
 /* White, not paper: it was paper against the answer's white card, and the card is gone. */
 .explorer .tag-seen { background: var(--card); color: var(--dim); border: 1px solid var(--line); }
 .explorer .sources-extra { color: var(--dim); margin-top: 6px; }
+/* The same names one sentence later, so the same face — but the face only. These run inline
+ * in a line of prose, where a size change would lead exactly the lines that carry a name and
+ * leave the rest short, which is why a citation inside a paragraph is face-only too. */
+.explorer .sources-extra a { font-family: var(--serif); }
 
 /* Composer — one skin of the ask box the hub wears the other of (`components/AskBox.tsx`).
  * The five `--ask-*` this field reads are overridden for this surface at the top of this
@@ -301,11 +326,14 @@
  * the trail. There is no strip across the top any more — they are read when asked for,
  * and the band's trail control carries the number when a limit is close. Each is one
  * line and a bar; the prose that used to sit under the allowance is in the
- * "Access & Cost" docs entry. */
+ * "Access & Cost" docs entry. The bar's unfilled track reads `--line` rather than the
+ * `#eeece7` it used to carry: the sheet owns one neutral and this is it. It lands a shade
+ * darker than the literal was, which is the cost of the track being the page's grey rather
+ * than a grey of its own. */
 .explorer .meter { font-size: 13px; color: var(--dim); }
 .explorer .meter-line { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .explorer .meter b { color: var(--ink); }
-.explorer .bar { height: 6px; background: #eeece7; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.explorer .bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 6px; overflow: hidden; }
 .explorer .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.3s; }
 .explorer .bar i.hot { background: var(--bad); }
 
@@ -323,9 +351,24 @@
 .explorer .trail-total { text-transform: none; letter-spacing: 0; }
 .explorer .round { border-left: 2px solid var(--line); padding-left: 10px; margin: 0 0 8px; }
 .explorer .round-cost { color: var(--faint); font-size: 11px; margin-top: 2px; }
-.explorer .call { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 10px; margin: 0 0 6px; }
-.explorer .call.bad { border-color: #efc4c4; }
-.explorer .call-terminal { background: var(--warn-soft); border-color: #f1d9b0; }
+/* The calls, un-boxed.
+ *
+ * Each was a four-sided, 8px-cornered white card, stacked six deep down a 300px column and
+ * wrapped in the round's own left rule — the pattern the hub's corpora stopped being, at a
+ * quarter of the width, and with a second edge drawn around it. A call is a row now: opened
+ * by the hairline the answer's list items and the hub's rows are opened by, closed by
+ * nothing, and sitting on the rail's own paper, since the white surface said "card" and
+ * there are no cards here. Its state moves off the edge and onto a leading rule in the
+ * colour the sheet already keeps for that state — `--ok`, `--bad`, and `--warn` for the
+ * terminal call — which is what retires the `#efc4c4` and `#f1d9b0` hairlines those two were
+ * drawn in. A call with no result yet wears no rule and does not need one: the room for it
+ * is already in the row's left padding, so the line does not step sideways when the result
+ * lands. The terminal call keeps its amber wash for the reason the brief keeps its own — a
+ * wash is not an enclosure. */
+.explorer .call { border-top: 1px solid var(--line); padding: 6px 0 6px 10px; margin: 0; }
+.explorer .call.ok { border-left: 2px solid var(--ok); padding-left: 8px; }
+.explorer .call.bad { border-left: 2px solid var(--bad); padding-left: 8px; }
+.explorer .call-terminal { background: var(--warn-soft); border-left: 2px solid var(--warn); padding-left: 8px; }
 .explorer .call-line { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
 .explorer .call-name { font-weight: 700; }
 .explorer .call-input { color: var(--dim); font: 12px var(--mono); word-break: break-all; }

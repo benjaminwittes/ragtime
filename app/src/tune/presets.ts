@@ -33,7 +33,6 @@ export const repoPresets: TunePresets = {
     'explorer.padX': '14px',
     'explorer.padY': '12px',
     'explorer.radius': '6px',
-    'explorer.radiusCard': '10px',
     'explorer.bubbleIndent': '8%',
   },
   roomy: {
@@ -41,7 +40,6 @@ export const repoPresets: TunePresets = {
     'explorer.padX': '28px',
     'explorer.padY': '26px',
     'explorer.radius': '10px',
-    'explorer.radiusCard': '14px',
     'explorer.bubbleIndent': '18%',
   },
 
@@ -59,7 +57,6 @@ export const repoPresets: TunePresets = {
   'kit-port': {
     'explorer.baseSize': '16px',
     'explorer.radius': '0.5rem',
-    'explorer.radiusCard': '0.7rem',
     'explorer.accent': 'var(--primary)',
   },
 
