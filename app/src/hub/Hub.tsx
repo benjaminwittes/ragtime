@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { Card, CardContent } from '@/components/ui/card'
 import { getHoldingsCached } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
@@ -51,19 +52,29 @@ export function Hub({ onNavigate }: { onNavigate: (path: string) => void }) {
   )
 }
 
+/**
+ * The hub's opening. Its counterpart is the Explorer's empty state, which makes the same
+ * move in the same place on the screen — so both are {@link SurfaceIntro} wearing their
+ * own surface's clothes, and the browser can travel one between the two rather than
+ * dissolve two into each other.
+ */
 function HubHero() {
   return (
-    <section className="pt-14 pb-2 text-center">
-      <h1 className="mx-auto max-w-3xl font-serif text-[2.6rem] font-medium leading-[1.12] tracking-tight text-foreground">
-        The Hub: One Search to Rule Them All
-      </h1>
-      <p className="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary">
-        Statutes, regulations, presidential documents, the Federal Register,
-        congressional hearings and debates, executive-branch legal opinions,
-        diplomatic history, the federal litigation that interprets them all —
-        and Lawfare's analysis of the whole — together.
-      </p>
-    </section>
+    <SurfaceIntro
+      level={1}
+      className="pt-14 pb-2 text-center"
+      heading="The Hub: One Search to Rule Them All"
+      headingClassName="mx-auto max-w-3xl font-serif text-[2.6rem] font-medium leading-[1.12] tracking-tight text-foreground"
+      ledeClassName="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary"
+      lede={
+        <>
+          Statutes, regulations, presidential documents, the Federal Register,
+          congressional hearings and debates, executive-branch legal opinions,
+          diplomatic history, the federal litigation that interprets them all —
+          and Lawfare's analysis of the whole — together.
+        </>
+      }
+    />
   )
 }
 
@@ -79,15 +90,29 @@ function HubHero() {
 function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
     <section className="mt-10 space-y-3 border-t border-lawfare-line pt-8">
-      <div className="flex items-baseline justify-between gap-4">
+      {/* This row leads the cards out and leads them back in — see the stagger in
+          `src/transitions.css`. It is named and they are named; the `<section>` around
+          them is not, because a named ancestor would take the whole grid out of the page
+          snapshot as one picture and there would be nothing left to stagger. */}
+      <div
+        className="flex items-baseline justify-between gap-4"
+        style={{ viewTransitionName: 'corpora-heading' }}
+      >
         <h2 className="font-serif text-xl font-semibold">Corpora</h2>
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           {spokes.length} loaded
         </span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {spokes.map((s) => (
-          <SpokeCard key={s.slug} spoke={s} onNavigate={onNavigate} />
+        {/* The index is the card's name for the length of the transition, and nothing
+            else: `hub-card-1` through `hub-card-N` in grid order, so the choreography can
+            hold each one back by one more beat than the last. By position rather than by
+            slug because the stagger is about where a card is on the screen, not which
+            corpus it happens to be — reorder the registry and the wave still runs top to
+            bottom. `transitions.css` writes its rules out to twelve; there are eleven
+            spokes today, and a twelfth added here needs a line added there. */}
+        {spokes.map((s, i) => (
+          <SpokeCard key={s.slug} spoke={s} index={i} onNavigate={onNavigate} />
         ))}
       </div>
     </section>
@@ -96,16 +121,22 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
 
 function SpokeCard({
   spoke,
+  index,
   onNavigate,
 }: {
   spoke: CorpusSpoke
+  /** Position in the grid, which is this card's place in the exit wave. See `SpokeGrid`. */
+  index: number
   onNavigate: (path: string) => void
 }) {
   const href = `/corpus/${spoke.slug}`
   const realHref = toHref(href)
 
   return (
-    <Card className="transition hover:border-primary/60 hover:shadow-sm">
+    <Card
+      className="transition hover:border-primary/60 hover:shadow-sm"
+      style={{ viewTransitionName: `hub-card-${index + 1}` }}
+    >
       <CardContent className="space-y-3 p-5">
         <h3 className="font-serif text-lg font-semibold">{spoke.title}</h3>
         <p className="text-sm text-muted-foreground">{spoke.description}</p>
@@ -192,7 +223,10 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
 
 function HubFooter({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
-    <footer className="mt-12 border-t border-lawfare-line pt-6 text-xs text-muted-foreground">
+    <footer
+      className="mt-12 border-t border-lawfare-line pt-6 text-xs text-muted-foreground"
+      style={{ viewTransitionName: 'hub-footer' }}
+    >
       <p>
         &copy; The Lawfare Institute &middot;{' '}
         <button
@@ -217,7 +251,12 @@ function HubFooter({ onNavigate }: { onNavigate: (path: string) => void }) {
 
 function AboutPanel() {
   return (
-    <section className="mt-12 border-t border-lawfare-line pt-6">
+    // Named, with the footer below it, so the two things at the bottom of the hub leave
+    // after the cards above them rather than with them — the page empties downward.
+    <section
+      className="mt-12 border-t border-lawfare-line pt-6"
+      style={{ viewTransitionName: 'about-panel' }}
+    >
       <h2 className="font-serif text-base font-semibold">About RAGtime</h2>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
         A Lawfare Institute research surface. Free tier covers structured

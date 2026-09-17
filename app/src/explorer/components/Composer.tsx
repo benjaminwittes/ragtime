@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+import { AskBox } from '@/components/AskBox'
 
 import { DRAFT_KEY } from '../model/persist.ts'
 import { readLocal, removeLocal, writeLocal } from '../storage.ts'
@@ -18,6 +20,13 @@ type Props = {
  * the only thing here the reader made rather than the machine. It survives on its own key
  * rather than inside the conversation blob — it changes on every keystroke and the
  * conversation does not, so sharing a key would rewrite every turn to record one letter.
+ *
+ * That draft, the focus rule and the order of the two things a send does are what is left
+ * here. The box itself is {@link AskBox}, which the hub's search is the other skin of: the
+ * form, the guard against sending nothing, and Enter-sends/Shift+Enter-newlines were
+ * written once on each surface and are now written once. The `.composer` class names go
+ * down as props, because `explorer.css` still styles this skin and nothing of the app's
+ * kit may cross into `.explorer`.
  */
 export function Composer({ placeholder, disabled, focusKey, onSend }: Props) {
   const [text, setText] = useState(() => readLocal(DRAFT_KEY) ?? '')
@@ -33,28 +42,30 @@ export function Composer({ placeholder, disabled, focusKey, onSend }: Props) {
     else removeLocal(DRAFT_KEY)
   }, [text])
 
-  const submit = (e?: FormEvent) => {
-    e?.preventDefault()
+  // Reached only through AskBox's guard, so there is nothing to check here that has not
+  // been checked: the trim-and-refuse-empty rule and the disabled rule are the box's.
+  const send = () => {
     const t = text.trim()
-    if (!t || disabled) return
     // Cleared here rather than left to the effect, so a send that is immediately followed
-    // by the page closing does not restore the question that was just asked.
+    // by the page closing does not restore the question that was just asked. The order is
+    // the point and survives the move into AskBox: clear, forget the draft, then send.
     setText('')
     removeLocal(DRAFT_KEY)
     onSend(t)
   }
-  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      submit()
-    }
-  }
   return (
-    <form className="composer" onSubmit={submit}>
-      <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} placeholder={placeholder} disabled={disabled} rows={2} />
-      <button type="submit" className="primary" disabled={disabled || !text.trim()}>
-        Send
-      </button>
-    </form>
+    <AskBox
+      as="textarea"
+      className="composer"
+      fieldRef={box}
+      value={text}
+      onChange={setText}
+      onSubmit={send}
+      placeholder={placeholder}
+      disabled={disabled}
+      rows={2}
+      submitLabel="Send"
+      submitClassName="primary"
+    />
   )
 }

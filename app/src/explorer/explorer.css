@@ -56,6 +56,22 @@
   --x-trail-left: 1.45fr;       /* the conversation's share while the trail is open */
   --x-trail-min: 300px;         /* the trail's floor before the layout stacks */
   --x-bubble-indent: 15%;       /* how far the reader's own turn sits in */
+
+  /* The composer's half of the ask box. These five are declared at `:root` in
+   * `index.css` with the hub's values — the hub's search field and this composer are one
+   * component in two skins (`components/AskBox.tsx`) — and overridden here with the
+   * numbers this sheet already carried. Same properties, two value sets, which is what
+   * lets the box travel between the two surfaces with something real to interpolate
+   * rather than two pictures to cross-fade. Each is still the value it was.
+   *
+   * `--ask-font-size` reads `--x-base-size` rather than repeating 15px: the textarea got
+   * its size from `font: inherit` before, and inheriting from the Explorer's own base is
+   * what it was inheriting. */
+  --ask-radius: 10px;
+  --ask-border-width: 1px;
+  --ask-pad-y: 8px;
+  --ask-pad-x: 10px;
+  --ask-font-size: var(--x-base-size);
 }
 
 .explorer { font: var(--x-base-size)/1.5 var(--sans); color: var(--ink); background: var(--bg); }
@@ -204,9 +220,12 @@
 .explorer .tag-seen { background: var(--bg); color: var(--dim); border: 1px solid var(--line); }
 .explorer .sources-extra { color: var(--dim); margin-top: 6px; }
 
-/* Composer */
+/* Composer — one skin of the ask box the hub wears the other of (`components/AskBox.tsx`).
+ * The five `--ask-*` this field reads are overridden for this surface at the top of this
+ * file; the padding on `.composer` itself is the band the field sits in rather than the
+ * field, and the hub has no counterpart to it, so it stays a literal. */
 .explorer .composer { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--card); }
-.explorer .composer textarea { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; min-height: 44px; max-height: 180px; }
+.explorer .composer textarea { flex: 1; border: var(--ask-border-width) solid var(--line); border-radius: var(--ask-radius); padding: var(--ask-pad-y) var(--ask-pad-x); font-size: var(--ask-font-size); resize: vertical; min-height: 44px; max-height: 180px; }
 
 /* The meter and the allowance: the conversation's spend and the day's pool, both inside
  * the trail. There is no strip across the top any more — they are read when asked for,

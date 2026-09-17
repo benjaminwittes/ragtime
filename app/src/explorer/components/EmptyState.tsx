@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { CorpusRegistry } from '@lawfare/ragtime-client'
 
+import { SurfaceIntro } from '@/components/SurfaceIntro'
+
 import { pinnedSummary } from '../model/brief.ts'
 import { EXAMPLE_QUESTIONS } from '../model/examples.ts'
 import { useExampleCount } from '../tune.ts'
@@ -43,11 +45,23 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
   const pinnedNames = pinned.map((slug) => corpora.find((c) => c.slug === slug)?.name ?? slug)
   return (
     <div className="empty">
-      <h2>Ask the federal record a question.</h2>
-      <p className="lede">
-        Orient runs first and costs almost nothing: it either asks you one question or proposes a research brief you can edit.
-        Research spends against the brief, and the trail shows every step and what it cost.
-      </p>
+      {/* The same component the hub opens with, and it carries no class of its own — the
+          `h2` and the `.lede` here are styled by `explorer.css` exactly as they were. The
+          `<section>` it wraps them in is new and costs nothing: this sheet has no bare
+          `section` rule, and a wrapper with no border or padding lets the lede's 18px
+          bottom margin collapse straight through it, so the gap to the examples below is
+          the one it always was. */}
+      <SurfaceIntro
+        level={2}
+        heading="Ask the federal record a question."
+        ledeClassName="lede"
+        lede={
+          <>
+            Orient runs first and costs almost nothing: it either asks you one question or proposes a research brief you can edit.
+            Research spends against the brief, and the trail shows every step and what it cost.
+          </>
+        }
+      />
       <div className="examples">
         {examples.map((q) => (
           <button key={q.text} type="button" className="example" onClick={() => onAsk(q.text)} disabled={disabled}>

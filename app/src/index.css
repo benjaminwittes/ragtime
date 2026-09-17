@@ -22,6 +22,10 @@
 @import 'shadcn/tailwind.css';
 @import './explorer/explorer.css';
 @import './hub/hub.css';
+/* Last of the imports, and it has to be: it names pieces of both sheets above and sets
+ * `--vt-*` against them, so it reads them rather than the other way round. What happens
+ * between two routes — which pieces travel, which leave, in what order. */
+@import './transitions.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -152,6 +156,35 @@
   --background: #fbfaf7;
   --border: #e3e0d8;
   --input: #e3e0d8;
+
+  /* The ask box, measured. This site asks a question in one component
+   * (`components/AskBox.tsx`) wearing two skins: the hub's cross-corpus search and the
+   * Explorer's composer. Five of its measurements were decided on both surfaces and
+   * written down twice — once as Tailwind utilities on the hub, once as declarations in
+   * `explorer.css` — which is two edit points for one decision and, worse, two values a
+   * browser has no way to see as the same thing.
+   *
+   * Declared once here with the hub's values and overridden inside `.explorer` with the
+   * composer's (the token block at the top of `explorer.css`, beside the `--x-*` it keeps
+   * its own structure in). The hub reads them back as arbitrary utility values —
+   * `rounded-[var(--ask-radius)]`, `py-[var(--ask-pad-y)]` — following the precedent
+   * `hub/hub.css` set for its measure and gutter, and for the same reason: a decision
+   * spelled as a utility is a decision with nothing to take hold of.
+   *
+   * What this buys beyond the single edit point: when the reader moves between the two
+   * surfaces the box travels rather than dissolves, and a browser interpolating one
+   * property from 0.5rem to 10px is animating a value. Two rules that happened to agree
+   * could only ever have cross-faded two pictures.
+   *
+   * Not promoted, on inspection: the size of the submit control. The hub's is a 2.75rem
+   * square sitting on top of the field and the composer's is a word with padding around
+   * it, so the number appears once, not twice, and promoting it would have invented a
+   * shared decision rather than recorded one. */
+  --ask-radius: 0.5rem; /* was rounded-lg */
+  --ask-border-width: 1.5px; /* was border-[1.5px] */
+  --ask-pad-y: 1rem; /* was py-4 */
+  --ask-pad-x: 1.25rem; /* was pl-5 */
+  --ask-font-size: 1.25rem; /* was text-xl, whose line height is now said as leading-7 */
 }
 
 .dark {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AskBox } from '@/components/AskBox'
 import { cn } from '@/lib/utils'
 import { toHref } from '@/lib/routing'
 import {
@@ -90,10 +91,11 @@ export function HubKeywordSearch({
   // doesn't desync the carryover from the displayed results.
   const [submittedQuery, setSubmittedQuery] = useState('')
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  // The form, the `preventDefault`, and the refusal to search for nothing are AskBox's
+  // now — the same three the Explorer's composer had written separately — so what is left
+  // here is the fan-out itself and what it does with an answer.
+  async function runSearch() {
     const q = query.trim()
-    if (!q) return
     setLoading(true)
     setError(null)
     try {
@@ -126,35 +128,42 @@ export function HubKeywordSearch({
 
   return (
     <section className="pt-7 pb-2">
-      <form onSubmit={handleSubmit} className="mx-auto max-w-2xl">
-        <div className="relative">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the law, the opinions, and the record…"
-            disabled={loading}
-            maxLength={200}
-            aria-label="Cross-corpus search"
-            className={cn(
-              'block w-full rounded-lg border-[1.5px] border-primary bg-card py-4 pl-5 pr-14 font-serif text-xl text-foreground shadow-sm',
-              'placeholder:text-lawfare-muted focus:outline-none focus:ring-2 focus:ring-primary/30',
-              loading && 'cursor-not-allowed opacity-60',
-            )}
-          />
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            aria-label="Search"
-            className={cn(
-              'absolute right-2 top-2 bottom-2 flex w-11 items-center justify-center rounded-md bg-primary text-lg text-primary-foreground transition',
-              canSubmit ? 'hover:opacity-90' : 'cursor-not-allowed opacity-40',
-            )}
-          >
-            {loading ? '…' : '→'}
-          </button>
-        </div>
-      </form>
+      {/* The same component the Explorer's composer is, wearing this surface's clothes.
+          Five of the measurements below are `var(--ask-*)` rather than literals — the
+          radius, the border, the two paddings and the size of the type — because the
+          composer decides all five too, and a value decided twice is a value that can
+          only be interpolated by accident. Declared with these values at `:root` in
+          `index.css` and overridden with the composer's inside `.explorer`.
+
+          `leading-7` is not new: `text-xl` set a font size *and* a line height, and an
+          arbitrary font size sets only the first, so the 1.75rem the box was already
+          drawn at is said out loud here rather than lost with the utility. `pr-14` stays
+          a literal — it is room for the submit control that sits on top of the field,
+          which is this skin's arrangement and not a decision the composer also makes. */}
+      <AskBox
+        as="input"
+        inputType="search"
+        className="mx-auto max-w-2xl"
+        fieldWrapClassName="relative"
+        value={query}
+        onChange={setQuery}
+        onSubmit={runSearch}
+        placeholder="Search the law, the opinions, and the record…"
+        disabled={loading}
+        maxLength={200}
+        ariaLabel="Cross-corpus search"
+        fieldClassName={cn(
+          'block w-full rounded-[var(--ask-radius)] border-[length:var(--ask-border-width)] border-primary bg-card py-[var(--ask-pad-y)] pl-[var(--ask-pad-x)] pr-14 font-serif text-[length:var(--ask-font-size)] leading-7 text-foreground shadow-sm',
+          'placeholder:text-lawfare-muted focus:outline-none focus:ring-2 focus:ring-primary/30',
+          loading && 'cursor-not-allowed opacity-60',
+        )}
+        submitAriaLabel="Search"
+        submitClassName={cn(
+          'absolute right-2 top-2 bottom-2 flex w-11 items-center justify-center rounded-md bg-primary text-lg text-primary-foreground transition',
+          canSubmit ? 'hover:opacity-90' : 'cursor-not-allowed opacity-40',
+        )}
+        submitLabel={loading ? '…' : '→'}
+      />
 
       {error && !response && (
         <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

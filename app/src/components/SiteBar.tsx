@@ -31,7 +31,24 @@ import { cn } from '@/lib/utils'
 export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
   const setSlot = useContext(SlotRefContext)
   return (
-    <header className="border-b border-lawfare-line bg-lawfare-paper">
+    // The first of three view transition names here, and it is set to *stop* an animation
+    // rather than to start one. A route change is captured as one snapshot of the whole
+    // document unless a piece is named separately, and this bar is mounted across the
+    // change — so unnamed it would be dissolved into a picture of itself, flickering on
+    // every navigation despite never having moved. Naming lifts it out of that snapshot
+    // and the browser holds it still.
+    //
+    // The link and the slot are then named *inside* it, because they are the two parts of
+    // the bar that genuinely do differ between routes: the Explorer link takes
+    // `aria-current` and its underline with it, and the slot goes from an empty spacer on
+    // the hub to the Explorer's trail toggle and conversations picker. A named descendant
+    // is cut out of its named ancestor's snapshot and given a group of its own, so those
+    // two can change while the bar around them does not. The timings are in
+    // `src/transitions.css`.
+    <header
+      className="border-b border-lawfare-line bg-lawfare-paper"
+      style={{ viewTransitionName: 'site-bar' }}
+    >
       {/* Wrapping, and tighter at phone width, because 390px is where this row runs out:
           it now carries the brand lockup *and* whatever the route puts in the slot. The
           measures that used to buy the Explorer's own band a single row (abbreviated
@@ -71,6 +88,7 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
           <AppLink
             to="/explorer"
             aria-current={onExplorer ? 'page' : undefined}
+            style={{ viewTransitionName: 'nav-explorer' }}
             className={cn(
               'font-serif text-[15px] text-primary underline-offset-4 hover:underline aria-[current=page]:underline',
               onExplorer && 'hidden sm:inline',
@@ -93,6 +111,7 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
             cluster moves to a second line instead of being written over. */}
         <div
           ref={setSlot}
+          style={{ viewTransitionName: 'bar-slot' }}
           className="flex min-w-0 flex-1 items-center gap-2 has-[button]:min-w-fit"
         />
         <DocsTrigger />
