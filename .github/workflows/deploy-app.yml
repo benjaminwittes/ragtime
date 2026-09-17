@@ -1,0 +1,112 @@
+name: Deploy App
+
+# Publishes the built SPA to the Lawfare-owned host that serves it.
+#
+# INERT UNTIL SWITCHED ON. The job is gated on the repository variable
+# DEPLOY_ENABLED, so this file can merge and sit dormant while the box is still
+# being built. Nothing runs, and main does not go red, until someone sets it.
+#
+# Required repository settings:
+#   vars.DEPLOY_ENABLED      'true' to arm this workflow
+#   vars.DEPLOY_HOST         hostname the box answers on
+#   vars.DEPLOY_USER         unprivileged account that owns /srv/ragtime-app
+#   vars.DEPLOY_KNOWN_HOSTS  the box's SSH host key, from `ssh-keyscan`
+#   secrets.DEPLOY_SSH_KEY   private half of that account's deploy key
+#
+# DEPLOY_KNOWN_HOSTS is a variable rather than a secret on purpose: a host key is
+# public by construction, and pinning it is the point. Never replace this with
+# StrictHostKeyChecking=no — that turns every deploy into an invitation to
+# whoever answers on that address.
+#
+# This repository is PUBLIC. Never add a `pull_request_target` trigger here: it
+# runs with repository secrets against code from a fork, which would hand the
+# deploy key to anyone who opens a pull request.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'index.html'
+      - 'deploy/**'
+      - '.github/workflows/deploy-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time, and never cancel one midway: a cancelled run can leave a
+# half-copied release directory, which the symlink swap would then publish.
+concurrency:
+  group: deploy-app
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      # Lint and tests already run on this same push in build-app.yml; this job
+      # only builds what it ships.
+      - name: Build
+        run: npm run build
+        env:
+          VITE_BASE: /
+
+      - name: Preserve legacy single-file app at /legacy.html
+        run: cp ../index.html dist/legacy.html
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+
+      # Ship into a release directory named for the commit, then move the
+      # `current` symlink. The swap is atomic, so no visitor ever sees a
+      # half-copied tree, and a rollback is one `ln -sfn` on the box with no
+      # rebuild and no CI run.
+      - name: Ship
+        run: |
+          set -euo pipefail
+          REL="/srv/ragtime-app/releases/${GITHUB_SHA}"
+          TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh "$TARGET" "mkdir -p '$REL'"
+          rsync -az --delete dist/ "$TARGET:$REL/"
+          ssh "$TARGET" "ln -sfn '$REL' /srv/ragtime-app/current.tmp && mv -Tf /srv/ragtime-app/current.tmp /srv/ragtime-app/current"
+          # Keep the five most recent releases so a rollback target survives.
+          ssh "$TARGET" "cd /srv/ragtime-app/releases && ls -1dt */ | tail -n +6 | xargs -r rm -rf"
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+
+      - name: Verify what is live
+        run: |
+          set -euo pipefail
+          echo "--- status on a deep link (expect 200, not 404) ---"
+          curl -sS -o /dev/null -w '%{http_code}\n' "https://${DEPLOY_HOST}/oauth/consent"
+          echo "--- headers ---"
+          curl -sSI "https://${DEPLOY_HOST}/" \
+            | grep -iE 'strict-transport|content-security|x-frame|x-content-type|referrer-policy|cache-control'
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
