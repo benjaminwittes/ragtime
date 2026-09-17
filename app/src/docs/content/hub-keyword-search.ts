@@ -28,7 +28,7 @@ Functions — handy for "has anyone written about this?")
 
 **Ten of the eleven corpora.** Sanctions sits out the fan. Its documents
 include the Federal Register's sanctions notices, which the Federal
-Register card already returns, so fanning both would show you the same
+Register section already returns, so fanning both would show you the same
 notices twice. Search Sanctions from its own workspace, where the entity
 lists and OFAC's guidance are searchable too.
 
@@ -40,10 +40,10 @@ CFR workspace").
 
 **There is nothing to set.** Every query goes to all ten, and there is no
 control that narrows it. The narrowing happens after the search instead:
-each corpus is its own card with its own count, so you can see which ones
-hold your answer and open the one that does.
+each corpus is its own section with its own count, so you can see which
+ones hold your answer and open the one that does.
 
-**Opening a workspace.** Each result card has an "Open workspace →" link
+**Opening a workspace.** Each corpus section has an "Open workspace →" link
 that takes you to that corpus's full surface. In the workspace you can:
 - See more than the 5 hub-level previews.
 - Add structured filters (date range, court, agency, classification).

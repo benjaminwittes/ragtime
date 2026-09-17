@@ -38,13 +38,13 @@ import { newInteractionId, postUsageLog } from '@/lib/usage-log'
  *     could say "just OLC + litigation". It was taken out deliberately,
  *     not because it was broken: ten switches is a decision demanded of
  *     someone who has not typed anything yet, and it bought a narrowing
- *     that the result cards already give for free (each corpus is its own
- *     card, with its own count and its own way into the workspace). A
+ *     that the results already give for free (each corpus is its own
+ *     section, with its own count and its own way into the workspace). A
  *     better narrowing affordance is intended, elsewhere; until it lands
  *     the fan is total and the surface says so by having no control at all.
- *   - On submit: per-corpus result cards, each with top-5 + total count
+ *   - On submit: per-corpus result sections, each with top-5 + total count
  *     + "Open in [X] workspace" link.
- *   - Per-corpus error state: if one corpus's query failed, that card
+ *   - Per-corpus error state: if one corpus's query failed, that section
  *     shows the error; the other corpora still render their results.
  *
  * Not yet here (deferred):
@@ -57,10 +57,10 @@ import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 
 /**
  * The spokes the hub keyword fan searches. Sanctions is registry-listed (it
- * has a corpus card) but EXCLUDED here, mirroring the Worker's HUB_CORPORA:
- * its keyword union includes the same federal_register documents the fr
- * card already surfaces, so fanning both would double-surface every FR
- * sanctions doc under two id schemes (the commentary/lawfare lesson).
+ * has a row in the corpus list) but EXCLUDED here, mirroring the Worker's
+ * HUB_CORPORA: its keyword union includes the same federal_register documents
+ * the fr section already surfaces, so fanning both would double-surface every
+ * FR sanctions doc under two id schemes (the commentary/lawfare lesson).
  */
 const HUB_KEYWORD_SPOKES = spokes.filter((s) => s.slug !== 'sanctions')
 
@@ -219,7 +219,11 @@ function HubKeywordResults({
             : `searched ${corpora.length} corpora`}
         </p>
       </div>
-      <div className="grid gap-3 lg:grid-cols-2">
+      {/* One column, no gap — the same argument the corpus list above makes. Two ruled
+          stacks whose result counts differ give two cadences that agree nowhere, and the
+          sections have to touch for the rule between them to be the thing that separates
+          them. A results list is a list. */}
+      <div>
         {corpora.map((corpus) => {
           const block = response.per_corpus[corpus]
           if (!block) return null
@@ -253,9 +257,19 @@ function CorpusResultCard({
   const href = `/corpus/${corpus}?q=${encodeURIComponent(query)}`
   const more = Math.max(0, block.count - block.results.length)
   return (
-    <article className="rounded-lg border border-border bg-card">
-      <header className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3">
-        <h3 className="font-serif text-base font-semibold">
+    // This was a bordered, rounded card on `bg-card`; it is a section on the page's own
+    // paper now, opened by the same hairline the corpus list above is ruled with. The hub
+    // was drawing a corpus two ways — a ruled row before a search, a box after one — and
+    // the box was the half that said a corpus's results are a thing apart from the page.
+    // One rule per corpus, `border-t` on the section itself so the cadence starts at the
+    // top and travels with the section: a rule above the section *and* a second under its
+    // header would be two rules per corpus, which stops reading as a separated group and
+    // starts reading as a table. Spacing separates the header from its results instead,
+    // and the results from each other — the rule here means "next corpus", and a finer
+    // rule between items would compete with the only one that carries meaning.
+    <article className="border-t border-lawfare-line py-4">
+      <header className="flex items-baseline justify-between gap-3">
+        <h3 className="min-w-0 font-serif text-base font-semibold">
           {longLabel(corpus)}
           <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
             {block.count.toLocaleString()} total
@@ -280,35 +294,34 @@ function CorpusResultCard({
           Open workspace →
         </a>
       </header>
-      <div className="px-4 py-3">
-        {block.error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            Search failed: {block.error}
-          </p>
-        )}
-        {!block.error && block.results.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            No matches in this corpus.
-          </p>
-        )}
-        {!block.error && block.results.length > 0 && (
-          <ol className="space-y-2 text-sm">
-            {block.results.map((r) => (
-              <li key={r.id} className="leading-snug">
-                <p className="text-foreground">{r.title}</p>
-                <p className="font-mono text-[11px] text-muted-foreground">
-                  {[r.context, r.date].filter(Boolean).join(' · ') || ''}
-                </p>
-              </li>
-            ))}
-          </ol>
-        )}
-        {more > 0 && (
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            +{more.toLocaleString()} more in the workspace.
-          </p>
-        )}
-      </div>
+      {/* A corpus that found nothing is its header line and nothing else. The mono count
+          beside the name already reads "0 total", so the paragraph that used to say "No
+          matches in this corpus." under it was a second line saying the same thing — and
+          on a fan of ten, most of them empty on a narrow query, ten such sections were
+          ten tall blank blocks between the rules. The error keeps its destructive box:
+          it is the exception on this surface, not the cadence. */}
+      {block.error && (
+        <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Search failed: {block.error}
+        </p>
+      )}
+      {!block.error && block.results.length > 0 && (
+        <ol className="mt-3 space-y-2 text-sm">
+          {block.results.map((r) => (
+            <li key={r.id} className="leading-snug">
+              <p className="text-foreground">{r.title}</p>
+              <p className="font-mono text-[11px] text-muted-foreground">
+                {[r.context, r.date].filter(Boolean).join(' · ') || ''}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+      {more > 0 && (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          +{more.toLocaleString()} more in the workspace.
+        </p>
+      )}
     </article>
   )
 }
@@ -342,7 +355,7 @@ function shortLabel(slug: CorpusSlug): string {
   }
 }
 
-/** Longer label for the per-corpus card header. */
+/** Longer label for the per-corpus section header. */
 function longLabel(slug: CorpusSlug): string {
   switch (slug) {
     case 'litigation':
