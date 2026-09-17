@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
-import { getHoldingsCached } from '@/lib/holdings-cache'
+import { formatCount } from '@/lib/format-count'
+import { getHoldingsCached, readHoldingsSnapshot } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
 import { spokeGroups, spokes } from '@/spokes/registry'
 import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
@@ -253,8 +254,22 @@ function SpokeCard({
 /**
  * The one number an entry carries: the headline count from the spoke's
  * `getHoldings()` — for litigation a live Worker call, for the others values
- * the corpus ingest reports settled — rendered as the first entry of `counts`
- * and nothing more.
+ * the corpus ingest reports settled — taken as the first entry of `counts`,
+ * rounded, and nothing more.
+ *
+ * Rounded because on the hub the figure's job is scale rather than audit:
+ * "1.7M cases" is the whole of what this line has to say, and the exact count
+ * lives on the spoke's own provenance disclosure, beside the coverage window
+ * that qualifies it. `lib/format-count.ts` carries the rest of that argument,
+ * and the form says approximate by itself — no tilde, no "about".
+ *
+ * The figure also arrives without waiting, on any visit but the first. Holdings
+ * are stored per corpus (`lib/holdings-cache.ts`) and the state is initialised
+ * from that snapshot, so a return visit paints the count in the first render;
+ * the effect below still fetches, and because the figure is rounded, a refresh
+ * that moved the count by a few hundred re-renders the same string and nothing
+ * on the line moves. The first-ever visit has nothing stored and shows the
+ * ellipsis, as it always did.
  *
  * It is rendered inline, at the right of the title's line rather than under it,
  * so the name and the figure are read together. That placement is what decides
@@ -276,10 +291,18 @@ function SpokeCard({
  * surface; a stale or unreachable count should not keep anyone out of a spoke.
  * Quiet is not silent, though: "count unavailable" says that a number was meant
  * to be here and is missing, where an empty right edge would say that this
- * corpus never had one.
+ * corpus never had one. And a failed fetch with a snapshot behind it shows the
+ * snapshot — a count from the last visit is worth more to a reader than a
+ * confession that this one did not load, and it is the same figure to within
+ * the rounding.
  */
 function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
-  const [holdings, setHoldings] = useState<CorpusHoldings | null>(null)
+  // Read once, at mount, and synchronously: a value in the initial state is a
+  // value in the first paint. Passing the function rather than the call keeps
+  // storage out of every later render.
+  const [holdings, setHoldings] = useState<CorpusHoldings | null>(() =>
+    readHoldingsSnapshot(spoke),
+  )
   const [errored, setErrored] = useState(false)
 
   useEffect(() => {
@@ -297,6 +320,23 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
     }
   }, [spoke])
 
+  // A figure beats both placeholders, whichever way it arrived — fetched this
+  // visit, or read from storage and left standing by a fetch that failed.
+  if (holdings) {
+    // The first entry of `counts` is the headline one by the descriptor's own ordering
+    // — "1.7M cases" before the docket entries under them, "60K sections" before the
+    // titles they sit in. The rest are a breakdown, and a breakdown belongs where
+    // there is room to explain it.
+    const headline = Object.entries(holdings.counts)[0]
+    if (!headline) return null
+    const [label, value] = headline
+    return (
+      <span className="shrink-0 font-mono text-xs text-right text-lawfare-text-warm">
+        {formatCount(value)} {label}
+      </span>
+    )
+  }
+
   if (errored) {
     return (
       <span className="shrink-0 font-mono text-xs text-right text-lawfare-text-warm">
@@ -304,25 +344,9 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
       </span>
     )
   }
-  if (!holdings) {
-    return (
-      <span className="shrink-0 font-mono text-xs text-right text-lawfare-text-warm">
-        …
-      </span>
-    )
-  }
-
-  // The first entry of `counts` is the headline one by the descriptor's own ordering
-  // — "1,737,246 cases" before the docket entries under them, "60,417 sections"
-  // before the titles they sit in. The rest are a breakdown, and a breakdown belongs
-  // where there is room to explain it.
-  const headline = Object.entries(holdings.counts)[0]
-  if (!headline) return null
-  const [label, value] = headline
-
   return (
     <span className="shrink-0 font-mono text-xs text-right text-lawfare-text-warm">
-      {value.toLocaleString()} {label}
+      …
     </span>
   )
 }
