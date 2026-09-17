@@ -156,7 +156,7 @@ function SpokeCard({
     // at the bottom: a rule separates rather than encloses, and there is nothing below
     // the last row for it to be separated from until the about panel brings its own.
     <div
-      className="flex flex-col gap-2 border-t border-lawfare-line py-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8"
+      className="flex flex-col gap-2 border-t border-lawfare-line py-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8"
       style={{ viewTransitionName: `hub-card-${index + 1}` }}
     >
       <div className="min-w-0 space-y-1 sm:flex-1">

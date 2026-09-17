@@ -176,21 +176,24 @@
 .explorer .steps .narration:first-of-type { margin-top: 4px; }
 /* The one question research asks before it spends. Not a control — the reply is typed in
  * the composer — so the four sides and the corners go and the leading rule carries it, at
- * the same 3px the error below uses. The question is the page talking, so it is set in the
+ * the same 2px the error below uses. The question is the page talking, so it is set in the
  * page's face; the serif here was the last place the app's voice borrowed the record's. */
-.explorer .question { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 10px 14px; margin: 10px 0; }
+.explorer .question { border-left: 2px solid var(--warn); background: var(--warn-soft); padding: 10px 14px; margin: 10px 0; }
 .explorer .question-head { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
 .explorer .question p { margin: 0; font: 400 17px/1.45 var(--sans); }
 .explorer .working { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 13px; margin: 8px 0; }
 .explorer .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
-.explorer .error { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; margin: 8px 0; font-size: 14px; }
+.explorer .error { border-left: 2px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; margin: 8px 0; font-size: 14px; }
 
 /* Brief card.
  *
  * A caution keeps its wash and loses its box. Nothing amber goes: the fill is the same, and
  * the four-sided `#f1d9b0` hairline is replaced by a leading rule in `--warn`, which the
- * sheet already owns — at 3px it is read as a mark rather than as an edge. What that buys is
+ * sheet already owns. It was 3px, argued as a mark rather than an edge, and pinned above
+ * every conversation it was the loudest thing on the Explorer; it is 2px now, the one weight
+ * every other leading rule on this sheet carries — the trail's calls, the record's quoted
+ * words, the question and the error — so a rule marks without shouting. What that buys is
  * one family out of three blocks: the brief, the clarifying question and the error are now
  * the same shape in three colours, and a four-sided border on this surface goes back to
  * meaning only that the reader can act on the thing. The buttons inside (`.brief-actions`)
@@ -198,7 +201,7 @@
  * 12px corner was `--x-radius-card`, and the brief was the last rule reading it, so the
  * property is gone from the tokens above and its knob from `tune.ts` — a knob that moves
  * nothing is a slider that lies about the page. */
-.explorer .brief { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 12px 16px; margin: 12px 0; }
+.explorer .brief { border-left: 2px solid var(--warn); background: var(--warn-soft); padding: 12px 16px; margin: 12px 0; }
 .explorer .brief-compact { padding: 10px 14px; }
 .explorer .brief-head { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
 .explorer .brief-title { font-weight: 700; }
