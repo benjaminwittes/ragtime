@@ -13,7 +13,8 @@
  */
 
 /* RAGtime Explorer — one stylesheet for the first shape. Lawfare's fonts
- * (Lato for the interface, EB Garamond for the answer) with system fallbacks;
+ * (Lato for the page and its answers, EB Garamond for headings, the names of
+ * documents and the record's own quoted words) with system fallbacks;
  * teal as the one accent. Layout: a strip of meter, allowance and the trail's
  * toggle across the top, the conversation under it at full width, and the trail
  * as a right-hand column only while it is open; stacked under 900px. */
@@ -28,6 +29,11 @@
   --dim: var(--color-lawfare-text-secondary, #555555);
   --faint: var(--color-lawfare-muted, #777777);
   --line: var(--border, #e3e0d8);
+  /* The second hairline weight, re-pointed from the app's token rather than written into
+   * each rule. `--line` separates content from content and never encloses; `--line-strong`
+   * is the edge of something the reader acts on — an input, a button, a menu — which is
+   * how a four-sided border comes to mean interactive on this surface and nothing else. */
+  --line-strong: var(--color-lawfare-line-strong, #cdc8ba);
   --bg: var(--background, #fbfaf7);
   --card: var(--card, #ffffff);
   --accent: var(--primary, #006a72);
@@ -51,8 +57,11 @@
   --x-base-size: 15px;          /* the interface's base size, not the answer's */
   --x-pad-y: 18px;
   --x-pad-x: 20px;
-  --x-radius: 8px;              /* buttons, inputs */
-  --x-radius-card: 12px;        /* bubbles, the brief, examples (−2px) */
+  /* Controls only, and it is the app's `--radius` value (3px) said again rather than
+   * referenced: the tuning panel parses a length knob as a number, and `var(--radius)`
+   * would read as 0 on the slider — a knob whose rest position lies about the page. */
+  --x-radius: 3px;              /* buttons, inputs, the pointing panel */
+  --x-radius-card: 12px;        /* the brief, and now only the brief — see below */
   --x-trail-left: 1.45fr;       /* the conversation's share while the trail is open */
   --x-trail-min: 300px;         /* the trail's floor before the layout stacks */
   --x-bubble-indent: 15%;       /* how far the reader's own turn sits in */
@@ -67,7 +76,7 @@
    * `--ask-font-size` reads `--x-base-size` rather than repeating 15px: the textarea got
    * its size from `font: inherit` before, and inheriting from the Explorer's own base is
    * what it was inheriting. */
-  --ask-radius: 10px;
+  --ask-radius: 3px; /* the app's corner; the hub half of this morph is the same 3px, so the pair now agree on shape */
   --ask-border-width: 1px;
   --ask-pad-y: 8px;
   --ask-pad-x: 10px;
@@ -100,13 +109,16 @@
 .explorer .right .scroll { padding: 10px 14px; font-size: 13px; }
 /* The narrow layout is one block at the end of this file — see there. */
 
-/* Buttons and chips */
+/* Buttons and chips. Everything here is pressed, typed in or dragged, so everything here
+ * keeps its four-sided edge and takes it in `--line-strong`. The full-round pills stay
+ * round: 999px is chrome rather than a corner, and the app's radius has nothing to say
+ * about it. */
 .explorer .primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: var(--x-radius); padding: 8px 14px; }
-.explorer .secondary { background: var(--card); color: var(--accent); border: 1px solid var(--line); border-radius: var(--x-radius); padding: 6px 12px; font-size: 13px; }
+.explorer .secondary { background: var(--card); color: var(--accent); border: 1px solid var(--line-strong); border-radius: var(--x-radius); padding: 6px 12px; font-size: 13px; }
 .explorer .link { background: none; border: 0; color: var(--accent); padding: 0; font-size: 13px; text-decoration: underline; }
 .explorer .pill { display: inline-block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
 .explorer .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.explorer .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 3px 10px; font-size: 13px; line-height: 1.3; }
+.explorer .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-strong); background: var(--card); border-radius: 999px; padding: 3px 10px; font-size: 13px; line-height: 1.3; }
 .explorer .chip-choice { cursor: pointer; }
 .explorer .chip-choice.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .explorer .chip-drag { cursor: grab; }
@@ -115,13 +127,13 @@
 .explorer .chip-x { border: 0; background: none; color: var(--dim); padding: 0 0 0 2px; line-height: 1; font-size: 15px; }
 .explorer .chip-tag { background: var(--bg); }
 .explorer .chip-shape { border-style: dashed; color: var(--dim); }
-.explorer .chip-add, .explorer .chip-input { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.explorer .chip-add, .explorer .chip-input { border: 1px dashed var(--line-strong); background: transparent; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
 .explorer .chip-input { min-width: 240px; }
 .explorer .hint { color: var(--dim); font-size: 12px; }
 .explorer .hint.warn { color: var(--warn); }
 .explorer .label { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
 .explorer .field { display: block; margin: 10px 0; }
-.explorer .field input:not(.chip-input) { width: 100%; border: 1px solid var(--line); border-radius: var(--x-radius); padding: 7px 10px; background: var(--card); margin-top: 4px; }
+.explorer .field input:not(.chip-input) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--x-radius); padding: 7px 10px; background: var(--card); margin-top: 4px; }
 .explorer .field input:focus, .explorer textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
 /* Empty state */
@@ -129,7 +141,7 @@
 .explorer .empty h2 { font: 600 26px/1.2 var(--serif); margin: 0 0 8px; }
 .explorer .lede { color: var(--dim); margin: 0 0 18px; }
 .explorer .examples { display: grid; gap: 8px; margin-bottom: 22px; }
-.explorer .example { text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: calc(var(--x-radius-card) - 2px); padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
+.explorer .example { text-align: left; border: 1px solid var(--line-strong); background: var(--card); border-radius: var(--x-radius); padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
 .explorer .example:hover:not(:disabled) { border-color: var(--accent); }
 .explorer .example-shape { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); min-width: 68px; }
 /* The collapsed "Search in" control. Reads as a label rather than a button, because it is
@@ -142,10 +154,17 @@
 .explorer .pins-toggle:hover, .explorer .pins-toggle.on { color: var(--ink); }
 .explorer .pins-toggle + .chips { margin-top: 8px; }
 
-/* Conversation */
+/* Conversation.
+ *
+ * A turn is opened by a rule and closed by nothing, the way a corpus is on the hub. The
+ * rule sits on the turn rather than between two of them, so the first turn gets one too
+ * and the cadence starts at the top; the space under the rule (18px) is shorter than the
+ * space above the next one (28px), which is what says the rule belongs to the turn it
+ * opens. The reader's own words keep the teal wash they already had and lose only their
+ * corners — a wash is not an enclosure, and the indent was always doing most of the work. */
 .explorer .conversation { max-width: var(--x-measure); margin: 0 auto; }
-.explorer .turn { margin-bottom: 18px; }
-.explorer .bubble { padding: 10px 14px; border-radius: var(--x-radius-card); white-space: pre-wrap; word-wrap: break-word; }
+.explorer .turn { border-top: 1px solid var(--line); padding-top: 18px; margin-bottom: 28px; }
+.explorer .bubble { padding: 10px 14px; white-space: pre-wrap; word-wrap: break-word; }
 .explorer .bubble.user { background: var(--accent-soft); margin-left: var(--x-bubble-indent); }
 .explorer .bubble.user.reply { margin-left: calc(var(--x-bubble-indent) * 2); }
 .explorer .marker { color: var(--faint); font-size: 12px; text-align: center; margin: 6px 0 10px; letter-spacing: 0.04em; }
@@ -156,13 +175,17 @@
 .explorer .steps-summary:hover { color: var(--dim); }
 .explorer .steps[open] .steps-summary { margin-bottom: 2px; }
 .explorer .steps .narration:first-of-type { margin-top: 4px; }
-.explorer .question { border: 1px solid #f1d9b0; border-left: 4px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 10px 14px; margin: 10px 0; }
+/* The one question research asks before it spends. Not a control — the reply is typed in
+ * the composer — so the four sides and the corners go and the leading rule carries it, at
+ * the same 3px the error below uses. The question is the page talking, so it is set in the
+ * page's face; the serif here was the last place the app's voice borrowed the record's. */
+.explorer .question { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 10px 14px; margin: 10px 0; }
 .explorer .question-head { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
-.explorer .question p { margin: 0; font: 400 18px/1.4 var(--serif); }
+.explorer .question p { margin: 0; font: 400 17px/1.45 var(--sans); }
 .explorer .working { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 13px; margin: 8px 0; }
 .explorer .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
-.explorer .error { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; border-radius: 6px; margin: 8px 0; font-size: 14px; }
+.explorer .error { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; margin: 8px 0; font-size: 14px; }
 
 /* Brief card */
 .explorer .brief { border: 1px solid #f1d9b0; background: var(--warn-soft); border-radius: var(--x-radius-card); padding: 12px 16px; margin: 12px 0; }
@@ -183,25 +206,71 @@
 .explorer .brief-compact[open] .brief-goal-line { display: none; }
 .explorer .brief-compact[open] .brief-summary { margin-bottom: 2px; }
 
-/* Answer */
-.explorer .answer { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 14px 18px; margin: 10px 0; }
-.explorer .md { font: 400 17px/1.55 var(--serif); }
+/* Answer.
+ *
+ * It was a white card with four sides and a 12px corner, which said the answer was a thing
+ * apart from the page it was asked on. It is the page: no border, no card surface, no
+ * radius, no padding of its own. What separates one turn from the last is the rule above
+ * the turn, and what separates the answer from the question is the space between them.
+ * Losing the white surface has one consequence to watch for — anything that was tinted
+ * with `--bg` to stand off the card now sits on `--bg`, so the inline code chip and the
+ * "from search" tag take the white instead (`--card`), the same two colours the other way
+ * round. */
+.explorer .answer { margin: 12px 0 0; }
+
+/* The faces, inverted.
+ *
+ * Lato speaks for the app and EB Garamond for the record. The whole answer used to be set
+ * in the serif, so the reader had no way to tell the page's own synthesis from the words it
+ * was synthesised from — the two voices wore one face. The synthesis is now the app's, in
+ * the app's sans at the site's own body size; the serif is kept for three things and marked
+ * where it appears: a heading, the name of a document (an in-app citation, which is the
+ * only link in an answer that names one — an open-web link is not a record), and the
+ * record's own quoted words, which also take a leading rule.
+ *
+ * 16px/1.6 rather than 17px/1.55. The old numbers were chosen for Garamond's small
+ * x-height; Lato's is about a sixth larger, so 16px Lato stands as tall as 17px Garamond
+ * on the page, and 16px is what the site sets its own body copy at. The line pitch goes
+ * from 26.35px to 25.6px — under 3% — so the answer's vertical rhythm barely moves while
+ * its voice changes, which is the point.
+ *
+ * The measure is untouched, and deliberately: `--x-measure` is 80ch declared on
+ * `.conversation`, which inherits the Explorer's own 15px Lato, so the `ch` never resolved
+ * against the serif and the column is exactly the width it was. Restating it in `rem` for
+ * this one rule would also have desynced it from `.brief-bar .brief`, which reads the same
+ * property so that a brief sits over the answer it produced. */
+.explorer .md { font: 400 16px/1.6 var(--sans); }
 .explorer .md p { margin: 0 0 10px; }
+/* The record's own words. The face and the size the whole answer used to be set in now say
+ * only this, and the leading rule marks it as quoted before a word is read. Neutral, not
+ * teal: a left rail is not an idiom this brand has, and a teal one would claim an axis the
+ * site does not use. */
+.explorer .md blockquote { font: 400 17px/1.55 var(--serif); border-left: 2px solid var(--line-strong); padding-left: 14px; margin: 12px 0; }
+.explorer .md blockquote p:last-child { margin-bottom: 0; }
+/* A citation is the name of a document, so it is set in the record's face. Face only, no
+ * optical size bump: `line-height` here is a unitless ratio, so an inline run at 1.05em
+ * would deepen exactly the lines that carry a citation and leave the paragraph unevenly
+ * led. An open-web link keeps the app's face and its `↗`. */
+.explorer .md a:not([target='_blank']) { font-family: var(--serif); }
 .explorer .md h1, .explorer .md h2, .explorer .md h3 { font: 600 18px/1.3 var(--sans); margin: 12px 0 6px; }
 .explorer .md ul, .explorer .md ol { padding-left: 22px; margin: 0 0 10px; }
 .explorer .md table { border-collapse: collapse; font-size: 15px; }
 .explorer .md td, .explorer .md th { border: 1px solid var(--line); padding: 4px 8px; }
-.explorer .md code { font: 13px var(--mono); background: var(--bg); padding: 1px 4px; border-radius: 4px; }
-.explorer .cards { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
-.explorer .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--bg); }
-.explorer .card-title { font: 600 16px/1.3 var(--sans); margin-bottom: 4px; }
+.explorer .md code { font: 13px var(--mono); background: var(--card); padding: 1px 4px; border-radius: var(--x-radius); }
+/* A list answer, once the answer stopped being a box: ten documents in ten boxes inside it
+ * would have been the same claim at a smaller scale, repeated. One column, no gap, a rule
+ * on each item so it travels with the item, and nothing closing the list at the bottom.
+ * The title is a document's name, so it takes the serif with the citations. */
+.explorer .cards { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 0; }
+.explorer .card { border-top: 1px solid var(--line); padding: 12px 0; }
+.explorer .card-title { font: 600 17px/1.3 var(--serif); margin-bottom: 4px; }
 .explorer .card-body { font-size: 16px; }
 .explorer .card-body p:last-child { margin-bottom: 0; }
 .explorer .count { display: flex; align-items: baseline; gap: 14px; margin: 4px 0 10px; }
 .explorer .count-number { font: 600 44px/1 var(--serif); color: var(--accent); }
 .explorer .count-link { font-size: 13px; }
-.explorer .document-open { display: inline-block; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 6px 12px; margin: 0 0 10px; text-decoration: none; font-size: 14px; }
-.explorer .badge { display: inline-block; font-size: 12px; border-radius: 6px; padding: 3px 8px; margin-top: 6px; }
+.explorer .document-open { display: inline-block; border: 1px solid var(--accent); color: var(--accent); border-radius: var(--x-radius); padding: 6px 12px; margin: 0 0 10px; text-decoration: none; font-size: 14px; }
+.explorer .badge { display: inline-block; font-size: 12px; border-radius: var(--x-radius); padding: 3px 8px; margin-top: 6px; }
 .explorer .badge-limit { background: var(--warn-soft); color: var(--warn); }
 .explorer .badge-budget { background: var(--bad-soft); color: var(--bad); }
 .explorer .badge-error { background: var(--bad-soft); color: var(--bad); }
@@ -215,9 +284,10 @@
 .explorer .source-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 .explorer .source-list li { display: flex; gap: 8px; align-items: baseline; }
 .explorer .source-slug { color: var(--faint); font-size: 11px; }
-.explorer .tag { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 4px; padding: 1px 5px; min-width: 58px; text-align: center; }
+.explorer .tag { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; border-radius: var(--x-radius); padding: 1px 5px; min-width: 58px; text-align: center; }
 .explorer .tag-read { background: #e4f3e8; color: var(--ok); }
-.explorer .tag-seen { background: var(--bg); color: var(--dim); border: 1px solid var(--line); }
+/* White, not paper: it was paper against the answer's white card, and the card is gone. */
+.explorer .tag-seen { background: var(--card); color: var(--dim); border: 1px solid var(--line); }
 .explorer .sources-extra { color: var(--dim); margin-top: 6px; }
 
 /* Composer — one skin of the ask box the hub wears the other of (`components/AskBox.tsx`).
@@ -225,7 +295,7 @@
  * file; the padding on `.composer` itself is the band the field sits in rather than the
  * field, and the hub has no counterpart to it, so it stays a literal. */
 .explorer .composer { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--card); }
-.explorer .composer textarea { flex: 1; border: var(--ask-border-width) solid var(--line); border-radius: var(--ask-radius); padding: var(--ask-pad-y) var(--ask-pad-x); font-size: var(--ask-font-size); resize: vertical; min-height: 44px; max-height: 180px; }
+.explorer .composer textarea { flex: 1; border: var(--ask-border-width) solid var(--line-strong); border-radius: var(--ask-radius); padding: var(--ask-pad-y) var(--ask-pad-x); font-size: var(--ask-font-size); resize: vertical; min-height: 44px; max-height: 180px; }
 
 /* The meter and the allowance: the conversation's spend and the day's pool, both inside
  * the trail. There is no strip across the top any more — they are read when asked for,
@@ -241,7 +311,7 @@
 
 .explorer .allowance { font-size: 13px; margin-top: 10px; }
 .explorer .allowance-line { color: var(--ink); }
-.explorer .allowance.spent { padding: 8px 10px; margin-left: -10px; margin-right: -10px; background: var(--bad-soft); border-radius: 8px; }
+.explorer .allowance.spent { padding: 8px 10px; margin-left: -10px; margin-right: -10px; background: var(--bad-soft); }
 .explorer .allowance.spent .allowance-line { color: var(--bad); font-weight: 700; }
 
 /* The rule between the numbers and the work they are the total of. */
@@ -275,7 +345,7 @@
 .explorer .trail-stop { color: var(--warn); font-size: 12px; }
 
 /* Settings dialog */
-.explorer .settings { border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; width: min(480px, 92vw); }
+.explorer .settings { border: 1px solid var(--line-strong); border-radius: var(--x-radius); padding: 18px 20px; width: min(480px, 92vw); }
 .explorer .settings::backdrop { background: rgba(0, 0, 0, 0.25); }
 .explorer .settings h3 { margin: 0 0 8px; }
 
@@ -312,9 +382,9 @@
    width. The open panel is capped and scrolls, because centring a tall panel on a short
    phone otherwise runs it off both ends at once. */
 .explorer .point { position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 40; max-height: calc(100dvh - 24px); display: flex; }
-.explorer .point-open { background: var(--card); color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font-size: 13px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10); }
+.explorer .point-open { background: var(--card); color: var(--dim); border: 1px solid var(--line-strong); border-radius: 999px; padding: 7px 14px; font-size: 13px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10); }
 .explorer .point-open:hover { color: var(--ink); }
-.explorer .point-panel { width: min(22rem, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; align-content: start; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14); }
+.explorer .point-panel { width: min(22rem, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--x-radius); padding: 14px; display: grid; gap: 10px; align-content: start; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14); }
 .explorer .point-head { display: flex; align-items: baseline; justify-content: space-between; }
 .explorer .point-x { background: none; border: 0; color: var(--faint); font-size: 18px; line-height: 1; padding: 0 2px; }
 .explorer .point-nature, .explorer .point-about, .explorer .point-wrong { margin: 0; font-size: 12px; color: var(--dim); }
@@ -322,12 +392,12 @@
 .explorer .point-target { display: grid; gap: 3px; border-left: 2px solid var(--line); padding-left: 10px; }
 .explorer .point-sel { font: 11px/1.3 var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .explorer .point-quote { font-size: 12px; color: var(--dim); }
-.explorer .point-note { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); resize: vertical; }
+.explorer .point-note { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--x-radius); background: var(--bg); resize: vertical; }
 .explorer .point-acts { display: flex; gap: 8px; justify-content: flex-end; }
-.explorer .point-acts button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 12px; }
+.explorer .point-acts button { border: 1px solid var(--line-strong); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 12px; }
 .explorer .point-first { background: var(--accent); color: #fff; border-color: var(--accent); }
 .explorer .point-first:disabled { opacity: 0.7; }
-.explorer .point-outline { position: fixed; z-index: 39; pointer-events: none; border: 2px solid var(--accent); border-radius: 6px; }
+.explorer .point-outline { position: fixed; z-index: 39; pointer-events: none; border: 2px solid var(--accent); border-radius: var(--x-radius); }
 
 @media (max-width: 900px) {
   /* A phone cannot show the answer and the trail at once and have either be worth

@@ -144,14 +144,14 @@ export const explorerKnobs = defineTunables([
     group: 'Shape',
     scope: 'explorer',
     kind: 'length',
-    value: '8px',
+    value: '3px',
     prop: '--x-radius',
     units: ['px', 'rem'],
     min: 0,
     max: 24,
     step: 1,
     source: { file: CSS, selector: '.explorer' },
-    note: 'Buttons and fields. The kit’s equivalent is the global corner radius.',
+    note: 'Buttons, fields and menus — the things a reader acts on, which are now the only things here with corners. The app’s own radius, said again rather than referenced so this slider has a number to rest on.',
   },
   {
     id: 'explorer.radiusCard',
@@ -166,7 +166,7 @@ export const explorerKnobs = defineTunables([
     max: 32,
     step: 1,
     source: { file: CSS, selector: '.explorer' },
-    note: 'Bubbles and the brief; the examples sit 2px inside it.',
+    note: 'The brief, and only the brief: the bubbles and the answer stopped being boxes, and the examples are a control now, so they follow the control radius.',
   },
 
   /* ---- Type ------------------------------------------------------------ */
@@ -183,7 +183,7 @@ export const explorerKnobs = defineTunables([
     max: 22,
     step: 0.5,
     source: { file: CSS, selector: '.explorer' },
-    note: 'The page’s base. The answer is set in the editorial face and follows its own scale.',
+    note: 'The page’s base. The answer speaks in the same face now, one step up at the site’s body size; the editorial face is kept for headings, document names and quoted words.',
   },
 
   /* ---- Colour (the four states this sheet still owns) ------------------- */
