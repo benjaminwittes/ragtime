@@ -14,14 +14,12 @@ import { uscSpoke } from './usc'
 /**
  * Central registry of declared spokes.
  *
- * The hub reads this to render the corpus cards (active spokes get an "Open
- * →" link; coming-soon spokes show a disabled placeholder with the same
- * holdings disclosure). Spoke routes are resolved through `getSpokeBySlug`
- * — active spokes mount the full `SpokeShell`, coming-soon spokes show a
- * lightweight "this corpus isn't surfaced yet" landing.
+ * The hub reads this to render the corpus cards — one card per spoke, with
+ * its holdings disclosure and an "Open →" link. Spoke routes are resolved
+ * through `getSpokeBySlug`, which mounts that corpus's shell.
  *
- * Order here = order shown on the hub. We lead with litigation (the one
- * active spoke) and then group the reference corpora (USC, CFR), the
+ * Order here = order shown on the hub. We lead with litigation and then
+ * group the reference corpora (USC, CFR), the
  * opinion corpus (OLC), the historical-narrative corpus (FRUS), and the
  * commentary corpus (Commentary — the federated Lawfare + Executive Functions
  * spoke, placed here as it's a different kind of source than the primary-source
@@ -45,9 +43,4 @@ export const spokes: readonly CorpusSpoke[] = [
 
 export function getSpokeBySlug(slug: CorpusSlug): CorpusSpoke | undefined {
   return spokes.find((s) => s.slug === slug)
-}
-
-/** Active spokes are the ones a user can fully navigate today. */
-export function getActiveSpokes(): readonly CorpusSpoke[] {
-  return spokes.filter((s) => s.status === 'active')
 }

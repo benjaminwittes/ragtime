@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
 import { SiteBar, SiteBarSlotProvider } from '@/components/SiteBar'
-import { ComingSoonSpoke } from '@/hub/ComingSoonSpoke'
 import { Hub } from '@/hub/Hub'
 import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
 import { TermsOfService } from '@/legal/TermsOfService'
@@ -30,13 +29,11 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *   `/explorer`                  → the Explorer: a conversation that orients,
  *                                  proposes a brief, researches, and hands off
  *                                  into the spokes (`src/explorer/`)
- *   `/corpus/<slug>` (active)    → full `SpokeShell`
+ *   `/corpus/<slug>`             → full `SpokeShell`
  *   `/corpus/<slug>/<id>`        → the same shell, which opens that
  *                                  document's detail sheet on mount (the
  *                                  Explorer's document handoff; see
  *                                  `readDeepLink` in lib/routing.ts)
- *   `/corpus/<slug>` (coming-    → `ComingSoonSpoke` landing page
- *                     soon)
  *   anything else                → "not found"
  *
  * The `/corpus/…` shapes are the deep-link grammar — `links` in the client
@@ -111,8 +108,7 @@ function App() {
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
           if (!spoke) return <NotFound pathname={`/corpus/${route.slug}`} onNavigate={navigate} />
-          if (spoke.status === 'active') return activeSpokeShell(spoke)
-          return <ComingSoonSpoke spoke={spoke} onNavigate={navigate} />
+          return spokeShell(spoke)
         })()
       : route.kind === 'privacy'
         ? <PrivacyPolicy onNavigate={navigate} />
@@ -142,12 +138,12 @@ function App() {
 }
 
 /**
- * Pick the right shell for an active spoke. The litigation spoke uses the
- * full stack-runtime `SpokeShell`; USC v1 alpha uses a slimmer
+ * Pick the right shell for a spoke. The litigation spoke uses the full
+ * stack-runtime `SpokeShell`; USC v1 alpha uses a slimmer
  * manual-filter-only shell while AI modes + stack runtime catch up.
- * Other spokes will add their own branches as they come online.
+ * Other spokes add their own branches here.
  */
-function activeSpokeShell(spoke: CorpusSpoke) {
+function spokeShell(spoke: CorpusSpoke) {
   const shell =
     spoke.slug === 'usc' ? (
       <UscSpokeShell spoke={spoke} />

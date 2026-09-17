@@ -11,8 +11,7 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  *
  * The hub is the user's entry point to RAGtime. It surfaces the loaded
  * corpora as cards with their holdings (counts + coverage + last-updated),
- * each active card linking into its spoke and each coming-soon card
- * showing the holdings disclosure but no link.
+ * each one linking into its spoke.
  *
  * One search affordance sits above the spoke grid, labelled plainly
  * "Search" ({@link HubKeywordSearch}): a single plain-language input fires
@@ -102,94 +101,42 @@ function SpokeCard({
   spoke: CorpusSpoke
   onNavigate: (path: string) => void
 }) {
-  const active = spoke.status === 'active'
   const href = `/corpus/${spoke.slug}`
   const realHref = toHref(href)
 
   return (
-    <Card
-      className={
-        active ? 'transition hover:border-primary/60 hover:shadow-sm' : ''
-      }
-    >
+    <Card className="transition hover:border-primary/60 hover:shadow-sm">
       <CardContent className="space-y-3 p-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="font-serif text-lg font-semibold">{spoke.title}</h3>
-          <StatusBadge status={spoke.status} />
-        </div>
+        <h3 className="font-serif text-lg font-semibold">{spoke.title}</h3>
         <p className="text-sm text-muted-foreground">{spoke.description}</p>
         <HoldingsSummary spoke={spoke} />
-        {active ? (
-          <a
-            href={realHref}
-            onClick={(e) => {
-              if (
-                e.button === 0 &&
-                !e.ctrlKey &&
-                !e.metaKey &&
-                !e.shiftKey &&
-                !e.altKey
-              ) {
-                e.preventDefault()
-                onNavigate(href)
-              }
-            }}
-            className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            Open <span aria-hidden>→</span>
-          </a>
-        ) : (
-          <a
-            href={realHref}
-            onClick={(e) => {
-              if (
-                e.button === 0 &&
-                !e.ctrlKey &&
-                !e.metaKey &&
-                !e.shiftKey &&
-                !e.altKey
-              ) {
-                e.preventDefault()
-                onNavigate(href)
-              }
-            }}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted/70"
-          >
-            Preview details →
-          </a>
-        )}
+        <a
+          href={realHref}
+          onClick={(e) => {
+            if (
+              e.button === 0 &&
+              !e.ctrlKey &&
+              !e.metaKey &&
+              !e.shiftKey &&
+              !e.altKey
+            ) {
+              e.preventDefault()
+              onNavigate(href)
+            }
+          }}
+          className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+        >
+          Open <span aria-hidden>→</span>
+        </a>
       </CardContent>
     </Card>
-  )
-}
-
-function StatusBadge({ status }: { status: CorpusSpoke['status'] }) {
-  if (status === 'active') {
-    return (
-      <span className="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-        Live
-      </span>
-    )
-  }
-  if (status === 'coming-soon') {
-    return (
-      <span className="rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300">
-        Coming soon
-      </span>
-    )
-  }
-  return (
-    <span className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-      Archived
-    </span>
   )
 }
 
 /**
  * Holdings disclosure rendered inside each card. Counts come from the
  * spoke's `getHoldings()` — for litigation, that's a live Worker call;
- * for the coming-soon stubs, hardcoded values from the corpus ingest
- * reports.
+ * for the others, hardcoded values from the corpus ingest reports.
  *
  * Failures render as a quiet "—" rather than blocking the card. The hub is
  * a navigation surface; a stale or unreachable count shouldn't keep the
