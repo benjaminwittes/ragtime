@@ -17,7 +17,10 @@ import type { CorpusSlug } from '@lawfare/ragtime-client'
  * question under a keyword box would teach the box wrong, and vice versa.
  *
  * **Every `query` here returned hits in its own corpus through the hub fan**
- * (`/corpus/hub/keyword`), checked against the live worker when it was written.
+ * (`/corpus/hub/keyword`), checked against the live worker when it was written
+ * and re-checked on 2026-09-17 when the register changed — each replacement
+ * scoped to its own corpus (`corpora: [slug]`), which is a tenth of the work of
+ * a fan and the reason the second pass finished at all.
  * A sample that finds nothing is worse than no sample at all: it is the surface
  * demonstrating its own failure with copy the page chose itself. Sanctions is
  * the one corpus the fan leaves out (`HUB_KEYWORD_SPOKES`), so its three were
@@ -30,6 +33,20 @@ import type { CorpusSlug } from '@lawfare/ragtime-client'
  * notices are still loading in waves, the Vault's scans carry no dates at all.
  * A sample that asks past the edge of a corpus is a promise the corpus cannot
  * keep.
+ *
+ * **The register is institutional, not topical** (2026-09-17). The first pass
+ * demonstrated the corpora on whatever was loudest — detention and habeas since
+ * January 2025, emergency-powers orders, the Insurrection Act, COINTELPRO and
+ * the Bureau's file on King — and a page that opens on those is not showing a
+ * reader what a corpus holds, it is making an argument with it. The samples that
+ * replaced them ask the same corpora the same *kind* of question in its dry,
+ * durable form: what a statute requires, how a rule was made, what the cables
+ * recorded, what the Vault posted. The subject matter is still the federal
+ * record and still worth reading — a national-security corpus is not obliged to
+ * be about drinking water — but nothing in the resting state of the page should
+ * read as a brief against a sitting administration, and nothing should trade on
+ * a sensational name. A sample that would look pointed screenshotted next to
+ * Lawfare's masthead is the wrong sample, however well it retrieves.
  *
  * The order is the registry's order — the whole first, then The law, As read,
  * The record, Commentary — because the rotation walks the same path the page
@@ -83,19 +100,19 @@ export const SAMPLES: readonly SampleSet[] = [
     title: 'Ask the federal record a question.',
     samples: [
       {
-        query: 'Youngstown',
+        query: 'Freedom of Information Act',
         question:
-          'What has the Office of Legal Counsel said about presidential emergency powers over communications networks? List the opinions.',
+          'What has the Office of Legal Counsel said about the Freedom of Information Act’s exemptions? List the opinions.',
       },
       {
-        query: 'International Emergency Economic Powers Act',
+        query: 'artificial intelligence',
         question:
-          'How many executive orders since January 2025 invoke the International Emergency Economic Powers Act?',
+          'How many rules and proposed rules about artificial intelligence has the Federal Register published since 1994?',
       },
       {
-        query: 'habeas corpus',
+        query: 'Administrative Procedure Act',
         question:
-          'How have federal courts handled habeas petitions from immigration detainees since January 2025? A short narrative with citations.',
+          'How have federal courts handled challenges to agency rulemaking since January 2025? A short narrative with citations.',
       },
     ],
   },
@@ -106,19 +123,18 @@ export const SAMPLES: readonly SampleSet[] = [
     title: 'Ask the U.S. Code what the law says.',
     samples: [
       {
-        query: '50 U.S.C. 1702',
-        question:
-          'What powers does the International Emergency Economic Powers Act give the President?',
+        // A citation rather than a phrase, because the box takes both and a
+        // reader who arrives with one in hand should see that it works.
+        query: '5 U.S.C. 552',
+        question: 'What does the Freedom of Information Act require an agency to disclose?',
       },
       {
-        query: 'habeas corpus',
-        question:
-          'Which statutes say when a federal court may grant a writ of habeas corpus?',
+        query: 'Administrative Procedure Act',
+        question: 'Which statutes govern how a federal agency makes a rule?',
       },
       {
-        query: 'posse comitatus',
-        question:
-          'What does the Code say about using the armed forces for law enforcement inside the United States?',
+        query: 'inspector general',
+        question: 'What does the Code say about the duties of an inspector general?',
       },
     ],
   },
@@ -129,12 +145,12 @@ export const SAMPLES: readonly SampleSet[] = [
     title: 'Ask the regulations what the agencies require.',
     samples: [
       {
-        query: 'credible fear',
-        question: 'What do the rules in force require in a credible-fear screening?',
+        query: 'environmental impact statement',
+        question: 'What do the rules in force require in an environmental impact statement?',
       },
       {
-        query: 'expedited removal',
-        question: 'Which regulations govern expedited removal as they stand today?',
+        query: 'endangered species',
+        question: 'Which regulations protect a listed species as they stand today?',
       },
       {
         query: 'national security information',
@@ -159,8 +175,8 @@ export const SAMPLES: readonly SampleSet[] = [
           'Which public laws have amended the Foreign Intelligence Surveillance Act?',
       },
       {
-        query: 'Guantanamo',
-        question: 'What have witnesses told congressional hearings about detention at Guantanamo?',
+        query: 'cybersecurity',
+        question: 'What have witnesses told congressional hearings about cybersecurity?',
       },
     ],
   },
@@ -171,17 +187,16 @@ export const SAMPLES: readonly SampleSet[] = [
     title: 'Ask the Federal Register which rules changed.',
     samples: [
       {
-        query: 'asylum',
-        question: 'Which asylum rules have agencies proposed and finalized since 1994?',
-      },
-      {
         query: 'artificial intelligence',
         question: 'What rules have agencies written about artificial intelligence?',
       },
       {
-        query: 'national emergency',
-        question:
-          'Which rules did agencies publish under a declared national emergency?',
+        query: 'drinking water',
+        question: 'Which drinking-water rules have agencies proposed and finalized since 1994?',
+      },
+      {
+        query: 'aviation safety',
+        question: 'What rules have agencies published about aviation safety?',
       },
     ],
   },
@@ -194,13 +209,12 @@ export const SAMPLES: readonly SampleSet[] = [
     title: 'Ask the presidency what it ordered.',
     samples: [
       {
-        query: 'International Emergency Economic Powers Act',
-        question: 'Which executive orders invoke the International Emergency Economic Powers Act?',
+        query: 'federal advisory committee',
+        question: 'Which executive orders established a federal advisory committee?',
       },
       {
-        query: 'national emergency',
-        question:
-          'Which executive orders declared a national emergency, and which later orders revoked them?',
+        query: 'regulatory review',
+        question: 'How have executive orders set the terms for reviewing agency regulations?',
       },
       {
         query: 'classified national security information',
@@ -216,17 +230,16 @@ export const SAMPLES: readonly SampleSet[] = [
     title: 'Ask the OLC what the executive may do.',
     samples: [
       {
-        query: 'war powers',
-        question:
-          'What has OLC said about the President’s authority to use military force without Congress?',
+        query: 'Freedom of Information Act',
+        question: 'How has OLC read the Freedom of Information Act’s exemptions?',
       },
       {
         query: 'executive privilege',
         question: 'How has OLC described executive privilege over White House communications?',
       },
       {
-        query: 'appointments clause',
-        question: 'What has OLC concluded about appointing officials without Senate confirmation?',
+        query: 'recess appointments',
+        question: 'What has OLC concluded about the President’s power to make recess appointments?',
       },
     ],
   },
@@ -242,8 +255,7 @@ export const SAMPLES: readonly SampleSet[] = [
       },
       {
         query: 'preliminary injunction',
-        question:
-          'Where have preliminary injunctions been sought against federal agencies since January 2025?',
+        question: 'Where have preliminary injunctions been sought since January 2025?',
       },
       {
         query: 'notice of appeal',
@@ -266,8 +278,8 @@ export const SAMPLES: readonly SampleSet[] = [
         question: 'What does the diplomatic record show about the decisions behind the Berlin airlift?',
       },
       {
-        query: 'Vietnam',
-        question: 'How did the State Department record the decision to escalate in Vietnam?',
+        query: 'Marshall Plan',
+        question: 'How did the State Department record the making of the Marshall Plan?',
       },
       {
         query: 'Suez',
@@ -277,64 +289,79 @@ export const SAMPLES: readonly SampleSet[] = [
   },
   {
     // The Vault's scans carry no document dates, so nothing here asks "when".
+    // The three are the Vault's long-closed famous files rather than its charged
+    // ones: COINTELPRO and the Bureau's file on King retrieve beautifully and
+    // make the hub's resting state an accusation, which is not what a reader who
+    // has typed nothing asked for.
     slug: 'fbi',
     title: 'Ask the FBI’s Vault what it released.',
     samples: [
       {
-        query: 'COINTELPRO',
-        question: 'What is in the Bureau’s COINTELPRO files?',
+        query: 'Amelia Earhart',
+        question: 'What does the Vault hold on Amelia Earhart?',
       },
       {
-        query: 'Martin Luther King',
-        question: 'What did the FBI release about its surveillance of Martin Luther King Jr.?',
+        query: 'Al Capone',
+        question: 'What is in the Bureau’s file on Al Capone?',
       },
       {
-        query: 'Unabomber',
-        question: 'What does the Vault hold on the Unabomber investigation?',
+        query: 'Alcatraz',
+        question: 'What did the FBI release about the escape from Alcatraz?',
       },
     ],
   },
   {
     // The one corpus the hub fan leaves out, so these three were checked
-    // against `/corpus/sanctions/entity-filter` and `/corpus/sanctions/filter`
-    // rather than against the fan. A reader who runs one in Search mode is
-    // searching the other ten; the Sanctions workspace is where these land.
+    // against `/corpus/sanctions/entity-filter` (the first) and
+    // `/corpus/sanctions/filter` (the other two) rather than against the fan. A
+    // reader who runs one in Search mode is searching the other ten; the
+    // Sanctions workspace is where these land.
+    //
+    // Every name on the SDN list is a geopolitical actor, so the way out of a
+    // rotating banner that reads like a designation announcement is to ask the
+    // list by trade rather than by name, and otherwise to ask the guidance about
+    // its own machinery. Nothing here asks *when* a party was designated:
+    // `publish_date` is a copy-freshness stamp for the list data, not a
+    // designation date, and a question shaped that way teaches the box a fact
+    // the corpus cannot supply.
     slug: 'sanctions',
     title: 'Ask the sanctions lists who is on them.',
     samples: [
       {
-        query: 'Hezbollah',
-        question: 'Which entities on the sanctions lists are designated in connection with Hezbollah?',
+        query: 'shipping',
+        question: 'Which shipping companies are on the sanctions lists?',
       },
       {
         query: 'general license',
         question: 'What does OFAC’s guidance say about general licenses?',
       },
       {
-        query: 'Wagner Group',
-        question: 'Has OFAC designated the Wagner Group, and under which program?',
+        query: 'blocked property',
+        question: 'What does OFAC’s guidance say about property it has blocked?',
       },
     ],
   },
 
   /* ---- Commentary ------------------------------------------------------ */
   {
-    // Two publications and no others, which is what the questions name.
+    // Two publications and no others — Lawfare federated with Executive
+    // Functions. The questions name the publication rather than an author now:
+    // naming one is a promise that the corpus holds them, and it is the kind of
+    // promise that rots quietly when the federation changes.
     slug: 'commentary',
     title: 'Ask the commentary what Lawfare made of it.',
     samples: [
       {
-        query: 'Insurrection Act',
-        question: 'What have Lawfare’s contributors argued about the Insurrection Act?',
+        query: 'cybersecurity',
+        question: 'What have Lawfare’s contributors argued about cybersecurity policy?',
       },
       {
         query: 'Section 702',
         question: 'What has been written about reauthorizing Section 702?',
       },
       {
-        query: 'emergency powers',
-        question:
-          'What have Bauer and Goldsmith written about the presidency’s emergency powers?',
+        query: 'export controls',
+        question: 'What has been written about export controls and national security?',
       },
     ],
   },
