@@ -33,7 +33,7 @@ export const fbiSpoke: CorpusSpoke = {
   slug: 'fbi',
   title: 'FBI Records',
   description:
-    'The FBI’s FOIA reading room (the Vault) as preserved — 10,700+ released files across 1,755 subjects, including documents since removed from the Vault.',
+    'The FBI’s FOIA reading room, the Vault, including files the Bureau has since taken down.',
   status: 'active',
 
   plainEnglishDisclosure:

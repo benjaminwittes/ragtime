@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { getHoldingsCached } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
-import { spokes } from '@/spokes/registry'
+import { spokeGroups, spokes } from '@/spokes/registry'
 import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
 import { HubKeywordSearch } from './HubKeywordSearch'
 
@@ -10,8 +10,8 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  * Hub landing surface — brief #1 (general AMA hub).
  *
  * The hub is the user's entry point to RAGtime. It surfaces the loaded
- * corpora as ruled rows with their holdings (counts + coverage +
- * last-updated), each one linking into its spoke.
+ * corpora in four headed groups, two to a row, each entry a title that
+ * links into its spoke, a line of copy, and its headline count.
  *
  * One search affordance sits above the spoke grid, labelled plainly
  * "Search" ({@link HubKeywordSearch}): a single plain-language input fires
@@ -67,11 +67,8 @@ function HubHero() {
       ledeClassName="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary"
       lede={
         <>
-          Statutes, regulations, presidential documents, the Federal Register,
-          congressional hearings and debates, executive-branch legal opinions,
-          diplomatic history, sanctions lists, released FBI files, the federal
-          litigation that interprets them all — and the published commentary on
-          the whole — together.
+          The law, how it has been read, what government did with it, and the
+          commentary on all three.
         </>
       }
     />
@@ -79,17 +76,29 @@ function HubHero() {
 }
 
 /**
- * Cross-corpus keyword AMA placeholder.
+ * The corpora, grouped and headed, as the body of the hub.
  *
- * Brief #1's flagship feature — free keyword AMA that spans all loaded
- * corpora. v1 ships disabled because (a) cross-corpus query routing on the
- * Worker hasn't been designed yet and (b) only one spoke is implemented,
- * so cross-corpus has nothing to cross to. The UI affordance is here so
- * the user understands what's coming.
+ * Eleven corpora in one undifferentiated list asked the reader to hold
+ * eleven things and told them nothing about how the eleven relate. The four
+ * groups are the relation — the law, how it has been read, the record of
+ * what was done, and the commentary that is not a primary source at all —
+ * and `spokes/registry.ts` argues for the membership. Here they are only
+ * rendered: a heading in the eyebrow voice, then that group's entries.
  */
 function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
+  // One counter over headings and entries in DOM order, resolved once here rather
+  // than arrived at inside the loops. The exit wave numbers the page as the reader
+  // reads it, and a heading is as much a thing on the screen as the entries under
+  // it, so it takes a number too. See the note on `SpokeCard`'s `index`.
+  let cursor = 0
+  const groups = spokeGroups.map((group) => ({
+    heading: group.heading,
+    headingIndex: cursor++,
+    entries: group.spokes.map((spoke) => ({ spoke, index: cursor++ })),
+  }))
+
   return (
-    <section className="mt-10 space-y-3 border-t border-lawfare-line pt-8">
+    <section className="mt-10 border-t border-lawfare-line pt-8">
       {/* This row leads the corpus rows out and leads them back in — see the stagger in
           `src/transitions.css`. It is named and they are named; the `<section>` around
           them is not, because a named ancestor would take the whole list out of the page
@@ -103,26 +112,45 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
           {spokes.length} loaded
         </span>
       </div>
-      {/* One column, not two, and no gap. A ruled list's argument is a regular cadence of
-          rules down one measure: two columns of rows whose descriptions wrap to different
-          depths give two cadences that agree nowhere, and every mismatch between them
-          reads as a broken rule rather than as a separated row. A gap would be the same
-          mistake in miniature — the rows have to touch for the rule between them to be
-          the thing that separates them. The width the second column used to buy is
-          recovered inside each row instead: above `sm`, the holdings and the link sit
-          beside the title rather than under it, so a row stays about three lines deep. */}
-      <div>
-        {/* The index is the row's name for the length of the transition, and nothing
-            else: `hub-card-1` through `hub-card-N` in list order, so the choreography can
-            hold each one back by one more beat than the last. By position rather than by
-            slug because the stagger is about where a row is on the screen, not which
-            corpus it happens to be — reorder the registry and the wave still runs top to
-            bottom. `transitions.css` writes its rules out to twelve; there are eleven
-            spokes today, and a twelfth added here needs a line added there. */}
-        {spokes.map((s, i) => (
-          <SpokeCard key={s.slug} spoke={s} index={i} onNavigate={onNavigate} />
-        ))}
-      </div>
+      {groups.map((group, g) => (
+        <div key={group.heading} className={g === 0 ? 'mt-6' : 'mt-8'}>
+          {/* The heading sits on the paper, above the first rule of its group rather
+              than inside a ruled cell, so it reads as a label for what follows and not
+              as another entry. Same voice as the "N loaded" count beside "Corpora":
+              small, mono, spaced — the page's way of saying something about the content
+              rather than saying content. */}
+          <h3
+            className="pb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+            style={{ viewTransitionName: `hub-card-${group.headingIndex + 1}` }}
+          >
+            {group.heading}
+          </h3>
+          {/* Two columns above `sm`, and no column gap: the left cell pads right, the
+              right cell pads left, so the two cells of a grid row put their rules end to
+              end and the page reads one rule across its whole measure. The objection this
+              used to carry — that two columns of rows wrapping to different depths give
+              two cadences that agree nowhere — was an objection to the old row, which was
+              a title, a description, two mono lines and a link. An entry is now three
+              fixed things, one line of copy among them, so the two columns are near
+              enough the same height on their own; and where they are not, CSS grid gives
+              a row's cells one height, which puts the next pair of rules back on the same
+              line like a ruled ledger. A group with an odd count leaves its last cell in
+              the left column at half width. That is the honest thing to show — the rule
+              stops where the content stops — and spanning it would make one entry look
+              like a different kind of entry. */}
+          <div className="grid sm:grid-cols-2">
+            {group.entries.map(({ spoke, index }, i) => (
+              <SpokeCard
+                key={spoke.slug}
+                spoke={spoke}
+                index={index}
+                side={i % 2 === 0 ? 'left' : 'right'}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </section>
   )
 }
@@ -130,41 +158,52 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
 function SpokeCard({
   spoke,
   index,
+  side,
   onNavigate,
 }: {
   spoke: CorpusSpoke
-  /** Position in the list, which is this row's place in the exit wave. See `SpokeGrid`. */
+  /**
+   * The entry's place in the exit wave, counted over headings and entries alike in
+   * DOM order (see `SpokeGrid`). It is the name for the length of a transition and
+   * nothing else, and it is a position rather than a slug because the choreography
+   * is about where a thing is on the screen, not which corpus it happens to be —
+   * regroup the registry and the wave still runs top to bottom. `transitions.css`
+   * writes its rules out to sixteen; four headings and eleven corpora make fifteen
+   * today, and the sixteenth thing added here needs a line added there.
+   */
   index: number
+  /** Which column the entry falls in, which decides the side it pads. */
+  side: 'left' | 'right'
   onNavigate: (path: string) => void
 }) {
   const href = `/corpus/${spoke.slug}`
   const realHref = toHref(href)
 
   return (
-    // This was a bordered, rounded, shadowed card; it is now a row on the page's own
+    // This was a bordered, rounded, shadowed card; it is now an entry on the page's own
     // paper, separated from its neighbours by a hairline rule. A box contains, and says
     // that what is inside it is a thing apart from the page. A rule only separates, and
     // says where one corpus stops and the next begins — which is the whole of what a
-    // corpus in a list of corpora needs said about it.
+    // corpus in a list of corpora needs said about it. The one thing here that may look
+    // like a control is the title, and it is a link, so it earns its underline on hover
+    // and nothing else: ink rather than the accent, because eleven accented words down a
+    // page would read as eleven buttons.
     //
-    // The rule is `border-t` on every row rather than `divide-y` on the container, for
-    // two reasons. It gives the first row a rule too, so the cadence starts at the top of
-    // the list rather than one row late, and the heading above is separated from the list
-    // the same way the rows are separated from each other. And it puts the rule on the
-    // row itself rather than on a parent's `* + *` selector, so it travels with the row
-    // when the exit wave lifts each one out under its own name. Nothing closes the list
-    // at the bottom: a rule separates rather than encloses, and there is nothing below
-    // the last row for it to be separated from until the about panel brings its own.
+    // The rule is `border-t` on every entry rather than `divide-y` on the container, for
+    // two reasons. It gives the first entry a rule too, so the cadence starts at the top
+    // of a group rather than one entry late, and the heading above is separated from its
+    // group the same way the entries are separated from each other. And it puts the rule
+    // on the entry itself rather than on a parent's `* + *` selector, so it travels with
+    // the entry when the exit wave lifts each one out under its own name. Nothing closes
+    // a group at the bottom: a rule separates rather than encloses, and the next heading
+    // or the about panel brings its own.
     <div
-      className="flex flex-col gap-2 border-t border-lawfare-line py-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8"
+      className={`space-y-1 border-t border-lawfare-line py-4 ${
+        side === 'left' ? 'sm:pr-8' : 'sm:pl-8'
+      }`}
       style={{ viewTransitionName: `hub-card-${index + 1}` }}
     >
-      <div className="min-w-0 space-y-1 sm:flex-1">
-        <h3 className="font-serif text-lg font-semibold">{spoke.title}</h3>
-        <p className="text-sm text-muted-foreground">{spoke.description}</p>
-      </div>
-      <div className="space-y-2 sm:max-w-[50%] sm:shrink-0 sm:text-right">
-        <HoldingsSummary spoke={spoke} />
+      <h4 className="font-serif text-lg font-semibold">
         <a
           href={realHref}
           onClick={(e) => {
@@ -179,23 +218,33 @@ function SpokeCard({
               onNavigate(href)
             }
           }}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+          className="text-foreground underline-offset-4 hover:underline"
         >
-          Open <span aria-hidden>→</span>
+          {spoke.title}
         </a>
-      </div>
+      </h4>
+      <p className="text-sm text-muted-foreground">{spoke.description}</p>
+      <HoldingsSummary spoke={spoke} />
     </div>
   )
 }
 
 /**
- * Holdings disclosure rendered inside each row. Counts come from the
- * spoke's `getHoldings()` — for litigation, that's a live Worker call;
- * for the others, hardcoded values from the corpus ingest reports.
+ * The one number an entry carries: the headline count from the spoke's
+ * `getHoldings()` — for litigation a live Worker call, for the others values
+ * the corpus ingest reports settled — rendered as the first entry of `counts`
+ * and nothing more.
  *
- * Failures render as a quiet "—" rather than blocking the row. The hub is
- * a navigation surface; a stale or unreachable count shouldn't keep the
- * user from getting into the spoke.
+ * The hub used to show the coverage line under it as well, and that was the
+ * hub restating a fact it does not own. Coverage is a claim about what is and
+ * is not in a corpus, it is qualified, and the qualifications live on the
+ * spoke's own provenance disclosure where there is room for them. Two of the
+ * old hub descriptions had quietly drifted from what that disclosure says, and
+ * a page that says a thing twice will eventually say it two ways. So the hub
+ * says how much, and the spoke says of what.
+ *
+ * Failures stay quiet rather than blocking the entry. The hub is a navigation
+ * surface; a stale or unreachable count should not keep anyone out of a spoke.
  */
 function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
   const [holdings, setHoldings] = useState<CorpusHoldings | null>(null)
@@ -231,17 +280,18 @@ function HoldingsSummary({ spoke }: { spoke: CorpusSpoke }) {
     )
   }
 
-  // Render the counts inline (e.g. "1,099,912 cases · 6,749,136 entries").
-  const countEntries = Object.entries(holdings.counts)
-  const countLine = countEntries
-    .map(([k, v]) => `${v.toLocaleString()} ${k}`)
-    .join(' · ')
+  // The first entry of `counts` is the headline one by the descriptor's own ordering
+  // — "1,737,246 cases" before the docket entries under them, "60,417 sections"
+  // before the titles they sit in. The rest are a breakdown, and a breakdown belongs
+  // where there is room to explain it.
+  const headline = Object.entries(holdings.counts)[0]
+  if (!headline) return null
+  const [label, value] = headline
 
   return (
-    <dl className="space-y-1 font-mono text-xs text-muted-foreground">
-      <div>{countLine}</div>
-      <div>{holdings.coverage}</div>
-    </dl>
+    <p className="font-mono text-xs text-muted-foreground">
+      {value.toLocaleString()} {label}
+    </p>
   )
 }
 

@@ -26,7 +26,7 @@ export const olcSpoke: CorpusSpoke = {
   slug: 'olc',
   title: 'OLC opinions',
   description:
-    'Department of Justice Office of Legal Counsel published opinions, including FOIA net-new disclosures via the Knight First Amendment Institute.',
+    'The Justice Department’s own view of what the executive may lawfully do, since 1934.',
   status: 'active',
 
   plainEnglishDisclosure:

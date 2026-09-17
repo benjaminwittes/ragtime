@@ -29,7 +29,7 @@ export const presidentialSpoke: CorpusSpoke = {
   slug: 'presidential',
   title: 'Presidential Documents',
   description:
-    'Executive orders, proclamations, memoranda, determinations, and notices — the formal signed instruments of presidential action, with the amendment/revocation graph.',
+    'Executive orders, proclamations and memoranda, with what each one amended or revoked.',
   status: 'active',
 
   plainEnglishDisclosure:

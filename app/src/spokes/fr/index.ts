@@ -26,7 +26,7 @@ export const frSpoke: CorpusSpoke = {
   slug: 'fr',
   title: 'Federal Register',
   description:
-    'Rules, proposed rules, and notices of the administrative state — the executive branch’s daily journal, 1994 to present.',
+    'The executive branch’s daily journal since 1994: every rule, proposed and final, and a growing share of its notices.',
   status: 'active',
 
   plainEnglishDisclosure:

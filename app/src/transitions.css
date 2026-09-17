@@ -49,11 +49,12 @@
    * nobody is looking at to govern how long the page is busy.
    *
    * The stagger is 28ms rather than the 40 this started at, and the arithmetic is the
-   * reason. Fourteen steps — a heading, twelve card slots, the about panel, the footer —
-   * are 560ms of pure delay at 40ms before the last piece has begun to move, on top of
-   * its own duration; at 28ms the wave is still legible as a wave and the tail lands
-   * around 0.7s. Below about 20ms it stops reading as a sequence and starts reading as a
-   * single blur, which is the failure at the other end. */
+   * reason. Nineteen steps — a heading, sixteen card slots, the about panel, the footer —
+   * are 720ms of pure delay at 40ms before the last piece has begun to move, on top of
+   * its own duration; at 28ms the last delay is around 500ms and the tail lands around
+   * 0.75s, and the wave is still legible as a wave. Below about 20ms it stops reading as
+   * a sequence and starts reading as a single blur, which is the failure at the other
+   * end. */
   :root {
     --vt-duration: 420ms;
     --vt-ease: cubic-bezier(0.4, 0, 0.2, 1);
@@ -74,7 +75,9 @@
    *   site-bar, nav-explorer, bar-slot   — components/SiteBar.tsx
    *   ask-box                            — components/AskBox.tsx (both skins, one place)
    *   surface-intro                      — components/SurfaceIntro.tsx (likewise)
-   *   hub-card-1 … hub-card-N            — hub/Hub.tsx, by grid position
+   *   hub-card-1 … hub-card-N            — hub/Hub.tsx: the group headings and the
+   *                                        corpus entries alike, numbered together in
+   *                                        the order they appear on the page
    *   corpora-heading, about-panel, hub-footer — hub/Hub.tsx
    *   explorer-examples, explorer-pins   — here */
   .explorer .examples {
@@ -134,10 +137,12 @@
    * Named on one surface only, so the browser gives each a group with one half filled: an
    * `old` when its surface is being left, a `new` when it is being arrived at. Both lists
    * are written out per name — there is no selector arithmetic in CSS and `:is()` buys
-   * nothing here — and the card slots run to twelve against eleven spokes today. A twelfth
-   * spoke costs nothing; a thirteenth needs a line added to each of the three lists below
-   * and its own delay rule, and will otherwise simply fade with the page, which is a
-   * degradation nobody will notice and everyone will have to debug. Hence this paragraph. */
+   * nothing here — and the card slots run to sixteen against the fifteen things the hub
+   * names today: four group headings and eleven corpora, counted together in page order.
+   * A sixteenth costs nothing; a seventeenth needs a line added to each of the three
+   * lists below and its own delay rule, and will otherwise simply fade with the page,
+   * which is a degradation nobody will notice and everyone will have to debug. Hence this
+   * paragraph. */
   ::view-transition-old(corpora-heading),
   ::view-transition-old(hub-card-1),
   ::view-transition-old(hub-card-2),
@@ -151,6 +156,10 @@
   ::view-transition-old(hub-card-10),
   ::view-transition-old(hub-card-11),
   ::view-transition-old(hub-card-12),
+  ::view-transition-old(hub-card-13),
+  ::view-transition-old(hub-card-14),
+  ::view-transition-old(hub-card-15),
+  ::view-transition-old(hub-card-16),
   ::view-transition-old(about-panel),
   ::view-transition-old(hub-footer),
   ::view-transition-old(explorer-examples),
@@ -173,6 +182,10 @@
   ::view-transition-new(hub-card-10),
   ::view-transition-new(hub-card-11),
   ::view-transition-new(hub-card-12),
+  ::view-transition-new(hub-card-13),
+  ::view-transition-new(hub-card-14),
+  ::view-transition-new(hub-card-15),
+  ::view-transition-new(hub-card-16),
   ::view-transition-new(about-panel),
   ::view-transition-new(hub-footer),
   ::view-transition-new(explorer-examples),
@@ -183,11 +196,13 @@
   }
 
   /* ── The order ───────────────────────────────────────────────────────────────────────
-   * The hub empties and fills downward: its heading first, then the cards in grid order,
-   * then the two panels at the foot. One delay per name, shared by the leaving half and
-   * the arriving half, and that sharing is not laziness — top-to-bottom is the right order
-   * in both directions, so the return needs no rules of its own and cannot drift from the
-   * outbound one. */
+   * The hub empties and fills downward: its heading first, then the group headings and
+   * the corpus entries in page order, then the two panels at the foot. A group heading
+   * takes a beat of its own, which is what makes each group leave as a group rather than
+   * as a run of entries with a label stuck to the first of them. One delay per name,
+   * shared by the leaving half and the arriving half, and that sharing is not laziness —
+   * top-to-bottom is the right order in both directions, so the return needs no rules of
+   * its own and cannot drift from the outbound one. */
   ::view-transition-old(corpora-heading),
   ::view-transition-new(corpora-heading) {
     animation-delay: 0ms; /* leads; the cards follow it */
@@ -240,13 +255,29 @@
   ::view-transition-new(hub-card-12) {
     animation-delay: calc(12 * var(--vt-stagger));
   }
+  ::view-transition-old(hub-card-13),
+  ::view-transition-new(hub-card-13) {
+    animation-delay: calc(13 * var(--vt-stagger));
+  }
+  ::view-transition-old(hub-card-14),
+  ::view-transition-new(hub-card-14) {
+    animation-delay: calc(14 * var(--vt-stagger));
+  }
+  ::view-transition-old(hub-card-15),
+  ::view-transition-new(hub-card-15) {
+    animation-delay: calc(15 * var(--vt-stagger));
+  }
+  ::view-transition-old(hub-card-16),
+  ::view-transition-new(hub-card-16) {
+    animation-delay: calc(16 * var(--vt-stagger));
+  }
   ::view-transition-old(about-panel),
   ::view-transition-new(about-panel) {
-    animation-delay: calc(13 * var(--vt-stagger));
+    animation-delay: calc(17 * var(--vt-stagger));
   }
   ::view-transition-old(hub-footer),
   ::view-transition-new(hub-footer) {
-    animation-delay: calc(14 * var(--vt-stagger));
+    animation-delay: calc(18 * var(--vt-stagger));
   }
 
   /* The Explorer's two are the one place old and new need different delays, and the

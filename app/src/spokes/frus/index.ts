@@ -26,7 +26,7 @@ export const frusSpoke: CorpusSpoke = {
   slug: 'frus',
   title: 'Foreign Relations of the United States',
   description:
-    'State Department documentary history of US foreign policy — the FRUS series, spanning 1620 to 1991.',
+    'The State Department’s declassified diplomatic record, to the end of the Cold War.',
   status: 'active',
 
   plainEnglishDisclosure:

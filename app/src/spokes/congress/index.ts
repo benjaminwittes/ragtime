@@ -24,7 +24,7 @@ export const congressSpoke: CorpusSpoke = {
   slug: 'congress',
   title: 'Congress',
   description:
-    'Public laws, bills, hearing transcripts, the Congressional Record, and witness testimony — the legislative branch across five collections.',
+    'Every public law since 1789, and the hearings, floor debate and bills of the modern Congress.',
   status: 'active',
 
   plainEnglishDisclosure:

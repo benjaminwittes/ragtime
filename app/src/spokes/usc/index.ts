@@ -26,8 +26,7 @@ import { type CorpusSpoke, fetchUscFacets } from '@lawfare/ragtime-client'
 export const uscSpoke: CorpusSpoke = {
   slug: 'usc',
   title: 'United States Code',
-  description:
-    'The full statutory law of the United States — all 53 titles, current as of release point 119-93.',
+  description: 'Every federal statute in force, across all 53 titles.',
   status: 'active',
 
   plainEnglishDisclosure:

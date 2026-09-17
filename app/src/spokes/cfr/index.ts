@@ -28,7 +28,7 @@ export const cfrSpoke: CorpusSpoke = {
   slug: 'cfr',
   title: 'Code of Federal Regulations',
   description:
-    'Federal agency regulations — all 49 titles, current as of 2026-05-21.',
+    'The rules the agencies wrote under those statutes, as they stand today, across all 49 titles.',
   status: 'active',
 
   plainEnglishDisclosure:
