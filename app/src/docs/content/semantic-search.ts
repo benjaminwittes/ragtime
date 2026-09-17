@@ -2,9 +2,11 @@ import type { DocsEntry } from '../types'
 
 /**
  * Docs entry for the keyword / semantic / both retrieval toggle (brief #9,
- * locked 2026-06-11). Global-scope: the toggle renders on every embedded
- * spoke (OLC, FRUS, Lawfare today) and reads identically on each, and its
- * DocsHint deep-links here from all of them.
+ * locked 2026-06-11). Global-scope: the toggle renders on every spoke whose
+ * descriptor sets `semanticSearch` — today OLC opinions, FRUS, Commentary,
+ * Presidential Documents, the Federal Register, Congress, FBI Records and
+ * Sanctions — and reads identically on each, and its DocsHint deep-links
+ * here from all of them.
  */
 export const semanticSearchEntry: DocsEntry = {
   slug: 'semantic-search',
@@ -44,11 +46,11 @@ filter-bounded set, use Keyword mode or read the semantic pane knowing
 it spans the whole corpus.
 
 **Where it's available.** Corpora whose documents have been embedded:
-OLC opinions, FRUS, Lawfare, Presidential Documents, the Federal
-Register, and Congress today; more as embedding coverage grows. On
-corpora still being loaded (Federal Register notices, parts of the
-Congressional Record), newly added documents become semantically
-searchable as the embedding queue catches up — keyword search covers
-them immediately. Searches in any mode are free.
+OLC opinions, FRUS, Commentary, Presidential Documents, the Federal
+Register, Congress, FBI Records, and Sanctions today; more as embedding
+coverage grows. On corpora still being loaded (Federal Register notices,
+parts of the Congressional Record), newly added documents become
+semantically searchable as the embedding queue catches up — keyword search
+covers them immediately. Searches in any mode are free.
 `,
 }

@@ -69,8 +69,9 @@ function HubHero() {
         <>
           Statutes, regulations, presidential documents, the Federal Register,
           congressional hearings and debates, executive-branch legal opinions,
-          diplomatic history, the federal litigation that interprets them all —
-          and Lawfare's analysis of the whole — together.
+          diplomatic history, sanctions lists, released FBI files, the federal
+          litigation that interprets them all — and the published commentary on
+          the whole — together.
         </>
       }
     />
