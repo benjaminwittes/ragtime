@@ -1,10 +1,6 @@
 import type { DocsEntry } from '../types'
 
-/**
- * Global "Primary sources, not commentary" entry — RAGtime searches and
- * analyzes primary sources but does not annotate or editorialize them.
- * Names what is permanently out of scope and what the AI layer will do.
- */
+/** Global "Primary sources, not commentary" entry. */
 export const notCommentaryEntry: DocsEntry = {
   slug: 'not-commentary',
   title: 'Primary Sources, Not Commentary',
@@ -12,40 +8,23 @@ export const notCommentaryEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 7,
   content: `
-RAGtime's edge is cross-cutting search plus AI over primary sources — not
-editorial annotation of them. So a few things are deliberately out of
-scope, permanently:
+RAGtime searches and analyzes primary sources; it does not annotate them.
+Three things are permanently out of scope: definitional pop-ups over
+statutes, hand-curated "related authorities" or editor's notes, and in-house
+explainers written as corpus content. A statute or an opinion here is the
+official text, full stop, and an AI synthesis across documents is an AI
+answer with citations, not an editorial gloss presented as authority.
 
-- No dictionary / definitional pop-ups layered over statutes.
-- No hand-curated "related authorities" or editor's notes.
-- No in-house explainers or summaries written as the corpus content.
+**One corpus is commentary, by design.** Commentary returns published
+analysis from Lawfare and Executive Functions. That is analysis — but it is
+*somebody else's*, searched as a corpus like any other. So a Commentary query
+surfaces and attributes what those authors argued, and never adjudicates who
+was right.
 
-**What this means for you.** When RAGtime shows you a statute or an
-opinion, you're seeing the official primary text, full stop. When AI
-synthesizes across documents, that synthesis is clearly an AI answer with
-citations — not an editorial gloss presented as authority.
-
-**One corpus is commentary — by design, not by exception to this rule.**
-The Commentary corpus returns published analysis from Lawfare and Executive
-Functions — their articles, podcasts, and newsletters. That's analysis, not
-a primary source — but it's *somebody else's* published analysis, treated
-as a corpus you search, exactly like the others. The rule above is about
-RAGtime never inserting *its own* editorial layer over the materials; it
-has nothing to say against *searching* a body of published commentary. So
-when you query Commentary, the AI surfaces and attributes **what those
-authors argued** ("In [piece] ([date]), [author] argued…") — it never
-adjudicates who was right or adds RAGtime's own take. The line we hold is
-the same everywhere: descriptive, cited, attributed — never RAGtime
-editorializing.
-
-**What the AI analytical layer will do.** You can ask the AI layer, in
-various places, to analyze or summarize material in its data stack. Some AI
-functions — like ranking cases by subjective criteria — inevitably require
-some degree of editorial judgment on the AI's part. Such material, we
-stress, is subject to all of the benefits and risks of using AI, including
-the risk of hallucination and other errors. RAGtime is designed to reduce
-that risk by restricting the AI to descriptive accounts of the materials in
-the documents it presents, and by requiring that it present the documents
-underlying every claim.
+**What the AI layer will do.** Some functions, such as ranking cases by
+subjective criteria, require editorial judgment from the model and carry the
+usual AI risks, hallucination among them. RAGtime bounds that by keeping the
+AI to descriptive accounts and requiring it to present the documents under
+every claim.
 `.trim(),
 }

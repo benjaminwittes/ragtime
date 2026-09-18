@@ -1,64 +1,48 @@
 import type { DocsEntry } from '../types'
 
 /**
- * FBI Records spoke "How to use" entry — what the corpus contains, the
- * removed-and-recovered provenance story, and the two disclosures unique to
- * this corpus: no document dates and variable OCR quality (brief #14).
+ * FBI Records spoke "How to use" entry.
+ *
+ * Two disclosures are unique to this corpus and load-bearing: the Vault
+ * publishes no document dates, and the Collection box matches the Bureau's
+ * stored slug as a case-insensitive substring, hyphens and underscores read
+ * as spaces. "COINTELPRO" and "D.B. Cooper" match nothing — keep the worked
+ * examples.
  */
 export const aboutFbiEntry: DocsEntry = {
   slug: 'about-fbi',
   title: 'How to Use: FBI Records',
-  summary:
-    'What the FBI Records corpus contains, how removed Vault documents were recovered, and why there is no date filter.',
+  summary: 'The preserved FBI Vault — what it holds, and why it has no date filter.',
   scope: { kind: 'spoke', spokeSlug: 'fbi' },
   order: 9,
   content: `
-**What's in it.** The FBI's own FOIA reading room — the Vault
-(vault.fbi.gov) — as this project preserved it: 10,746 released documents
-across 1,755 subject collections, from COINTELPRO and the Rosenberg case
-to Amerithrax, Jonestown, and D.B. Cooper. These are the Bureau's own
-scanned files: memos, teletypes, lab reports, and correspondence, released
-under FOIA with the Bureau's redactions intact.
+**What's in it.** The FBI's own FOIA reading room — the Vault — as this
+project preserved it: 10,746 released documents across 1,755 subject
+collections, from COINTELPRO and the Rosenberg case to Amerithrax and D.B.
+Cooper, released with the Bureau's redactions intact. 1,627 have since been
+taken down from the Vault; our copies come from Wayback Machine captures,
+badged with a capture date and isolated by the Provenance filter.
 
-**Removed and recovered.** 1,627 of these documents were on the Vault and
-have since been taken down. Our copies come from Wayback Machine captures;
-each carries a quiet "removed from the Vault" badge with its capture date,
-and the detail panel links the original Vault URL the capture preserved.
-The Provenance filter isolates them ("Removed from the Vault — recovered").
+**No document dates, by the source's design.** The Vault publishes scans
+without dates, so this corpus has no date filter and no date sort — the only
+spoke where that is true. "Documents *about* 1965" works as a content search;
+"documents *from* 1965" is not a question the corpus can answer, and the AI
+modes say so rather than fake a chronology.
 
-**No document dates — by the source's design.** The Vault publishes scans
-without dates, so this corpus has no date filter and no date sort — the
-only spoke where that's true. "Documents *about* 1965" works fine as a
-content search; "documents *from* 1965" is not a question the corpus can
-answer, and the AI modes will say so rather than fake a chronology.
+**Collections are the browse spine**, and the Collection box is a typeahead
+over all 1,755. Pick from the list rather than typing a name through: the
+stored names are the Bureau's rather than English — some slugs
+("rosenberg-case", "cointel-pro"), some titles ("Kansas City Massacre") — and
+the box matches your text as a substring of the stored value, with hyphens
+and underscores read as spaces and nothing else. So "Cointel Pro" finds the
+COINTELPRO files and "COINTELPRO" finds nothing; "D B Cooper" works and
+"D.B. Cooper" does not.
 
-**Collections are the browse spine.** Every document files under a Vault
-subject, and the Collection box in the filter is a typeahead over all 1,755
-of them: start typing, then pick from the list rather than typing a name
-through.
-
-Picking matters, because the stored names are the Bureau's, not English.
-Some are slugs ("rosenberg-case", "cointel-pro"), some are titles ("Kansas
-City Massacre"), and the box matches what you type as a substring of the
-stored value — with hyphens and underscores read as spaces, and nothing
-else. So "Cointel Pro" finds the COINTELPRO files and "COINTELPRO" finds
-nothing at all; "D B Cooper" finds the D.B. Cooper file and "D.B. Cooper"
-finds nothing. Type a fragment you are sure of, read what comes back, and
-click it — the chip that appears afterwards shows the stored value you are
-actually filtering on.
-
-**Searching tip.** These are OCR'd historical records in period
-vocabulary. The Bureau's own program names rarely match modern phrasing —
-"COINTELPRO" appears in the pages as "counterintelligence program," and
-subjects hide under codenames and file jargon. Try the era's own terms, or
-the semantic toggle to bridge the vocabulary gap. OCR quality varies
-(clean / normalized / degraded, badged on every row) — treat verbatim
-wording from degraded scans with care; the PDF link on every row holds the
-original.
-
-**Coverage candor.** This is the Vault as preserved — the FBI's chosen
-FOIA postings, not all FBI records and not current investigations. Absence
-here is absence from the Vault, not evidence the FBI holds nothing.
+**Two honest limits.** These are OCR'd records in period vocabulary, and the
+Bureau's program names rarely match modern phrasing, so try the era's own
+terms or the semantic toggle; OCR quality is badged clean, normalized or
+degraded on every row. And this is the Vault as preserved, not all FBI
+records, so absence here is absence from the Vault.
 
 **Demo queries:** "What do the FBI's files show about the 9/11
 investigation?"; "What was COINTELPRO, according to the Bureau's own

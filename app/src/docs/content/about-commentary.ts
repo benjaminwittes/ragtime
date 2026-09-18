@@ -1,57 +1,36 @@
 import type { DocsEntry } from '../types'
 
-/**
- * Commentary spoke "How to use" entry — what the corpus contains (two
- * federated publications: Lawfare + Executive Functions), the commentary-not-
- * primary-source caveat, and how to search it.
- */
+/** Commentary spoke "How to use" entry — two federated publications. */
 export const aboutCommentaryEntry: DocsEntry = {
   slug: 'about-commentary',
   title: 'How to Use: Commentary',
-  summary:
-    'What the Commentary corpus contains (Lawfare + Executive Functions), the commentary-not-primary-source caveat, and how to search it.',
+  summary: 'Lawfare and Executive Functions — analysis by named authors, not primary sources.',
   scope: { kind: 'spoke', spokeSlug: 'commentary' },
   order: 9,
   content: `
-**What's in it.** Expert legal and national-security commentary from **two
-publications**, federated under one spoke:
+**What's in it.** Two publications, federated under one spoke: **Lawfare**
+(articles, podcast episodes and newsletters from lawfaremedia.org, 2010 to
+the present, about 22.7K original pieces) and **Executive Functions** (Bob
+Bauer and Jack Goldsmith on the presidency and executive power, December 2024
+to the present, about 540 pieces).
 
-- **Lawfare** — its own articles, podcast episodes, and newsletters from
-  lawfaremedia.org (2010→present, ~22.7K original pieces).
-- **Executive Functions** — the Bob Bauer + Jack Goldsmith publication on the
-  presidency and executive power (December 2024→present, a young ~540-piece
-  corpus).
+**Commentary, not adjudication.** These archives are *analysis* — arguments,
+explainers and debate by named expert authors — not primary sources. The
+corpus records what these authors argued, not what the law *is*. Ask the AI
+what has been said about a topic and it reports, with per-author, per-piece
+and per-**publication** attribution, and never tells you which view is right.
 
-This is the platform's **commentary** corpus. Unlike the litigation docket, OLC
-opinions, the U.S. Code, the CFR, or FRUS — all primary sources — these archives
-are *analysis*: arguments, explainers, and debate by named expert authors.
+**Three data notes.** Publication and author are first-class filters, which
+matters because the same author often writes in both venues. Content type is
+built from the types the corpus actually holds and scoped to whichever
+publication you picked; there is no topic filter and no roundup toggle, since
+neither field is first-class across both. And coverage is uneven: nothing
+from Executive Functions predates December 2024, because the publication did
+not yet exist.
 
-**The key caveat: commentary, not adjudication.** Every piece reflects its
-author's views. The corpus is a record of what these authors have argued, not a
-settled account of what the law *is*. When you ask the AI what has been said
-about a topic, it reports — with per-author, per-piece, and per-**publication**
-attribution — what specific authors wrote, and it never tells you which view is
-right.
-
-**A few data notes:**
-
-- **Publication and Author are first-class filters.** Scope to Lawfare or
-  Executive Functions, and to a specific author by name (the same author often
-  writes in both venues — Jack Goldsmith is the canonical case).
-- **Content type.** A select built from the types the corpus actually holds
-  — articles, podcasts, newsletters and the rest — and scoped to whichever
-  publication you picked, if you picked one. There is no separate roundup
-  toggle and no topic filter: neither field is first-class across both
-  publications.
-- **Coverage is uneven.** Lawfare runs 2010→present; Executive Functions only
-  from December 2024. Absence of Executive Functions coverage before then means
-  the publication did not yet exist.
-
-**What it's good for.** "What has been written about [Section 702 / emergency
-powers / executive privilege]?" — where AI narrative synthesis (the paradigmatic
-mode here) gathers the relevant pieces across both publications and lays out the
-arguments with attribution. It pairs naturally with the primary-source corpora:
-read the opinion in OLC, then see how commentators analyzed it.
+**What it's good for.** "What has been written about Section 702 / emergency
+powers / executive privilege?" It pairs with the primary-source corpora: read
+the opinion in OLC, then see how commentators analyzed it.
 
 **Demo queries:** "What has been argued about the major questions doctrine?";
 filter by publication or author to read one venue or contributor; summarize a

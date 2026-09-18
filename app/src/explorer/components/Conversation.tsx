@@ -106,7 +106,7 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
             {turn.running && (
               <div className="working" aria-live="polite">
                 <span className="dot" />
-                {label || (turn.phase === 'orient' ? 'getting oriented…' : 'researching…')}
+                {label || (turn.phase === 'orient' ? 'planning…' : 'researching…')}
               </div>
             )}
           </article>

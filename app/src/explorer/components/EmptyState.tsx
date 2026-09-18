@@ -57,7 +57,7 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
         ledeClassName="lede"
         lede={
           <>
-            Orient runs first and costs almost nothing: it either asks you one question or proposes a research brief you can edit.
+            Planning runs first and costs almost nothing: it either asks you one question or proposes a research brief you can edit.
             Research spends against the brief, and the trail shows every step and what it cost.
           </>
         }

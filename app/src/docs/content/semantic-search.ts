@@ -1,65 +1,39 @@
 import type { DocsEntry } from '../types'
 
 /**
- * Docs entry for the keyword / semantic / both retrieval toggle (brief #9,
- * locked 2026-06-11). Global-scope: the toggle renders on every spoke whose
- * descriptor sets `semanticSearch` AND is registered in `spokes/registry.ts`
- * — today OLC opinions, FRUS, Commentary, Presidential Documents, the Federal
- * Register, Congress, FBI Records and Sanctions, eight of the eleven. It reads
- * identically on each (`spokes/components/SearchModeToggle.tsx`, gated in each
- * shell by `spoke.semanticSearch`), and its DocsHint deep-links here from all
- * of them.
- *
- * `spokes/lawfare/index.ts` also sets the flag and does NOT count: that spoke
- * is not in the registry, so nothing mounts it. USC, CFR and litigation do not
- * set it and get no toggle. Re-derive the list from those two facts rather
- * than from this comment.
+ * Docs entry for the keyword / semantic / both retrieval toggle. It renders
+ * on every spoke whose descriptor sets `semanticSearch` AND that is
+ * registered in `spokes/registry.ts` — eight of the eleven.
+ * `spokes/lawfare/index.ts` sets the flag and does NOT count, because nothing
+ * mounts that spoke. Re-derive the list from those two facts.
  */
 export const semanticSearchEntry: DocsEntry = {
   slug: 'semantic-search',
   title: 'Keyword vs. Semantic Search',
-  summary:
-    'What the Search-by toggle does: matching your words, matching your meaning, or both side by side.',
+  summary: 'Matching your words, matching your meaning, or both side by side.',
   scope: { kind: 'global' },
   order: 3,
   content: `
-**What it is.** On corpora that support it, the search surface has a
-"Search by" toggle with three settings:
+Where a corpus supports it, **Search by** offers three settings.
 
-- **Keyword** matches your exact words using full-text search. Best for
-  names, citations, and precise phrases ("Youngstown", "50 U.S.C. 1702").
-- **Semantic** matches your *meaning*. Every document has been mapped into
-  a vector space where conceptually similar passages sit near each other,
-  so a search for "can the president fire agency heads" finds removal-power
-  opinions that never use the word "fire". Best for concepts and doctrines.
-- **Both** (the default) runs the two searches at once and shows the
-  results side by side — you never have to run a search twice to get the
-  full picture.
-
-**Why two separate panes instead of one merged list?** The two methods
-score relevance in incomparable ways, and *which* method found a document
-is itself useful information. "Matched your words" tells you the term is
-actually present; "matched your meaning" tells you the ideas align. A
-merged list would hide that distinction.
-
-**The overlap badge.** A document that appears in both panes is the
-strongest kind of result — it carries an "also a keyword match" /
-"also a semantic match" badge rather than being shown only once.
+- **Keyword** matches your exact words. Best for names, citations and precise
+  phrases ("Youngstown", "50 U.S.C. 1702").
+- **Semantic** matches your *meaning*, so "can the president fire agency
+  heads" finds removal-power opinions that never use the word "fire". Best
+  for concepts and doctrines.
+- **Both** (the default) runs the two at once, in separate panes, because
+  their relevance scores are not comparable. A document in both panes is
+  badged as such, and that is the strongest kind of result.
 
 **What semantic search reads.** The search text only. Structured filters
-(date ranges, author, source, topic…) apply to the keyword pane but do
-not constrain the semantic pane in this version — if you need a
-filter-bounded set, use Keyword mode or read the semantic pane knowing
-it spans the whole corpus.
+apply to the keyword pane and do not constrain the semantic pane in this
+version, so a filter-bounded set needs Keyword mode.
 
-**Where it's available.** Eight of the eleven corpora: OLC opinions, FRUS,
-Commentary, Presidential Documents, the Federal Register, Congress, FBI
-Records, and Sanctions. The U.S. Code, the CFR, and federal litigation have
-keyword search only — on those three the "Search by" row simply isn't there,
-rather than being shown greyed out. Where a corpus is still loading — the
-Federal Register's notices are arriving in waves — newly added documents are
-keyword-searchable at once and become semantically searchable as the
-embedding queue catches up. Searches in any mode are free, on every corpus,
-with no key and no account.
-`,
+**Where it exists.** Eight of the eleven corpora: OLC, FRUS, Commentary,
+Presidential Documents, the Federal Register, Congress, FBI Records and
+Sanctions. The U.S. Code, the CFR and federal litigation have keyword search
+only, and show no Search by row at all. Where a corpus is still loading, new
+documents are keyword-searchable at once and semantically searchable once the
+embedding queue catches up. Searching is free in every mode.
+`.trim(),
 }

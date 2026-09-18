@@ -7,7 +7,6 @@ import { accessAndCostEntry } from './content/access-and-cost'
 import { auditabilityEntry } from './content/auditability'
 import { freeTierMetadataFloorEntry } from './content/free-tier-metadata-floor'
 import { notCommentaryEntry } from './content/not-commentary'
-import { usingDocumentationEntry } from './content/using-documentation'
 import { givingFeedbackEntry } from './content/giving-feedback'
 // Litigation spoke.
 import { aboutLitigationEntry } from './content/about-litigation'
@@ -54,25 +53,16 @@ import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
 import { aboutSanctionsEntry } from './content/about-sanctions'
 
 /**
- * Central docs registry. 39 entries: 9 global and 30 spoke-scoped.
+ * Central docs registry. 38 entries: 8 global and 30 spoke-scoped.
  *
  * Entries live in `./content/<slug>.ts` and are aggregated here.
  *
- * - The nine global entries carry `order` 1 through 9, in the sequence they
- *   are imported above: getting started, the cross-corpus hub search, the
- *   keyword/semantic retrieval toggle, access & cost, auditability, the
- *   free-tier metadata floor, primary-sources-not-commentary, how this
- *   overlay works, and how to report a problem. They render on every surface.
+ * - The eight global entries carry `order` 1 through 8, in the sequence they
+ *   are imported above, and render on every surface.
  * - Spoke entries carry `order` 9 for the "How to use this corpus" intro,
  *   10 for the corpus's AI mode, 20 for the per-document Summarize action,
- *   and 11 for the one second surface inside a spoke (`about-clemency`,
- *   which lives in the Presidential spoke). They render only when that spoke
- *   is the active context.
- *
- * A spoke intro shares `order` 9 with `giving-feedback`, and the tie is
- * broken by title in `selectDocsForContext` — every intro is titled "How to
- * use…", which sorts after "Giving Feedback", so the nine globals do in fact
- * come first. That is a property of the titles, not of the numbers.
+ *   and 11 for the one second surface inside a spoke (`about-clemency`, in
+ *   the Presidential spoke). They render only in that spoke.
  *
  * Three entries are registered and can never surface: `about-lawfare`,
  * `lawfare-narrative-synthesis` and `lawfare-article-summary` are scoped to
@@ -91,7 +81,6 @@ export const docsEntries: readonly DocsEntry[] = [
   auditabilityEntry,
   freeTierMetadataFloorEntry,
   notCommentaryEntry,
-  usingDocumentationEntry,
   givingFeedbackEntry,
   // Litigation
   aboutLitigationEntry,

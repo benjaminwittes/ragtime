@@ -1,21 +1,11 @@
 import type { DocsEntry } from '../types'
 
 /**
- * Docs entry for the hub cross-corpus keyword search. Global-scope (visible
- * on every surface), because the hub search routes users into the spokes.
+ * Docs entry for the hub cross-corpus keyword search. The fan covers every
+ * spoke except sanctions (`HUB_KEYWORD_SPOKES`).
  *
- * This entry describes the Search mode of the hub's box, which is the mode it
- * opens in (`useState<Mode>('search')`). The other tab hands the same words to
- * `/explorer`; the Explorer itself is described in `getting-started` and
- * `access-and-cost` — there is no `explorer-*` entry in the registry — because
- * the box is one field with two destinations, not two features
- * (`hub/HubKeywordSearch.tsx`). The chip row that once let a reader pick corpora
- * is gone; the fan covers every spoke except sanctions (`HUB_KEYWORD_SPOKES`),
- * so the counts below track `spokes/registry.ts` and that one exclusion.
- *
- * The price under each tab went with the chips: `MODES[].cost` is now drawn in
- * the tab's own margin and revealed on hover or focus from `sm` up, so nothing
- * stands under the words at rest. The prose below says that, not the caption.
+ * The tabs carry NO captions under them — `MODES[].cost` is drawn in the
+ * tab's own margin. Do not write a caption back into the prose here.
  */
 export const hubKeywordSearchEntry: DocsEntry = {
   slug: 'hub-keyword-search',
@@ -24,68 +14,31 @@ export const hubKeywordSearchEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 2,
   content: `
-**What it is.** The hub's one box, in **Search** mode — the mode it opens
-in, and one of the two tabs above it. Type a phrase or a topic; the system
-fires a parallel full-text search across ten corpora — from federal
-litigation to the Congressional Record — and returns the top-5 results
-from each, plus the total count per corpus. Free, no AI. (Nine of the ten
-are primary sources; the tenth is Commentary, which returns published
-analysis from Lawfare and Executive Functions — handy for "has anyone
-written about this?")
+**Search** runs a full-text search across ten corpora at once and returns the
+top five results from each, plus the total count per corpus. Free, no AI.
+Nine of the ten are primary sources; the tenth is Commentary, published
+analysis from Lawfare and Executive Functions. **Explorer** sends the same
+words to a conversation that plans the research, runs it across the corpora
+and hands you into them; that reads with AI and costs money. Switching keeps
+what you have typed.
 
-**The other tab.** **Explorer** takes the same box and sends what you
-typed to the Explorer instead, where a conversation plans the research,
-runs it across the corpora, and hands you into them. That one reads with
-AI and costs money; this one does not. Switching tabs keeps whatever you
-have typed.
+**Ten of the eleven corpora.** Sanctions sits out the fan, because its
+documents include the Federal Register's sanctions notices, which that
+section already returns. Search Sanctions from its own workspace, where the
+entity lists and OFAC's guidance are searchable too.
 
-**Ten of the eleven corpora.** Sanctions sits out the fan. Its documents
-include the Federal Register's sanctions notices, which the Federal
-Register section already returns, so fanning both would show you the same
-notices twice. Search Sanctions from its own workspace, where the entity
-lists and OFAC's guidance are searchable too.
+**Results are grouped by corpus rather than merged into one ranking**, since
+each corpus scores relevance off its own index and those scores are not
+comparable. Nothing narrows the fan: every Search query goes to all ten, and
+the narrowing happens afterwards. Open the section that holds your answer and
+you get more than five results, structured filters, the full document view,
+and that corpus's own AI modes.
 
-**Why grouped by corpus, not one merged list?** Each corpus's relevance
-scores come from its own full-text index and aren't comparable across
-tables — a merged ranking would be quietly misleading. Grouping is
-honest, reads clearly, and doubles as routing ("mostly CFR → open the
-CFR workspace").
-
-**There is nothing to narrow.** The tabs choose where your words go; they
-do not choose which corpora are searched. Every query in Search mode goes
-to all ten, and no control narrows that. The narrowing happens after the
-search instead: each corpus is its own section with its own count, so you
-can see which ones hold your answer and open the one that does.
-
-**Opening a workspace.** Each corpus section has an "Open workspace →" link
-that takes you to that corpus's full surface. In the workspace you can:
-- See more than the 5 hub-level previews.
-- Add structured filters (date range, court, agency, classification).
-- Click into the canonical document view (with full text, hierarchy,
-  provenance).
-- Use the corpus-specific AI mode (Ask, narrative synthesis, legal
-  analysis) where available.
-
-**Search here, or ask?** That is what the two tabs are for, and the page
-says so in two places. The heading above the box changes its verb with the
-mode. And each tab's price — "free, no AI" for Search, "uses AI" for
-Explorer — waits in the margin on that tab's own outside edge, appearing
-while the tab is under a pointer or a focus ring on screens wide enough to
-hold it. Search matches words, so use it when you have a phrase, a name, or
-a citation you expect to appear verbatim ("Freedom of Information Act",
-"5 U.S.C. 552") — and the box types out examples of exactly that, three for
-each corpus in turn, which Tab will put in the field for you while the box
-is still empty. Switching tabs rewrites the same example as a question in
-your own words, because that is what the Explorer takes. When you don't
-know the wording the documents use, switch and ask it: that is a
-conversation which researches across the corpora and hands you off into
-them. Each corpus workspace also has its own AI modes once you know where
-you're looking. Those read with AI; Search doesn't.
-
-**Why this matters.** Most real research questions span corpora — "Where
-does this credible-fear standard come from in immigration law?" pulls
-USC, CFR, OLC, and litigation. The corpora share no common facets, so no
-single filter runs across them. Use the hub search when you don't know
-which corpus holds the answer.
+**Which one to use.** Search matches words, so use it for a phrase, a name or
+a citation you expect verbatim: "Freedom of Information Act", "5 U.S.C. 552".
+When you don't know the wording the documents use, ask the Explorer. Most
+real questions span corpora — "where does this credible-fear standard come
+from in immigration law?" pulls USC, CFR, OLC and litigation — and no single
+filter runs across them.
 `.trim(),
 }

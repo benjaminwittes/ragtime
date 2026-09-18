@@ -1,11 +1,6 @@
 import type { DocsEntry } from '../types'
 
-/**
- * Docs entry for the "Summarize this opinion" action on the OLC opinion
- * detail sheet. Brief #2 §3 names this as the "plus" alongside the
- * narrative-synthesis flagship — not a mode in the selector, but an
- * action on the canonical opinion view.
- */
+/** OLC per-opinion Summarize. The 197 degraded scans is a measured figure. */
 export const olcOpinionSummaryEntry: DocsEntry = {
   slug: 'olc-opinion-summary',
   title: 'Summarize This Opinion',
@@ -13,38 +8,15 @@ export const olcOpinionSummaryEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'olc' },
   order: 20,
   content: `
-**What it is.** A button on the opinion detail side sheet (where you read
-the full opinion text). Click it to generate a structured summary of the
-opinion using your configured AI access.
+Summarize, on an opinion's detail panel, returns the question presented,
+OLC's conclusion, the reasoning in OLC's own framing, the authorities cited,
+and anything OLC explicitly disclaimed. It describes what the opinion says,
+not whether it is right. One model call, cheaper than the narrative AMA.
 
-**The output.** A markdown summary organized around standard headings:
-
-- *Question presented* — what OLC was asked.
-- *Conclusion* — OLC's bottom line.
-- *Reasoning* — the steps of the argument, in OLC's framing.
-- *Authorities cited* — major statutes, prior OLC opinions, court cases.
-- *Notable caveats / limits* — anything OLC explicitly disclaimed.
-
-The summary is attribution-forward: it describes what the opinion *says*,
-not whether it's right. Quotations use curly quotes; direct quotation is
-sparse.
-
-**Long opinions.** Opinions longer than the worker's text cap are
-truncated before the model sees them. The result panel surfaces a clear
-"truncated" notice in that case — the later sections of the opinion
-weren't summarized.
-
-**Opinions with no text.** Some Knight FOIA entries are catalog records
-without recoverable text (DOJ released the index entry but no usable
-scan). The button is disabled for those; the corpus knows the opinion
-exists but holds nothing to summarize.
-
-**Degraded OCR.** ~197 Knight FOIA opinions are degraded scans. When you
-summarize one, the model's candor note will lower-confidence the result
-accordingly. The canonical PDF (linked under Provenance) is the source
-of truth in those cases.
-
-**Cost.** One model call per summarize. Cheaper than the narrative AMA
-because there's no planning step.
+**What it cannot read.** Some Knight FOIA entries are catalog records with no
+recoverable scan, and the button is disabled there. About 197 more are
+degraded scans; a summary of one carries a lowered-confidence note, and the
+canonical PDF under Provenance is the source of truth. An opinion past the
+worker's text cap is truncated, with a notice saying so.
 `.trim(),
 }

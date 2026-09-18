@@ -1,10 +1,6 @@
 import type { DocsEntry } from '../types'
 
-/**
- * Global "What's free: the metadata floor" entry — structured-metadata
- * filtering (not just keyword search) is free on every corpus, and why
- * that reinforces auditability and reserves the AI layer for focused sets.
- */
+/** Global "What's free: the metadata floor" entry. */
 export const freeTierMetadataFloorEntry: DocsEntry = {
   slug: 'free-tier-metadata-floor',
   title: "What's Free: The Metadata Floor",
@@ -12,19 +8,14 @@ export const freeTierMetadataFloorEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 6,
   content: `
-On every corpus, the free tier includes structured-metadata filtering, not
-just full-text keyword search. That means you can filter by dates, titles
-and headings, courts and agencies, classification, positive-law status,
-document type — every native structured field the corpus carries is free to
-filter on.
+The free tier on every corpus includes structured-metadata filtering, not
+just full-text keyword search: dates, titles and headings, courts and
+agencies, classification, positive-law status, document type — every native
+structured field a corpus carries.
 
-This reinforces auditability: the more you can filter by structured fields,
-the more precisely you can define — and check — the set you're working
-with. It is also much faster than AI calls.
-
-**Use structured metadata whenever you can.** The more you filter using
-wholly objective criteria, the more you can reserve the AI layer — which
-costs real money to run — for smaller, more-focused datasets bounded by
-known parameters.
+The more you filter on objective fields, the more precisely you can define
+and check the set you are working with. It is also much faster than an AI
+call, and it reserves the AI layer, which costs real money, for small sets
+bounded by known parameters.
 `.trim(),
 }

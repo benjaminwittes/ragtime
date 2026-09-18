@@ -103,7 +103,7 @@ export function ExplorerPage() {
       ? 'Reply to the question'
       : x.phase === 'research'
         ? 'Ask a follow-up — same brief; edit the brief above for a new one'
-        : 'What do you want to know? Orient decides how to research it before anything spends.'
+        : 'What do you want to know? Planning runs first, before anything spends.'
 
   // A refusal the page already renders somewhere it is being looked at is not worth a
   // third copy in the band: the conversation cap wears a badge on the answer, and an

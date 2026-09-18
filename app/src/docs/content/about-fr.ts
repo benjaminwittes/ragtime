@@ -1,49 +1,35 @@
 import type { DocsEntry } from '../types'
 
-/**
- * Federal Register spoke "How to use" entry — what the corpus contains,
- * the notices-in-waves loading disclosure, and the EO-implementation
- * cross-link (brief #12).
- */
+/** Federal Register spoke "How to use" entry. */
 export const aboutFrEntry: DocsEntry = {
   slug: 'about-fr',
   title: 'How to Use: Federal Register',
-  summary:
-    'What the Federal Register corpus contains, how the notices are loading in waves, and how documents link back to executive orders.',
+  summary: 'What the Federal Register corpus holds, and how its notices are still loading.',
   scope: { kind: 'spoke', spokeSlug: 'fr' },
   order: 9,
   content: `
-**What's in it.** The daily journal of the executive branch — the
-documents through which the administrative state actually acts. Three
-document types: **rules** (final regulations), **proposed rules**
-(NPRMs, open for comment before they harden), and **notices** (agency
-actions of every other kind — sanctions designations, meetings, policy
-statements). Rules and proposed rules are complete from 1994 — the
-Federal Register's digital floor — to the present, updated daily.
+**What's in it.** The daily journal of the executive branch: **rules** (final
+regulations), **proposed rules** (open for comment before they harden), and
+**notices** (agency actions of every other kind, from sanctions designations
+to meetings). Rules and proposed rules are complete from 1994 — the Federal
+Register's digital floor — and updated daily.
 
-**Notices are loading in waves.** The notice universe is enormous, so it
-is arriving in priority order: sanctions and designation notices (OFAC,
-State Department), immigration notices (USCIS), and significant notices
-landed first; the broad historical sweep is loading now. If a notice
-count looks low for an agency or an era, the wave may simply not have
-reached it yet — the holdings band at the top of this spoke carries the
-current figure, and the rounded one on the hub is not the place to check.
-Newly loaded notices are keyword-searchable immediately and become
-semantically searchable as the embedding queue catches up.
+**Notices are loading in waves**, in priority order: sanctions and
+designation notices, immigration notices, other significant notices first,
+the broad historical sweep now. A notice count that looks low for an agency
+or an era may be a wave that has not arrived; this spoke's holdings band
+carries the current figure. New notices are keyword-searchable at once and
+semantically searchable once the embedding queue catches up.
 
-**The executive-order link.** Federal Register documents cite the
-executive orders they implement, and the corpus captures those citations.
-That's what connects a sanctions notice back to the national-emergency EO
-it enforces, and it pairs naturally with the Presidential Documents
-corpus next door — EO on one side, the regulatory machinery executing it
-on the other.
+**The executive-order link.** These documents cite the executive orders they
+implement, and the corpus captures those citations — which is what connects a
+sanctions notice back to the national-emergency order it enforces.
 
-**Searching tip.** Regulatory language is formal: "sanctions" appear as
-"blocking property," a "ban" is a "prohibition on transactions." The
-semantic toggle bridges the vocabulary gap. The structured filters are
-strong here — agency, document type, RIN, CFR title and part, significant
-rules, comment windows, publication and effective dates — so narrowing
-first and reading second usually beats broad keyword search.
+**Searching tip.** The language is formal: sanctions appear as "blocking
+property", a ban as a "prohibition on transactions". The semantic toggle
+bridges that, and the structured filters (agency, document type, RIN, CFR
+title and part, comment windows, publication and effective dates) are strong
+enough that narrowing first usually beats a broad keyword search.
 
 **Demo queries:** "What Biden-era gun regulations were rescinded by the
 Trump administration?"; "Show me all sanctions notices emanating from the
