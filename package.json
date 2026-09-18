@@ -13,7 +13,9 @@
     "lint": "npm run lint -w app",
     "check": "npm run check --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "build": "npm run build -w app"
+    "build": "npm run build -w app",
+    "suggestions:export": "node scripts/suggestions-export.mjs",
+    "suggestions:import": "node scripts/suggestions-import.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.12.3",
