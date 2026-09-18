@@ -59,7 +59,7 @@ import { OlcResultsList } from './OlcResultsList'
  *
  * Scope for AMA: when filter rows have been produced, the AMA call passes
  * those opinion ids as scope so synthesis runs over the narrowed set;
- * otherwise scope is the full 2,145-opinion corpus.
+ * otherwise scope is the full 2,151-opinion corpus.
  */
 export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const { setActiveSpokeSlug } = useDocs()
@@ -157,7 +157,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   function buildAmaScope(): OlcAmaScope {
     if (filterIds.length === 0) {
-      const total = facets?.opinion_count ?? 2145
+      const total = facets?.opinion_count ?? 2151
       return {
         is_full_db: true,
         count: total,

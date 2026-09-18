@@ -46,7 +46,6 @@ export const frusSpoke: CorpusSpoke = {
         knownGaps: [
           'FRUS publication is a lagging series — post-1991 volumes are released gradually as declassification clears.',
           `${(f.volume_count - f.volumes_with_docs).toLocaleString()} volumes are placeholder metadata (no documents loaded yet).`,
-          'Semantic retrieval (pgvector) deferred to Phase 2; v1 keyword search underperforms most on questions about concepts (containment, deterrence) versus events (Berlin Airlift, Bay of Pigs).',
         ],
       }
     } catch {

@@ -18,7 +18,7 @@ import type { OlcFacetCount, OlcFilterFields } from '@lawfare/ragtime-client'
  * never published them), or only the canonical DOJ-published archive.
  *
  * The OCR-quality filter defaults to "any" but exposes the option to
- * exclude degraded scans (~200 of 2,145) for serious research where text
+ * exclude degraded scans (~197 of 2,151) for serious research where text
  * accuracy matters.
  */
 export function OlcFilterForm({

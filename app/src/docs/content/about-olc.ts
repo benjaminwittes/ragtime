@@ -15,8 +15,8 @@ export const aboutOlcEntry: DocsEntry = {
 **What's in it.** Opinions of the Justice Department's Office of Legal
 Counsel — the executive branch's own authoritative legal interpretations,
 binding within the executive. The corpus combines DOJ's published archive
-(1,441 opinions) with opinions obtained by the Knight First Amendment
-Institute in Freedom of Information Act litigation (706 opinions) — 2,147
+(1,445 opinions) with opinions obtained by the Knight First Amendment
+Institute in Freedom of Information Act litigation (706 opinions) — 2,151
 in total, reaching back to the 1930s.
 
 **A key caveat.** Counts and date distributions reflect when opinions were

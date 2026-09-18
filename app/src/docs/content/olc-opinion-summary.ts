@@ -39,7 +39,7 @@ without recoverable text (DOJ released the index entry but no usable
 scan). The button is disabled for those; the corpus knows the opinion
 exists but holds nothing to summarize.
 
-**Degraded OCR.** ~199 Knight FOIA opinions are degraded scans. When you
+**Degraded OCR.** ~197 Knight FOIA opinions are degraded scans. When you
 summarize one, the model's candor note will lower-confidence the result
 accordingly. The canonical PDF (linked under Provenance) is the source
 of truth in those cases.
