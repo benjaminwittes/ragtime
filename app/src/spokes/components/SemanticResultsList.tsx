@@ -89,9 +89,16 @@ export function SemanticResultsList({
 }
 
 /**
- * Pane label for the side-by-side ("both") view — the segregation is the
- * point (brief #9 decision 2): the user should always know WHY a result
- * came back.
+ * Pane label for the side-by-side view — the segregation is the point
+ * (brief #9 decision 2): the user should always know WHY a result came
+ * back.
+ *
+ * This used to name a "both" mode the reader could pick. The keyword /
+ * semantic / both toggle came off the spokes on 2026-09-18 (Mary Ford:
+ * the app does not make that distinction in Search), so both retrievals
+ * now always run and this label is the only place the difference is
+ * stated. Decision 2 survives the toggle's removal — it is about
+ * explaining a result, not about choosing a mode.
  */
 export function ResultsPaneHeader({ kind }: { kind: 'keyword' | 'semantic' }) {
   return (
