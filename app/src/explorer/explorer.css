@@ -143,6 +143,11 @@
 .explorer .example { text-align: left; border: 1px solid var(--line-strong); background: var(--card); border-radius: var(--x-radius); padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
 .explorer .example:hover:not(:disabled) { border-color: var(--accent); }
 .explorer .example-shape { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); min-width: 68px; }
+/* The operators line. `.hint` is written for an inline span everywhere else, so a block of
+ * it needs its own margins or the browser's default paragraph gap opens under the examples'
+ * own 22px. Same 22px above and below, so the line sits between the examples and the pins
+ * rather than attaching to either. */
+.explorer .empty > .hint { display: block; margin: 0 0 22px; line-height: 1.45; }
 /* The collapsed "Search in" control. Reads as a label rather than a button, because it is
  * the same line the label used to be — pressing it is the discovery, and a second heavy
  * control beside the examples would compete with them for the same glance. */

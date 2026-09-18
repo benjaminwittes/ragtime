@@ -70,6 +70,19 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
           </button>
         ))}
       </div>
+      {/* For the reader arriving from Search, who has just learned that a quoted phrase, a
+          leading minus and OR all do something there and will try them here. What it does
+          NOT say is that they are ignored — this surface cannot know that, because the
+          agent composing the query runs in the Worker, and guessing across that seam is the
+          error this app keeps making. It says the two things this repo can show: the marks
+          are Search's, and the query that reaches a corpus is one the Explorer wrote, which
+          the trail prints (`Trail.tsx` renders `query` off each tool call). Sits at the foot
+          of the empty state because that is the copy nearest the composer, and only on the
+          first screen — a line under every turn would be noise by the third. */}
+      <p className="hint">
+        Ask in plain words — quotes, minus and OR belong to Search. The Explorer writes its
+        own searches from your question, and the trail shows each one.
+      </p>
       {corpora.length > 0 && (
         <div className="pins">
           {/* Thirteen chips is five rows on a desktop and more on a phone, for a control
