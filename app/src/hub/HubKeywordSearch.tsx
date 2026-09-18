@@ -85,13 +85,17 @@ type Mode = 'search' | 'explorer'
 
 /* The two names, each with the one thing its sentence cannot say.
  *
- * The h1 carries what the box takes and what comes back; these captions carry
+ * The h1 carries what the box takes and what comes back; these strings carry
  * what it costs, which is the half a reader needs precisely when both modes are
  * available to them — an unlit Explorer is its own explanation, a lit one is a
  * choice with a price. Three words each, in the muted mono the Tab hint uses, so
- * the pair reads as annotation on the choice rather than a second line of copy.
- * They sit under the tabs because that is where the choice is made; the sentence
- * that used to do this job sat under the box, which is after it. */
+ * a price reads as annotation on the choice rather than a second line of copy.
+ *
+ * They no longer stand under the words. A caption apiece at rest made the row
+ * read as four things when it is two, which is the distraction he called off the
+ * live page (2026-09-18, his ruling). Each string waits in the margin of its own
+ * tab now and comes back while that tab is under a pointer or a focus ring — see
+ * the tablist below for how, and for why nothing moves when one arrives. */
 const MODES: readonly { id: Mode; label: string; cost: string }[] = [
   { id: 'search', label: 'Search', cost: 'free, no AI' },
   { id: 'explorer', label: 'Explorer', cost: 'uses AI' },
@@ -267,19 +271,46 @@ export function HubKeywordSearch({
           }
         />
 
-        {/* Two words in the page's reading voice, each over its price. The
-            active one wears the same accent the group headings below do: 2px of
-            teal on the bottom edge, the width of the word — which is why the
-            rule lives on a span around the label and not on the button, now that
-            the button is wider than its own name. The inactive one carries a
-            transparent border of the same weight so the pair sits on one
-            baseline and nothing moves when the choice changes. */}
+        {/* Two words in the page's reading voice, at about half the height of
+            the sentence above them — the page's second voice, not a second
+            headline. The active one wears the same accent the group headings
+            below do: 2px of teal on the bottom edge, the width of the word,
+            which is why the rule sits on a span around the label rather than on
+            the button. The inactive one carries a transparent border of the
+            same weight so the pair sits on one baseline and nothing moves when
+            the choice changes.
+
+            The price used to be a caption under each word. At rest that put two
+            mono lines under two serif ones, and the row read as four things
+            when it is two. It comes back on the outer flank instead — Search's
+            price to the left of Search, Explorer's to the right of Explorer —
+            for as long as that tab is under a pointer or a focus ring: a note
+            in the margin of the choice, on the choice's own side, and only
+            while it is being asked for.
+
+            Nothing moves when one arrives, because a price is never in the flow
+            to begin with: each is absolutely positioned inside its own button,
+            so revealing it shifts neither tab, nor the box under them, nor the
+            page. That is the property the transparent border buys above, bought
+            the same way.
+
+            Never the teal: teal is the accent that says *chosen*, and a price is
+            not a choice. It stays the muted mono the Tab hint uses, on the lit
+            tab as much as the unlit one.
+
+            Below `sm` the reveal never fires. A touch screen has no pointer to
+            fire it with, and at 390 a note flanking the pair is a note running
+            into the words or off the edge of the paper — so nothing is lost
+            there that was not already lost. The span itself is in the document
+            at every width, transparent rather than hidden, because the button
+            names it in `aria-describedby`, and a price that is `display: none`
+            is a price nobody is told. */}
         <div
           role="tablist"
           aria-label="What the box does"
-          className="mt-8 flex items-baseline justify-center gap-7"
+          className="mt-8 flex items-baseline justify-center gap-8 sm:gap-10"
         >
-          {MODES.map((m) => (
+          {MODES.map((m, i) => (
             <button
               key={m.id}
               type="button"
@@ -287,6 +318,16 @@ export function HubKeywordSearch({
               id={`hub-mode-${m.id}`}
               aria-selected={mode === m.id}
               aria-controls="hub-ask"
+              // The word is the name; the price is a description. Without the
+              // label the flanking span would be read into the name — a tab
+              // called "Search free, no AI" — and then read out a second time as
+              // its own description. With it, the name is the word on screen and
+              // the price arrives where a description belongs. Saying it at all
+              // is the point: one of these two modes spends money, and an
+              // affordance that exists only under a pointer exists neither for a
+              // reader who has none nor for a finger on glass.
+              aria-label={m.label}
+              aria-describedby={`hub-mode-${m.id}-cost`}
               // Roving tabindex, the tablist pattern: one stop for the pair, and
               // the arrows move between them, so Tab from the title lands on the
               // choice once and then on the box.
@@ -301,27 +342,40 @@ export function HubKeywordSearch({
                 document.getElementById(`hub-mode-${next.id}`)?.focus()
               }}
               className={cn(
-                'flex flex-col items-center font-serif text-[16px] transition-colors duration-150',
+                'group relative flex flex-col items-center font-serif text-[22px] transition-colors duration-150 sm:text-[28px]',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lawfare-teal',
                 mode === m.id
                   ? 'text-foreground'
                   : 'text-lawfare-text-secondary hover:text-lawfare-teal',
               )}
             >
+              {/* `pb-2` where the 16px word had `pb-1`: the rule is 2px of ink
+                  read against a 28px face, and 4px of air put it in the
+                  descender of "Explorer" rather than under the word. */}
               <span
                 className={cn(
-                  'border-b-2 pb-1 transition-colors duration-150',
+                  'border-b-2 pb-2 transition-colors duration-150',
                   mode === m.id ? 'border-lawfare-teal' : 'border-transparent',
                 )}
               >
                 {m.label}
               </span>
-              {/* Never the teal: teal is the accent that says *chosen*, and a
-                  price is not a choice. The active one only warms. */}
+              {/* The first tab's price flanks left and the last one's flanks
+                  right, so each sits on the pair's outside and neither can
+                  collide with the other word. `inset-y-0` with `items-center`
+                  rather than a nudged offset: the note is centred on the button
+                  it belongs to, which lands an 11px line on the middle of a 28px
+                  one without a measured number to go stale. `pointer-events-none`
+                  because an invisible price is otherwise still a hit target — a
+                  strip of empty paper beside the tabs that changes the mode when
+                  clicked. */}
               <span
+                id={`hub-mode-${m.id}-cost`}
                 className={cn(
-                  'mt-1 font-mono text-[11px] transition-colors duration-150',
-                  mode === m.id ? 'text-lawfare-text-warm' : 'text-lawfare-muted',
+                  'pointer-events-none absolute inset-y-0 flex items-center whitespace-nowrap font-mono text-[11px] text-lawfare-muted',
+                  'opacity-0 transition-opacity duration-150',
+                  'sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100',
+                  i === 0 ? 'right-full mr-3' : 'left-full ml-3',
                 )}
               >
                 {m.cost}
@@ -443,11 +497,11 @@ export function HubKeywordSearch({
               sentence per mode, under the box — which is to say after the
               reader had already chosen, in the smallest voice on the page, in
               the one place they had no reason to look. That job moved up to the
-              title and the tab captions (2026-09-17, his ruling). What is left
-              is the link, which was never the explanation: plain text, because a
-              link is the one thing on this page that may be teal, and a box
-              around it would make it a third control under two tabs and a
-              field. */}
+              title and the tabs (2026-09-17, his ruling; the price left the tab
+              for the tab's margin the day after). What is left is the link,
+              which was never the explanation: plain text, because a link is the
+              one thing on this page that may be teal, and a box around it would
+              make it a third control under two tabs and a field. */}
           {/* Centred, unlike the Tab hint above it, and the split is on what the
               two refer to: the hint describes the words in the field, so it sits
               where those words start, and the link is a page-level way out, so
