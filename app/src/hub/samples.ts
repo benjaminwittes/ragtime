@@ -18,13 +18,20 @@ import type { CorpusSlug } from '@lawfare/ragtime-client'
  *
  * **Every `query` here returned hits in its own corpus through the hub fan**
  * (`/corpus/hub/keyword`), checked against the live worker when it was written
- * and re-checked on 2026-09-17 when the register changed — each replacement
- * scoped to its own corpus (`corpora: [slug]`), which is a tenth of the work of
- * a fan and the reason the second pass finished at all.
+ * and re-checked every time the register moved, most recently on 2026-09-18 —
+ * each replacement scoped to its own corpus (`corpora: [slug]`), which is a
+ * tenth of the work of a fan and the reason a whole pass fits inside the
+ * worker's ten-requests-a-minute limit.
  * A sample that finds nothing is worse than no sample at all: it is the surface
  * demonstrating its own failure with copy the page chose itself. Sanctions is
  * the one corpus the fan leaves out (`HUB_KEYWORD_SPOKES`), so its three were
  * checked against its own entity and guidance filters instead.
+ *
+ * **A count is not evidence.** These indexes match loosely, and a query can
+ * return hundreds of documents with nothing to do with it — see the litigation
+ * and presidential set comments for the two that were caught doing exactly that
+ * after a first pass had "verified" them on counts alone. Every `query` here is
+ * checked by reading the titles that come back.
  *
  * **Every `question` is answerable from what its spoke says it holds.** The
  * coverage lines in `spokes/<slug>/index.ts` are the authority: litigation
@@ -34,19 +41,28 @@ import type { CorpusSlug } from '@lawfare/ragtime-client'
  * A sample that asks past the edge of a corpus is a promise the corpus cannot
  * keep.
  *
- * **The register is institutional, not topical** (2026-09-17). The first pass
- * demonstrated the corpora on whatever was loudest — detention and habeas since
- * January 2025, emergency-powers orders, the Insurrection Act, COINTELPRO and
- * the Bureau's file on King — and a page that opens on those is not showing a
- * reader what a corpus holds, it is making an argument with it. The samples that
- * replaced them ask the same corpora the same *kind* of question in its dry,
- * durable form: what a statute requires, how a rule was made, what the cables
- * recorded, what the Vault posted. The subject matter is still the federal
- * record and still worth reading — a national-security corpus is not obliged to
- * be about drinking water — but nothing in the resting state of the page should
- * read as a brief against a sitting administration, and nothing should trade on
- * a sensational name. A sample that would look pointed screenshotted next to
- * Lawfare's masthead is the wrong sample, however well it retrieves.
+ * **The register is topical, and institutional about it** (2026-09-18). The
+ * first pass demonstrated the corpora on whatever was loudest and read as a
+ * brief; the second overcorrected into the archive, and a page that opens on
+ * drinking water and federal advisory committees is not sober, it is a records
+ * portal. Lawfare is a sharp, topical, news-aware institution, and the resting
+ * state of this page is the subtlest branding the app has. So the axis is not
+ * how recent the subject is — it is what the sample asks of it. Ask what an
+ * authority requires, what a court ordered, which order it runs under, what the
+ * record shows: those questions stay right however live the subject, and they
+ * are what a working journalist types. A sample that delivers a verdict on a
+ * person or a party is the wrong sample however dry its vocabulary. The old
+ * test survives in that narrower form — if it would look *pointed* next to
+ * Lawfare's masthead it is wrong, but if it merely looks *current*, that is the
+ * brand.
+ *
+ * **Two audiences, and they are not equal.** First, journalists working a story
+ * that is live today — they are why each set leads on questions the federal
+ * record can actually settle. Second, and genuinely second, readers who came
+ * because the Vault has a file on D.B. Cooper. A famous or frankly salacious
+ * holding earns the third slot as the hook, never the lead, and only where the
+ * corpus actually has one — the Code and the CFR have no scandals and get none.
+ * It is checked like every other sample.
  *
  * The order is the registry's order — the whole first, then The law, As read,
  * The record, Commentary — because the rotation walks the same path the page
@@ -145,16 +161,16 @@ export const SAMPLES: readonly SampleSet[] = [
       {
         // A citation rather than a phrase, because the box takes both and a
         // reader who arrives with one in hand should see that it works.
-        query: '5 U.S.C. 552',
-        question: 'What does the Freedom of Information Act require an agency to disclose?',
+        query: '8 U.S.C. 1225',
+        question: 'What does the law require before someone is removed without a hearing?',
       },
       {
-        query: 'Administrative Procedure Act',
-        question: 'Which statutes govern how a federal agency makes a rule?',
+        query: 'insurrection',
+        question: 'Which statutes let the President use the armed forces against an insurrection?',
       },
       {
         query: 'inspector general',
-        question: 'What does the Code say about the duties of an inspector general?',
+        question: 'What must the President tell Congress before removing an inspector general?',
       },
     ],
   },
@@ -168,17 +184,16 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'environmental impact statement',
-        question: 'What do the rules in force require in an environmental impact statement?',
+        query: 'reduction in force',
+        question: 'What do the regulations in force require before an agency cuts federal jobs?',
       },
       {
-        query: 'endangered species',
-        question: 'Which regulations protect a listed species as they stand today?',
+        query: 'asylum',
+        question: 'What do the current rules require of someone applying for asylum?',
       },
       {
-        query: 'national security information',
-        question:
-          'What do the current regulations say about handling classified national security information?',
+        query: 'security clearance',
+        question: 'What do the regulations require before an agency grants a security clearance?',
       },
     ],
   },
@@ -201,8 +216,8 @@ export const SAMPLES: readonly SampleSet[] = [
           'Which public laws have amended the Foreign Intelligence Surveillance Act?',
       },
       {
-        query: 'cybersecurity',
-        question: 'What have witnesses told congressional hearings about cybersecurity?',
+        query: 'impoundment',
+        question: 'What have witnesses told congressional hearings about impounded funds?',
       },
     ],
   },
@@ -216,16 +231,16 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'artificial intelligence',
-        question: 'What rules have agencies written about artificial intelligence?',
+        query: 'cyber incident reporting',
+        question: 'Which rules require a company to report a cyber incident to the government?',
       },
       {
-        query: 'drinking water',
-        question: 'Which drinking-water rules have agencies proposed and finalized since 1994?',
+        query: 'semiconductor export controls',
+        question: 'What rules control the export of semiconductor manufacturing equipment?',
       },
       {
-        query: 'aviation safety',
-        question: 'What rules have agencies published about aviation safety?',
+        query: 'immigration detention',
+        question: 'What rules have agencies written about immigration detention since 1994?',
       },
     ],
   },
@@ -233,7 +248,15 @@ export const SAMPLES: readonly SampleSet[] = [
     // "Ordered" covers what this corpus is: executive orders back to 1940, and
     // the proclamations, memoranda and determinations from 1994 — instruments
     // the President signs, rather than the office as an institution. The three
-    // samples stay on the orders, which is the part that reaches furthest back.
+    // samples stay on the orders: two on the authority a sitting President is
+    // signing under this year, and one on declassification. That third slot used
+    // to ask about the classification system, and "classified" and
+    // "classification" are both words this index answers wrongly — it matches
+    // loosely, and "classification" lands on *tariff* classification, so its 219
+    // hits open on "Adjusting Imports of Polysilicon". "declassification" (33)
+    // returns the order on the Kennedy and King records and the September 11
+    // declassification reviews, which is what the question asks for. A query
+    // here is checked by reading the order titles it returns, not by its count.
     slug: 'presidential',
     titles: {
       search: 'Search the presidency’s orders for a name.',
@@ -241,17 +264,16 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'federal advisory committee',
-        question: 'Which executive orders established a federal advisory committee?',
+        query: 'International Emergency Economic Powers Act',
+        question: 'Which executive orders invoke the International Emergency Economic Powers Act?',
       },
       {
-        query: 'regulatory review',
-        question: 'How have executive orders set the terms for reviewing agency regulations?',
+        query: 'national emergency',
+        question: 'Which national emergencies has the President declared, and under what authority?',
       },
       {
-        query: 'classified national security information',
-        question:
-          'How have executive orders since 1940 changed the rules for classifying national security information?',
+        query: 'declassification',
+        question: 'Which executive orders have directed agencies to declassify records?',
       },
     ],
   },
@@ -265,8 +287,8 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'Freedom of Information Act',
-        question: 'How has OLC read the Freedom of Information Act’s exemptions?',
+        query: 'war powers',
+        question: 'How has OLC read the President’s power to use military force without Congress?',
       },
       {
         query: 'executive privilege',
@@ -279,8 +301,17 @@ export const SAMPLES: readonly SampleSet[] = [
     ],
   },
   {
-    // The floor is 2025-01-20 and the keyword index runs over docket-entry
-    // descriptions, so the words here are the words a docket uses.
+    // The floor is 2025-01-20, and the keyword index runs over docket-entry
+    // descriptions — short strings, matched loosely. **A multi-word subject
+    // phrase returns near-random cases here, and the count will not tell you**:
+    // "Alien Enemies Act" retrieves 493 dockets and not one of them is an Alien
+    // Enemies Act case, and "tariffs" retrieves 568 by matching "tariff" in its
+    // shipping and utility rate-schedule sense. Single distinctive words work —
+    // "deportation", "habeas" and "FOIA" each return the cases a reader would
+    // expect — so the query half is one word, and the question half carries the
+    // subject, which is free because the Explorer routes semantically and never
+    // touches this index. Check a candidate by reading the case names that come
+    // back, never by its count.
     slug: 'litigation',
     titles: {
       search: 'Search the dockets for a case or a party.',
@@ -288,16 +319,16 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'temporary restraining order',
-        question: 'Which cases since January 2025 opened with a temporary restraining order?',
+        query: 'deportation',
+        question: 'What has been filed in the deportation cases since January 2025?',
       },
       {
-        query: 'preliminary injunction',
-        question: 'Where have preliminary injunctions been sought since January 2025?',
+        query: 'habeas',
+        question: 'What have habeas petitions asked the courts to do since January 2025?',
       },
       {
-        query: 'notice of appeal',
-        question: 'What has been appealed to the circuits since the start of 2025?',
+        query: 'FOIA',
+        question: 'Who has sued a federal agency for its records since January 2025?',
       },
     ],
   },
@@ -308,6 +339,9 @@ export const SAMPLES: readonly SampleSet[] = [
     // is a historical one. "The cables" is what the record mostly is — telegrams,
     // memoranda of conversation, the paper a decision left behind — and it gives
     // the sentence a subject; "how it was decided" had no "it" to point to.
+    // The third is this corpus's hook: the 1953 coup in Iran is the most famous
+    // thing the published record holds, and it is in here as cables rather than
+    // as a leak.
     slug: 'frus',
     titles: {
       search: 'Search the cables for a place or a name.',
@@ -323,17 +357,20 @@ export const SAMPLES: readonly SampleSet[] = [
         question: 'How did the State Department record the making of the Marshall Plan?',
       },
       {
-        query: 'Suez',
-        question: 'What do the declassified papers say about the Suez crisis of 1956?',
+        query: 'Mossadegh',
+        question: 'What do the declassified cables say about the 1953 coup in Iran?',
       },
     ],
   },
   {
     // The Vault's scans carry no document dates, so nothing here asks "when".
-    // The three are the Vault's long-closed famous files rather than its charged
-    // ones: COINTELPRO and the Bureau's file on King retrieve beautifully and
-    // make the hub's resting state an accusation, which is not what a reader who
-    // has typed nothing asked for.
+    // Two leads on what the Bureau has published about the fights of the last
+    // ten years, and then the hook — the Vault's D.B. Cooper file is why a good
+    // share of its visitors ever arrive, and it earns the third slot for that
+    // and not the first. The name is typed here the way a reader types it: the
+    // collections typeahead stores "D-B-Cooper " with the periods stripped and a
+    // trailing space, and matches nothing on "D.B. Cooper", but keyword search
+    // takes it plainly.
     slug: 'fbi',
     titles: {
       search: 'Search the FBI’s Vault for a name or a file.',
@@ -341,33 +378,33 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'Amelia Earhart',
-        question: 'What does the Vault hold on Amelia Earhart?',
+        query: 'Capitol violence',
+        question: 'What is in the Vault’s file on the January 6 Capitol violence?',
       },
       {
-        query: 'Al Capone',
-        question: 'What is in the Bureau’s file on Al Capone?',
+        query: 'Mueller',
+        question: 'What did the Bureau release from the Special Counsel Mueller investigation?',
       },
       {
-        query: 'Alcatraz',
-        question: 'What did the FBI release about the escape from Alcatraz?',
+        query: 'D.B. Cooper',
+        question: 'What does the Vault hold on the D.B. Cooper hijacking?',
       },
     ],
   },
   {
     // The one corpus the hub fan leaves out, so these three were checked
-    // against `/corpus/sanctions/entity-filter` (the first) and
-    // `/corpus/sanctions/filter` (the other two) rather than against the fan. A
+    // against `/corpus/sanctions/entity-filter` (the first two) and
+    // `/corpus/sanctions/filter` (the third) rather than against the fan. A
     // reader who runs one in Search mode is searching the other ten; the
     // Sanctions workspace is where these land.
     //
-    // Every name on the SDN list is a geopolitical actor, so the way out of a
-    // rotating banner that reads like a designation announcement is to ask the
-    // list by trade rather than by name, and otherwise to ask the guidance about
-    // its own machinery. Nothing here asks *when* a party was designated:
-    // `publish_date` is a copy-freshness stamp for the list data, not a
-    // designation date, and a question shaped that way teaches the box a fact
-    // the corpus cannot supply.
+    // Naming an entity is back in bounds (2026-09-18). Asking which Gazprom
+    // companies are listed is a question about the list; it is not an
+    // announcement about Gazprom, and asking the list by trade instead — the
+    // older dodge — cost the samples their subject and bought nothing. What
+    // stays out is *when* a party was designated: `publish_date` is a
+    // copy-freshness stamp for the list data, not a designation date, and a
+    // question shaped that way teaches the box a fact the corpus cannot supply.
     slug: 'sanctions',
     titles: {
       search: 'Search the sanctions lists for a name.',
@@ -375,16 +412,16 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'shipping',
-        question: 'Which shipping companies are on the sanctions lists?',
+        query: 'Gazprom',
+        question: 'Which Gazprom companies are on the sanctions lists?',
+      },
+      {
+        query: 'Islamic Revolutionary Guard Corps',
+        question: 'Who is listed in connection with the Islamic Revolutionary Guard Corps?',
       },
       {
         query: 'general license',
         question: 'What does OFAC’s guidance say about general licenses?',
-      },
-      {
-        query: 'blocked property',
-        question: 'What does OFAC’s guidance say about property it has blocked?',
       },
     ],
   },
@@ -402,8 +439,8 @@ export const SAMPLES: readonly SampleSet[] = [
     },
     samples: [
       {
-        query: 'cybersecurity',
-        question: 'What have Lawfare’s contributors argued about cybersecurity policy?',
+        query: 'Insurrection Act',
+        question: 'What has Lawfare published about the Insurrection Act?',
       },
       {
         query: 'Section 702',

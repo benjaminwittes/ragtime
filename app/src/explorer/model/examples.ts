@@ -8,8 +8,10 @@
  * `'all'` set in `hub/samples.ts`, so a reader who crosses from the hub with one
  * of them finds this surface saying the same thing rather than a paraphrase.
  * Edit one side and the other goes stale silently — nothing checks it. The tone
- * rule that governs both lives in that file's header: institutional register, no
- * sample that reads as an argument about a sitting administration.
+ * rule that governs both lives in that file's header: the register is topical
+ * and institutional about it, so the subject may be today's headline as long as
+ * the question asks what an authority requires, what a court ordered, or what
+ * the record shows — never a verdict on a person or a party.
  */
 
 export type ExampleQuestion = { text: string; shape: 'list' | 'count' | 'narrative' }
