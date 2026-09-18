@@ -1,6 +1,8 @@
 import { buildCfrSourceUrl } from '@/lib/external-source-urls'
 import type { CfrSectionDisplayRow } from '@lawfare/ragtime-client'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * CFR manual-filter results table.
  *
@@ -70,11 +72,11 @@ export function CfrResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} sections · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <CfrSectionRowsTable rows={rows} onOpenSection={onOpenSection} />
+      <ResultWindow rows={rows} count={count} noun="sections">
+        {(visible) => (
+          <CfrSectionRowsTable rows={visible} onOpenSection={onOpenSection} />
+        )}
+      </ResultWindow>
     </div>
   )
 }

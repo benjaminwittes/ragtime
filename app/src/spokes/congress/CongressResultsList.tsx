@@ -15,6 +15,8 @@ import {
   prettyGranuleClass,
 } from './congress-format'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * Congress manual-filter results — one table shape per collection:
  *   laws      — PL number · title · kind · approved · Stat. cite
@@ -91,17 +93,20 @@ export function CongressResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()}{' '}
-        {collectionNoun(collection, count ?? rows.length)} · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <CongressRowsTable
-        collection={collection}
+      <ResultWindow
         rows={rows}
-        onOpenDocument={onOpenDocument}
-        semanticMatchIds={semanticMatchIds}
-      />
+        count={count}
+        noun={collectionNoun(collection, count ?? rows.length)}
+      >
+        {(visible) => (
+          <CongressRowsTable
+            collection={collection}
+            rows={visible}
+            onOpenDocument={onOpenDocument}
+            semanticMatchIds={semanticMatchIds}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }

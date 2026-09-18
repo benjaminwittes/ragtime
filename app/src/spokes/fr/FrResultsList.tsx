@@ -2,6 +2,8 @@ import type { FrDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { isTodayOrLater, prettyDocType } from './fr-format'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * Federal Register manual-filter results table.
  *
@@ -79,15 +81,15 @@ export function FrResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} documents · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <FrDocumentRowsTable
-        rows={rows}
-        onOpenDocument={onOpenDocument}
-        semanticMatchIds={semanticMatchIds}
-      />
+      <ResultWindow rows={rows} count={count} noun="documents">
+        {(visible) => (
+          <FrDocumentRowsTable
+            rows={visible}
+            onOpenDocument={onOpenDocument}
+            semanticMatchIds={semanticMatchIds}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }

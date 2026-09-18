@@ -1,6 +1,8 @@
 import type { LawfareArticleDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * Lawfare manual-filter results list.
  *
@@ -75,15 +77,15 @@ export function LawfareResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} pieces · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <LawfareArticleRowsList
-        rows={rows}
-        onOpenArticle={onOpenArticle}
-        semanticMatchIds={semanticMatchIds}
-      />
+      <ResultWindow rows={rows} count={count} noun="pieces">
+        {(visible) => (
+          <LawfareArticleRowsList
+            rows={visible}
+            onOpenArticle={onOpenArticle}
+            semanticMatchIds={semanticMatchIds}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }

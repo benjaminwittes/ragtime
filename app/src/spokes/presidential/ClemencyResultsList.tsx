@@ -1,5 +1,7 @@
 import type { ClemencyGrantDisplayRow } from '@lawfare/ragtime-client'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * Clemency grant results table. Columns: Recipient · Type · President ·
  * Date · Topic · Source. The Source column renders the provenance badge —
@@ -45,11 +47,11 @@ export function ClemencyResultsList({
 
   return (
     <div className="px-6 py-4">
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} grants · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <ClemencyRowsTable rows={rows} onOpenGrant={onOpenGrant} />
+      <ResultWindow rows={rows} count={count} noun="grants">
+        {(visible) => (
+          <ClemencyRowsTable rows={visible} onOpenGrant={onOpenGrant} />
+        )}
+      </ResultWindow>
     </div>
   )
 }

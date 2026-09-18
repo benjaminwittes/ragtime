@@ -2,6 +2,8 @@ import type { CommentaryDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { commentaryRowKey } from './commentary-format'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * Commentary manual-filter results list.
  *
@@ -79,15 +81,15 @@ export function CommentaryResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} pieces · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <CommentaryRowsList
-        rows={rows}
-        onOpenDocument={onOpenDocument}
-        semanticMatchKeys={semanticMatchKeys}
-      />
+      <ResultWindow rows={rows} count={count} noun="pieces">
+        {(visible) => (
+          <CommentaryRowsList
+            rows={visible}
+            onOpenDocument={onOpenDocument}
+            semanticMatchKeys={semanticMatchKeys}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }

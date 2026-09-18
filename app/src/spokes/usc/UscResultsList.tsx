@@ -1,6 +1,8 @@
 import { buildUscSourceUrl } from '@/lib/external-source-urls'
 import type { UscSectionDisplayRow } from '@lawfare/ragtime-client'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * USC manual-filter results table.
  *
@@ -71,11 +73,11 @@ export function UscResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} sections · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <UscSectionRowsTable rows={rows} onOpenSection={onOpenSection} />
+      <ResultWindow rows={rows} count={count} noun="sections">
+        {(visible) => (
+          <UscSectionRowsTable rows={visible} onOpenSection={onOpenSection} />
+        )}
+      </ResultWindow>
     </div>
   )
 }

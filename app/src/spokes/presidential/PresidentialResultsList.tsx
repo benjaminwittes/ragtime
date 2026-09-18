@@ -1,6 +1,8 @@
 import type { PresidentialDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * Presidential Documents manual-filter results table.
  *
@@ -77,15 +79,15 @@ export function PresidentialResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} documents · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <PresidentialDocumentRowsTable
-        rows={rows}
-        onOpenDocument={onOpenDocument}
-        semanticMatchIds={semanticMatchIds}
-      />
+      <ResultWindow rows={rows} count={count} noun="documents">
+        {(visible) => (
+          <PresidentialDocumentRowsTable
+            rows={visible}
+            onOpenDocument={onOpenDocument}
+            semanticMatchIds={semanticMatchIds}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }

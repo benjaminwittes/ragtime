@@ -1,6 +1,8 @@
 import type { SanctionsEntityDisplayRow } from '@lawfare/ragtime-client'
 import { aliasLine, entityTypeLabel, listTypeLabel } from './sanctions-format'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * Sanctions entity results table (the marquee pane's list).
  *
@@ -76,11 +78,11 @@ export function SanctionsEntityResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} entries · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <SanctionsEntityRowsTable rows={rows} onOpenEntity={onOpenEntity} />
+      <ResultWindow rows={rows} count={count} noun="entries">
+        {(visible) => (
+          <SanctionsEntityRowsTable rows={visible} onOpenEntity={onOpenEntity} />
+        )}
+      </ResultWindow>
     </div>
   )
 }

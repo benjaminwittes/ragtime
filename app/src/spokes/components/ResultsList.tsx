@@ -10,6 +10,8 @@ import {
 } from '@lawfare/ragtime-client'
 import { MARKDOWN_COMPONENTS } from './markdown-components'
 
+import { ResultWindow } from './ResultWindow'
+
 /**
  * How a result page was produced. Drives the "How this was produced"
  * disclosure rendered above the table — surfaces the executed SQL (for
@@ -185,10 +187,6 @@ export function ResultsList({
       {source?.kind === 'claude_ama' && (
         <AnalysisNarrative title="Answer" markdown={source.answerMarkdown} />
       )}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} cases · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
       {/* This was a bordered, rounded container drawn around rows a `divide-y` had already
           separated — a box around a list that did not need one. The box is gone and only
           the scroll survives, because a table wider than the pane still has to move under
@@ -198,114 +196,118 @@ export function ResultsList({
           the cadence starts at the first row — and that first rule is also the one that
           separates the column heads from the list, drawn once. Nothing closes the table at
           the bottom; a rule separates rather than encloses. */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          {/* Column heads are labels on the page, not a filled band across it — the app's
-              small-label vocabulary, the one the hub counts its corpora in. */}
-          <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <Th>Case</Th>
-              <Th>Docket</Th>
-              <Th>Court</Th>
-              <Th>Judge</Th>
-              <Th>Filed</Th>
-              <Th>Cause</Th>
-              <Th className="text-right">Entries</Th>
-              {source?.kind === 'claude_read' && <Th>AI reason</Th>}
-              {annotationCols.includes('rank') && (
-                <Th className="text-right">Rank</Th>
-              )}
-              {annotationCols.includes('score') && (
-                <Th className="text-right">Score</Th>
-              )}
-              {annotationCols.includes('category') && <Th>Category</Th>}
-              {annotationCols.includes('label') && <Th>Label</Th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const verdict =
-                source?.kind === 'claude_read'
-                  ? source.verdicts[r.cl_id]
-                  : undefined
-              const annotation =
-                source?.kind === 'claude_analysis'
-                  ? source.annotations[r.cl_id]
-                  : undefined
-              return (
-                <tr
-                  key={r.cl_id}
-                  id={`case-${r.cl_id}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onOpenCase(r)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onOpenCase(r)
-                    }
-                  }}
-                  aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
-                  className="cursor-pointer scroll-mt-20 border-t border-lawfare-line hover:bg-muted/50 focus:bg-muted/60 focus:outline-none target:bg-primary/10"
-                >
-                  <Td>
-                    <span className="font-medium text-foreground">
-                      {r.case_name ?? '(no name)'}
-                    </span>
-                    {snippets?.[r.cl_id] && (
-                      <span className="mt-0.5 block max-w-md text-xs leading-snug text-muted-foreground">
-                        {renderSnippet(snippets[r.cl_id])}
-                      </span>
-                    )}
-                  </Td>
-                  <Td className="font-mono text-xs text-muted-foreground">
-                    {r.docket_number ?? '—'}
-                  </Td>
-                  <Td className="font-mono text-xs uppercase">
-                    {r.court ?? '—'}
-                  </Td>
-                  <Td className="text-xs">{r.judge ?? '—'}</Td>
-                  <Td className="font-mono text-xs">{r.date_filed ?? '—'}</Td>
-                  <Td
-                    className="max-w-xs truncate text-xs"
-                    title={r.cause ?? undefined}
-                  >
-                    {shortCause(r.cause)}
-                  </Td>
-                  <Td className="text-right font-mono text-xs tabular-nums">
-                    {r.entry_count ?? '—'}
-                  </Td>
-                  {source?.kind === 'claude_read' && (
-                    <Td className="max-w-sm text-xs text-muted-foreground">
-                      {verdict?.reason ?? '—'}
-                    </Td>
-                  )}
+      <ResultWindow rows={rows} count={count} noun="cases">
+        {(visible) => (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              {/* Column heads are labels on the page, not a filled band across it — the app's
+                  small-label vocabulary, the one the hub counts its corpora in. */}
+              <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <Th>Case</Th>
+                  <Th>Docket</Th>
+                  <Th>Court</Th>
+                  <Th>Judge</Th>
+                  <Th>Filed</Th>
+                  <Th>Cause</Th>
+                  <Th className="text-right">Entries</Th>
+                  {source?.kind === 'claude_read' && <Th>AI reason</Th>}
                   {annotationCols.includes('rank') && (
-                    <Td className="text-right font-mono text-xs tabular-nums">
-                      {annotation?.rank ?? '—'}
-                    </Td>
+                    <Th className="text-right">Rank</Th>
                   )}
                   {annotationCols.includes('score') && (
-                    <Td className="text-right font-mono text-xs tabular-nums">
-                      {annotation?.score ?? '—'}
-                    </Td>
+                    <Th className="text-right">Score</Th>
                   )}
-                  {annotationCols.includes('category') && (
-                    <Td className="max-w-xs truncate text-xs">
-                      {annotation?.category ?? '—'}
-                    </Td>
-                  )}
-                  {annotationCols.includes('label') && (
-                    <Td className="max-w-sm text-xs">
-                      {annotation?.label ?? '—'}
-                    </Td>
-                  )}
+                  {annotationCols.includes('category') && <Th>Category</Th>}
+                  {annotationCols.includes('label') && <Th>Label</Th>}
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {visible.map((r) => {
+                  const verdict =
+                    source?.kind === 'claude_read'
+                      ? source.verdicts[r.cl_id]
+                      : undefined
+                  const annotation =
+                    source?.kind === 'claude_analysis'
+                      ? source.annotations[r.cl_id]
+                      : undefined
+                  return (
+                    <tr
+                      key={r.cl_id}
+                      id={`case-${r.cl_id}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onOpenCase(r)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onOpenCase(r)
+                        }
+                      }}
+                      aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
+                      className="cursor-pointer scroll-mt-20 border-t border-lawfare-line hover:bg-muted/50 focus:bg-muted/60 focus:outline-none target:bg-primary/10"
+                    >
+                      <Td>
+                        <span className="font-medium text-foreground">
+                          {r.case_name ?? '(no name)'}
+                        </span>
+                        {snippets?.[r.cl_id] && (
+                          <span className="mt-0.5 block max-w-md text-xs leading-snug text-muted-foreground">
+                            {renderSnippet(snippets[r.cl_id])}
+                          </span>
+                        )}
+                      </Td>
+                      <Td className="font-mono text-xs text-muted-foreground">
+                        {r.docket_number ?? '—'}
+                      </Td>
+                      <Td className="font-mono text-xs uppercase">
+                        {r.court ?? '—'}
+                      </Td>
+                      <Td className="text-xs">{r.judge ?? '—'}</Td>
+                      <Td className="font-mono text-xs">{r.date_filed ?? '—'}</Td>
+                      <Td
+                        className="max-w-xs truncate text-xs"
+                        title={r.cause ?? undefined}
+                      >
+                        {shortCause(r.cause)}
+                      </Td>
+                      <Td className="text-right font-mono text-xs tabular-nums">
+                        {r.entry_count ?? '—'}
+                      </Td>
+                      {source?.kind === 'claude_read' && (
+                        <Td className="max-w-sm text-xs text-muted-foreground">
+                          {verdict?.reason ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('rank') && (
+                        <Td className="text-right font-mono text-xs tabular-nums">
+                          {annotation?.rank ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('score') && (
+                        <Td className="text-right font-mono text-xs tabular-nums">
+                          {annotation?.score ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('category') && (
+                        <Td className="max-w-xs truncate text-xs">
+                          {annotation?.category ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('label') && (
+                        <Td className="max-w-sm text-xs">
+                          {annotation?.label ?? '—'}
+                        </Td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ResultWindow>
     </div>
   )
 }

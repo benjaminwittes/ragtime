@@ -1,6 +1,8 @@
 import type { OlcOpinionDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
+import { ResultWindow } from '../components/ResultWindow'
+
 /**
  * OLC manual-filter results table.
  *
@@ -78,15 +80,15 @@ export function OlcResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} opinions · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <OlcOpinionRowsTable
-        rows={rows}
-        onOpenOpinion={onOpenOpinion}
-        semanticMatchIds={semanticMatchIds}
-      />
+      <ResultWindow rows={rows} count={count} noun="opinions">
+        {(visible) => (
+          <OlcOpinionRowsTable
+            rows={visible}
+            onOpenOpinion={onOpenOpinion}
+            semanticMatchIds={semanticMatchIds}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }
