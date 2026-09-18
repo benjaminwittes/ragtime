@@ -5,6 +5,11 @@ import type { DocsEntry } from '../types'
  * floor and why it's there, what it's good for, demo queries, and two things
  * to know about search today.
  *
+ * The floor is unsettled, not merely stale: coverage is mid-switch to a new
+ * ingest (Thomas, 2026-09-18), so no date here is safe to assert and this
+ * entry quotes none. Do not "fix" it by copying a number back in from
+ * `getHoldings` or from the JSDoc below — settle the corpus first.
+ *
  * The floor moved. `spokes/litigation/index.ts` blanked its own
  * `plainEnglishDisclosure` with the note that "filed since 2025-01-20" is
  * stale — comprehensive coverage reaches back to Q4 2024 and curated
@@ -26,11 +31,12 @@ metadata (parties, court, judge, dates, cause / nature-of-suit) plus the
 docket entries themselves, and OCR text of attached filings where we have
 it.
 
-**Where the corpus starts, and why it is not one date.** Comprehensive
-coverage runs from the last quarter of 2024 forward. That floor is an
+**Where the corpus starts, and why it is not one date.** The comprehensive
+floor is moving backward, and this page deliberately does not quote a date
+for it: the figure would be wrong again before you read it. That floor is an
 artifact of the use case Lawfare first built this corpus for — identifying
 violated court orders in immigration habeas cases during the second Trump
-administration — and it is being pushed backward over time. Curated
+administration. Curated
 **collections** reach further back than the floor does: January 6
 prosecutions to 2021, AI liability, and others. So "how far back does this
 go" has two answers, and the **Collection** filter is where the second one
