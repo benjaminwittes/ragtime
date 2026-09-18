@@ -115,11 +115,11 @@ export function toolVerb(call: Pick<TrailCall, 'name' | 'input'>): string {
  */
 export function workingLabel(turn: Turn, previous: string): string {
   const ev = turn.lastEvent
-  if (!ev) return turn.phase === 'orient' ? 'getting oriented…' : 'researching…'
+  if (!ev) return turn.phase === 'orient' ? 'planning…' : 'researching…'
   switch (ev.type) {
     case 'phase':
       if (ev.outcome) return 'finishing…'
-      return ev.phase === 'orient' ? 'getting oriented…' : 'researching…'
+      return ev.phase === 'orient' ? 'planning…' : 'researching…'
     case 'tool_call':
       return toolVerb({ name: ev.name, input: ev.input }) + '…'
     case 'tool_result': {
