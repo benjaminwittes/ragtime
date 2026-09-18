@@ -12,7 +12,7 @@ import { type CorpusSpoke, fetchFrFacets } from '@lawfare/ragtime-client'
  * Surfaces:
  * - Manual filter: FTS + type / agency / significant / RIN / CFR title+
  *   part / open-for-comment / publication + effective date ranges, with
- *   the keyword/semantic/both toggle (the corpus is embedded).
+ *   side-by-side keyword and semantic results (the corpus is embedded).
  * - claude_ama: plan→execute→synthesize over federal_register_documents —
  *   rescission chains, sanctions programs, comment-window queries, EO-
  *   implementation questions.

@@ -9,8 +9,8 @@ import { type CorpusSpoke, fetchCongressFacets } from '@lawfare/ragtime-client'
  * selector (locked design: no separate hub cards per collection).
  *
  * Surfaces:
- * - Manual filter per collection (+ the keyword/semantic/both toggle —
- *   semantic lights up when the corpus embed lands).
+ * - Manual filter per collection (+ side-by-side keyword and semantic
+ *   results — semantic lights up when the corpus embed lands).
  * - "Who said what": the hearings collection's speaker-turn sub-pane —
  *   witness/member + topic + Q→A pairing over ~7M attributed turns.
  * - claude_ama: plan→execute→synthesize across the five tables.

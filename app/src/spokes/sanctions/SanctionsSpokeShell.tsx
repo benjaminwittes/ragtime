@@ -41,7 +41,6 @@ import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
-import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
 import {
   ResultsPaneHeader,
   SemanticResultsList,
@@ -79,8 +78,9 @@ import { parseSanctionsQualifiedId } from './sanctions-format'
  *    the current SDN + consolidated lists, entity cards, the PINNED
  *    screening candor banner (visible on the pane, never buried) with the
  *    live data-as-of date and a link to OFAC's authoritative search.
- *  - OFAC guidance: FAQs, enforcement actions, general licenses — with the
- *    keyword/semantic/both toggle and "More like this" pivots.
+ *  - OFAC guidance: FAQs, enforcement actions, general licenses — with
+ *    side-by-side keyword and semantic results, and "More like this"
+ *    pivots.
  *  - Federal Register: the sanctions slice, queried live in the fr corpus;
  *    detail views reuse the FR document sheet (no duplication).
  *
@@ -224,7 +224,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             pane: 'guidance',
             fields,
             executed_sql: r.executed_sql,
-            search_mode: searchMode,
+            search_mode: 'both',
           },
           cited_ids: r.ids,
         },
@@ -275,7 +275,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             pane: 'fr',
             fields,
             executed_sql: r.executed_sql,
-            search_mode: searchMode,
+            search_mode: 'both',
           },
           cited_ids: r.ids,
         },
@@ -296,7 +296,6 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   }
 
   // ── Semantic pane (shared by the two document legs) ──────────────────────
-  const [searchMode, setSearchMode] = useState<SearchMode>('both')
   const [semRows, setSemRows] = useState<SemanticSearchRow[]>()
   const [semLoading, setSemLoading] = useState(false)
   const [semError, setSemError] = useState<string>()
@@ -309,24 +308,15 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setSemHasRun(false)
   }
 
-  /** The keyword/semantic/both split for the guidance + FR panes. Entities
-   *  never route here — they have no chunks. */
+  /** Keyword and semantic run together for the guidance + FR panes.
+   *  Entities never route here — they have no chunks. */
   async function submitDocumentsPane(
     searchText: string | undefined,
     runKeyword: () => Promise<void>,
   ) {
-    const wantKeyword = searchMode !== 'semantic'
-    const wantSemantic = searchMode !== 'keyword' && !!searchText?.trim()
-    if (searchMode === 'semantic' && !wantSemantic) {
-      setSemHasRun(true)
-      setSemRows([])
-      setSemError(
-        'Semantic search needs search text — add words to the search field. (Structured filters alone run in Keyword mode.)',
-      )
-      return
-    }
+    const wantSemantic = !!searchText?.trim()
     await Promise.all([
-      wantKeyword ? runKeyword() : Promise.resolve(),
+      runKeyword(),
       wantSemantic
         ? runSemanticPane(searchText!.trim())
         : Promise.resolve(clearSemanticPane()),
@@ -346,7 +336,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'sanctions',
           mode: 'semantic_search',
           question: query,
-          plan: { pane, search_mode: searchMode },
+          plan: { pane, search_mode: 'both' },
           cited_ids: r.results.map((row) => row.id),
         },
         auth.auth,
@@ -662,18 +652,11 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     () => new Set(guidanceIds.map((id) => `guidance:${id}`)),
     [guidanceIds],
   )
-  const paneLoading =
-    pane === 'entities'
-      ? entityLoading
-      : pane === 'guidance'
-        ? guidanceLoading
-        : frLoading
-
-  const showSemanticToggle = pane !== 'entities'
-  const showKeywordPane = pane === 'entities' || searchMode !== 'semantic'
   const showSemanticPane =
-    pane !== 'entities' && searchMode !== 'keyword' && (semHasRun || semLoading)
-  const panesSideBySide = showKeywordPane && showSemanticPane
+    pane !== 'entities' && (semHasRun || semLoading)
+  // The keyword pane always renders, so the two-column layout is on exactly
+  // when the semantic pane is showing.
+  const panesSideBySide = showSemanticPane
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -704,13 +687,6 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       {activeMode === 'manual_filter' && (
         <>
           <PaneToggle pane={pane} onSelect={switchPane} />
-          {showSemanticToggle && (
-            <SearchModeToggle
-              mode={searchMode}
-              onSelect={setSearchMode}
-              disabled={paneLoading || semLoading}
-            />
-          )}
           {pane === 'entities' && (
             <SanctionsEntityFilterForm
               facets={entityFacets}
@@ -742,45 +718,43 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 : undefined
             }
           >
-            {showKeywordPane && (
-              <div className="min-w-0">
-                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
-                {pane === 'entities' && (
-                  <SanctionsEntityResultsList
-                    rows={entityRows}
-                    count={entityCount}
-                    loading={entityLoading}
-                    error={entityError}
-                    hasRun={entityHasRun}
-                    executedSql={entityExecutedSql}
-                    onOpenEntity={handleOpenEntity}
-                  />
-                )}
-                {pane === 'guidance' && (
-                  <SanctionsGuidanceResultsList
-                    rows={guidanceRows}
-                    count={guidanceCount}
-                    loading={guidanceLoading}
-                    error={guidanceError}
-                    hasRun={guidanceHasRun}
-                    executedSql={guidanceExecutedSql}
-                    onOpenDocument={handleOpenGuidance}
-                    semanticMatchIds={semHasRun ? guidanceIdSet : undefined}
-                  />
-                )}
-                {pane === 'fr' && (
-                  <FrResultsList
-                    rows={frRows}
-                    count={frCount}
-                    loading={frLoading}
-                    error={frError}
-                    hasRun={frHasRun}
-                    executedSql={frExecutedSql}
-                    onOpenDocument={handleOpenFr}
-                  />
-                )}
-              </div>
-            )}
+            <div className="min-w-0">
+              {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+              {pane === 'entities' && (
+                <SanctionsEntityResultsList
+                  rows={entityRows}
+                  count={entityCount}
+                  loading={entityLoading}
+                  error={entityError}
+                  hasRun={entityHasRun}
+                  executedSql={entityExecutedSql}
+                  onOpenEntity={handleOpenEntity}
+                />
+              )}
+              {pane === 'guidance' && (
+                <SanctionsGuidanceResultsList
+                  rows={guidanceRows}
+                  count={guidanceCount}
+                  loading={guidanceLoading}
+                  error={guidanceError}
+                  hasRun={guidanceHasRun}
+                  executedSql={guidanceExecutedSql}
+                  onOpenDocument={handleOpenGuidance}
+                  semanticMatchIds={semHasRun ? guidanceIdSet : undefined}
+                />
+              )}
+              {pane === 'fr' && (
+                <FrResultsList
+                  rows={frRows}
+                  count={frCount}
+                  loading={frLoading}
+                  error={frError}
+                  hasRun={frHasRun}
+                  executedSql={frExecutedSql}
+                  onOpenDocument={handleOpenFr}
+                />
+              )}
+            </div>
             {showSemanticPane && (
               <div className="min-w-0">
                 {panesSideBySide && <ResultsPaneHeader kind="semantic" />}

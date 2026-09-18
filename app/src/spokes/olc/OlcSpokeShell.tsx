@@ -30,7 +30,6 @@ import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
-import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
 import {
   ResultsPaneHeader,
   SemanticResultsList,
@@ -124,7 +123,6 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   // Semantic pane state (brief #9). The keyword pane is the filter state
   // above, unchanged; the semantic pane runs /corpus/semantic-search in
   // vector-only mode off the same free-text field.
-  const [searchMode, setSearchMode] = useState<SearchMode>('both')
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
   const [semLoading, setSemLoading] = useState(false)
   const [semError, setSemError] = useState<string | undefined>(undefined)
@@ -206,24 +204,14 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   useOpenDeepLinkedDocument((doc) => handleOpenMltResult(doc.id))
 
   async function handleSubmit(fields: OlcFilterFields) {
-    // Both panes run in parallel off one submit (brief #9: default "both" —
-    // never make the user search twice). Semantic consumes only the free-
-    // text field; with no search text the semantic pane simply doesn't run.
-    const wantKeyword = searchMode !== 'semantic'
+    // Both panes run in parallel off one submit (brief #9). Search always
+    // runs both mechanisms, so the user never searches twice. Semantic
+    // consumes only the free-text field; with no search text the semantic
+    // pane simply doesn't run.
     const wantSemantic =
-      spoke.semanticSearch === true &&
-      searchMode !== 'keyword' &&
-      !!fields.search?.trim()
-    if (searchMode === 'semantic' && !wantSemantic) {
-      setSemHasRun(true)
-      setSemRows([])
-      setSemError(
-        'Semantic search needs search text — add words to the search field. (Structured filters alone run in Keyword mode.)',
-      )
-      return
-    }
+      spoke.semanticSearch === true && !!fields.search?.trim()
     await Promise.all([
-      wantKeyword ? runKeywordPane(fields) : Promise.resolve(),
+      runKeywordPane(fields),
       wantSemantic
         ? runSemanticPane(fields.search!.trim())
         : Promise.resolve(clearSemanticPane()),
@@ -246,7 +234,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'olc',
           mode: 'manual_filter',
           question: fields.search ?? fields.title ?? fields.author ?? '(structured filter)',
-          plan: { fields, executed_sql: r.executed_sql, search_mode: searchMode },
+          plan: { fields, executed_sql: r.executed_sql, search_mode: 'both' },
           cited_ids: r.ids,
         },
         auth.auth,
@@ -281,7 +269,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'olc',
           mode: 'semantic_search',
           question: query,
-          plan: { search_mode: searchMode },
+          plan: { search_mode: 'both' },
           cited_ids: r.results.map((row) => row.id),
         },
         auth.auth,
@@ -371,10 +359,11 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     () => new Set((semRows ?? []).map((r) => r.id)),
     [semRows],
   )
-  const showKeywordPane = searchMode !== 'semantic'
   const showSemanticPane =
-    spoke.semanticSearch === true && searchMode !== 'keyword' && (semHasRun || semLoading)
-  const panesSideBySide = showKeywordPane && showSemanticPane
+    spoke.semanticSearch === true && (semHasRun || semLoading)
+  // The keyword pane always renders, so the two-column layout is on exactly
+  // when the semantic pane is showing.
+  const panesSideBySide = showSemanticPane
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!auth.auth) {
@@ -532,13 +521,6 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
       {activeMode === 'manual_filter' && (
         <>
-          {spoke.semanticSearch && (
-            <SearchModeToggle
-              mode={searchMode}
-              onSelect={setSearchMode}
-              disabled={queryLoading || semLoading}
-            />
-          )}
           <OlcFilterForm
             sources={facets?.sources ?? []}
             ocrQualities={facets?.ocr_qualities ?? []}
@@ -560,7 +542,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
       {activeMode === 'manual_filter' && (
         <>
-          {showKeywordPane && rows && rows.length > 0 && !queryLoading && (
+          {rows && rows.length > 0 && !queryLoading && (
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <div
@@ -570,21 +552,19 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 : undefined
             }
           >
-            {showKeywordPane && (
-              <div className="min-w-0">
-                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
-                <OlcResultsList
-                  rows={rows}
-                  count={count}
-                  loading={queryLoading}
-                  error={queryError}
-                  hasRun={hasRun}
-                  executedSql={executedSql}
-                  onOpenOpinion={handleOpenOpinion}
-                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
-                />
-              </div>
-            )}
+            <div className="min-w-0">
+              {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+              <OlcResultsList
+                rows={rows}
+                count={count}
+                loading={queryLoading}
+                error={queryError}
+                hasRun={hasRun}
+                executedSql={executedSql}
+                onOpenOpinion={handleOpenOpinion}
+                semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+              />
+            </div>
             {showSemanticPane && (
               <div className="min-w-0">
                 {panesSideBySide && <ResultsPaneHeader kind="semantic" />}

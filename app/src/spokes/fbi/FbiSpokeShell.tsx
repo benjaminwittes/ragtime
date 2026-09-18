@@ -30,7 +30,6 @@ import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
-import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
 import {
   ResultsPaneHeader,
   SemanticResultsList,
@@ -50,10 +49,10 @@ import { FbiResultsList } from './FbiResultsList'
 
 /**
  * FBI Records spoke shell (brief #14). Two query modes:
- *  - manual_filter: FTS + collection typeahead + provenance facet, with the
- *    keyword/semantic/both toggle (the corpus arrived fully embedded) and a
- *    document detail sheet whose provenance block surfaces the Wayback
- *    story for recovered documents.
+ *  - manual_filter: FTS + collection typeahead + provenance facet, with
+ *    side-by-side keyword and semantic results (the corpus arrived fully
+ *    embedded) and a document detail sheet whose provenance block surfaces
+ *    the Wayback story for recovered documents.
  *  - claude_ama: plan→execute→synthesize over fbi_documents — collection
  *    questions, removed-document questions, topical search across the OCR
  *    text. The Worker planner carries the corpus's candor stack (no
@@ -126,7 +125,6 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [hasRun, setHasRun] = useState(false)
 
   // Semantic pane state (brief #9) — live day one; the corpus arrived embedded.
-  const [searchMode, setSearchMode] = useState<SearchMode>('both')
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
   const [semLoading, setSemLoading] = useState(false)
   const [semError, setSemError] = useState<string | undefined>(undefined)
@@ -197,21 +195,10 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   useOpenDeepLinkedDocument((doc) => handleOpenMltResult(doc.id))
 
   async function handleSubmit(fields: FbiFilterFields) {
-    const wantKeyword = searchMode !== 'semantic'
     const wantSemantic =
-      spoke.semanticSearch === true &&
-      searchMode !== 'keyword' &&
-      !!fields.search?.trim()
-    if (searchMode === 'semantic' && !wantSemantic) {
-      setSemHasRun(true)
-      setSemRows([])
-      setSemError(
-        'Semantic search needs search text — add words to the search field. (Structured filters alone run in Keyword mode.)',
-      )
-      return
-    }
+      spoke.semanticSearch === true && !!fields.search?.trim()
     await Promise.all([
-      wantKeyword ? runKeywordPane(fields) : Promise.resolve(),
+      runKeywordPane(fields),
       wantSemantic
         ? runSemanticPane(fields.search!.trim())
         : Promise.resolve(clearSemanticPane()),
@@ -235,7 +222,7 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           mode: 'manual_filter',
           question:
             fields.search ?? fields.collection ?? fields.provenance ?? '(structured filter)',
-          plan: { fields, executed_sql: r.executed_sql, search_mode: searchMode },
+          plan: { fields, executed_sql: r.executed_sql, search_mode: 'both' },
           cited_ids: r.ids,
         },
         auth.auth,
@@ -270,7 +257,7 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'fbi',
           mode: 'semantic_search',
           question: query,
-          plan: { search_mode: searchMode },
+          plan: { search_mode: 'both' },
           cited_ids: r.results.map((row) => row.id),
         },
         auth.auth,
@@ -348,10 +335,11 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     () => new Set((semRows ?? []).map((r) => r.id)),
     [semRows],
   )
-  const showKeywordPane = searchMode !== 'semantic'
   const showSemanticPane =
-    spoke.semanticSearch === true && searchMode !== 'keyword' && (semHasRun || semLoading)
-  const panesSideBySide = showKeywordPane && showSemanticPane
+    spoke.semanticSearch === true && (semHasRun || semLoading)
+  // The keyword pane always renders, so the two-column layout is on exactly
+  // when the semantic pane is showing.
+  const panesSideBySide = showSemanticPane
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!auth.auth) {
@@ -505,13 +493,6 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
       {activeMode === 'manual_filter' && (
         <>
-          {spoke.semanticSearch && (
-            <SearchModeToggle
-              mode={searchMode}
-              onSelect={setSearchMode}
-              disabled={queryLoading || semLoading}
-            />
-          )}
           <FbiFilterForm
             provenance={facets?.provenance ?? []}
             topCollections={facets?.collections ?? []}
@@ -533,7 +514,7 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
       {activeMode === 'manual_filter' && (
         <>
-          {showKeywordPane && rows && rows.length > 0 && !queryLoading && (
+          {rows && rows.length > 0 && !queryLoading && (
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <div
@@ -543,21 +524,19 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 : undefined
             }
           >
-            {showKeywordPane && (
-              <div className="min-w-0">
-                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
-                <FbiResultsList
-                  rows={rows}
-                  count={count}
-                  loading={queryLoading}
-                  error={queryError}
-                  hasRun={hasRun}
-                  executedSql={executedSql}
-                  onOpenDocument={handleOpenDocument}
-                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
-                />
-              </div>
-            )}
+            <div className="min-w-0">
+              {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+              <FbiResultsList
+                rows={rows}
+                count={count}
+                loading={queryLoading}
+                error={queryError}
+                hasRun={hasRun}
+                executedSql={executedSql}
+                onOpenDocument={handleOpenDocument}
+                semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+              />
+            </div>
             {showSemanticPane && (
               <div className="min-w-0">
                 {panesSideBySide && <ResultsPaneHeader kind="semantic" />}

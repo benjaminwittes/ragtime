@@ -2,11 +2,8 @@ import type { DocsContext, DocsEntry } from './types'
 // Global entries (always visible).
 import { gettingStartedEntry } from './content/getting-started'
 import { hubKeywordSearchEntry } from './content/hub-keyword-search'
-import { semanticSearchEntry } from './content/semantic-search'
 import { accessAndCostEntry } from './content/access-and-cost'
 import { auditabilityEntry } from './content/auditability'
-import { freeTierMetadataFloorEntry } from './content/free-tier-metadata-floor'
-import { notCommentaryEntry } from './content/not-commentary'
 import { givingFeedbackEntry } from './content/giving-feedback'
 // Litigation spoke.
 import { aboutLitigationEntry } from './content/about-litigation'
@@ -53,12 +50,18 @@ import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
 import { aboutSanctionsEntry } from './content/about-sanctions'
 
 /**
- * Central docs registry. 38 entries: 8 global and 30 spoke-scoped.
+ * Central docs registry. 35 entries: 5 global and 30 spoke-scoped.
  *
  * Entries live in `./content/<slug>.ts` and are aggregated here.
  *
- * - The eight global entries carry `order` 1 through 8, in the sequence they
+ * - The five global entries carry `order` 1 through 5, in the sequence they
  *   are imported above, and render on every surface.
+ *   There were eight until 2026-09-18, when Mary Ford's note collapsed them
+ *   by three: `semantic-search` was deleted with the keyword/semantic
+ *   control it documented, `free-tier-metadata-floor` folded into
+ *   `access-and-cost`, and `not-commentary` into `getting-started`. Both
+ *   merges kept the importable entry as the survivor — `accessAndCostEntry`
+ *   and `gettingStartedEntry` are named from outside this directory.
  * - Spoke entries carry `order` 9 for the "How to use this corpus" intro,
  *   10 for the corpus's AI mode, 20 for the per-document Summarize action,
  *   and 11 for the one second surface inside a spoke (`about-clemency`, in
@@ -76,11 +79,8 @@ export const docsEntries: readonly DocsEntry[] = [
   // Global
   gettingStartedEntry,
   hubKeywordSearchEntry,
-  semanticSearchEntry,
   accessAndCostEntry,
   auditabilityEntry,
-  freeTierMetadataFloorEntry,
-  notCommentaryEntry,
   givingFeedbackEntry,
   // Litigation
   aboutLitigationEntry,

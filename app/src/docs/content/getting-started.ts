@@ -8,6 +8,16 @@ import type { DocsEntry } from '../types'
  * balance, an Anthropic key, or the demo password. A pass on 2026-09-18 cut
  * the demo password on the strength of `ExplorerPage.tsx:53`, which only
  * proves a NON-Anthropic BYOK key is refused. Do not narrow it again.
+ *
+ * The "Primary Sources, Not Commentary" section was its own global entry
+ * (`not-commentary.ts`) until 2026-09-18, when Mary Ford asked for it to sit
+ * here instead — and early, because the stakes of it are a big part of what
+ * makes RAGtime RAGtime. This entry is the survivor of that merge because
+ * `hub/HubKeywordSearch.tsx` deep-links `docs.open('getting-started')`.
+ *
+ * The "Getting Around" heading is not editorial dressing: without it the
+ * hub/spoke material after the merged section would render underneath that
+ * section's own `h2`.
  */
 export const gettingStartedEntry: DocsEntry = {
   slug: 'getting-started',
@@ -25,6 +35,28 @@ documentary history of U.S. foreign relations (FRUS), the FBI's released
 Vault files, and OFAC's sanctions lists and guidance. The eleventh is
 commentary — Lawfare and Executive Functions — where you are searching what
 named authors argued rather than the law itself.
+
+## Primary Sources, Not Commentary
+
+RAGtime searches and analyzes primary sources; it does not annotate them.
+Three things are permanently out of scope: definitional pop-ups over
+statutes, hand-curated "related authorities" or editor's notes, and in-house
+explainers written as corpus content. A statute or an opinion here is the
+official text, full stop, and an AI synthesis across documents is an AI
+answer with citations, not an editorial gloss presented as authority.
+
+**The eleventh corpus is commentary, by design.** That analysis is *somebody
+else's*, searched as a corpus like any other. So a Commentary query surfaces
+and attributes what those authors argued, and never adjudicates who was
+right.
+
+**What the AI layer will do.** Some functions, such as ranking cases by
+subjective criteria, require editorial judgment from the model and carry the
+usual AI risks, hallucination among them. RAGtime bounds that by keeping the
+AI to descriptive accounts and requiring it to present the documents under
+every claim.
+
+## Getting Around
 
 **The hub** is the cross-corpus entry point. **Search** fans a keyword query
 across ten of the eleven corpora at once, free and without AI; use it when

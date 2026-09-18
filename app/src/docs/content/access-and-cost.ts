@@ -11,19 +11,24 @@ import type { DocsEntry } from '../types'
  * it. A pass on 2026-09-18 grepped the spoke code, found nothing and cut it.
  * It does not contradict the pre-flight: that refuses a query ESTIMATED to go
  * below zero, the buffer lets one ALREADY RUNNING overshoot.
+ *
+ * The "What's Free: The Metadata Floor" section was its own global entry
+ * (`free-tier-metadata-floor.ts`) until 2026-09-18, when Mary Ford asked for
+ * the two to be one tab. This entry is the survivor of that merge because
+ * `explorer/model/allowance.test.ts` imports `accessAndCostEntry` by name.
  */
 export const accessAndCostEntry: DocsEntry = {
   slug: 'access-and-cost',
   title: 'Access & Cost',
-  summary: 'Free search, bring-your-own-key, or a Lawfare-billed prepaid balance — and how charges work.',
+  summary: 'Free search and filtering, bring-your-own-key, or a Lawfare-billed prepaid balance — and how charges work.',
   scope: { kind: 'global' },
-  order: 4,
+  order: 3,
   content: `
 Three access modes, chosen in **AI access**. Lawfare is not trying to make
 money here: the billing exists to recoup what the system costs to run.
 
-**1. Free.** Keyword search and structured metadata filtering on every
-corpus. No account, no key, no card, and no cap on how much you search.
+**1. Free.** Search and structured metadata filtering on every corpus. No
+account, no key, no card, and no cap on how much you search.
 
 **2. Your own key.** Paste an Anthropic, OpenAI or Google key to unlock the
 AI modes. Those calls bill to your provider, not to Lawfare. The key stays in
@@ -50,5 +55,16 @@ tab, resetting at 00:00 UTC, with the Worker's own figure winning once a turn
 has reported one. A paid balance is metered on the balance instead and has no
 allowance. Both numbers live in the **trail**, with every tool call and what
 it cost, and a turn that is refused says which limit refused it.
+
+## What's Free: The Metadata Floor
+
+The free tier is not just full-text search. Every native structured field a
+corpus carries is filterable at no cost: dates, titles and headings, courts
+and agencies, classification, positive-law status, document type.
+
+The more you filter on objective fields, the more precisely you can define
+and check the set you are working with. It is also much faster than an AI
+call, and it reserves the AI layer, which costs real money, for small sets
+bounded by known parameters.
 `.trim(),
 }

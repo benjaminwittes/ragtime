@@ -29,7 +29,6 @@ import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
-import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
 import {
   ResultsPaneHeader,
   SemanticResultsList,
@@ -130,7 +129,6 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   // Semantic pane state (brief #9). See OlcSpokeShell for the pattern
   // rationale; the keyword pane is the filter state above, unchanged.
-  const [searchMode, setSearchMode] = useState<SearchMode>('both')
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
   const [semLoading, setSemLoading] = useState(false)
   const [semError, setSemError] = useState<string | undefined>(undefined)
@@ -202,21 +200,10 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   async function handleSubmit(fields: LawfareFilterFields) {
     // Both panes off one submit (brief #9; see OlcSpokeShell). Lawfare's
     // free-text field is `q` (not `search`).
-    const wantKeyword = searchMode !== 'semantic'
     const wantSemantic =
-      spoke.semanticSearch === true &&
-      searchMode !== 'keyword' &&
-      !!fields.q?.trim()
-    if (searchMode === 'semantic' && !wantSemantic) {
-      setSemHasRun(true)
-      setSemRows([])
-      setSemError(
-        'Semantic search needs search text — add words to the keyword field. (Structured filters alone run in Keyword mode.)',
-      )
-      return
-    }
+      spoke.semanticSearch === true && !!fields.q?.trim()
     await Promise.all([
-      wantKeyword ? runKeywordPane(fields) : Promise.resolve(),
+      runKeywordPane(fields),
       wantSemantic
         ? runSemanticPane(fields.q!.trim())
         : Promise.resolve(clearSemanticPane()),
@@ -243,7 +230,7 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             fields.author_slug ??
             fields.topic_slug ??
             '(structured filter)',
-          plan: { fields, executed_sql: r.executed_sql, search_mode: searchMode },
+          plan: { fields, executed_sql: r.executed_sql, search_mode: 'both' },
           cited_ids: r.ids,
         },
         auth.auth,
@@ -278,7 +265,7 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'lawfare',
           mode: 'semantic_search',
           question: query,
-          plan: { search_mode: searchMode },
+          plan: { search_mode: 'both' },
           cited_ids: r.results.map((row) => row.id),
         },
         auth.auth,
@@ -360,10 +347,11 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     () => new Set((semRows ?? []).map((r) => r.id)),
     [semRows],
   )
-  const showKeywordPane = searchMode !== 'semantic'
   const showSemanticPane =
-    spoke.semanticSearch === true && searchMode !== 'keyword' && (semHasRun || semLoading)
-  const panesSideBySide = showKeywordPane && showSemanticPane
+    spoke.semanticSearch === true && (semHasRun || semLoading)
+  // The keyword pane always renders, so the two-column layout is on exactly
+  // when the semantic pane is showing.
+  const panesSideBySide = showSemanticPane
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!auth.auth) {
@@ -519,13 +507,6 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
       {activeMode === 'manual_filter' && (
         <>
-          {spoke.semanticSearch && (
-            <SearchModeToggle
-              mode={searchMode}
-              onSelect={setSearchMode}
-              disabled={queryLoading || semLoading}
-            />
-          )}
           <LawfareFilterForm
             topAuthors={facets?.top_authors ?? []}
             topics={facets?.topics ?? []}
@@ -548,7 +529,7 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
       {activeMode === 'manual_filter' && (
         <>
-          {showKeywordPane && rows && rows.length > 0 && !queryLoading && (
+          {rows && rows.length > 0 && !queryLoading && (
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <div
@@ -558,21 +539,19 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 : undefined
             }
           >
-            {showKeywordPane && (
-              <div className="min-w-0">
-                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
-                <LawfareResultsList
-                  rows={rows}
-                  count={count}
-                  loading={queryLoading}
-                  error={queryError}
-                  hasRun={hasRun}
-                  executedSql={executedSql}
-                  onOpenArticle={handleOpenArticle}
-                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
-                />
-              </div>
-            )}
+            <div className="min-w-0">
+              {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+              <LawfareResultsList
+                rows={rows}
+                count={count}
+                loading={queryLoading}
+                error={queryError}
+                hasRun={hasRun}
+                executedSql={executedSql}
+                onOpenArticle={handleOpenArticle}
+                semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+              />
+            </div>
             {showSemanticPane && (
               <div className="min-w-0">
                 {panesSideBySide && <ResultsPaneHeader kind="semantic" />}

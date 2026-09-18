@@ -6,7 +6,7 @@ export const auditabilityEntry: DocsEntry = {
   title: 'Auditability: How to Trust What You See',
   summary: 'No naked claims, no naked numbers. Every answer is checkable against the sources it came from.',
   scope: { kind: 'global' },
-  order: 5,
+  order: 4,
   content: `
 AIs make mistakes, and RAGtime puts AI on legal and historical material. It
 earns the right to do that by making every output checkable.

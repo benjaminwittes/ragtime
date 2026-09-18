@@ -30,7 +30,6 @@ import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
-import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
 import {
   ResultsPaneHeader,
   SemanticResultsList,
@@ -51,9 +50,9 @@ import { FrResultsList } from './FrResultsList'
 /**
  * Federal Register spoke shell (brief #12). Two query modes:
  *  - manual_filter: structured filter (type / agency / significant / RIN /
- *    CFR / comment-window / date ranges) + keyword/semantic/both toggle
- *    (the corpus arrived embedded) + document detail with the operative
- *    dates block.
+ *    CFR / comment-window / date ranges) + side-by-side keyword and
+ *    semantic results (the corpus arrived embedded) + document detail with
+ *    the operative dates block.
  *  - claude_ama: plan→execute→synthesize over federal_register_documents —
  *    rescission chains, sanctions programs, EO-implementation questions.
  *
@@ -118,7 +117,6 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [hasRun, setHasRun] = useState(false)
 
   // Semantic pane state (brief #9).
-  const [searchMode, setSearchMode] = useState<SearchMode>('both')
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
   const [semLoading, setSemLoading] = useState(false)
   const [semError, setSemError] = useState<string | undefined>(undefined)
@@ -188,21 +186,10 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   useOpenDeepLinkedDocument((doc) => handleOpenMltResult(doc.id))
 
   async function handleSubmit(fields: FrFilterFields) {
-    const wantKeyword = searchMode !== 'semantic'
     const wantSemantic =
-      spoke.semanticSearch === true &&
-      searchMode !== 'keyword' &&
-      !!fields.search?.trim()
-    if (searchMode === 'semantic' && !wantSemantic) {
-      setSemHasRun(true)
-      setSemRows([])
-      setSemError(
-        'Semantic search needs search text — add words to the search field. (Structured filters alone run in Keyword mode.)',
-      )
-      return
-    }
+      spoke.semanticSearch === true && !!fields.search?.trim()
     await Promise.all([
-      wantKeyword ? runKeywordPane(fields) : Promise.resolve(),
+      runKeywordPane(fields),
       wantSemantic
         ? runSemanticPane(fields.search!.trim())
         : Promise.resolve(clearSemanticPane()),
@@ -226,7 +213,7 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           mode: 'manual_filter',
           question:
             fields.search ?? fields.rin ?? fields.agencySlug ?? '(structured filter)',
-          plan: { fields, executed_sql: r.executed_sql, search_mode: searchMode },
+          plan: { fields, executed_sql: r.executed_sql, search_mode: 'both' },
           cited_ids: r.ids,
         },
         auth.auth,
@@ -261,7 +248,7 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'fr',
           mode: 'semantic_search',
           question: query,
-          plan: { search_mode: searchMode },
+          plan: { search_mode: 'both' },
           cited_ids: r.results.map((row) => row.id),
         },
         auth.auth,
@@ -339,10 +326,11 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     () => new Set((semRows ?? []).map((r) => r.id)),
     [semRows],
   )
-  const showKeywordPane = searchMode !== 'semantic'
   const showSemanticPane =
-    spoke.semanticSearch === true && searchMode !== 'keyword' && (semHasRun || semLoading)
-  const panesSideBySide = showKeywordPane && showSemanticPane
+    spoke.semanticSearch === true && (semHasRun || semLoading)
+  // The keyword pane always renders, so the two-column layout is on exactly
+  // when the semantic pane is showing.
+  const panesSideBySide = showSemanticPane
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!auth.auth) {
@@ -493,13 +481,6 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
       {activeMode === 'manual_filter' && (
         <>
-          {spoke.semanticSearch && (
-            <SearchModeToggle
-              mode={searchMode}
-              onSelect={setSearchMode}
-              disabled={queryLoading || semLoading}
-            />
-          )}
           <FrFilterForm
             docTypes={facets?.doc_types ?? []}
             agencies={facets?.agencies ?? []}
@@ -521,7 +502,7 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
       {activeMode === 'manual_filter' && (
         <>
-          {showKeywordPane && rows && rows.length > 0 && !queryLoading && (
+          {rows && rows.length > 0 && !queryLoading && (
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <div
@@ -531,21 +512,19 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 : undefined
             }
           >
-            {showKeywordPane && (
-              <div className="min-w-0">
-                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
-                <FrResultsList
-                  rows={rows}
-                  count={count}
-                  loading={queryLoading}
-                  error={queryError}
-                  hasRun={hasRun}
-                  executedSql={executedSql}
-                  onOpenDocument={handleOpenDocument}
-                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
-                />
-              </div>
-            )}
+            <div className="min-w-0">
+              {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+              <FrResultsList
+                rows={rows}
+                count={count}
+                loading={queryLoading}
+                error={queryError}
+                hasRun={hasRun}
+                executedSql={executedSql}
+                onOpenDocument={handleOpenDocument}
+                semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+              />
+            </div>
             {showSemanticPane && (
               <div className="min-w-0">
                 {panesSideBySide && <ResultsPaneHeader kind="semantic" />}

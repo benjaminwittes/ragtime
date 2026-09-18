@@ -13,8 +13,8 @@ import { type CorpusSpoke, fetchPresidentialFacets } from '@lawfare/ragtime-clie
  *
  * Surfaces:
  * - Manual filter: type / president / number lookup / agency / date +
- *   FTS, with the keyword/semantic/both toggle from day one (the corpus
- *   arrived fully embedded).
+ *   FTS, with side-by-side keyword and semantic results from day one (the
+ *   corpus arrived fully embedded).
  * - claude_ama: status/lineage + reversal-matrix + trend + narrative
  *   synthesis, with the coverage-asymmetry denominators enforced in the
  *   worker prompts.
