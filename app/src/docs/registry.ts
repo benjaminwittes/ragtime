@@ -54,24 +54,33 @@ import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
 import { aboutSanctionsEntry } from './content/about-sanctions'
 
 /**
- * Central docs registry.
+ * Central docs registry. 39 entries: 9 global and 30 spoke-scoped.
  *
  * Entries live in `./content/<slug>.ts` and are aggregated here.
  *
- * Editorial intent (per brief #6 §6, brief #6 decisions 9b cross-reference):
- * - Global entries cover cross-cutting principles users should know once:
- *   getting started, the cross-corpus hub search, the keyword/semantic
- *   retrieval toggle, access & cost, auditability, the free-tier metadata
- *   floor, primary-sources-not-commentary, how the docs overlay / `?`
- *   shortcut works, and how to give feedback. Ordered (order 1-9) so they
- *   list in a stable sequence everywhere.
- * - Spoke entries cover per-corpus content: a "How to use this corpus"
- *   intro (order 9), the corpus's AI synthesis mode (order 10), and the
- *   per-document Summarize action (order 20). They surface only when their
- *   spoke is the active context, sorted after the globals.
+ * - The nine global entries carry `order` 1 through 9, in the sequence they
+ *   are imported above: getting started, the cross-corpus hub search, the
+ *   keyword/semantic retrieval toggle, access & cost, auditability, the
+ *   free-tier metadata floor, primary-sources-not-commentary, how this
+ *   overlay works, and how to report a problem. They render on every surface.
+ * - Spoke entries carry `order` 9 for the "How to use this corpus" intro,
+ *   10 for the corpus's AI mode, 20 for the per-document Summarize action,
+ *   and 11 for the one second surface inside a spoke (`about-clemency`,
+ *   which lives in the Presidential spoke). They render only when that spoke
+ *   is the active context.
  *
- * Ordering is the editorial sequence from the in-app documentation draft
- * (the full text reviewed 2026-06-02 and folded back in).
+ * A spoke intro shares `order` 9 with `giving-feedback`, and the tie is
+ * broken by title in `selectDocsForContext` — every intro is titled "How to
+ * use…", which sorts after "Giving Feedback", so the nine globals do in fact
+ * come first. That is a property of the titles, not of the numbers.
+ *
+ * Three entries are registered and can never surface: `about-lawfare`,
+ * `lawfare-narrative-synthesis` and `lawfare-article-summary` are scoped to
+ * the `lawfare` spoke, which was federated into Commentary and is no longer
+ * in `spokes/registry.ts`, so nothing ever sets that context. They are kept
+ * rather than deleted because `scripts/suggestions-export.mjs` carries rows
+ * off their demo and good-question blocks; deleting them is a decision about
+ * that CSV, not about this file.
  */
 export const docsEntries: readonly DocsEntry[] = [
   // Global

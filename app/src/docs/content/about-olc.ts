@@ -39,8 +39,12 @@ any year-over-year count should be read as "released," not "issued."
 **What it's good for.** Doctrinal questions — "what has OLC said about
 recess appointments / war powers / executive privilege" — where AI
 narrative synthesis (the paradigmatic mode here) shines. Keyword search
-underperforms on abstract doctrinal phrasing, so lean on AI synthesis to
-find documents by concept.
+underperforms on abstract doctrinal phrasing, and there are two free ways
+around that before you spend anything: the **Search by** row above the
+filters has a Semantic setting that matches meaning rather than words (see
+*Keyword vs. Semantic Search*), and it defaults to running both at once.
+Use AI synthesis when you want the opinions read and tied together, not
+merely found.
 
 **Demo queries:** "OLC on the President's removal power"; filter by date
 range to see a decade's released opinions; summarize a specific opinion.

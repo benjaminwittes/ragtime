@@ -16,14 +16,14 @@ import { useDocs } from './DocsContext'
  * The floating-documentation overlay.
  *
  * Mounted by DocsProvider; renders a shadcn Sheet that slides in from the
- * right when isOpen becomes true. Shows a list of available entries
- * (filtered by current spoke context) on top; selected entry's markdown
- * content rendered below.
+ * right when isOpen becomes true. It shows one of two things, never both: the
+ * list of entries that apply here (globals plus the active spoke's), or one
+ * entry's markdown with an "← All topics" button back to the list.
  *
- * v1 = infrastructure only; the docs registry is empty, so the empty-state
- * message is what users see. Editorial content lands in PR 4b (or staged
- * with each spoke's implementation, so per-spoke docs are written against
- * the real surface).
+ * The empty state below is unreachable in this build — the registry is never
+ * empty, and the globals alone make `selectDocsForContext` return nine on
+ * every surface. It is kept as the honest branch for a registry that has been
+ * emptied, and it says that rather than naming a pull request.
  */
 export function DocsOverlay() {
   const { isOpen, close, activeSlug, activeSpokeSlug, open } = useDocs()
@@ -48,8 +48,7 @@ export function DocsOverlay() {
         {entries.length === 0 ? (
           <div className="px-6 py-8">
             <p className="text-sm text-muted-foreground italic">
-              No documentation entries registered yet. (Infrastructure landed
-              in PR 4a; editorial content is a later pass.)
+              No documentation topics apply here.
             </p>
           </div>
         ) : (

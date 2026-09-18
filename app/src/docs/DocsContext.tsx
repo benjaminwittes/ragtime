@@ -22,10 +22,11 @@ import { DocsOverlay } from './DocsOverlay'
  *   - setActiveSpokeSlug: setter for the spoke context (called by the
  *     spoke renderer when the user enters/leaves a spoke)
  *
- * The provider also wires the global `?` keyboard shortcut (Shift+/) that
- * opens the overlay from anywhere in the app — suppressed when the user is
- * typing in an input/textarea/contenteditable so it doesn't fight with
- * normal typing.
+ * The provider also wires the global `?` keyboard shortcut, which toggles the
+ * overlay from anywhere in the app rather than only opening it — suppressed
+ * when the user is typing in an input, textarea, select or contenteditable so
+ * it doesn't fight with normal typing. It keys on the character `?`, not on
+ * Shift+/, so a layout that puts `?` elsewhere still works.
  */
 export type DocsContextValue = {
   isOpen: boolean

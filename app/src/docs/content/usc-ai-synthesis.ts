@@ -59,9 +59,12 @@ analysis with inline citations to specific sections.
 estimate before every query; refine the question if the scope is larger
 than you intended, or opt out via its "don't show again" checkbox.
 
-**Phase 2: semantic retrieval.** USC questions about *principles*
+**Keyword only, on this corpus.** USC questions about *principles*
 (\`due process\`, \`commerce clause concepts\`) underperform on keyword
-search. The pgvector upgrade is on the post-beta roadmap and matters
-most acutely on USC and OLC.
+search, and the U.S. Code is one of the three corpora with no semantic
+search at all — there is no "Search by" row on this spoke, and the AMA
+planner writes SQL. Ask for the provision, the actor, or the citation, and
+the analysis will find the cluster around it; ask for the principle and you
+are relying on the Code having used your word.
 `.trim(),
 }

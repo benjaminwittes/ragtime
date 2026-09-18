@@ -38,8 +38,11 @@ right.
 - **Publication and Author are first-class filters.** Scope to Lawfare or
   Executive Functions, and to a specific author by name (the same author often
   writes in both venues — Jack Goldsmith is the canonical case).
-- **Content type.** Filter to articles, essays, podcasts, newsletters, or
-  roundups.
+- **Content type.** A select built from the types the corpus actually holds
+  — articles, podcasts, newsletters and the rest — and scoped to whichever
+  publication you picked, if you picked one. There is no separate roundup
+  toggle and no topic filter: neither field is first-class across both
+  publications.
 - **Coverage is uneven.** Lawfare runs 2010→present; Executive Functions only
   from December 2024. Absence of Executive Functions coverage before then means
   the publication did not yet exist.

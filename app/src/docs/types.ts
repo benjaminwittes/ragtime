@@ -1,24 +1,21 @@
 /**
  * Docs-registry types.
  *
- * The docs registry is the cross-cutting documentation infrastructure
- * established in brief #6 §6 (the "v1 modifications" that delete the
- * welcome card and move "How to use" into floating documentation).
+ * The docs registry is the cross-cutting documentation infrastructure from
+ * brief #6 §6, which replaced two surfaces that no longer exist: the spoke
+ * welcome card and the tooltips that used to hang off the mode buttons. Both
+ * are gone from the app; this overlay is what stands in their place.
  *
  * Entries are markdown content keyed by slug and scoped either globally
- * (cross-cutting principles, auditability, etc.) or to a specific corpus
- * spoke ("How to use the litigation surface", "About FRUS", etc.).
+ * (cross-cutting principles, auditability, access and cost) or to a specific
+ * corpus spoke ("How to Use: OLC Opinions", "Summarize This Section").
+ * The registry is populated — see `registry.ts` for the count and the
+ * ordering rules. The infrastructure-only stage is long past.
  *
- * v1 = infrastructure only (PR 4a). Editorial content per spoke is a
- * later editorial pass (PR 4b or staged with each spoke's implementation).
- *
- * Cross-references to the strategic briefs:
- * - brief #6 §6 — welcome card removal; "How to use" → floating documentation
- * - brief #6 §6 — mode-button tooltips deleted when floating documentation
- *   lands (so this infrastructure replaces both surfaces)
- * - brief #7 §2 — per-collection plain-English disclosure is *not* the same
- *   as docs entries (that's surfaced in the header band); docs entries are
- *   the longer-form "how to use this" content.
+ * Not the same thing as a spoke's `plainEnglishDisclosure` (brief #7 §2),
+ * which the spoke header renders inline and which states what a corpus holds.
+ * Docs entries are the longer-form "how to use this" content behind the
+ * overlay.
  */
 
 import type { CorpusSlug } from '@lawfare/ragtime-client'

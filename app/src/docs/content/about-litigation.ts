@@ -1,9 +1,18 @@
 import type { DocsEntry } from '../types'
 
 /**
- * Litigation spoke "How to use" entry — what's in the corpus, the
- * post-1/20/2025 coverage floor and why it's there, what it's good for,
- * demo queries, and two things to know about search today.
+ * Litigation spoke "How to use" entry — what's in the corpus, the coverage
+ * floor and why it's there, what it's good for, demo queries, and two things
+ * to know about search today.
+ *
+ * The floor moved. `spokes/litigation/index.ts` blanked its own
+ * `plainEnglishDisclosure` with the note that "filed since 2025-01-20" is
+ * stale — comprehensive coverage reaches back to Q4 2024 and curated
+ * collections (January 6 to 2021, AI liability) go earlier still. That
+ * comment is the newest word on it and what the prose below follows. Note
+ * that the same file's `getHoldings` still reports the old floor in its
+ * `coverage` string and `knownGaps`; that disagreement is the spoke's to
+ * settle, not this entry's to repeat.
  */
 export const aboutLitigationEntry: DocsEntry = {
   slug: 'about-litigation',
@@ -12,18 +21,25 @@ export const aboutLitigationEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'litigation' },
   order: 9,
   content: `
-**What's in it.** All federal district-court and appellate dockets — the
-case metadata (parties, court, judge, dates, cause / nature-of-suit) plus
-the full docket entries, and OCR text of attached filings where we have it,
-filed since January 20, 2025. This floor is an arbitrary artifact of the
-original use case Lawfare built this corpus for: identifying violated court
-orders in immigration habeas cases during the second Trump administration.
-We will push it backward over time; for now, treat the corpus as "the Trump
-II era" of federal litigation. The header shows the exact last-synced date.
-The corpus updates continuously but can be up to a few days behind the
-current state of any given docket — so don't assume the listings include
-the current day's filings. RAGtime is not a substitute for PACER or
-CourtListener for up-to-the-minute docket tracking.
+**What's in it.** Federal district-court and appellate dockets — the case
+metadata (parties, court, judge, dates, cause / nature-of-suit) plus the
+docket entries themselves, and OCR text of attached filings where we have
+it.
+
+**Where the corpus starts, and why it is not one date.** Comprehensive
+coverage runs from the last quarter of 2024 forward. That floor is an
+artifact of the use case Lawfare first built this corpus for — identifying
+violated court orders in immigration habeas cases during the second Trump
+administration — and it is being pushed backward over time. Curated
+**collections** reach further back than the floor does: January 6
+prosecutions to 2021, AI liability, and others. So "how far back does this
+go" has two answers, and the **Collection** filter is where the second one
+lives. The header band shows the last-synced date and the live counts.
+
+The corpus updates continuously but can be a few days behind the current
+state of any given docket — so don't assume the listings include today's
+filings. RAGtime is not a substitute for PACER or CourtListener for
+up-to-the-minute docket tracking.
 
 **What it's good for.** Tracking and analyzing live federal litigation:
 who's suing whom over what, where, and how the cases are moving. Because
@@ -53,10 +69,14 @@ criteria:
 
 **Two things to know about search today.**
 
-- Full-text search currently runs over docket-entry descriptions, not yet
-  the full text of every attached document — full-document search will land
-  as the document-text backfill completes over the next several weeks.
-- Searching with no court selected returns nothing; "All courts" is the
-  default for a reason.
+- Full-text search runs over docket-entry descriptions, not the full text
+  of every attached document. Full-document search lands when the ingest
+  backfill populates the document text and it is indexed; until then, a
+  phrase buried inside a filed PDF is not findable here even though the PDF
+  is.
+- The court selector opens with every court checked, and the form sends
+  exactly what is checked. Uncheck them all and you have asked for cases in
+  no court — which is not a narrower search but an empty one. Narrow the
+  list rather than clearing it.
 `.trim(),
 }

@@ -26,7 +26,8 @@ is arriving in priority order: sanctions and designation notices (OFAC,
 State Department), immigration notices (USCIS), and significant notices
 landed first; the broad historical sweep is loading now. If a notice
 count looks low for an agency or an era, the wave may simply not have
-reached it yet — the corpus card's live count is the current state.
+reached it yet — the holdings band at the top of this spoke carries the
+current figure, and the rounded one on the hub is not the place to check.
 Newly loaded notices are keyword-searchable immediately and become
 semantically searchable as the embedding queue catches up.
 

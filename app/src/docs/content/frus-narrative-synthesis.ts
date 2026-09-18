@@ -50,11 +50,15 @@ verbatim when interesting (a document marked SECRET at the time, or — for
 the inverse signal — a document marked UNCLASSIFIED on a sensitive topic).
 Person attribution is explicit when the TEI extraction made it possible.
 
-**Phase 2: semantic retrieval.** FRUS questions about *concepts*
-(containment, deterrence, "the special relationship") benefit substantially
-from semantic retrieval that v1 keyword search underperforms on. Questions
-about specific *events* (Berlin Airlift, Bay of Pigs, Suez) work well now.
-The semantic-retrieval upgrade is on the post-beta roadmap.
+**What the planner retrieves with, and what it doesn't.** This mode writes
+SQL, so its reach is the words in the record: questions about specific
+*events* (Berlin Airlift, Bay of Pigs, Suez) land well, and questions about
+*concepts* (containment, deterrence, "the special relationship") are at the
+mercy of whether the cables used your word. Plain search on this spoke does
+have a **Semantic** setting — see *Keyword vs. Semantic Search* — and it is
+the better instrument for a concept. The AMA planner does not reach for it
+yet, so for a conceptual sweep, find the documents semantically first and
+then ask about what you found.
 
 **Cost.** Plan call + synthesis call. The pre-flight modal shows the
 estimate before every query — refine the question if the scope is larger

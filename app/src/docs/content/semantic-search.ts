@@ -3,10 +3,17 @@ import type { DocsEntry } from '../types'
 /**
  * Docs entry for the keyword / semantic / both retrieval toggle (brief #9,
  * locked 2026-06-11). Global-scope: the toggle renders on every spoke whose
- * descriptor sets `semanticSearch` — today OLC opinions, FRUS, Commentary,
- * Presidential Documents, the Federal Register, Congress, FBI Records and
- * Sanctions — and reads identically on each, and its DocsHint deep-links
- * here from all of them.
+ * descriptor sets `semanticSearch` AND is registered in `spokes/registry.ts`
+ * — today OLC opinions, FRUS, Commentary, Presidential Documents, the Federal
+ * Register, Congress, FBI Records and Sanctions, eight of the eleven. It reads
+ * identically on each (`spokes/components/SearchModeToggle.tsx`, gated in each
+ * shell by `spoke.semanticSearch`), and its DocsHint deep-links here from all
+ * of them.
+ *
+ * `spokes/lawfare/index.ts` also sets the flag and does NOT count: that spoke
+ * is not in the registry, so nothing mounts it. USC, CFR and litigation do not
+ * set it and get no toggle. Re-derive the list from those two facts rather
+ * than from this comment.
  */
 export const semanticSearchEntry: DocsEntry = {
   slug: 'semantic-search',
@@ -45,12 +52,14 @@ not constrain the semantic pane in this version — if you need a
 filter-bounded set, use Keyword mode or read the semantic pane knowing
 it spans the whole corpus.
 
-**Where it's available.** Corpora whose documents have been embedded:
-OLC opinions, FRUS, Commentary, Presidential Documents, the Federal
-Register, Congress, FBI Records, and Sanctions today; more as embedding
-coverage grows. On corpora still being loaded (Federal Register notices,
-parts of the Congressional Record), newly added documents become
-semantically searchable as the embedding queue catches up — keyword search
-covers them immediately. Searches in any mode are free.
+**Where it's available.** Eight of the eleven corpora: OLC opinions, FRUS,
+Commentary, Presidential Documents, the Federal Register, Congress, FBI
+Records, and Sanctions. The U.S. Code, the CFR, and federal litigation have
+keyword search only — on those three the "Search by" row simply isn't there,
+rather than being shown greyed out. Where a corpus is still loading — the
+Federal Register's notices are arriving in waves — newly added documents are
+keyword-searchable at once and become semantically searchable as the
+embedding queue catches up. Searches in any mode are free, on every corpus,
+with no key and no account.
 `,
 }

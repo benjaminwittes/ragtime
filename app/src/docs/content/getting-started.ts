@@ -34,7 +34,14 @@ yet know which corpus holds your answer. (Sanctions is the one the fan
 leaves out; search that corpus from its own workspace.) **Explorer** sends
 the same box to the Explorer, which takes a question in your own words,
 plans the research, and hands you into the corpora it used. That one reads
-with AI, so it needs a key, a balance, or a demo password.
+with AI, and it runs on Claude specifically: it needs a Lawfare-billed
+balance or an **Anthropic** key. A key for another provider is refused with
+a line saying so before anything is sent.
+
+Below the first screen the hub lists the corpora themselves, in four groups
+— the law, as read, the record, and commentary — each with its headline
+count and a line about what it holds. The foot of the first screen says how
+many there are and scrolls you to them.
 
 **Each spoke** is a corpus's own workspace, with the structured filters,
 the canonical document view, and the AI modes that fit that corpus.
@@ -54,8 +61,9 @@ the canonical document view, and the AI modes that fit that corpus.
   system gives you an estimate of the cost before you run it.
 
 **A note on what's free.** Searching and structured filtering on the local
-database are free on every corpus. The AI features run on either your own
-API key or a Lawfare-billed prepaid balance — see Access & cost. This
+database are free on every corpus, and so is semantic search on the eight
+corpora that have it. The AI features run on either your own API key or a
+Lawfare-billed prepaid balance — see Access & cost. This
 billing exists only to recoup Lawfare's cost of running the system: we
 charge $1.35 for every $1.00 of actual API usage on our key. This markup
 covers expenses associated with the search functions. It is not designed

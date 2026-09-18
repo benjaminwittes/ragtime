@@ -5,12 +5,17 @@ import type { DocsEntry } from '../types'
  * on every surface), because the hub search routes users into the spokes.
  *
  * This entry describes the Search mode of the hub's box, which is the mode it
- * opens in. The other one hands the same words to the Explorer and is described
- * where the Explorer is (`getting-started`, `explorer-*`) — the box is one
- * field with two destinations, not two features (`hub/HubKeywordSearch.tsx`).
- * The chip row that once let a reader pick corpora is gone; the fan covers
- * every spoke except sanctions (`HUB_KEYWORD_SPOKES`), so the counts below
- * track `spokes/registry.ts` and that one exclusion.
+ * opens in (`useState<Mode>('search')`). The other tab hands the same words to
+ * `/explorer`; the Explorer itself is described in `getting-started` and
+ * `access-and-cost` — there is no `explorer-*` entry in the registry — because
+ * the box is one field with two destinations, not two features
+ * (`hub/HubKeywordSearch.tsx`). The chip row that once let a reader pick corpora
+ * is gone; the fan covers every spoke except sanctions (`HUB_KEYWORD_SPOKES`),
+ * so the counts below track `spokes/registry.ts` and that one exclusion.
+ *
+ * The price under each tab went with the chips: `MODES[].cost` is now drawn in
+ * the tab's own margin and revealed on hover or focus from `sm` up, so nothing
+ * stands under the words at rest. The prose below says that, not the caption.
  */
 export const hubKeywordSearchEntry: DocsEntry = {
   slug: 'hub-keyword-search',
@@ -61,17 +66,21 @@ that takes you to that corpus's full surface. In the workspace you can:
 - Use the corpus-specific AI mode (Ask, narrative synthesis, legal
   analysis) where available.
 
-**Search here, or ask?** That is what the two tabs are for, and each one
-says so twice: the heading above the box changes its verb with the mode,
-and the caption under the tab names the cost. Search matches words, so use
-it when you have a phrase, a name, or a citation you expect to appear
-verbatim ("Freedom of Information Act", "5 U.S.C. 552") — and the
-placeholder cycles through examples of exactly that, one per corpus, which
-Tab will put in the box for you. When the question is in your own words and you
-don't know the wording the documents use, switch to Explorer and ask it:
-that is a conversation which researches across the corpora and hands you
-off into them. Each corpus workspace also has its own AI modes once you
-know where you're looking. Those read with AI; Search doesn't.
+**Search here, or ask?** That is what the two tabs are for, and the page
+says so in two places. The heading above the box changes its verb with the
+mode. And each tab's price — "free, no AI" for Search, "uses AI" for
+Explorer — waits in the margin on that tab's own outside edge, appearing
+while the tab is under a pointer or a focus ring on screens wide enough to
+hold it. Search matches words, so use it when you have a phrase, a name, or
+a citation you expect to appear verbatim ("Freedom of Information Act",
+"5 U.S.C. 552") — and the box types out examples of exactly that, three for
+each corpus in turn, which Tab will put in the field for you while the box
+is still empty. Switching tabs rewrites the same example as a question in
+your own words, because that is what the Explorer takes. When you don't
+know the wording the documents use, switch and ask it: that is a
+conversation which researches across the corpora and hands you off into
+them. Each corpus workspace also has its own AI modes once you know where
+you're looking. Those read with AI; Search doesn't.
 
 **Why this matters.** Most real research questions span corpora — "Where
 does this credible-fear standard come from in immigration law?" pulls

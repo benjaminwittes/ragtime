@@ -33,10 +33,19 @@ content search; "documents *from* 1965" is not a question the corpus can
 answer, and the AI modes will say so rather than fake a chronology.
 
 **Collections are the browse spine.** Every document files under a Vault
-subject. The Collection box in the filter is a typeahead over all 1,755
-subjects — start typing and pick one (the stored names are messy: slugs
-like "rosenberg-case" next to human titles like "Kansas City Massacre";
-the typeahead handles both spellings).
+subject, and the Collection box in the filter is a typeahead over all 1,755
+of them: start typing, then pick from the list rather than typing a name
+through.
+
+Picking matters, because the stored names are the Bureau's, not English.
+Some are slugs ("rosenberg-case", "cointel-pro"), some are titles ("Kansas
+City Massacre"), and the box matches what you type as a substring of the
+stored value — with hyphens and underscores read as spaces, and nothing
+else. So "Cointel Pro" finds the COINTELPRO files and "COINTELPRO" finds
+nothing at all; "D B Cooper" finds the D.B. Cooper file and "D.B. Cooper"
+finds nothing. Type a fragment you are sure of, read what comes back, and
+click it — the chip that appears afterwards shows the stored value you are
+actually filtering on.
 
 **Searching tip.** These are OCR'd historical records in period
 vocabulary. The Bureau's own program names rarely match modern phrasing —
