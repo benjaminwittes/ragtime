@@ -206,10 +206,11 @@ export function AmaPreflight({
           )}
 
           <p className="mt-4 text-[11px] text-muted-foreground">
-            Estimate is from the agent&apos;s planning step and may be off.
-            Cancel and refine the question if you want to narrow scope. Broad
-            questions over a large scope can take up to a minute or two to
-            run.
+            Estimate is from the agent&apos;s planning step and may be off;
+            the session log reports what the query actually spent once it
+            finishes. Cancel and refine the question if you want to narrow
+            scope. Broad questions over a large scope can take up to a minute
+            or two to run.
           </p>
           </div>
 

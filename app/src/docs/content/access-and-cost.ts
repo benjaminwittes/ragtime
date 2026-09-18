@@ -10,6 +10,13 @@ import type { DocsEntry } from '../types'
  * (`components/SiteBar.tsx`). And the 1.35x figure appears nowhere in this
  * repo: it is a Worker-side billing fact, so it is repeated here as given and
  * must not be "corrected" from anything in the frontend.
+ *
+ * The courtesy buffer is REAL — `legal/terms-of-service-content.ts` states it
+ * — so do not cut it again as unsupported. A pass on 2026-09-18 grepped the
+ * spoke code for "buffer", found nothing, and deleted it; the ToS had it all
+ * along. It does not contradict the pre-flight paragraph: the pre-flight
+ * refuses a query ESTIMATED to go below zero, while the buffer lets one
+ * ALREADY RUNNING overshoot slightly.
  */
 export const accessAndCostEntry: DocsEntry = {
   slug: 'access-and-cost',
@@ -59,6 +66,11 @@ or low. If the estimate is over your balance the modal says so and lets you
 proceed anyway — the query often lands cheaper — but if execution would take
 the balance below zero the Worker stops it there. If the estimate is over
 your per-query cap, refine the question or proceed once as an override.
+
+There is also a small **courtesy buffer** on the paid tier: a query already
+under way can finish even if it lands a little past your balance, and new
+paid queries pause until you add credit. The Terms of Service state the
+commitment.
 
 **Why a cost estimate on every AI action?** AI calls over large document
 sets cost real money. Showing the estimate up front keeps the tool honest
