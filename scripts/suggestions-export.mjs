@@ -1030,7 +1030,7 @@ function extractPlaceholders() {
       if (hint) extra.push(FORMAT_HINT_CONSTRAINT + ' (' + hint + ')')
       if (short === 'spokes/fbi/FbiFilterForm.tsx' && line === 248) {
         extra.push(
-          'LIVE BUG: this is the FBI collection typeahead, so its example must match a real stored collection value. It does not — the stored values are "cointel-pro" and "D-B-Cooper " (with a trailing space), so "COINTELPRO" and "D.B. Cooper" match nothing in the box they label',
+          'TYPEAHEAD, NOT PROSE: this is the FBI collection field, so every example must be a spelling that actually matches a stored collection. The worker matches the typed string as a case-insensitive substring of the stored value, or of that value with hyphens and underscores turned into spaces. The stored values here are "cointel-pro" and "D-B-Cooper " (with a trailing space), so "COINTELPRO" and "D.B. Cooper" match NOTHING — write them the way the box itself displays them, "Cointel Pro" and "D B Cooper". Verified against the live worker 2026-09-18',
         )
       }
       records.push({
