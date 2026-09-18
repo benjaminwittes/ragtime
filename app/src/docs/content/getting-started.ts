@@ -1,6 +1,14 @@
 import type { DocsEntry } from '../types'
 
 /**
+ * The Explorer's credentials are the three named by the app's own
+ * no-credential message — `explorer/hooks/useExplorer.ts:76` and
+ * `explorer/ExplorerPage.tsx:101`: "Sign in, add an Anthropic key, or enter
+ * the demo password to ask." A pass on 2026-09-18 cut the demo password on
+ * the strength of `ExplorerPage.tsx:53`, which only proves a NON-Anthropic
+ * BYOK key is refused — it says nothing about demo mode. Do not narrow this
+ * list again without reading that message.
+ *
  * Global "Start Here" orientation entry. The one-minute explanation of what
  * RAGtime is and the three things you can do on any corpus. Ordered first
  * among the global topics.
@@ -35,8 +43,8 @@ leaves out; search that corpus from its own workspace.) **Explorer** sends
 the same box to the Explorer, which takes a question in your own words,
 plans the research, and hands you into the corpora it used. That one reads
 with AI, and it runs on Claude specifically: it needs a Lawfare-billed
-balance or an **Anthropic** key. A key for another provider is refused with
-a line saying so before anything is sent.
+balance, an **Anthropic** key, or the demo password. A key for another
+provider is refused with a line saying so before anything is sent.
 
 Below the first screen the hub lists the corpora themselves, in four groups
 — the law, as read, the record, and commentary — each with its headline
