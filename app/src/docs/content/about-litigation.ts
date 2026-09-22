@@ -1,9 +1,9 @@
 import type { DocsEntry } from '../types'
 
 /**
- * Litigation spoke "How to use" entry — what's in the corpus, the
- * post-1/20/2025 coverage floor and why it's there, what it's good for,
- * demo queries, and two things to know about search today.
+ * Litigation spoke "How to use" entry — what's in the corpus (served live
+ * from CourtListener, all dates), what it's good for, demo queries, and two
+ * things to know about search today.
  */
 export const aboutLitigationEntry: DocsEntry = {
   slug: 'about-litigation',
@@ -12,18 +12,14 @@ export const aboutLitigationEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'litigation' },
   order: 9,
   content: `
-**What's in it.** All federal district-court and appellate dockets — the
-case metadata (parties, court, judge, dates, cause / nature-of-suit) plus
-the full docket entries, and OCR text of attached filings where we have it,
-filed since January 20, 2025. This floor is an arbitrary artifact of the
-original use case Lawfare built this corpus for: identifying violated court
-orders in immigration habeas cases during the second Trump administration.
-We will push it backward over time; for now, treat the corpus as "the Trump
-II era" of federal litigation. The header shows the exact last-synced date.
-The corpus updates continuously but can be up to a few days behind the
-current state of any given docket — so don't assume the listings include
-the current day's filings. RAGtime is not a substitute for PACER or
-CourtListener for up-to-the-minute docket tracking.
+**What's in it.** Federal district-court and appellate dockets, searched
+live on CourtListener's RECAP archive at any filing date: the case metadata
+(court, judge, dates, cause / nature-of-suit), the docket entries, and the
+text of attached filings where RECAP has them. RECAP holds only what
+someone has bought from PACER, so coverage is uneven by court and by case.
+An empty result means CourtListener holds nothing that matches, not that
+nothing was filed. RAGtime is not a substitute for PACER for complete,
+up-to-the-minute docket tracking.
 
 **What it's good for.** Tracking and analyzing live federal litigation:
 who's suing whom over what, where, and how the cases are moving. Because
@@ -53,9 +49,8 @@ criteria:
 
 **Two things to know about search today.**
 
-- Full-text search currently runs over docket-entry descriptions, not yet
-  the full text of every attached document — full-document search will land
-  as the document-text backfill completes over the next several weeks.
+- Full-text search runs over docket entries and the text of the filings
+  RECAP holds. Results come newest first, 100 at a time.
 - Searching with no court selected returns nothing; "All courts" is the
   default for a reason.
 `.trim(),

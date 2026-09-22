@@ -270,15 +270,22 @@ export type CollectionRef = {
   name: string
 }
 
+/** Litigation is served live from CourtListener (federate-api), so the facets
+ *  are CourtListener's: the court list is its federal court table, and
+ *  `case_count` its docket count over those courts — null when the count probe
+ *  failed. `entry_count` and `last_synced` are null: there is no mirror and no
+ *  sync. `judges` and `collections` are empty — there is no judge pick-list
+ *  upstream (the filter matches a judge by name) and collections were a
+ *  mirror-only curation. */
 export type CorpusFacets = {
-  case_count: number
-  entry_count: number
+  case_count: number | null
+  entry_count: number | null
   court_count: number
-  /** YYYY-MM-DD; the Worker derives it from MAX(last_synced_at). */
-  last_synced: string
-  /** All distinct court codes in the corpus (used for the courts checkbox list). */
+  /** YYYY-MM-DD, or null for a live corpus with nothing to sync. */
+  last_synced: string | null
+  /** Court codes for the courts checkbox list. */
   courts: string[]
-  /** All distinct judge names in the corpus (used for the judge dropdown). */
+  /** Judge names for a pick-list; empty when the corpus has none. */
   judges: string[]
   collections: CollectionRef[]
 }
@@ -289,10 +296,7 @@ export async function fetchCorpusFacets(): Promise<CorpusFacets> {
     headers: { 'content-type': 'application/json' },
     body: '{}',
   })
-  if (!r.ok) {
-    const msg = await safeErrorMessage(r)
-    throw new Error(`/corpus/facets failed (${r.status}): ${msg}`)
-  }
+  if (!r.ok) throw await corpusError(r, '/corpus/facets')
   return (await r.json()) as CorpusFacets
 }
 
@@ -351,29 +355,41 @@ export type CaseDisplayRow = {
 }
 
 export type FilterResult = {
+  /** Exactly the rows returned — never the whole match set. */
   cl_ids: number[]
   display_rows: CaseDisplayRow[]
+  /** CourtListener's true total; exceeds `cl_ids.length` when more pages
+   *  remain. */
   count: number
-  /** The SQL the Worker generated for the display query — surfaced for the
-   *  auditability principle (brief #6 governing principles, §7b item 3). */
+  /** Opaque cursor for the next rows: POST the same fields with `cursor`.
+   *  Null (or absent) when the match set is exhausted. */
+  next_cursor?: string | null
+  /** Keyword-match snippets for the returned rows, keyed by cl_id. Present
+   *  for keyword filters; saves the /corpus/snippets round trip. */
+  snippets?: Record<string, string>
+  /** How the rows were produced — for litigation, the replayable
+   *  CourtListener request. Surfaced for the auditability principle (brief #6
+   *  governing principles, §7b item 3). */
   generated_sql: string
-  /** The id-set query — separate so the user can see the cheap path too. */
-  executed_sql: string
+  /** Null for litigation: there is no SQL scope to hand back. */
+  executed_sql: string | null
 }
 
 export async function runManualFilter(
   fields: FilterFields,
   scope?: FilterScope,
+  cursor?: string,
 ): Promise<FilterResult> {
   const r = await fetch(`${WORKER_URL}/corpus/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields, scope: scope ?? {} }),
+    body: JSON.stringify({
+      fields,
+      scope: scope ?? {},
+      ...(cursor ? { cursor } : {}),
+    }),
   })
-  if (!r.ok) {
-    const msg = await safeErrorMessage(r)
-    throw new Error(`/corpus/filter failed (${r.status}): ${msg}`)
-  }
+  if (!r.ok) throw await corpusError(r, '/corpus/filter')
   return (await r.json()) as FilterResult
 }
 
@@ -556,9 +572,10 @@ export async function confirmClaudeSql(
  * /corpus/analyze — one-shot analytical narrative ("claude_analysis" mode)
  * ------------------------------------------------------------------------- */
 
-/** Server-side hard cap on cases per /corpus/analyze (the context won't fit
- *  beyond this). Mirrors CLAUDE_ANALYSIS_HARD_CAP in worker/index.js. */
-export const ANALYSIS_HARD_CAP = 2000
+/** Server-side hard cap on cases per /corpus/analyze. Each case costs one
+ *  CourtListener docket-entries call, so the cap is sized to the service
+ *  key's hourly budget. Mirrors LITIGATION_ANALYSIS_CAP in worker/index.js. */
+export const ANALYSIS_HARD_CAP = 150
 
 /** Per-case annotations the model may emit alongside the narrative. All
  *  fields are optional — the model includes only what fits the prompt
@@ -4587,10 +4604,7 @@ export async function fetchCasesByIds(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ids }),
   })
-  if (!r.ok) {
-    const msg = await safeErrorMessage(r)
-    throw new Error(`/corpus/cases failed (${r.status}): ${msg}`)
-  }
+  if (!r.ok) throw await corpusError(r, '/corpus/cases')
   const body = (await r.json()) as { rows: CaseDisplayRow[] }
   return body.rows
 }
@@ -4616,7 +4630,7 @@ export type ReadBatchResult = {
  *  worth keeping near the orchestrator that uses them. */
 export const READ_BATCH_SIZE = 25 // cases per /corpus/read-batch call
 export const READ_CONCURRENCY = 4 // parallel in-flight calls
-export const READ_MAX_BATCH = 100 // Worker hard cap per batch
+export const READ_MAX_BATCH = 25 // Worker hard cap per batch (LITIGATION_READ_BATCH_CAP)
 
 /** Single /corpus/read-batch call against a slice of case IDs. */
 export async function runReadBatch(
@@ -4722,6 +4736,10 @@ export type DocketEntryRow = {
 
 export type CaseEntriesResult = {
   entries: DocketEntryRow[]
+  /** The docket's full entry count upstream. */
+  total?: number
+  /** True when only the newest entries were fetched. */
+  truncated?: boolean
 }
 
 export async function fetchCaseEntries(clId: number): Promise<CaseEntriesResult> {
@@ -4730,10 +4748,7 @@ export async function fetchCaseEntries(clId: number): Promise<CaseEntriesResult>
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ cl_id: clId }),
   })
-  if (!r.ok) {
-    const msg = await safeErrorMessage(r)
-    throw new Error(`/corpus/entries failed (${r.status}): ${msg}`)
-  }
+  if (!r.ok) throw await corpusError(r, '/corpus/entries')
   return (await r.json()) as CaseEntriesResult
 }
 
@@ -5198,6 +5213,47 @@ export async function runMoreLikeThis(
 /* ----------------------------------------------------------------------------
  * Helpers
  * ------------------------------------------------------------------------- */
+
+/** Error codes whose Worker message is written for the reader, so it is shown
+ *  as-is rather than behind a route + status prefix. Litigation's upstream is
+ *  CourtListener: a spent hourly budget, a missing key, a retired mode, or a
+ *  scope the API cannot take is reported as one — never as an empty result. */
+const READER_FACING_CODES = new Set([
+  'upstream_rate_limited',
+  'upstream_error',
+  'not_configured',
+  'retired_federated',
+  'scope_too_large',
+  'scope_unsupported',
+])
+
+/** A corpus-route failure with the Worker's error code attached. */
+export class CorpusRouteError extends Error {
+  status: number
+  code?: string
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'CorpusRouteError'
+    this.status = status
+    this.code = code
+  }
+}
+
+async function corpusError(r: Response, route: string): Promise<CorpusRouteError> {
+  let message: string = r.statusText
+  let code: string | undefined
+  try {
+    const body = (await r.json()) as { error?: { message?: string; code?: string } }
+    message = body.error?.message ?? message
+    code = body.error?.code
+  } catch {
+    // Non-JSON body: fall back to the status text.
+  }
+  if (code && READER_FACING_CODES.has(code)) {
+    return new CorpusRouteError(message, r.status, code)
+  }
+  return new CorpusRouteError(`${route} failed (${r.status}): ${message}`, r.status, code)
+}
 
 async function safeErrorMessage(r: Response): Promise<string> {
   try {

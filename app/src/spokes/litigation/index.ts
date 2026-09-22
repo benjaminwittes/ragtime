@@ -11,6 +11,12 @@ import { fetchCorpusFacets } from '@/lib/worker-client'
  * `getHoldings` calls the Worker's /corpus/facets endpoint — which the
  * filter form also consumes — and reshapes its response into the
  * descriptor's CorpusHoldings type.
+ *
+ * Served live from CourtListener's REST API (federate-api, settled
+ * 2026-08-16, ragtime-evals#176). There is no hosted mirror, so the modes and
+ * affordances that ran SQL or embeddings over it are retired for this corpus:
+ * AI-writes-SQL, AMA (NL→SQL plan/execute) and more-like-this. The Worker
+ * answers them 410 retired_federated; the descriptor stops offering them.
  */
 export const litigationSpoke: CorpusSpoke = {
   slug: 'litigation',
@@ -19,39 +25,30 @@ export const litigationSpoke: CorpusSpoke = {
     'Federal district court and appellate dockets, with full docket entries and OCR text of attached filings.',
   status: 'active',
 
-  // Intentionally blank. The old "filed since 2025-01-20" line is stale:
-  // comprehensive coverage now reaches back to Q4 2024, and curated collections
-  // (J6 → 2021, AI-liability) go earlier still. Holdings detail belongs in the
-  // docs; the header stays silent until coverage harmonizes as the backfill
-  // pushes the comprehensive floor backward.
-  plainEnglishDisclosure: '',
+  plainEnglishDisclosure:
+    'Searched live on CourtListener (RECAP), at any filing date. An empty result means CourtListener holds nothing that matches, not that nothing was filed.',
 
   getHoldings: async () => {
     const f = await fetchCorpusFacets()
+    const counts: Record<string, number> = {}
+    if (f.case_count != null) counts.cases = f.case_count
+    if (f.entry_count != null) counts.docketEntries = f.entry_count
     return {
-      counts: { cases: f.case_count, docketEntries: f.entry_count },
+      counts,
       coverage:
-        'Federal district + appellate courts, post-2025-01-20 floor (backward expansion deferred to post-beta).',
-      // `last_synced` is YYYY-MM-DD from the Worker; preserved as string so
-      // formatters can choose how to render. CorpusHoldings allows Date|string.
-      lastUpdated: f.last_synced,
+        'Federal district + appellate courts, all dates — whatever RECAP holds.',
+      // Null for a live corpus: reads go upstream, there is nothing to sync.
+      lastUpdated: f.last_synced ?? 'live',
       knownGaps: [
-        'No coverage pre-2025-01-20 — backward expansion on rainy-day list.',
-        'FTS runs over docket-entry descriptions today; full-document FTS lands when the documents.text_content column is populated by the ragtime-pipeline backfill (harvest-pcg agent) and indexed (brief #6 decision 7).',
+        'RECAP holds only the dockets and filings someone has bought from PACER, so coverage is uneven by court and by case.',
+        'Keyword search only — no semantic search or more-like-this over CourtListener.',
       ],
     }
   },
 
-  // Five modes ported wholesale per brief #6 decision 3 — the set has earned
-  // its keep through production use; the React port is a re-skin + refactor,
-  // not a redesign.
-  queryModes: [
-    'manual_filter',
-    'claude_sql',
-    'claude_read',
-    'claude_analysis',
-    'claude_ama',
-  ],
+  // Brief #6 decision 3 ported five modes. Two ran SQL over the retired
+  // mirror and are gone for litigation: claude_sql and claude_ama.
+  queryModes: ['manual_filter', 'claude_read', 'claude_analysis'],
 
   // Three flagships, symmetric (brief #6 decision 2). Litigation differs
   // from FRUS/OLC (which name one paradigmatic flagship) — the stack-of-
@@ -62,7 +59,8 @@ export const litigationSpoke: CorpusSpoke = {
     paradigmatic: null,
   },
 
-  // Eight filter axes from brief #6 §2.
+  // Brief #6 §2's eight filter axes, less `collection` — a mirror-only
+  // curation the Worker now refuses by name.
   facets: [
     {
       id: 'fts',
@@ -83,10 +81,14 @@ export const litigationSpoke: CorpusSpoke = {
       optionsSource: 'corpus-query',
     },
     {
+      // CourtListener has no judge pick-list for dockets; the filter matches
+      // a judge by name. FilterForm renders a text input when the facet list
+      // arrives empty.
       id: 'judge',
       label: 'Judge',
       control: 'dropdown',
       optionsSource: 'corpus-query',
+      placeholder: 'e.g. Boasberg',
     },
     {
       id: 'case_type',
@@ -98,12 +100,6 @@ export const litigationSpoke: CorpusSpoke = {
         { value: 'mj', label: 'Magistrate' },
         { value: 'mc', label: 'Misc' },
       ],
-    },
-    {
-      id: 'collection',
-      label: 'Collection',
-      control: 'dropdown',
-      optionsSource: 'corpus-query',
     },
     {
       id: 'cause',
@@ -156,21 +152,6 @@ export const litigationSpoke: CorpusSpoke = {
   // Collections (brief #7 decision 8) flip this to 'full-doc'.
   defaultSearchDepth: 'docket-only',
 
-  // 2026-05-27 hook: declared but UI is not rendered at v1. Actual
-  // implementation post-beta Sprint 1-2.
-  moreLikeThis: {
-    documentUnit: {
-      label: 'case',
-      supportsSubDocuments: true, // sub-doc = specific filing within a case
-    },
-    similarityHints: [
-      'more cases with this theory of liability',
-      'more cases before this judge',
-      'more cases citing this opinion',
-      'more cases at this procedural posture',
-      'more cases challenging the same EO / agency action',
-    ],
-    supportsMultiSelect: true,
-    permitsCrossCorpusPivot: false, // v1 within-corpus only per 2026-05-27
-  },
+  // No `moreLikeThis`: the digest embeddings it pivoted on have no
+  // CourtListener equivalent, and RECAP is keyword-only.
 }

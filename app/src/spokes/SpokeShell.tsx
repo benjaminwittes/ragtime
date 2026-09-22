@@ -1,26 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AMA_CONFIRM_THRESHOLD_CENTS,
-  ANALYSIS_HARD_CAP,
-  type AmaPlan,
-  type AmaScope,
   type CaseDisplayRow,
   type CorpusFacets,
   type FilterFields,
+  type FilterResult,
   type FilterScope,
-  WorkerSqlError,
-  type SqlGenResult,
-  type SqlGenConfirmNeeded,
-  isSqlConfirmNeeded,
-  confirmClaudeSql,
   fetchCasesByIds,
   fetchCorpusFacets,
-  fetchMatchSnippets,
   runClaudeAnalysis,
-  runClaudeExecute,
-  runClaudePlan,
   runClaudeRead,
-  runClaudeSql,
   runManualFilter,
 } from '@/lib/worker-client'
 import { useDocs } from '@/docs/DocsContext'
@@ -28,10 +16,9 @@ import { readCarryoverQuery } from '@/lib/routing'
 import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
-import { type UsageLogRecord, newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { type UsageLogRecord } from '@/lib/usage-log'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { AmaPreflight } from './components/AmaPreflight'
 import { UsageLogAnnotation } from './components/UsageLogAnnotation'
 import { ExportBar } from './components/ExportBar'
 import { downloadCsv, fileSlug, type CsvColumn } from '@/lib/export-csv'
@@ -39,23 +26,16 @@ import { downloadNarrativePdf } from '@/lib/export-pdf'
 import { LITIGATION_BASE_COLUMNS } from '@/lib/export-columns'
 import { Breadcrumb } from './components/Breadcrumb'
 import { CaseDetailSheet } from './components/CaseDetailSheet'
-import { useMoreLikeThis, type MltSeed } from './more-like-this/useMoreLikeThis'
-import { MoreLikeThisPrompt } from './more-like-this/MoreLikeThisPrompt'
-import { MoreLikeThisView } from './more-like-this/MoreLikeThisView'
-import { ClaudeAmaForm, type AmaLogLine } from './components/ClaudeAmaForm'
 import { ClaudeAnalysisForm } from './components/ClaudeAnalysisForm'
 import { ClaudeReadForm } from './components/ClaudeReadForm'
-import { ClaudeSqlForm } from './components/ClaudeSqlForm'
 import { FilterForm } from './components/FilterForm'
 import { ModeRow } from './components/ModeRow'
 import { ResultsList } from './components/ResultsList'
 import { SpokeHeader } from './components/SpokeHeader'
 import {
   type StackPage,
-  buildClaudeAmaLabel,
   buildClaudeAnalysisLabel,
   buildClaudeReadLabel,
-  buildClaudeSqlLabel,
   buildManualFilterLabel,
 } from './stack'
 import type {
@@ -87,10 +67,14 @@ import type {
  *     banner with a "return to current" affordance.
  *   - On mount/unmount: setActiveSpokeSlug() so the docs-overlay shows
  *     spoke-scoped entries.
+ *
+ * Litigation is served live from CourtListener (federate-api). A filter page
+ * holds the newest rows loaded so far plus a cursor; "load more" on the tip
+ * appends the next rows. Every later operation (a stacked filter, Read,
+ * Analyze) runs over the loaded rows, and the page's `count` says how many
+ * the full match set holds. AI-writes-SQL, AMA and more-like-this ran over
+ * the retired mirror and are not offered here.
  */
-/** Above this many ids, send `scope_sql` (if available) instead of inlining the
- *  id list. Matches the Worker's executeCorpusPlan SCOPE_LITERAL_LIMIT (25k). */
-const SCOPE_INLINE_CAP = 25000
 
 export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const { setActiveSpokeSlug } = useDocs()
@@ -183,41 +167,9 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   // because they operate on the active scope, not a past one.
   const scopeSize = tipPage?.rows.length ?? 0
 
-  // ── Match snippets (lazy, per viewed page) ─────────────────────────────
-  // For manual_filter pages produced by a keyword search, fetch a highlighted
-  // ts_headline fragment per case showing WHY it matched. Bounded to the first
-  // SNIPPET_ROW_CAP rows (the table renders them top-first and a snippet over
-  // the full ≤10k set would hammer the corpus DB). Cached per page id so
-  // breadcrumb hops don't refetch. Failures are swallowed — snippets are an
-  // enhancement, never a gate on the results. The map is derived from the cache
-  // ref during render; the effect only does the async fetch + a version bump.
-  const SNIPPET_ROW_CAP = 60
-  const snippetCacheRef = useRef<Map<string, Record<number, string>>>(new Map())
-  const [, bumpSnippetVersion] = useState(0)
-  const snippetPage =
-    viewingPage?.source.kind === 'manual_filter' && viewingPage.searchTerm
-      ? viewingPage
-      : undefined
-  const snippets = snippetPage
-    ? (snippetCacheRef.current.get(snippetPage.id) ?? {})
-    : {}
-  useEffect(() => {
-    const term = snippetPage?.searchTerm
-    if (!snippetPage || !term || snippetCacheRef.current.has(snippetPage.id))
-      return
-    let cancelled = false
-    const ids = snippetPage.rows
-      .slice(0, SNIPPET_ROW_CAP)
-      .map((r) => r.cl_id)
-    void fetchMatchSnippets(ids, term).then((map) => {
-      if (cancelled) return
-      snippetCacheRef.current.set(snippetPage.id, map)
-      bumpSnippetVersion((v) => v + 1)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [snippetPage])
+  // Keyword-match snippets ride along on the filter response (CourtListener's
+  // own highlighting), stored per page — no lazy per-page fetch.
+  const snippets = viewingPage?.snippets ?? {}
 
   /** Push a new page onto the stack and move viewing to it. */
   function pushPage(p: Omit<StackPage, 'id'>) {
@@ -237,39 +189,24 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setViewingIdx(stack.length - 1)
   }
 
-  /** Build the scope payload for /corpus/filter and /corpus/sql from the tip's
-   *  FULL id-set. Empty stack → empty scope (full corpus).
-   *
-   *  Uses the page's full `clIds` (not the capped display `rows`) so a filter of
-   *  e.g. 195k criminal cases is genuinely searched — previously this read
-   *  `rows` and silently truncated every downstream AI op to the 10k display
-   *  rows. For large scopes we send `scope_sql` (a tiny query the Worker
-   *  re-derives) instead of inlining tens of thousands of ids; the Worker's
-   *  cl_ids inline cap is 25k (executeCorpusPlan SCOPE_LITERAL_LIMIT). */
+  /** Build the scope payload for /corpus/filter from the tip's loaded id-set.
+   *  Empty stack → empty scope (full corpus). The Worker ANDs the ids into the
+   *  CourtListener query and refuses a scope over its id cap by name
+   *  (scope_too_large), which surfaces as the query error. */
   function buildScopeFromTip(): FilterScope {
     if (!tipPage) return {}
     const ids = tipPage.clIds ?? tipPage.rows.map((r) => r.cl_id)
     if (ids.length === 0) return {}
-    if (ids.length > SCOPE_INLINE_CAP && tipPage.scopeSql) {
-      return { scope_sql: tipPage.scopeSql }
-    }
     return { cl_ids: ids }
   }
 
   const enabledModes = useMemo<QueryMode[]>(() => {
     const enabled: QueryMode[] = ['manual_filter']
-    if (byokConfigured) enabled.push('claude_sql')
     if (byokConfigured && scopeSize > 0) enabled.push('claude_read')
-    if (
-      byokConfigured &&
-      scopeSize > 0 &&
-      scopeSize <= ANALYSIS_HARD_CAP
-    ) {
-      enabled.push('claude_analysis')
-    }
-    // claude_ama is BYOK-only; it operates on the current scope OR the full
-    // corpus, so it has no scope gate. The pre-flight modal handles cost.
-    if (byokConfigured) enabled.push('claude_ama')
+    // Analyze stays selectable over its cap: at 150 cases the cap is hit by
+    // two loaded pages, and the form explains it (narrow first) where a
+    // disabled tab would only say "soon".
+    if (byokConfigured && scopeSize > 0) enabled.push('claude_analysis')
     return enabled
   }, [byokConfigured, scopeSize])
 
@@ -279,22 +216,68 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     if (!canSubmit) return
     setQueryLoading(true)
     setQueryError(undefined)
+    setLoadMoreError(undefined)
     try {
-      const r = await runManualFilter(fields, buildScopeFromTip())
+      const scope = buildScopeFromTip()
+      const r = await runManualFilter(fields, scope)
       pushPage({
         operationType: 'manual_filter',
         operationLabel: buildManualFilterLabel(fields),
         rows: r.display_rows,
         count: r.count,
         clIds: r.cl_ids,
-        scopeSql: r.executed_sql,
         source: { kind: 'manual_filter', generatedSql: r.generated_sql },
-        searchTerm: fields.search?.trim() || undefined,
+        paging: { fields, scope, cursor: r.next_cursor ?? null },
+        snippets: snippetMap(r),
       })
     } catch (e) {
       setQueryError(e instanceof Error ? e.message : String(e))
     } finally {
       setQueryLoading(false)
+    }
+  }
+
+  // "Load more": fetch the next CourtListener rows for the tip and append
+  // them in place. Tip-only, because every later page was derived from the
+  // rows a page held when it ran; growing a past page would rewrite that
+  // record under it.
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState<string | undefined>(
+    undefined,
+  )
+  const canLoadMore =
+    isViewingTip && !!tipPage?.paging?.cursor && !queryLoading
+
+  async function handleLoadMore() {
+    const tip = tipPage
+    const paging = tip?.paging
+    if (!tip || !paging?.cursor || !isViewingTip) return
+    setLoadingMore(true)
+    setLoadMoreError(undefined)
+    try {
+      const r = await runManualFilter(paging.fields, paging.scope, paging.cursor)
+      setStack((prev) => {
+        const last = prev[prev.length - 1]
+        if (!last || last.id !== tip.id) return prev
+        const seen = new Set(last.rows.map((row) => row.cl_id))
+        const fresh = r.display_rows.filter((row) => !seen.has(row.cl_id))
+        const rows = [...last.rows, ...fresh]
+        return [
+          ...prev.slice(0, -1),
+          {
+            ...last,
+            rows,
+            count: r.count,
+            clIds: rows.map((row) => row.cl_id),
+            paging: { ...paging, cursor: r.next_cursor ?? null },
+            snippets: { ...last.snippets, ...snippetMap(r) },
+          },
+        ]
+      })
+    } catch (e) {
+      setLoadMoreError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -305,110 +288,14 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     if (carriedOverRef.current || !carryover) return
     carriedOverRef.current = true
     // Mirror the filter form's defaults: all courts (omitting `allCourts`
-    // would scope to zero courts → zero rows) and the post-2025-01-20 floor.
-    void handleFilterSubmit({
-      search: carryover,
-      allCourts: true,
-      from: '2025-01-20',
-    })
+    // would scope to zero courts → zero rows) and no date floor.
+    void handleFilterSubmit({ search: carryover, allCourts: true })
     // Mount-only: handleFilterSubmit + carryover are stable for this mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Explorer document handoff (`/corpus/litigation/<cl_id>`, the target of
-  // an `rt://` citation): open the case sheet once on mount through the
-  // resolver the more-like-this results use.
-  useOpenDeepLinkedDocument((doc) => handleOpenMltResult(doc.id))
-
-  // A heavy Claude-SQL query the user can opt to "run anyway" (90s). Non-null
-  // means the warning card is shown; cleared on Run-it / Refine / new submit.
-  const [pendingSqlConfirm, setPendingSqlConfirm] = useState<{
-    prompt: string
-    confirm: SqlGenConfirmNeeded
-  } | null>(null)
-
-  // Switch modes, dropping any stale run-anyway offer. (Handler, not an effect,
-  // so we don't setState synchronously inside an effect.)
   function selectMode(m: QueryMode) {
     setActiveMode(m)
-    setPendingSqlConfirm(null)
-  }
-
-  /** Push a Claude-SQL result page (shared by the direct and run-anyway paths). */
-  function pushClaudeSqlPage(prompt: string, r: SqlGenResult) {
-    if (typeof r._balance_cents === 'number') {
-      paid.applyBalanceFromWorker(r._balance_cents)
-    }
-    pushPage({
-      operationType: 'claude_sql',
-      operationLabel: buildClaudeSqlLabel(prompt, r.label),
-      rows: r.display_rows,
-      count: r.count,
-      clIds: r.cl_ids,
-      source: {
-        kind: 'claude_sql',
-        prompt,
-        label: r.label,
-        generatedSql: r.generated_sql,
-      },
-    })
-  }
-
-  async function handleClaudeSqlSubmit(prompt: string) {
-    if (!canSubmit) return
-    if (!auth.auth) {
-      setQueryError('Configure AI access (header, top right) first.')
-      return
-    }
-    setQueryLoading(true)
-    setQueryError(undefined)
-    setPendingSqlConfirm(null)
-    try {
-      const r = await runClaudeSql(
-        { prompt, scope: buildScopeFromTip() },
-        auth.auth,
-      )
-      if (typeof r._balance_cents === 'number') {
-        paid.applyBalanceFromWorker(r._balance_cents)
-      }
-      // Heavy query — don't run at the 60s ceiling; offer the run-anyway path.
-      if (isSqlConfirmNeeded(r)) {
-        setPendingSqlConfirm({ prompt, confirm: r })
-        return
-      }
-      pushClaudeSqlPage(prompt, r)
-    } catch (e) {
-      if (e instanceof WorkerSqlError) {
-        setQueryError(e.message)
-        // Brief #6 §7b item 3 — surface the generated SQL even on
-        // failure. We DON'T push a page for failures (the audit trail
-        // captures successful operations only); the error and SQL
-        // surface inline on the current view.
-      } else {
-        setQueryError(e instanceof Error ? e.message : String(e))
-      }
-    } finally {
-      setQueryLoading(false)
-    }
-  }
-
-  /** "Run anyway" — execute the flagged-heavy query at the 90s ceiling. */
-  async function handleClaudeSqlRunAnyway() {
-    if (!auth.auth || !pendingSqlConfirm) return
-    const { prompt, confirm } = pendingSqlConfirm
-    setPendingSqlConfirm(null)
-    setQueryLoading(true)
-    setQueryError(undefined)
-    setProgressLabel('Working — broad searches can take a minute or two…')
-    try {
-      const r = await confirmClaudeSql(confirm.token, auth.auth)
-      pushClaudeSqlPage(prompt, r)
-    } catch (e) {
-      setQueryError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setQueryLoading(false)
-      setProgressLabel(undefined)
-    }
   }
 
   async function handleClaudeReadSubmit(criterion: string) {
@@ -498,209 +385,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
-  // ── AMA orchestrator ───────────────────────────────────────────────────
-  // The pre-flight modal is gated by `pendingPlan` — when non-null, the
-  // modal is shown and the user must confirm before /corpus/execute fires.
-  // `amaLog` drives the inline session log on the form.
-  const [amaLog, setAmaLog] = useState<AmaLogLine[]>([])
-  const [pendingPlan, setPendingPlan] = useState<{
-    plan: AmaPlan
-    question: string
-    /** Snapshot of the tip's rows at submission time. Used to filter the
-     *  kept set locally when AMA narrows over an existing scope; null when
-     *  AMA ran against the full corpus. */
-    incomingRows: CaseDisplayRow[] | null
-  } | null>(null)
-
-  function appendAmaLog(line: AmaLogLine) {
-    setAmaLog((prev) => [...prev, line])
-  }
-
-  /** Build the AMA scope payload from the tip. No tip = run against full
-   *  corpus. Uses the FULL id-set (not the capped display rows) so AMA over a
-   *  large filter genuinely covers it; large scopes go via `scope_sql`. */
-  function buildAmaScope(): AmaScope {
-    const ids = tipPage?.clIds ?? tipPage?.rows.map((r) => r.cl_id) ?? []
-    if (!tipPage || ids.length === 0) {
-      return {
-        is_full_db: true,
-        count: facets?.case_count ?? 0,
-        description: `The full corpus${facets ? ' (' + facets.case_count.toLocaleString() + ' cases)' : ''} across all federal courts.`,
-      }
-    }
-    // Use the page's true `count` for the displayed scope size: the Worker
-    // caps the materialized id list at 25k+1, so `ids.length` understates a
-    // large filter (e.g. shows 25,001 for a 91k set). The scope decision still
-    // keys on ids.length — past the cap it's 25001 (> SCOPE_INLINE_CAP), which
-    // correctly routes to scope_sql.
-    const scopeCount = tipPage.count ?? ids.length
-    const base = {
-      is_full_db: false,
-      count: scopeCount,
-      description: `${scopeCount.toLocaleString()} cases from the current scope.`,
-    }
-    if (ids.length > SCOPE_INLINE_CAP && tipPage.scopeSql) {
-      return { ...base, scope_sql: tipPage.scopeSql }
-    }
-    return { ...base, cl_ids: ids }
-  }
-
-  async function handleClaudeAmaSubmit(question: string) {
-    if (!canSubmit) return
-    if (!auth.auth) {
-      setQueryError('Configure AI access (header, top right) first.')
-      return
-    }
-    setQueryLoading(true)
-    setQueryError(undefined)
-    setAmaLog([])
-    appendAmaLog({ label: 'Step 1/3.', message: 'Planning the query…' })
-    const scope = buildAmaScope()
-    const incomingRowsSnapshot = tipPage?.rows ?? null
-    let plan: AmaPlan
-    try {
-      plan = await runClaudePlan(question, scope, auth.auth)
-      if (typeof plan._balance_cents === 'number') {
-        paid.applyBalanceFromWorker(plan._balance_cents)
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      appendAmaLog({ label: 'Plan failed.', message: msg, status: 'error' })
-      setQueryError(msg)
-      setQueryLoading(false)
-      return
-    }
-    appendAmaLog({
-      label: 'Plan.',
-      message: `${plan.output_mode} · ${plan.queries.length} quer${plan.queries.length === 1 ? 'y' : 'ies'} · est. ${fmtCents(plan.estimated_cost_cents)}`,
-      status: 'done',
-    })
-
-    if (plan.estimated_cost_cents > AMA_CONFIRM_THRESHOLD_CENTS) {
-      setPendingPlan({
-        plan,
-        question,
-        incomingRows: incomingRowsSnapshot,
-      })
-      return
-    }
-    await runAmaExecute(plan, question, incomingRowsSnapshot)
-  }
-
-  async function runAmaExecute(
-    plan: AmaPlan,
-    question: string,
-    incomingRowsSnapshot: CaseDisplayRow[] | null,
-  ) {
-    if (!auth.auth) return
-    appendAmaLog({
-      label: 'Step 2/3.',
-      message:
-        'Executing planned queries… broad questions over a large scope can take a minute or two.',
-    })
-    try {
-      const synth = await runClaudeExecute(plan.token, auth.auth)
-      if (typeof synth._balance_cents === 'number') {
-        paid.applyBalanceFromWorker(synth._balance_cents)
-      }
-      appendAmaLog({
-        label: 'Step 3/3.',
-        message: 'Synthesized the answer.',
-        status: 'done',
-      })
-
-      // Empty or null incoming rows = full corpus.
-      const incomingCount =
-        incomingRowsSnapshot && incomingRowsSnapshot.length > 0
-          ? incomingRowsSnapshot.length
-          : (facets?.case_count ?? 0)
-      let outRows: CaseDisplayRow[]
-      let narrowed = false
-      const wantsList =
-        synth.output_mode === 'list' || synth.output_mode === 'hybrid'
-      if (wantsList && synth.cl_ids && synth.cl_ids.length > 0) {
-        narrowed = true
-        const incomingMap =
-          incomingRowsSnapshot && incomingRowsSnapshot.length > 0
-            ? new Map(incomingRowsSnapshot.map((r) => [r.cl_id, r]))
-            : null
-        // Map from the snapshot only if it actually contains every cited id;
-        // otherwise fetch. Over a large scope the snapshot is just the 10k
-        // display rows, so AMA can cite cases outside it — mapping alone would
-        // silently drop them.
-        if (incomingMap && synth.cl_ids.every((id) => incomingMap.has(id))) {
-          outRows = synth.cl_ids
-            .map((id) => incomingMap.get(id))
-            .filter((r): r is CaseDisplayRow => r != null)
-        } else {
-          outRows = await fetchCasesByIds(synth.cl_ids.slice(0, 10000))
-        }
-      } else {
-        // Narrative-only — rows pass through. Empty for full-corpus
-        // narrative answers (the agent's narrative is the whole result).
-        outRows = incomingRowsSnapshot ?? []
-      }
-
-      const allCandor = dedupe([
-        ...(plan.candor_notes ?? []),
-        ...(synth.candor_notes ?? []),
-      ])
-
-      pushPage({
-        operationType: 'claude_ama',
-        operationLabel: buildClaudeAmaLabel(question),
-        rows: outRows,
-        count: outRows.length,
-        clIds: narrowed && synth.cl_ids ? synth.cl_ids : outRows.map((r) => r.cl_id),
-        source: {
-          kind: 'claude_ama',
-          question,
-          outputMode: synth.output_mode,
-          planSummary: plan.approach_summary,
-          candorNotes: allCandor,
-          answerMarkdown: synth.answer_markdown,
-          incomingCount,
-          outgoingCount: outRows.length,
-          narrowed,
-        },
-      })
-      const total = (plan._cost_cents ?? 0) + (synth._cost_cents ?? 0)
-      if (total > 0) {
-        appendAmaLog({
-          label: 'Done.',
-          message: `Total spent: ${fmtCents(total)}`,
-          status: 'done',
-        })
-      } else {
-        appendAmaLog({ label: 'Done.', message: '', status: 'done' })
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      appendAmaLog({ label: 'Execute failed.', message: msg, status: 'error' })
-      setQueryError(msg)
-    } finally {
-      setQueryLoading(false)
-    }
-  }
-
-  async function handleAmaProceed() {
-    if (!pendingPlan) return
-    const { plan, question, incomingRows } = pendingPlan
-    setPendingPlan(null)
-    await runAmaExecute(plan, question, incomingRows)
-  }
-
-  function handleAmaCancel() {
-    if (!pendingPlan) return
-    appendAmaLog({
-      label: 'Cancelled.',
-      message: 'User cancelled at pre-flight.',
-      status: 'error',
-    })
-    setPendingPlan(null)
-    setQueryLoading(false)
-  }
-
   // ── Case-detail state ──────────────────────────────────────────────────
   const [detailOpen, setDetailOpen] = useState(false)
   const [openCase, setOpenCase] = useState<CaseDisplayRow | null>(null)
@@ -710,58 +394,20 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setDetailOpen(true)
   }
 
-  // ── "More like this" pivot stack (briefs §3) ───────────────────────────
-  // Litigation pivots on the per-case digest (worker slug litigation ->
-  // doc_chunks corpus litigation_digest, keyed by cl_id). The pivot stashes
-  // this spoke view and opens a new stack seeded with similar cases; back
-  // returns here (the shell stays mounted, so the operation stack above is
-  // preserved verbatim).
-  const [mltOpeningId, setMltOpeningId] = useState<string | null>(null)
-  const mlt = useMoreLikeThis({
-    slug: 'litigation',
-    auth: auth.auth,
-    stashedLabel: 'Litigation search',
-    onBalance: paid.applyBalanceFromWorker,
-    onResult: (page) => {
-      void postUsageLog(
-        {
-          interaction_id: newInteractionId(),
-          surface: 'litigation',
-          mode: 'more_like_this',
-          question: page.prompt || '(overall similarity)',
-          plan: {
-            seed_id: page.seed.id,
-            route: page.result.route,
-            lens: page.result.lens,
-            query: page.result.query,
-          },
-          cited_ids: page.result.results.map((r) => r.id),
-          cost_cents: page.result._cost_cents,
-        },
-        auth.auth,
-      )
-    },
-  })
-
-  /** Detail-sheet "More like this" → close the sheet, open the ask-UI. */
-  function handleMoreLikeThis(seed: MltSeed) {
-    setDetailOpen(false)
-    mlt.requestPivot(seed)
-  }
-
-  /** Open an MLT result (a similar case) in the detail sheet — resolve the
-   *  cl_id to a full row via items-by-ids, same path as a results-list open. */
-  async function handleOpenMltResult(id: string) {
-    setMltOpeningId(id)
+  /** Open a case by id (a deep link) in the detail sheet — resolve the cl_id
+   *  to a full row, same path as a results-list open. */
+  async function handleOpenCaseById(id: string) {
     try {
       const rows = await fetchCasesByIds([Number(id)])
       if (rows.length > 0) handleOpenCase(rows[0])
     } catch {
       // Best-effort.
-    } finally {
-      setMltOpeningId(null)
     }
   }
+
+  // Explorer document handoff (`/corpus/litigation/<cl_id>`, the target of
+  // an `rt://` citation): open the case sheet once on mount.
+  useOpenDeepLinkedDocument((doc) => handleOpenCaseById(doc.id))
 
   /** Discard the tip (the last operation) and return to the previous layer —
    *  the scope from which it was derived becomes active again. Restores the
@@ -779,6 +425,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setViewingIdx(stack.length - 2) // new tip; -1 when the stack becomes empty (= All cases)
     setActiveMode('manual_filter')
     setQueryError(undefined)
+    setLoadMoreError(undefined)
     setDetailOpen(false)
     setOpenCase(null)
   }
@@ -800,9 +447,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryError(undefined)
     setDetailOpen(false)
     setOpenCase(null)
-    setAmaLog([])
-    setPendingPlan(null)
-    setPendingSqlConfirm(null)
+    setLoadMoreError(undefined)
   }
 
   return (
@@ -813,15 +458,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         loading={holdingsLoading}
         error={holdingsError}
       />
-      {mlt.active ? (
-        <MoreLikeThisView
-          controller={mlt}
-          documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'case'}
-          onOpenResult={handleOpenMltResult}
-          openingId={mltOpeningId}
-        />
-      ) : (
-      <>
       <ModeRow
         modes={spoke.queryModes}
         activeMode={activeMode}
@@ -861,55 +497,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           initialSearch={carryover ?? undefined}
         />
       )}
-      {canSubmit && activeMode === 'claude_sql' && (
-        <ClaudeSqlForm
-          loading={queryLoading}
-          byokConfigured={byokConfigured}
-          onSubmit={handleClaudeSqlSubmit}
-        />
-      )}
-      {canSubmit &&
-        activeMode === 'claude_sql' &&
-        pendingSqlConfirm &&
-        !queryLoading && (
-          <div
-            role="status"
-            className="space-y-3 border-b border-border bg-amber-500/10 px-6 py-4 text-sm text-amber-900 dark:text-amber-200"
-          >
-            <p>
-              {pendingSqlConfirm.confirm.reason === 'timed_out'
-                ? 'This search didn’t finish within the standard time limit — it’s a broad query.'
-                : 'This is a broad search across a large scope.'}{' '}
-              You can run it with an extended limit — it may take up to a minute
-              or two. Or refine your terms or narrow the scope for a faster
-              result.
-            </p>
-            <div className="flex items-center gap-2">
-              <Button type="button" onClick={handleClaudeSqlRunAnyway}>
-                Run it anyway
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setPendingSqlConfirm(null)}
-              >
-                Refine instead
-              </Button>
-            </div>
-          </div>
-        )}
-      {canSubmit &&
-        activeMode === 'claude_sql' &&
-        queryLoading &&
-        progressLabel && (
-          <div
-            role="status"
-            className="flex items-center gap-2 border-b border-border bg-card px-6 py-3 text-sm text-muted-foreground"
-          >
-            <span className="inline-block size-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-            {progressLabel}
-          </div>
-        )}
       {canSubmit && activeMode === 'claude_read' && (
         <ClaudeReadForm
           loading={queryLoading}
@@ -925,15 +512,6 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           byokConfigured={byokConfigured}
           scopeSize={scopeSize}
           onSubmit={handleClaudeAnalysisSubmit}
-        />
-      )}
-      {canSubmit && activeMode === 'claude_ama' && (
-        <ClaudeAmaForm
-          loading={queryLoading}
-          byokConfigured={byokConfigured}
-          scopeSize={scopeSize}
-          log={amaLog}
-          onSubmit={handleClaudeAmaSubmit}
         />
       )}
       {viewingPage && !queryLoading && (
@@ -959,6 +537,16 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         source={viewingPage?.source}
         snippets={snippets}
         onOpenCase={handleOpenCase}
+        loadMore={
+          viewingPage?.paging?.cursor && isViewingTip
+            ? {
+                onLoadMore: handleLoadMore,
+                disabled: !canLoadMore,
+                loading: loadingMore,
+                error: loadMoreError,
+              }
+            : undefined
+        }
       />
       {viewingPage && (
         <UsageLogAnnotation
@@ -966,28 +554,10 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           record={litigationRecordFromPage(viewingPage)}
         />
       )}
-      </>
-      )}
-      <MoreLikeThisPrompt
-        seed={mlt.pendingSeed}
-        documentUnitLabel={spoke.moreLikeThis?.documentUnit.label ?? 'case'}
-        similarityHints={spoke.moreLikeThis?.similarityHints ?? []}
-        loading={mlt.loading}
-        onSubmit={mlt.submitPivot}
-        onCancel={mlt.cancelPivot}
-      />
       <CaseDetailSheet
         case={openCase}
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        onMoreLikeThis={handleMoreLikeThis}
-      />
-      <AmaPreflight
-        plan={pendingPlan?.plan ?? null}
-        open={!!pendingPlan}
-        onProceed={handleAmaProceed}
-        onCancel={handleAmaCancel}
-        paidAccount={auth.isPaid ? paid.account : null}
       />
     </div>
   )
@@ -1181,23 +751,11 @@ function ViewingPastBanner({ onReturnToTip }: { onReturnToTip: () => void }) {
   )
 }
 
-/** Compact cent → dollars/cents formatter. <100¢ stays in cents for the
- *  low-cost-per-step UX; ≥100¢ flips to dollars. */
-function fmtCents(c: number | undefined): string {
-  if (c == null || !Number.isFinite(c)) return '—'
-  if (c < 100) return `${c.toFixed(1)}¢`
-  return `$${(c / 100).toFixed(2)}`
-}
-
-/** Stable de-duplication for candor notes. */
-function dedupe(xs: readonly string[]): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const x of xs) {
-    if (!seen.has(x)) {
-      seen.add(x)
-      out.push(x)
-    }
+/** A filter response's snippets, re-keyed by numeric cl_id. */
+function snippetMap(r: FilterResult): Record<number, string> {
+  const out: Record<number, string> = {}
+  for (const [k, v] of Object.entries(r.snippets ?? {})) {
+    if (typeof v === 'string' && v) out[Number(k)] = v
   }
   return out
 }

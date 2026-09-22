@@ -40,20 +40,24 @@ export type StackPage = {
   rows: CaseDisplayRow[]
   /** Total matched count (may exceed rows.length for paginated results). */
   count: number
-  /** The FULL matched id-set (NOT the capped display `rows`). Used to build the
-   *  scope for the next operation so a large filter isn't silently truncated to
-   *  the 10k display rows. Absent for pages with no id-set (e.g. narrative AMA). */
+  /** The page's id-set, used to build the scope for the next operation.
+   *  Litigation is served live from CourtListener, so a filter page holds the
+   *  rows loaded so far — not the whole match set; `count` says how many more
+   *  there are. Absent for pages with no id-set. */
   clIds?: number[]
-  /** For manual_filter pages: the id-set SQL (`SELECT cl_id FROM cases WHERE …`).
-   *  Sent as `scope_sql` for large scopes so we pass a tiny query instead of
-   *  inlining tens of thousands of ids. */
-  scopeSql?: string
   /** Provenance object that drives ResultsList's rendering. */
   source: ResultSource
-  /** For manual_filter pages with a keyword search: the raw search term, used
-   *  to lazily fetch per-row match snippets (highlighted `ts_headline`). Absent
-   *  for non-search filters and AI-produced pages. */
-  searchTerm?: string
+  /** For manual_filter pages: what "load more" needs to fetch the next rows —
+   *  the same fields and scope, plus CourtListener's cursor. `cursor` is null
+   *  once the match set is exhausted. */
+  paging?: {
+    fields: FilterFields
+    scope: Record<string, unknown>
+    cursor: string | null
+  }
+  /** Keyword-match snippets for the loaded rows, keyed by cl_id. The filter
+   *  response carries them, so there is no second round trip. */
+  snippets?: Record<number, string>
 }
 
 /* ----------------------------------------------------------------------------
