@@ -48,18 +48,24 @@ export function SpokeHeader({
         )}
 
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
-          <Stat
-            label="Cases"
-            value={formatStatValue(holdings?.counts.cases, loading, error)}
-          />
-          <Stat
-            label="Docket entries"
-            value={formatStatValue(
-              holdings?.counts.docketEntries,
-              loading,
-              error,
-            )}
-          />
+          {/* Once holdings arrive, a count the corpus does not report (a live
+           *  corpus has no docket-entry total) is left out, not shown as "…". */}
+          {(!holdings || holdings.counts.cases !== undefined) && (
+            <Stat
+              label="Cases"
+              value={formatStatValue(holdings?.counts.cases, loading, error)}
+            />
+          )}
+          {(!holdings || holdings.counts.docketEntries !== undefined) && (
+            <Stat
+              label="Docket entries"
+              value={formatStatValue(
+                holdings?.counts.docketEntries,
+                loading,
+                error,
+              )}
+            />
+          )}
           <Stat
             label="Updated"
             value={formatDateValue(holdings?.lastUpdated, loading, error)}

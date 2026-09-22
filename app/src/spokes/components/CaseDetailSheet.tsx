@@ -77,6 +77,10 @@ function CaseDetailBody({
   // Because the parent passes a unique `key` per case, this component is
   // mounted fresh per case — initial state needs no reset effect.
   const [entries, setEntries] = useState<DocketEntryRow[] | undefined>(undefined)
+  // The docket's full entry count, when only the newest entries were fetched.
+  const [truncatedTotal, setTruncatedTotal] = useState<number | undefined>(
+    undefined,
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
 
@@ -87,6 +91,7 @@ function CaseDetailBody({
         const r = await fetchCaseEntries(theCase.cl_id)
         if (cancelled) return
         setEntries(r.entries)
+        if (r.truncated && r.total != null) setTruncatedTotal(r.total)
       } catch (e) {
         if (cancelled) return
         setError(e instanceof Error ? e.message : String(e))
@@ -150,7 +155,9 @@ function CaseDetailBody({
             Docket entries
             {entries && (
               <span className="ml-2 font-mono normal-case text-muted-foreground/70">
-                ({entries.length.toLocaleString()})
+                {truncatedTotal != null
+                  ? `(newest ${entries.length.toLocaleString()} of ${truncatedTotal.toLocaleString()})`
+                  : `(${entries.length.toLocaleString()})`}
               </span>
             )}
           </h3>
