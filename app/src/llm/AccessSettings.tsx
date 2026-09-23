@@ -78,7 +78,12 @@ export function AccessSettings() {
           aria-hidden="true"
           className={cn('inline-block size-1.5 rounded-full', pipColor)}
         />
-        AI access
+        {/* "Access" on a phone. Every header this button sits in runs out of row at 390px
+            — the Explorer's measurably so — and the word "AI" is the one word here that
+            the pip beside it and the sheet behind it both already say. Full text from
+            `sm` up, where there is room for it. */}
+        <span className="sm:hidden">Access</span>
+        <span className="hidden sm:inline">AI access</span>
       </button>
       <SheetContent
         side="right"

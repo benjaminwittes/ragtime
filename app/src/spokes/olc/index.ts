@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchOlcFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchOlcFacets } from '@lawfare/ragtime-client'
 
 /**
  * OLC opinions spoke.
@@ -20,14 +19,14 @@ import { fetchOlcFacets } from '@/lib/worker-client'
  * - Summarize-one-opinion (PR 4q): brief #2 §3's "plus" — an action on
  *   the opinion detail panel, not a mode in the selector.
  *
- * Counts: 2,145 total = 1,439 DOJ-published archive + 706 Knight FOIA
+ * Counts: 2,151 total = 1,445 DOJ-published archive + 706 Knight FOIA
  * net-new. Per-section live counts come from /corpus/olc/facets.
  */
 export const olcSpoke: CorpusSpoke = {
   slug: 'olc',
   title: 'OLC opinions',
   description:
-    'Department of Justice Office of Legal Counsel published opinions, including FOIA net-new disclosures via the Knight First Amendment Institute.',
+    'The Justice Department’s own view of what the executive may lawfully do, since 1934.',
   status: 'active',
 
   plainEnglishDisclosure:
@@ -49,17 +48,17 @@ export const olcSpoke: CorpusSpoke = {
           knight_foia: knight,
         },
         knownGaps: [
-          '~199 Knight FOIA opinions are degraded scans — LLM-assisted text cleanup deferred to a later sprint.',
+          '~197 Knight FOIA opinions are degraded scans — LLM-assisted text cleanup deferred to a later sprint.',
           'OLC index/catalog documents (the transparency-catalog metadata) deferred.',
           'Author, recipient, and president are not yet populated on the metadata — surfaced only where the opinion text itself names them.',
         ],
       }
     } catch {
       return {
-        counts: { opinions: 2147 },
+        counts: { opinions: 2151 },
         coverage: '1934 → present',
         lastUpdated: '2026-06-10',
-        provenance: { doj_published: 1441, knight_foia: 706 },
+        provenance: { doj_published: 1445, knight_foia: 706 },
       }
     }
   },

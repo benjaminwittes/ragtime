@@ -1,7 +1,7 @@
 import type {
   CongressBillDisplayRow,
   CongressCollection,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Non-component formatting helpers shared across the Congress spoke's

@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchPresidentialFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchPresidentialFacets } from '@lawfare/ragtime-client'
 
 /**
  * Presidential Documents spoke (brief #11).
@@ -14,8 +13,8 @@ import { fetchPresidentialFacets } from '@/lib/worker-client'
  *
  * Surfaces:
  * - Manual filter: type / president / number lookup / agency / date +
- *   FTS, with the keyword/semantic/both toggle from day one (the corpus
- *   arrived fully embedded).
+ *   FTS, with side-by-side keyword and semantic results from day one (the
+ *   corpus arrived fully embedded).
  * - claude_ama: status/lineage + reversal-matrix + trend + narrative
  *   synthesis, with the coverage-asymmetry denominators enforced in the
  *   worker prompts.
@@ -30,7 +29,7 @@ export const presidentialSpoke: CorpusSpoke = {
   slug: 'presidential',
   title: 'Presidential Documents',
   description:
-    'Executive orders, proclamations, memoranda, determinations, and notices — the formal signed instruments of presidential action, with the amendment/revocation graph.',
+    'Executive orders, proclamations and memoranda, with what each one amended or revoked.',
   status: 'active',
 
   plainEnglishDisclosure:

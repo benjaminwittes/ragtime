@@ -23,9 +23,8 @@
  * land in Phase 2 (brief #6 §6 future).
  */
 
-import type { CaseDisplayRow, FilterFields } from '@/lib/worker-client'
+import type { CaseDisplayRow, FilterFields, QueryMode } from '@lawfare/ragtime-client'
 import type { ResultSource } from './components/ResultsList'
-import type { QueryMode } from './types'
 
 /** One frame in the operations stack. */
 export type StackPage = {

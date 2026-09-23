@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchCorpusFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchCorpusFacets } from '@lawfare/ragtime-client'
 
 /**
  * Litigation spoke.
@@ -22,7 +21,7 @@ export const litigationSpoke: CorpusSpoke = {
   slug: 'litigation',
   title: 'Federal court litigation',
   description:
-    'Federal district court and appellate dockets, with full docket entries and OCR text of attached filings.',
+    'Federal dockets, district and appellate, since the start of 2025, and the filings on each.',
   status: 'active',
 
   plainEnglishDisclosure:

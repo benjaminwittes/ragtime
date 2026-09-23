@@ -6,7 +6,7 @@ import type {
   CongressCollection,
   CongressCommitteeCount,
   CongressFilterFields,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { prettyGranuleClass } from './congress-format'
 
 /**

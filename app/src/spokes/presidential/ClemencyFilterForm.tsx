@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import type {
   ClemencyFacetCount,
   ClemencyFilterFields,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the clemency surface (brief #11 §7). Person-shaped axes:

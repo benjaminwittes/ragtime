@@ -21,8 +21,9 @@ import {
   type PresidentialDocumentSummary,
   fetchPresidentialDocument,
   summarizePresidentialDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { TextQualityBadge } from './PresidentialResultsList'
+import { SUMMARY_MARKDOWN_COMPONENTS } from '../components/markdown-components'
 
 /**
  * Side sheet showing one presidential document: full text + metadata +
@@ -142,7 +143,7 @@ function PresidentialDocumentDetailBody({
 
   return (
     <>
-      <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
+      <SheetHeader className="space-y-2 border-b border-lawfare-line bg-card p-5 pr-12">
         <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-serif text-base font-semibold leading-snug">
             {citation}
@@ -197,7 +198,7 @@ function PresidentialDocumentDetailBody({
           <p className="text-sm text-muted-foreground">Loading document…</p>
         )}
         {error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-sm text-destructive">
             {error}
           </p>
         )}
@@ -230,6 +231,7 @@ function PresidentialDocumentDetailBody({
               <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Document text
               </h3>
+              {/* Un-boxed per the ruled page (7e75ba3, d27967f): rules separate content, boxes mean interactive. */}
               {detail.body_text ? (
                 <>
                   {detail.text_quality === 'juris_backfill' && (
@@ -239,15 +241,15 @@ function PresidentialDocumentDetailBody({
                       rendition lives at the Federal Register link above.
                     </p>
                   )}
-                  <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card p-4 font-sans text-sm leading-relaxed text-foreground">
+                  <pre className="mt-2 whitespace-pre-wrap break-words border-t border-lawfare-line pt-4 font-sans text-sm leading-relaxed text-foreground">
                     {detail.body_text}
                   </pre>
                 </>
               ) : isFindingAid ? (
                 <aside
                   className={cn(
-                    'mt-2 rounded-md border px-3 py-2 text-xs',
-                    'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                    'mt-2 border-l-2 pl-3 py-2 pr-3 text-xs',
+                    'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
                   )}
                 >
                   This is a <strong>finding-aid entry</strong>: the Federal
@@ -266,11 +268,11 @@ function PresidentialDocumentDetailBody({
             </section>
 
             {detail.disposition_notes && (
-              <details className="rounded-md border border-border bg-muted/30">
+              <details className="border-t border-lawfare-line bg-muted/30">
                 <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/60">
                   Raw OFR disposition notes
                 </summary>
-                <pre className="whitespace-pre-wrap break-words border-t border-border p-3 font-mono text-[11px] leading-relaxed text-foreground/80">
+                <pre className="whitespace-pre-wrap break-words border-t border-lawfare-line p-3 font-mono text-[11px] leading-relaxed text-foreground/80">
                   {detail.disposition_notes}
                 </pre>
               </details>
@@ -440,10 +442,10 @@ function StatusLineageSection({
       </h3>
       <p
         className={cn(
-          'mt-1.5 rounded-md border px-3 py-2 text-xs leading-relaxed',
+          'mt-1.5 border-l-2 pl-3 py-2 pr-3 text-xs leading-relaxed',
           revoked
-            ? 'border-destructive/40 bg-destructive/10 text-destructive'
-            : 'border-border bg-muted/30 text-foreground/90',
+            ? 'border-destructive bg-destructive/10 text-destructive'
+            : 'border-lawfare-line-strong bg-muted/30 text-foreground/90',
         )}
       >
         {revoked
@@ -554,7 +556,7 @@ function AiSummarySection({
         : ''
 
   return (
-    <section className="rounded-md border border-border bg-card p-4">
+    <section className="border-t border-lawfare-line bg-muted/30 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -581,7 +583,7 @@ function AiSummarySection({
         </Button>
       </div>
       {error && (
-        <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="mt-3 border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-xs text-destructive">
           {error}
         </p>
       )}
@@ -590,8 +592,8 @@ function AiSummarySection({
           {summary.was_truncated && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               Document text was truncated before summarization (the cap is
@@ -601,8 +603,8 @@ function AiSummarySection({
           {summary.candor_notes.length > 0 && (
             <aside
               className={cn(
-                'rounded-md border px-3 py-2 text-xs',
-                'border-amber-400/40 bg-amber-500/10 text-amber-900 dark:text-amber-200',
+                'border-l-2 pl-3 py-2 pr-3 text-xs',
+                'border-amber-400 bg-amber-500/10 text-amber-900 dark:text-amber-200',
               )}
             >
               <h4 className="text-[10px] font-medium uppercase tracking-wider opacity-80">
@@ -629,38 +631,4 @@ function AiSummarySection({
       )}
     </section>
   )
-}
-
-/** Compact markdown styling for the in-panel summary. */
-const SUMMARY_MARKDOWN_COMPONENTS = {
-  h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1 className="font-serif text-lg font-semibold mt-2 mb-1.5" {...props} />
-  ),
-  h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2 className="font-serif text-base font-semibold mt-3 mb-1" {...props} />
-  ),
-  h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="font-serif text-sm font-semibold mt-2 mb-1" {...props} />
-  ),
-  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p className="leading-relaxed text-foreground/90" {...props} />
-  ),
-  strong: (props: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-foreground" {...props} />
-  ),
-  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul className="list-disc pl-5 space-y-0.5" {...props} />
-  ),
-  ol: (props: React.OlHTMLAttributes<HTMLOListElement>) => (
-    <ol className="list-decimal pl-5 space-y-0.5" {...props} />
-  ),
-  li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
-    <li className="leading-relaxed" {...props} />
-  ),
-  blockquote: (props: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
-    <blockquote
-      className="border-l-4 border-muted-foreground/30 pl-3 italic text-muted-foreground"
-      {...props}
-    />
-  ),
 }

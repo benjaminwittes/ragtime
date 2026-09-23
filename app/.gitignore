@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Screenshots the drivers in e2e/ take: evidence for the session that took them.
+e2e/shots

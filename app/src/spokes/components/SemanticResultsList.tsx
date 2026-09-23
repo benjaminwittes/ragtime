@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import type { SemanticSearchRow } from '@/lib/worker-client'
+import type { SemanticSearchRow } from '@lawfare/ragtime-client'
 import { cn } from '@/lib/utils'
 
 /**
  * Semantic-pane result list (brief #9). Shared by every embedded spoke:
  * unlike the keyword pane (which reuses each spoke's rich filter table),
  * semantic results have a corpus-neutral shape — title / date / context /
- * best-chunk snippet / similarity — so one card list serves all spokes.
+ * best-chunk snippet / similarity — so one ruled list serves all spokes.
  *
- * Overlap is badged, not deduped (brief #9 decision 3): a card whose id is
+ * Overlap is badged, not deduped (brief #9 decision 3): a row whose id is
  * in `keywordIds` carries an "also a keyword match" badge. The set comes
  * from the spoke filter's FULL matching-id list, so the badge isn't limited
  * to the keyword pane's displayed top rows.
@@ -25,7 +25,7 @@ export function SemanticResultsList({
    *  id to its full display row (items-by-ids) before opening. */
   onOpen,
   /** Opening rows may need a per-row metadata fetch; this id renders its
-   *  card in a loading state meanwhile. */
+   *  row in a loading state meanwhile. */
   openingId,
 }: {
   rows: readonly SemanticSearchRow[] | undefined
@@ -71,7 +71,9 @@ export function SemanticResultsList({
       <p className="mb-3 font-mono text-xs text-muted-foreground">
         {rows.length.toLocaleString()} closest by meaning
       </p>
-      <ol className="space-y-2">
+      {/* No gap: the rows have to touch for the rule between them to be the thing that
+          separates them. A gap plus a rule is a box in two pieces. */}
+      <ol>
         {rows.map((row) => (
           <SemanticResultCard
             key={row.id}
@@ -87,13 +89,24 @@ export function SemanticResultsList({
 }
 
 /**
- * Pane label for the side-by-side ("both") view — the segregation is the
- * point (brief #9 decision 2): the user should always know WHY a result
- * came back.
+ * Pane label for the side-by-side view — the segregation is the point
+ * (brief #9 decision 2): the user should always know WHY a result came
+ * back.
+ *
+ * This used to name a "both" mode the reader could pick. The keyword /
+ * semantic / both toggle came off the spokes on 2026-09-18 (Mary Ford:
+ * the app does not make that distinction in Search), so both retrievals
+ * now always run and this label is the only place the difference is
+ * stated. Decision 2 survives the toggle's removal — it is about
+ * explaining a result, not about choosing a mode.
  */
 export function ResultsPaneHeader({ kind }: { kind: 'keyword' | 'semantic' }) {
   return (
-    <div className="border-b border-border bg-muted/40 px-6 py-2">
+    // The pane label keeps its wash this slice. It is the only thing telling two
+    // side-by-side panes apart in the shells whose keyword pane this change does not
+    // reach, so dropping the fill here would unlabel a surface nobody asked me to touch.
+    // Its rule takes the app's content hairline.
+    <div className="border-b border-lawfare-line bg-muted/40 px-6 py-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {kind === 'keyword' ? 'Matched your words' : 'Matched your meaning'}
       </p>
@@ -140,12 +153,20 @@ function SemanticResultCard({
   const [expanded, setExpanded] = useState(false)
   return (
     <li>
+      {/* Ten results in ten bordered, rounded cards on `bg-card` was the claim the hub and
+          the Explorer both retired: a result is not a thing apart from the page, it is a
+          row on it. So the box goes and a hairline opens each row, the same rule the table
+          of cases next to it is ruled with. The element stays a `<button>` and still opens
+          the document — a border is not what makes a thing clickable here; the pointer and
+          the hover wash are, and both are kept. The horizontal padding goes with the box
+          that justified it, so the row now starts on the same measure as the count above
+          it. */}
       <button
         type="button"
         onClick={() => onOpen(row)}
         disabled={opening}
         className={cn(
-          'w-full rounded-md border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted',
+          'w-full border-t border-lawfare-line py-3 text-left transition-colors hover:bg-muted',
           opening && 'cursor-wait opacity-60',
         )}
       >

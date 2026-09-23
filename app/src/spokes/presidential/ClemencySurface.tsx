@@ -6,7 +6,7 @@ import {
   fetchClemencyFacets,
   fetchClemencyGrant,
   runClemencyFilter,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { useAuth } from '@/lib/use-auth'
 import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'

@@ -1,4 +1,4 @@
-import type { QueryMode } from '../types'
+import type { QueryMode } from '@lawfare/ragtime-client'
 import { cn } from '@/lib/utils'
 import { DocsHint } from '@/docs/DocsHint'
 

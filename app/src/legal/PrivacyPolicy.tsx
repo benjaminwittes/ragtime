@@ -1,7 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
-import { SiteMasthead } from '@/components/SiteMasthead'
 import { LAST_UPDATED, PRIVACY_POLICY_MD } from './privacy-policy-content'
 
 /**
@@ -16,7 +15,6 @@ import { LAST_UPDATED, PRIVACY_POLICY_MD } from './privacy-policy-content'
 export function PrivacyPolicy({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
     <>
-      <SiteMasthead />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <button
           type="button"

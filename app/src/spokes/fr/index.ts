@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchFrFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchFrFacets } from '@lawfare/ragtime-client'
 
 /**
  * Federal Register spoke (brief #12).
@@ -13,7 +12,7 @@ import { fetchFrFacets } from '@/lib/worker-client'
  * Surfaces:
  * - Manual filter: FTS + type / agency / significant / RIN / CFR title+
  *   part / open-for-comment / publication + effective date ranges, with
- *   the keyword/semantic/both toggle (the corpus is embedded).
+ *   side-by-side keyword and semantic results (the corpus is embedded).
  * - claude_ama: plan→execute→synthesize over federal_register_documents —
  *   rescission chains, sanctions programs, comment-window queries, EO-
  *   implementation questions.
@@ -27,7 +26,7 @@ export const frSpoke: CorpusSpoke = {
   slug: 'fr',
   title: 'Federal Register',
   description:
-    'Rules, proposed rules, and notices of the administrative state — the executive branch’s daily journal, 1994 to present.',
+    'The executive branch’s daily journal since 1994: every rule, proposed and final, and a growing share of its notices.',
   status: 'active',
 
   plainEnglishDisclosure:

@@ -1,9 +1,9 @@
-import type { CorpusSpoke } from '../types'
 import {
+  type CorpusSpoke,
   fetchSanctionsEntityFacets,
   fetchSanctionsGuidanceFacets,
   fetchSanctionsFrFacets,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Sanctions spoke (brief #15) — the FIRST CROSS-CORPUS SPOKE.
@@ -33,7 +33,7 @@ export const sanctionsSpoke: CorpusSpoke = {
   slug: 'sanctions',
   title: 'Sanctions',
   description:
-    'OFAC’s sanctions lists (SDN + consolidated, ~19,600 entries), OFAC-published guidance, and Federal Register sanctions actions — one research workspace.',
+    'Who the Treasury has sanctioned, alongside OFAC’s guidance and the Federal Register’s sanctions notices.',
   status: 'active',
 
   plainEnglishDisclosure:

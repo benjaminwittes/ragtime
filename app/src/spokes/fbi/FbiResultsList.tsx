@@ -1,10 +1,12 @@
-import type { FbiDocumentDisplayRow } from '@/lib/worker-client'
+import type { FbiDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import {
   fbiCollectionLabel,
   formatWaybackDate,
   isWaybackRecovered,
 } from './fbi-format'
+
+import { ResultWindow } from '../components/ResultWindow'
 
 /**
  * FBI Records manual-filter results table.
@@ -86,15 +88,15 @@ export function FbiResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} documents · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <FbiDocumentRowsTable
-        rows={rows}
-        onOpenDocument={onOpenDocument}
-        semanticMatchIds={semanticMatchIds}
-      />
+      <ResultWindow rows={rows} count={count} noun="documents">
+        {(visible) => (
+          <FbiDocumentRowsTable
+            rows={visible}
+            onOpenDocument={onOpenDocument}
+            semanticMatchIds={semanticMatchIds}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }
@@ -113,9 +115,11 @@ export function FbiDocumentRowsTable({
   semanticMatchIds?: ReadonlySet<string>
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    // Un-boxed to match components/ResultsList.tsx (7e75ba3): rules separate content,
+    // boxes mean interactive.
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             <Th>Title</Th>
             <Th>Collection</Th>
@@ -124,7 +128,7 @@ export function FbiDocumentRowsTable({
             <Th className="text-right" aria-label="PDF link" />
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody>
           {rows.map((r) => (
             <tr
               key={r.id}
@@ -138,7 +142,7 @@ export function FbiDocumentRowsTable({
                 }
               }}
               aria-label={`Open ${r.title ?? 'document ' + r.id} in detail panel`}
-              className="cursor-pointer hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
+              className="cursor-pointer border-t border-lawfare-line hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
             >
               <Td>
                 <span className="text-foreground">{r.title ?? '(no title)'}</span>
@@ -223,11 +227,11 @@ function PdfLink({ row }: { row: FbiDocumentDisplayRow }) {
 
 function ExecutedSqlDisclosure({ sql }: { sql: string }) {
   return (
-    <details className="mb-3 rounded-md border border-border bg-muted/30">
+    <details className="mb-3 border-t border-lawfare-line bg-muted/30">
       <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/60">
         Executed SQL
       </summary>
-      <div className="border-t border-border p-3">
+      <div className="border-t border-lawfare-line p-3">
         <pre className="overflow-x-auto rounded bg-background p-2 font-mono text-[11px] leading-relaxed text-foreground">
           {sql}
         </pre>

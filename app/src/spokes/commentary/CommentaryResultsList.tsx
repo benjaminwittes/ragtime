@@ -1,6 +1,8 @@
-import type { CommentaryDisplayRow } from '@/lib/worker-client'
+import type { CommentaryDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { commentaryRowKey } from './commentary-format'
+
+import { ResultWindow } from '../components/ResultWindow'
 
 /**
  * Commentary manual-filter results list.
@@ -79,15 +81,15 @@ export function CommentaryResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} pieces · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <CommentaryRowsList
-        rows={rows}
-        onOpenDocument={onOpenDocument}
-        semanticMatchKeys={semanticMatchKeys}
-      />
+      <ResultWindow rows={rows} count={count} noun="pieces">
+        {(visible) => (
+          <CommentaryRowsList
+            rows={visible}
+            onOpenDocument={onOpenDocument}
+            semanticMatchKeys={semanticMatchKeys}
+          />
+        )}
+      </ResultWindow>
     </div>
   )
 }
@@ -107,7 +109,9 @@ export function CommentaryRowsList({
   semanticMatchKeys?: ReadonlySet<string>
 }) {
   return (
-    <ul className="space-y-2">
+    // Un-boxed to match components/SemanticResultsList.tsx (7e75ba3): rules separate
+    // content, boxes mean interactive. No gap — a gap plus a rule is a box in two pieces.
+    <ul>
       {rows.map((r) => (
         <li key={commentaryRowKey(r)}>
           <div
@@ -121,7 +125,7 @@ export function CommentaryRowsList({
               }
             }}
             aria-label={`Open ${r.title ?? 'piece ' + r.id} in the reader`}
-            className="cursor-pointer rounded-md border border-border bg-card p-4 hover:bg-muted/40 focus:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            className="cursor-pointer border-t border-lawfare-line py-4 hover:bg-muted/40 focus:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-baseline gap-2">
@@ -232,7 +236,7 @@ function PostTypeBadge({ value }: { value: string }) {
 
 function TopicChip({ label }: { label: string }) {
   return (
-    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
       {label}
     </span>
   )
@@ -240,11 +244,11 @@ function TopicChip({ label }: { label: string }) {
 
 function ExecutedSqlDisclosure({ sql }: { sql: string }) {
   return (
-    <details className="mb-3 rounded-md border border-border bg-muted/30">
+    <details className="mb-3 border-t border-lawfare-line bg-muted/30">
       <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/60">
         Executed SQL
       </summary>
-      <div className="border-t border-border p-3">
+      <div className="border-t border-lawfare-line p-3">
         <pre className="overflow-x-auto rounded bg-background p-2 font-mono text-[11px] leading-relaxed text-foreground">
           {sql}
         </pre>

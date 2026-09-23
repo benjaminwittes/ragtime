@@ -1,15 +1,20 @@
-import { DocsTrigger } from '@/docs/DocsTrigger'
-import { AccessSettings } from '@/llm/AccessSettings'
-import type { CorpusHoldings, CorpusSpoke } from '../types'
+import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
 import { BackToHubLink } from './BackToHubLink'
+import { SpokeIdentity } from './SpokeIdentity'
 
 /**
- * The spoke's top band: title + plain-English disclosure (brief #6 decision
+ * The spoke's orientation band: plain-English disclosure (brief #6 decision
  * 9b) + holdings counts (brief #6 decision 9a). Always visible, regardless
  * of stack state — these are corpus-level facts, not query-level state.
  *
  * Per brief #6 §6 modifications, the welcome card is gone; the disclosure
  * + holdings are the always-visible orientation at the top of the spoke.
+ *
+ * It is a `<section>` rather than a `<header>` now, and the two things in it
+ * that were chrome have left: the title goes up to the site's one bar through
+ * {@link SpokeIdentity}, and the docs and AI-access buttons are in that bar
+ * once for the whole site instead of once per spoke. What stays is what is
+ * about this corpus rather than about the site.
  */
 export function SpokeHeader({
   spoke,
@@ -28,23 +33,12 @@ export function SpokeHeader({
   const disclosure = renderDisclosure(spoke.plainEnglishDisclosure, holdings)
 
   return (
-    <header className="border-b border-border bg-card">
-      <div className="mx-auto max-w-6xl px-6 py-6">
+    <section className="border-b border-border bg-card">
+      <SpokeIdentity spoke={spoke} />
+      <div className="mx-auto max-w-6xl px-6 py-5">
         <BackToHubLink className="mb-3" />
-        <div className="flex items-baseline justify-between gap-4">
-          <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
-            {spoke.title}
-          </h1>
-          <div className="flex items-center gap-2">
-            <AccessSettings />
-            <DocsTrigger />
-            <p className="font-mono text-xs text-muted-foreground">
-              {spoke.slug}
-            </p>
-          </div>
-        </div>
         {disclosure && (
-          <p className="mt-2 text-sm text-muted-foreground">{disclosure}</p>
+          <p className="text-sm text-muted-foreground">{disclosure}</p>
         )}
 
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
@@ -78,7 +72,7 @@ export function SpokeHeader({
           </p>
         )}
       </div>
-    </header>
+    </section>
   )
 }
 

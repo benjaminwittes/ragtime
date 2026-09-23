@@ -7,7 +7,7 @@ import {
   type FbiFacetCount,
   type FbiFilterFields,
   fetchFbiCollections,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the FBI Records spoke (brief #14).
@@ -245,7 +245,7 @@ function CollectionTypeahead({
         value={query}
         onChange={(e) => handleChange(e.target.value)}
         onFocus={() => setOpen(true)}
-        placeholder="e.g. Rosenberg, COINTELPRO, D.B. Cooper"
+        placeholder="e.g. Rosenberg, Cointel Pro, D B Cooper"
         disabled={disabled}
       />
       {open && (list.length > 0 || searching) && (

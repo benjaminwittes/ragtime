@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchFrusFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchFrusFacets } from '@lawfare/ragtime-client'
 
 /**
  * FRUS (Foreign Relations of the United States) spoke.
@@ -27,7 +26,7 @@ export const frusSpoke: CorpusSpoke = {
   slug: 'frus',
   title: 'Foreign Relations of the United States',
   description:
-    'State Department documentary history of US foreign policy — the FRUS series, spanning 1620 to 1991.',
+    'The State Department’s declassified diplomatic record, to the end of the Cold War.',
   status: 'active',
 
   plainEnglishDisclosure:
@@ -47,7 +46,6 @@ export const frusSpoke: CorpusSpoke = {
         knownGaps: [
           'FRUS publication is a lagging series — post-1991 volumes are released gradually as declassification clears.',
           `${(f.volume_count - f.volumes_with_docs).toLocaleString()} volumes are placeholder metadata (no documents loaded yet).`,
-          'Semantic retrieval (pgvector) deferred to Phase 2; v1 keyword search underperforms most on questions about concepts (containment, deterrence) versus events (Berlin Airlift, Bay of Pigs).',
         ],
       }
     } catch {

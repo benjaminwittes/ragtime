@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type {
-  AmaOutputMode,
-  AnalysisAnnotation,
-  CaseDisplayRow,
-} from '@/lib/worker-client'
-import { SNIPPET_HL_START, SNIPPET_HL_STOP } from '@/lib/worker-client'
+import {
+  type AmaOutputMode,
+  type AnalysisAnnotation,
+  type CaseDisplayRow,
+  SNIPPET_HL_START,
+  SNIPPET_HL_STOP,
+} from '@lawfare/ragtime-client'
+import { MARKDOWN_COMPONENTS } from './markdown-components'
+
+import { ResultWindow } from './ResultWindow'
 
 /**
  * How a result page was produced. Drives the "How this was produced"
@@ -185,7 +189,6 @@ export function ResultsList({
   // Live-served rows carry no entry count; drop the column rather than fill
   // it with dashes.
   const showEntries = rows.some((r) => r.entry_count != null)
-  const total = count ?? rows.length
 
   return (
     <div className="px-6 py-4">
@@ -196,119 +199,129 @@ export function ResultsList({
       {source?.kind === 'claude_ama' && (
         <AnalysisNarrative title="Answer" markdown={source.answerMarkdown} />
       )}
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {total > rows.length
-          ? `Showing ${rows.length.toLocaleString()} of ${total.toLocaleString()} cases, newest first`
-          : `${total.toLocaleString()} cases`}
-      </p>
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <Th>Case</Th>
-              <Th>Docket</Th>
-              <Th>Court</Th>
-              <Th>Judge</Th>
-              <Th>Filed</Th>
-              <Th>Cause</Th>
-              {showEntries && <Th className="text-right">Entries</Th>}
-              {source?.kind === 'claude_read' && <Th>AI reason</Th>}
-              {annotationCols.includes('rank') && (
-                <Th className="text-right">Rank</Th>
-              )}
-              {annotationCols.includes('score') && (
-                <Th className="text-right">Score</Th>
-              )}
-              {annotationCols.includes('category') && <Th>Category</Th>}
-              {annotationCols.includes('label') && <Th>Label</Th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((r) => {
-              const verdict =
-                source?.kind === 'claude_read'
-                  ? source.verdicts[r.cl_id]
-                  : undefined
-              const annotation =
-                source?.kind === 'claude_analysis'
-                  ? source.annotations[r.cl_id]
-                  : undefined
-              return (
-                <tr
-                  key={r.cl_id}
-                  id={`case-${r.cl_id}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onOpenCase(r)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onOpenCase(r)
-                    }
-                  }}
-                  aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
-                  className="cursor-pointer scroll-mt-20 hover:bg-muted/50 focus:bg-muted/60 focus:outline-none target:bg-primary/10"
-                >
-                  <Td>
-                    <span className="font-medium text-foreground">
-                      {r.case_name ?? '(no name)'}
-                    </span>
-                    {snippets?.[r.cl_id] && (
-                      <span className="mt-0.5 block max-w-md text-xs leading-snug text-muted-foreground">
-                        {renderSnippet(snippets[r.cl_id])}
-                      </span>
-                    )}
-                  </Td>
-                  <Td className="font-mono text-xs text-muted-foreground">
-                    {r.docket_number ?? '—'}
-                  </Td>
-                  <Td className="font-mono text-xs uppercase">
-                    {r.court ?? '—'}
-                  </Td>
-                  <Td className="text-xs">{r.judge ?? '—'}</Td>
-                  <Td className="font-mono text-xs">{r.date_filed ?? '—'}</Td>
-                  <Td
-                    className="max-w-xs truncate text-xs"
-                    title={r.cause ?? undefined}
-                  >
-                    {shortCause(r.cause)}
-                  </Td>
-                  {showEntries && (
-                    <Td className="text-right font-mono text-xs tabular-nums">
-                      {r.entry_count ?? '—'}
-                    </Td>
-                  )}
-                  {source?.kind === 'claude_read' && (
-                    <Td className="max-w-sm text-xs text-muted-foreground">
-                      {verdict?.reason ?? '—'}
-                    </Td>
-                  )}
+      {/* This was a bordered, rounded container drawn around rows a `divide-y` had already
+          separated — a box around a list that did not need one. The box is gone and only
+          the scroll survives, because a table wider than the pane still has to move under
+          the reader's finger. What is left is the page's own paper with a hairline between
+          one case and the next: a row is separated from the row below it, not contained
+          with it. The rule sits on the row rather than on a parent's `* + *` selector, so
+          the cadence starts at the first row — and that first rule is also the one that
+          separates the column heads from the list, drawn once. Nothing closes the table at
+          the bottom; a rule separates rather than encloses. */}
+      <ResultWindow rows={rows} count={count} noun="cases">
+        {(visible) => (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              {/* Column heads are labels on the page, not a filled band across it — the app's
+                  small-label vocabulary, the one the hub counts its corpora in. */}
+              <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <Th>Case</Th>
+                  <Th>Docket</Th>
+                  <Th>Court</Th>
+                  <Th>Judge</Th>
+                  <Th>Filed</Th>
+                  <Th>Cause</Th>
+                  {showEntries && <Th className="text-right">Entries</Th>}
+                  {source?.kind === 'claude_read' && <Th>AI reason</Th>}
                   {annotationCols.includes('rank') && (
-                    <Td className="text-right font-mono text-xs tabular-nums">
-                      {annotation?.rank ?? '—'}
-                    </Td>
+                    <Th className="text-right">Rank</Th>
                   )}
                   {annotationCols.includes('score') && (
-                    <Td className="text-right font-mono text-xs tabular-nums">
-                      {annotation?.score ?? '—'}
-                    </Td>
+                    <Th className="text-right">Score</Th>
                   )}
-                  {annotationCols.includes('category') && (
-                    <Td className="max-w-xs truncate text-xs">
-                      {annotation?.category ?? '—'}
-                    </Td>
-                  )}
-                  {annotationCols.includes('label') && (
-                    <Td className="max-w-sm text-xs">
-                      {annotation?.label ?? '—'}
-                    </Td>
-                  )}
+                  {annotationCols.includes('category') && <Th>Category</Th>}
+                  {annotationCols.includes('label') && <Th>Label</Th>}
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {visible.map((r) => {
+                  const verdict =
+                    source?.kind === 'claude_read'
+                      ? source.verdicts[r.cl_id]
+                      : undefined
+                  const annotation =
+                    source?.kind === 'claude_analysis'
+                      ? source.annotations[r.cl_id]
+                      : undefined
+                  return (
+                    <tr
+                      key={r.cl_id}
+                      id={`case-${r.cl_id}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onOpenCase(r)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onOpenCase(r)
+                        }
+                      }}
+                      aria-label={`Open ${r.case_name ?? 'case ' + r.cl_id} in detail panel`}
+                      className="cursor-pointer scroll-mt-20 border-t border-lawfare-line hover:bg-muted/50 focus:bg-muted/60 focus:outline-none target:bg-primary/10"
+                    >
+                      <Td>
+                        <span className="font-medium text-foreground">
+                          {r.case_name ?? '(no name)'}
+                        </span>
+                        {snippets?.[r.cl_id] && (
+                          <span className="mt-0.5 block max-w-md text-xs leading-snug text-muted-foreground">
+                            {renderSnippet(snippets[r.cl_id])}
+                          </span>
+                        )}
+                      </Td>
+                      <Td className="font-mono text-xs text-muted-foreground">
+                        {r.docket_number ?? '—'}
+                      </Td>
+                      <Td className="font-mono text-xs uppercase">
+                        {r.court ?? '—'}
+                      </Td>
+                      <Td className="text-xs">{r.judge ?? '—'}</Td>
+                      <Td className="font-mono text-xs">{r.date_filed ?? '—'}</Td>
+                      <Td
+                        className="max-w-xs truncate text-xs"
+                        title={r.cause ?? undefined}
+                      >
+                        {shortCause(r.cause)}
+                      </Td>
+                      {showEntries && (
+                        <Td className="text-right font-mono text-xs tabular-nums">
+                          {r.entry_count ?? '—'}
+                        </Td>
+                      )}
+                      {source?.kind === 'claude_read' && (
+                        <Td className="max-w-sm text-xs text-muted-foreground">
+                          {verdict?.reason ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('rank') && (
+                        <Td className="text-right font-mono text-xs tabular-nums">
+                          {annotation?.rank ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('score') && (
+                        <Td className="text-right font-mono text-xs tabular-nums">
+                          {annotation?.score ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('category') && (
+                        <Td className="max-w-xs truncate text-xs">
+                          {annotation?.category ?? '—'}
+                        </Td>
+                      )}
+                      {annotationCols.includes('label') && (
+                        <Td className="max-w-sm text-xs">
+                          {annotation?.label ?? '—'}
+                        </Td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ResultWindow>
       {loadMore && (
         <div className="mt-3 flex flex-col items-center gap-2">
           <button
@@ -349,15 +362,21 @@ function AnalysisNarrative({
 }) {
   const [open, setOpen] = useState(true)
   return (
+    // The answer is the page's own content, so the card it used to sit on goes: no border,
+    // no radius, no `bg-card` surface, and none of the padding only a box justified. The
+    // summary is still a control — it opens and closes — but it takes its affordance as a
+    // pointer and a colour change, sized to its own label, rather than as a full-width
+    // fill that would put back the band the column heads just lost. The body is opened by
+    // a rule instead of enclosed by a border.
     <details
       open={open}
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-      className="mb-3 rounded-md border border-border bg-card"
+      className="mb-3"
     >
-      <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/40">
+      <summary className="w-fit cursor-pointer select-none py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
         {title}
       </summary>
-      <div className="space-y-3 border-t border-border px-5 py-4 text-sm text-foreground">
+      <div className="space-y-3 border-t border-lawfare-line pt-4 text-sm text-foreground">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={MARKDOWN_COMPONENTS}
@@ -367,87 +386,6 @@ function AnalysisNarrative({
       </div>
     </details>
   )
-}
-
-/**
- * Explicit element styling for the narrative markdown. Tailwind v4 doesn't
- * ship the `prose` utilities (those are v3's @tailwindcss/typography), so
- * we style each element directly. Matches the editorial register of the
- * legacy spoke surface — serif headings, primary-color links, monospace
- * inline code.
- */
-const MARKDOWN_COMPONENTS = {
-  h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1 className="font-serif text-2xl font-semibold mt-2 mb-3" {...props} />
-  ),
-  h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2
-      className="font-serif text-xl font-semibold mt-5 mb-2 border-b border-border pb-1"
-      {...props}
-    />
-  ),
-  h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="font-serif text-base font-semibold mt-4 mb-1.5" {...props} />
-  ),
-  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p className="leading-relaxed text-foreground" {...props} />
-  ),
-  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a className="text-primary hover:underline" {...props} />
-  ),
-  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul className="list-disc pl-6 space-y-1" {...props} />
-  ),
-  ol: (props: React.OlHTMLAttributes<HTMLOListElement>) => (
-    <ol className="list-decimal pl-6 space-y-1" {...props} />
-  ),
-  li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
-    <li className="leading-relaxed" {...props} />
-  ),
-  blockquote: (props: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
-    <blockquote
-      className="border-l-4 border-muted-foreground/30 pl-4 italic text-muted-foreground"
-      {...props}
-    />
-  ),
-  strong: (props: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="font-semibold text-foreground" {...props} />
-  ),
-  em: (props: React.HTMLAttributes<HTMLElement>) => (
-    <em className="italic" {...props} />
-  ),
-  code: (props: React.HTMLAttributes<HTMLElement>) => (
-    <code
-      className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
-      {...props}
-    />
-  ),
-  hr: (props: React.HTMLAttributes<HTMLHRElement>) => (
-    <hr className="my-4 border-border" {...props} />
-  ),
-  table: (props: React.TableHTMLAttributes<HTMLTableElement>) => (
-    <div className="my-3 overflow-x-auto rounded-md border border-border">
-      <table className="w-full text-sm" {...props} />
-    </div>
-  ),
-  thead: (props: React.HTMLAttributes<HTMLTableSectionElement>) => (
-    <thead
-      className="bg-muted text-xs uppercase tracking-wide text-muted-foreground"
-      {...props}
-    />
-  ),
-  tbody: (props: React.HTMLAttributes<HTMLTableSectionElement>) => (
-    <tbody className="divide-y divide-border" {...props} />
-  ),
-  tr: (props: React.HTMLAttributes<HTMLTableRowElement>) => (
-    <tr {...props} />
-  ),
-  th: (props: React.ThHTMLAttributes<HTMLTableCellElement>) => (
-    <th className="px-3 py-2 text-left font-medium" {...props} />
-  ),
-  td: (props: React.TdHTMLAttributes<HTMLTableCellElement>) => (
-    <td className="px-3 py-2 align-top" {...props} />
-  ),
 }
 
 /**
@@ -535,9 +473,12 @@ function renderSnippet(snippet: string): React.ReactNode {
       break
     }
     nodes.push(
+      // `--color-lawfare-mark` has one job on this surface and this is it: the wash under
+      // a term the reader searched for. Not a surface, not a state, not a chip — and no
+      // corner, because a highlighted run of words is not an object.
       <mark
         key={key++}
-        className="rounded-sm bg-primary/15 px-0.5 font-medium text-foreground"
+        className="bg-lawfare-mark px-0.5 font-medium text-foreground"
       >
         {snippet.slice(start + 1, stop)}
       </mark>,
@@ -591,15 +532,21 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
             : 'How this was produced'
 
   return (
+    // Provenance, not content: the criterion a model read against, the SQL it wrote, the
+    // verdict it reached. The four sides and the corner go — a border on this surface now
+    // means the reader can act on the thing — but the wash stays, so the block still reads
+    // as machine working rather than as the page's own words, and a rule above it opens it
+    // the way every other block on this page is opened. Whether a state fill survives at
+    // all is Thomas's call and not this slice's; keeping it costs nothing to reverse.
     <details
       open={open}
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-      className="mb-3 rounded-md border border-border bg-muted/30"
+      className="mb-3 border-t border-lawfare-line bg-muted/30"
     >
       <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/60">
         {title}
       </summary>
-      <div className="space-y-2 border-t border-border p-3 text-xs">
+      <div className="space-y-2 border-t border-lawfare-line p-3 text-xs">
         {source.kind === 'claude_sql' && (
           <>
             <div>

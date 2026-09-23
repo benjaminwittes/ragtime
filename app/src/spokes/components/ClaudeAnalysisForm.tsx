@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ANALYSIS_HARD_CAP } from '@/lib/worker-client'
+import { ANALYSIS_HARD_CAP } from '@lawfare/ragtime-client'
 
 /**
  * Brief #6 §0 decision 3 — `claude_analysis` mode ported wholesale.

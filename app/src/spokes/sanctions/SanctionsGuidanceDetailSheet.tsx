@@ -12,7 +12,7 @@ import {
   type SanctionsGuidanceDetail,
   type SanctionsGuidanceDisplayRow,
   fetchSanctionsGuidanceDocument,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 import { guidanceTypeLabel } from './sanctions-format'
 import { ProgramChips } from './SanctionsEntityResultsList'
 
@@ -100,7 +100,7 @@ function SanctionsGuidanceDetailBody({
 
   return (
     <>
-      <SheetHeader className="space-y-2 border-b border-border bg-card p-5 pr-12">
+      <SheetHeader className="space-y-2 border-b border-lawfare-line bg-card p-5 pr-12">
         <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-serif text-base font-semibold leading-snug">
             {title}
@@ -159,7 +159,7 @@ function SanctionsGuidanceDetailBody({
           <p className="text-sm text-muted-foreground">Loading document…</p>
         )}
         {error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="border-l-2 border-destructive bg-destructive/10 pl-3 py-2 pr-3 text-sm text-destructive">
             {error}
           </p>
         )}
@@ -191,8 +191,9 @@ function SanctionsGuidanceDetailBody({
                   is the original.
                 </p>
               )}
+              {/* Un-boxed per the ruled page (7e75ba3, d27967f): rules separate content, boxes mean interactive. */}
               {detail.body_text ? (
-                <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card p-4 font-sans text-sm leading-relaxed text-foreground">
+                <pre className="mt-2 whitespace-pre-wrap break-words border-t border-lawfare-line pt-4 font-sans text-sm leading-relaxed text-foreground">
                   {detail.body_text}
                 </pre>
               ) : (

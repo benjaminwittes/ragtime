@@ -2,12 +2,8 @@ import type { DocsContext, DocsEntry } from './types'
 // Global entries (always visible).
 import { gettingStartedEntry } from './content/getting-started'
 import { hubKeywordSearchEntry } from './content/hub-keyword-search'
-import { semanticSearchEntry } from './content/semantic-search'
 import { accessAndCostEntry } from './content/access-and-cost'
 import { auditabilityEntry } from './content/auditability'
-import { freeTierMetadataFloorEntry } from './content/free-tier-metadata-floor'
-import { notCommentaryEntry } from './content/not-commentary'
-import { usingDocumentationEntry } from './content/using-documentation'
 import { givingFeedbackEntry } from './content/giving-feedback'
 // Litigation spoke.
 import { aboutLitigationEntry } from './content/about-litigation'
@@ -54,35 +50,37 @@ import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
 import { aboutSanctionsEntry } from './content/about-sanctions'
 
 /**
- * Central docs registry.
+ * Central docs registry. 35 entries: 5 global and 30 spoke-scoped.
  *
  * Entries live in `./content/<slug>.ts` and are aggregated here.
  *
- * Editorial intent (per brief #6 §6, brief #6 decisions 9b cross-reference):
- * - Global entries cover cross-cutting principles users should know once:
- *   getting started, the cross-corpus hub search, the keyword/semantic
- *   retrieval toggle, access & cost, auditability, the free-tier metadata
- *   floor, primary-sources-not-commentary, how the docs overlay / `?`
- *   shortcut works, and how to give feedback. Ordered (order 1-9) so they
- *   list in a stable sequence everywhere.
- * - Spoke entries cover per-corpus content: a "How to use this corpus"
- *   intro (order 9), the corpus's AI synthesis mode (order 10), and the
- *   per-document Summarize action (order 20). They surface only when their
- *   spoke is the active context, sorted after the globals.
+ * - The five global entries carry `order` 1 through 5, in the sequence they
+ *   are imported above, and render on every surface.
+ *   There were eight until 2026-09-18, when Mary Ford's note collapsed them
+ *   by three: `semantic-search` was deleted with the keyword/semantic
+ *   control it documented, `free-tier-metadata-floor` folded into
+ *   `access-and-cost`, and `not-commentary` into `getting-started`. Both
+ *   merges kept the importable entry as the survivor — `accessAndCostEntry`
+ *   and `gettingStartedEntry` are named from outside this directory.
+ * - Spoke entries carry `order` 9 for the "How to use this corpus" intro,
+ *   10 for the corpus's AI mode, 20 for the per-document Summarize action,
+ *   and 11 for the one second surface inside a spoke (`about-clemency`, in
+ *   the Presidential spoke). They render only in that spoke.
  *
- * Ordering is the editorial sequence from the in-app documentation draft
- * (the full text reviewed 2026-06-02 and folded back in).
+ * Three entries are registered and can never surface: `about-lawfare`,
+ * `lawfare-narrative-synthesis` and `lawfare-article-summary` are scoped to
+ * the `lawfare` spoke, which was federated into Commentary and is no longer
+ * in `spokes/registry.ts`, so nothing ever sets that context. They are kept
+ * rather than deleted because `scripts/suggestions-export.mjs` carries rows
+ * off their demo and good-question blocks; deleting them is a decision about
+ * that CSV, not about this file.
  */
 export const docsEntries: readonly DocsEntry[] = [
   // Global
   gettingStartedEntry,
   hubKeywordSearchEntry,
-  semanticSearchEntry,
   accessAndCostEntry,
   auditabilityEntry,
-  freeTierMetadataFloorEntry,
-  notCommentaryEntry,
-  usingDocumentationEntry,
   givingFeedbackEntry,
   // Litigation
   aboutLitigationEntry,

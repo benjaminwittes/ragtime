@@ -4,7 +4,7 @@ import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { setAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import { cn } from '@/lib/utils'
-import type { AmaPlan } from '@/lib/worker-client'
+import type { AmaPlan } from '@lawfare/ragtime-client'
 
 /**
  * Pre-flight modal shown between AMA planning and execution. PR 4w fires
@@ -207,10 +207,10 @@ export function AmaPreflight({
 
           <p className="mt-4 text-[11px] text-muted-foreground">
             Estimate is from the agent&apos;s planning step and may be off;
-            you&apos;ll see the actual running cost in the session log as the
-            query executes. Cancel and refine the question if you want to
-            narrow scope. Broad questions over a large scope can take up to a
-            minute or two to run.
+            the session log reports what the query actually spent once it
+            finishes. Cancel and refine the question if you want to narrow
+            scope. Broad questions over a large scope can take up to a minute
+            or two to run.
           </p>
           </div>
 

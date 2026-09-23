@@ -14,22 +14,22 @@ import {
   runPresidentialFilter,
   runPresidentialPlan,
   runSemanticSearch,
-} from '@/lib/worker-client'
+  type CorpusHoldings,
+  type CorpusSpoke,
+  type QueryMode,
+} from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
 import { useDeepLink, useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
-import { DocsTrigger } from '@/docs/DocsTrigger'
-import { AccessSettings } from '@/llm/AccessSettings'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { isAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
-import type { CorpusHoldings, CorpusSpoke, QueryMode } from '../types'
 import { AmaPreflight } from '../components/AmaPreflight'
 import { BackToHubLink } from '../components/BackToHubLink'
+import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
-import { SearchModeToggle, type SearchMode } from '../components/SearchModeToggle'
 import {
   ResultsPaneHeader,
   SemanticResultsList,
@@ -51,9 +51,9 @@ import { cn } from '@/lib/utils'
 
 /**
  * Presidential Documents spoke shell (brief #11). Two query modes:
- *  - manual_filter: structured filter + keyword/semantic/both toggle
- *    (first spoke to launch with the brief #9 surface built in — the
- *    corpus arrived fully embedded) + document detail with the parsed
+ *  - manual_filter: structured filter + side-by-side keyword and semantic
+ *    results (first spoke to launch with the brief #9 surface built in —
+ *    the corpus arrived fully embedded) + document detail with the parsed
  *    disposition trail.
  *  - claude_ama: status/lineage + reversal-matrix + trend + narrative
  *    synthesis over presidential_documents + presidential_dispositions.
@@ -118,7 +118,6 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [hasRun, setHasRun] = useState(false)
 
   // Semantic pane state (brief #9).
-  const [searchMode, setSearchMode] = useState<SearchMode>('both')
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
   const [semLoading, setSemLoading] = useState(false)
   const [semError, setSemError] = useState<string | undefined>(undefined)
@@ -200,21 +199,10 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   })
 
   async function handleSubmit(fields: PresidentialFilterFields) {
-    const wantKeyword = searchMode !== 'semantic'
     const wantSemantic =
-      spoke.semanticSearch === true &&
-      searchMode !== 'keyword' &&
-      !!fields.search?.trim()
-    if (searchMode === 'semantic' && !wantSemantic) {
-      setSemHasRun(true)
-      setSemRows([])
-      setSemError(
-        'Semantic search needs search text — add words to the search field. (Structured filters alone run in Keyword mode.)',
-      )
-      return
-    }
+      spoke.semanticSearch === true && !!fields.search?.trim()
     await Promise.all([
-      wantKeyword ? runKeywordPane(fields) : Promise.resolve(),
+      runKeywordPane(fields),
       wantSemantic
         ? runSemanticPane(fields.search!.trim())
         : Promise.resolve(clearSemanticPane()),
@@ -238,7 +226,7 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           mode: 'manual_filter',
           question:
             fields.search ?? fields.title ?? fields.agency ?? '(structured filter)',
-          plan: { fields, executed_sql: r.executed_sql, search_mode: searchMode },
+          plan: { fields, executed_sql: r.executed_sql, search_mode: 'both' },
           cited_ids: r.ids,
         },
         auth.auth,
@@ -273,7 +261,7 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           surface: 'presidential',
           mode: 'semantic_search',
           question: query,
-          plan: { search_mode: searchMode },
+          plan: { search_mode: 'both' },
           cited_ids: r.results.map((row) => row.id),
         },
         auth.auth,
@@ -351,10 +339,11 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     () => new Set((semRows ?? []).map((r) => r.id)),
     [semRows],
   )
-  const showKeywordPane = searchMode !== 'semantic'
   const showSemanticPane =
-    spoke.semanticSearch === true && searchMode !== 'keyword' && (semHasRun || semLoading)
-  const panesSideBySide = showKeywordPane && showSemanticPane
+    spoke.semanticSearch === true && (semHasRun || semLoading)
+  // The keyword pane always renders, so the two-column layout is on exactly
+  // when the semantic pane is showing.
+  const panesSideBySide = showSemanticPane
 
   async function handleClaudeAmaSubmit(question: string) {
     if (!auth.auth) {
@@ -511,13 +500,6 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
       {activeMode === 'manual_filter' && (
         <>
-          {spoke.semanticSearch && (
-            <SearchModeToggle
-              mode={searchMode}
-              onSelect={setSearchMode}
-              disabled={queryLoading || semLoading}
-            />
-          )}
           <PresidentialFilterForm
             docTypes={facets?.doc_types ?? []}
             presidents={facets?.presidents ?? []}
@@ -539,7 +521,7 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
       {activeMode === 'manual_filter' && (
         <>
-          {showKeywordPane && rows && rows.length > 0 && !queryLoading && (
+          {rows && rows.length > 0 && !queryLoading && (
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <div
@@ -549,21 +531,19 @@ export function PresidentialSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 : undefined
             }
           >
-            {showKeywordPane && (
-              <div className="min-w-0">
-                {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
-                <PresidentialResultsList
-                  rows={rows}
-                  count={count}
-                  loading={queryLoading}
-                  error={queryError}
-                  hasRun={hasRun}
-                  executedSql={executedSql}
-                  onOpenDocument={handleOpenDocument}
-                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
-                />
-              </div>
-            )}
+            <div className="min-w-0">
+              {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
+              <PresidentialResultsList
+                rows={rows}
+                count={count}
+                loading={queryLoading}
+                error={queryError}
+                hasRun={hasRun}
+                executedSql={executedSql}
+                onOpenDocument={handleOpenDocument}
+                semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+              />
+            </div>
             {showSemanticPane && (
               <div className="min-w-0">
                 {panesSideBySide && <ResultsPaneHeader kind="semantic" />}
@@ -698,22 +678,15 @@ function PresidentialHeader({
   const eo = holdings?.provenance?.executive_orders
   const withText = holdings?.provenance?.with_full_text
   return (
-    <header className="border-b border-border bg-card px-6 py-5">
+    // The band is page material now, not chrome: the title goes up to the site's
+    // one bar through SpokeIdentity, and the docs and AI-access buttons are in
+    // that bar once for the whole site. What is left is about this corpus.
+    <section className="border-b border-border bg-card px-6 py-5">
+      <SpokeIdentity spoke={spoke} />
       <BackToHubLink className="mb-3" />
-      <div className="flex items-start justify-between gap-4">
-        <div className="max-w-3xl">
-          <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
-            {spoke.title}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {spoke.plainEnglishDisclosure}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <DocsTrigger />
-          <AccessSettings />
-        </div>
-      </div>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        {spoke.plainEnglishDisclosure}
+      </p>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <HoldingTile
           label="Documents"
@@ -733,7 +706,7 @@ function PresidentialHeader({
           Could not load holdings: {error}
         </p>
       )}
-    </header>
+    </section>
   )
 }
 

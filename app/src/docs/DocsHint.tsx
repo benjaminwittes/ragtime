@@ -8,8 +8,8 @@ import { cn } from '@/lib/utils'
  * user confused by *that* element can pull up the topic that describes it
  * without hunting through the full topic list.
  *
- * Promised by the `using-documentation` entry ("the small ? markers next to
- * specific controls open straight to the topic for that element").
+ * Rendered today in three places: the mode row, the Search-by toggle, and the
+ * Summarize button on a detail sheet.
  *
  * Stops click propagation so it never triggers an enclosing row/card click
  * handler (e.g. a result card that opens a detail sheet).

@@ -15,7 +15,7 @@ import {
   cleanEntryDescription,
   entryDeepLink,
   fetchCaseEntries,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Case-detail panel. Slide-in sheet from the right that loads and shows the
@@ -106,7 +106,7 @@ function CaseDetailBody({
 
   return (
     <>
-      <SheetHeader className="border-b border-border p-5 pr-12">
+      <SheetHeader className="border-b border-lawfare-line p-5 pr-12">
         <SheetTitle className="font-serif text-xl leading-tight">
           {theCase.cl_url ? (
             <a
@@ -173,12 +173,13 @@ function CaseDetailBody({
               No docket entries recorded for this case.
             </p>
           )}
+          {/* Un-boxed per the ruled page (7e75ba3, d27967f): rules separate content, boxes mean interactive. */}
           {entries && entries.length > 0 && (
             <ol className="space-y-3">
               {entries.map((e, i) => (
                 <li
                   key={`${e.entry_number ?? '_'}-${i}`}
-                  className="rounded-md border border-border bg-card p-3"
+                  className="border-t border-lawfare-line pt-3"
                 >
                   <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
                     <span className="font-mono text-muted-foreground">
@@ -217,7 +218,7 @@ function CaseDetailBody({
           <section
             aria-label="Cross-corpus citations"
             data-citations-slot="reserved"
-            className="mt-8 border-t border-border pt-4"
+            className="mt-8 border-t border-lawfare-line pt-4"
           >
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Citations

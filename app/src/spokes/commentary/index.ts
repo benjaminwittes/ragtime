@@ -1,5 +1,4 @@
-import type { CorpusSpoke } from '../types'
-import { fetchCommentaryFacets } from '@/lib/worker-client'
+import { type CorpusSpoke, fetchCommentaryFacets } from '@lawfare/ragtime-client'
 
 /**
  * Commentary spoke.
@@ -35,7 +34,7 @@ export const commentarySpoke: CorpusSpoke = {
   slug: 'commentary',
   title: 'Commentary',
   description:
-    'Expert legal/national-security commentary — Lawfare and Executive Functions, federated under one spoke.',
+    'Lawfare and Executive Functions: the analysis of all of the above.',
   status: 'active',
 
   plainEnglishDisclosure:

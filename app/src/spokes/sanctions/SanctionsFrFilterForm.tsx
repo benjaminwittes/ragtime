@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   type SanctionsFrFacets,
   type SanctionsFrFilterFields,
-} from '@/lib/worker-client'
+} from '@lawfare/ragtime-client'
 
 /**
  * Manual filter for the Federal Register sanctions slice (brief #15

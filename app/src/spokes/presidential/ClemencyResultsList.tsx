@@ -1,4 +1,6 @@
-import type { ClemencyGrantDisplayRow } from '@/lib/worker-client'
+import type { ClemencyGrantDisplayRow } from '@lawfare/ragtime-client'
+
+import { ResultWindow } from '../components/ResultWindow'
 
 /**
  * Clemency grant results table. Columns: Recipient · Type · President ·
@@ -45,11 +47,11 @@ export function ClemencyResultsList({
 
   return (
     <div className="px-6 py-4">
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? rows.length).toLocaleString()} grants · showing first{' '}
-        {rows.length.toLocaleString()}
-      </p>
-      <ClemencyRowsTable rows={rows} onOpenGrant={onOpenGrant} />
+      <ResultWindow rows={rows} count={count} noun="grants">
+        {(visible) => (
+          <ClemencyRowsTable rows={visible} onOpenGrant={onOpenGrant} />
+        )}
+      </ResultWindow>
     </div>
   )
 }
@@ -62,9 +64,11 @@ export function ClemencyRowsTable({
   onOpenGrant: (row: ClemencyGrantDisplayRow) => void
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    // Un-boxed to match components/ResultsList.tsx (7e75ba3): rules separate content,
+    // boxes mean interactive.
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             <Th>Recipient</Th>
             <Th>Type</Th>
@@ -74,7 +78,7 @@ export function ClemencyRowsTable({
             <Th>Source</Th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody>
           {rows.map((r) => (
             <tr
               key={r.pardon_id}
@@ -85,7 +89,7 @@ export function ClemencyRowsTable({
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenGrant(r) }
               }}
               aria-label={`Open ${r.person_name ?? 'grant ' + r.pardon_id} in detail panel`}
-              className="cursor-pointer hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
+              className="cursor-pointer border-t border-lawfare-line hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
             >
               <Td>
                 <span className="font-medium text-foreground">{r.person_name ?? '(unnamed)'}</span>

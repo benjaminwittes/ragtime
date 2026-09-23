@@ -9,8 +9,8 @@ import {
   detectCourtPreset,
   isCircuitCourt,
   resolveCourtPreset,
-} from '@/lib/worker-client'
-import type { FacetSpec } from '../types'
+  type FacetSpec,
+} from '@lawfare/ragtime-client'
 import { courtDisplayName } from '@/spokes/litigation/court-names'
 
 /**

@@ -1,56 +1,70 @@
 import type { DocsEntry } from '../types'
 
 /**
- * Global "Access & Cost" entry. Explains the three access modes (free,
- * BYOK, Lawfare-billed prepaid) and how charges work. The cost language
- * here is corrected from the editorial draft: the markup applies to actual
- * API cost (not estimated), and the courtesy buffer is a small overdraft
- * allowance, not a hard floor that prevents emptying the balance.
+ * Global "Access & Cost" entry.
+ *
+ * Two facts not to "correct" from the frontend: the balance lives inside the
+ * AI access sheet (`llm/AccessSettings.tsx`), not the site bar, and the 1.35x
+ * markup is a Worker-side billing fact that appears nowhere in this repo.
+ *
+ * The courtesy buffer is REAL — `legal/terms-of-service-content.ts` states
+ * it. A pass on 2026-09-18 grepped the spoke code, found nothing and cut it.
+ * It does not contradict the pre-flight: that refuses a query ESTIMATED to go
+ * below zero, the buffer lets one ALREADY RUNNING overshoot.
+ *
+ * The "What's Free: The Metadata Floor" section was its own global entry
+ * (`free-tier-metadata-floor.ts`) until 2026-09-18, when Mary Ford asked for
+ * the two to be one tab. This entry is the survivor of that merge because
+ * `explorer/model/allowance.test.ts` imports `accessAndCostEntry` by name.
  */
 export const accessAndCostEntry: DocsEntry = {
   slug: 'access-and-cost',
   title: 'Access & Cost',
-  summary: 'Free search, bring-your-own-key, or a Lawfare-billed prepaid balance — and how charges work.',
+  summary: 'Free search and filtering, bring-your-own-key, or a Lawfare-billed prepaid balance — and how charges work.',
   scope: { kind: 'global' },
-  order: 4,
+  order: 3,
   content: `
-RAGtime has three access modes, side by side. You pick one in **AI access**
-(top right). To be clear, Lawfare is not seeking to monetize RAGtime — we
-want it available for free to everyone doing research for any reason. But
-it costs real money to run every AI-enabled search, to maintain and develop
-the databases and search infrastructure that make them powerful, and to
-improve the system over time. The cost structure here is meant to keep the
-system as widely available and as low-cost as possible while letting
-Lawfare recoup what it spends to support it.
+Three access modes, chosen in **AI access**. Lawfare is not trying to make
+money here: the billing exists to recoup what the system costs to run.
 
-**1. The free tier.** Keyword search and structured metadata filtering on
-every corpus are free. No account, key, or credit card. This is the full
-search-and-filter surface, not a teaser — any search you can do locally
-against the database, do as much as you want. We will not charge you a dime.
+**1. Free.** Search and structured metadata filtering on every corpus. No
+account, no key, no card, and no cap on how much you search.
 
-**2. Bring your own key (BYOK).** We also won't charge you a dime to use
-the AI features with your own API key. Paste a key from Anthropic, OpenAI,
-or Google into the BYOK option to unlock the AI modes (Ask, synthesis,
-read, analyze). API calls bill to your provider account, not to Lawfare.
-Your key stays in your browser, and any money exchanged is between you and
-your AI provider. The service Lawfare provides is free.
+**2. Your own key.** Paste an Anthropic, OpenAI or Google key to unlock the
+AI modes. Those calls bill to your provider, not to Lawfare. The key stays in
+this browser; the Worker forwards it on each call and keeps no copy.
 
-**3. Lawfare-billed (paid).** The only time Lawfare charges you is if you
-want the AI features, don't have your own API key, and so want to use
-ours — which costs Lawfare money on every API call. You can buy a prepaid
-block at fixed dollar values ($5 / $20 / $50), and Lawfare runs the AI for
-you on Anthropic models. Each AI action shows an estimated cost before you
-run it and the actual cost after; your remaining balance shows in RAGtime's
-header. Lawfare charges $1.35 for every $1.00 of actual API cost, solely to
-support overhead on the system itself — not to generate revenue.
+**3. Lawfare-billed.** With no key of your own, buy a prepaid block ($5 /
+$20 / $50) and Lawfare runs Anthropic models for you, charging $1.35 for
+every $1.00 of actual API cost. Your balance and your per-query cap are at
+the top of the paid tab in **AI access**.
 
-There's a small courtesy buffer on the paid tier: because cost estimates
-are deliberately conservative, the system lets a query finish even if it
-lands a few cents past your balance, rather than cutting you off mid-run.
-Your next top-up clears the small deficit.
+**Estimates are estimates; the balance is the floor.** Every AI action is
+priced before it runs, by a planning step that guesses, so the figure can be
+high or low. An estimate over your balance is a warning you can override, and
+the query often lands cheaper; execution that would take the balance below
+zero is stopped there. An estimate over your per-query cap can be overridden
+once. A small **courtesy buffer** lets a query already under way finish a
+little past your balance, and new paid queries pause until you add credit.
+The Terms of Service state that commitment.
 
-**Why a cost estimate on every AI action?** AI calls over large document
-sets cost real money. Showing the estimate up front keeps the tool honest
-and lets you narrow the set first if the number looks high.
+**The Explorer has two limits of its own.** One conversation spends at most
+25¢; start a new one for a fresh 25¢. And a daily allowance — sixty model
+calls as this build is written, counted per network address rather than per
+tab, resetting at 00:00 UTC, with the Worker's own figure winning once a turn
+has reported one. A paid balance is metered on the balance instead and has no
+allowance. Both numbers live in the **trail**, with every tool call and what
+it cost, and a turn that is refused says which limit refused it.
+
+## What's Free: The Metadata Floor
+
+The free tier is not just full-text search. Every native structured field a
+corpus carries is filterable at no cost: dates, titles and headings, courts
+and agencies, classification, positive-law status, document type.
+
+The more you filter on objective fields, the more precisely you can define
+and check the set you are working with. It is also much faster than an AI
+call, and it reserves the AI layer, which costs real money, for small sets
+bounded by known parameters.
 `.trim(),
 }
