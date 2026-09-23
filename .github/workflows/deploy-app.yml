@@ -27,6 +27,9 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'index.html'
       - 'deploy/**'
       - '.github/workflows/deploy-app.yml'
@@ -57,9 +60,12 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: package-lock.json
 
+      # The repo is an npm workspace (`app/` + `packages/client`), so the one
+      # lockfile and the install live at the root, as in build-app.yml.
       - name: Install deps
+        working-directory: .
         run: npm ci
 
       # Lint and tests already run on this same push in build-app.yml; this job
