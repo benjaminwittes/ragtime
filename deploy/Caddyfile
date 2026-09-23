@@ -1,0 +1,105 @@
+# Caddy config for the RAGtime single-page app.
+#
+# Two environment variables, both set in /etc/default/caddy on the box:
+#   SITE_HOST   the hostname this box answers on. Staging and production use the
+#               same file; only this differs.
+#   API_ORIGIN  the Worker's origin, for connect-src. It moves when the API moves
+#               off workers.dev, and a stale value here shows up as a CSP report
+#               rather than as a broken app, because the full policy is
+#               report-only (see below).
+#
+# Root is a symlink the deploy flips, so a rollback is one `ln -sfn` and needs no
+# rebuild. See deploy/README.md.
+
+{$SITE_HOST} {
+	root * /srv/ragtime-app/current
+	encode zstd gzip
+
+	header {
+		# Enforced. HSTS without `preload`, deliberately: preload is a decision
+		# about the whole parent domain and this is one subdomain of a zone we do
+		# not own.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		Permissions-Policy        "geolocation=(), microphone=(), camera=()"
+		X-Frame-Options           "DENY"
+		# Resolves the `report-to csp` in the policies below. `report-uri` is
+		# deprecated but is still what Safari and older Chrome send to, so both
+		# names are given and they point at the same place.
+		Reporting-Endpoints       `csp="/csp-report"`
+		-Server
+	}
+
+	# Framing is the one CSP directive shipped ENFORCED, on its own, because it
+	# cannot break a page that is never legitimately framed and it is the control
+	# the OAuth consent page actually needs — a consent screen inside someone
+	# else's iframe is consent taken from a user who cannot see what they granted.
+	# X-Frame-Options above covers the same ground for older clients.
+	header Content-Security-Policy "frame-ancestors 'none'"
+
+	# Everything else is REPORT-ONLY first. A content policy guessed from reading
+	# the source and shipped enforced is how a working app goes blank on a Sunday.
+	# Watch the reports, then promote this to the enforced header and delete the
+	# single-directive one above.
+	#   style-src needs 'unsafe-inline' because React `style={{...}}` props are
+	#   inline style attributes; removing that means removing them from the app.
+	#   Stripe needs nothing here: checkout is a top-level redirect, not Stripe.js.
+	#   The SPA names no font host because it ships its own: EB Garamond and
+	#   Lato are bundled under app/src/assets/fonts. /legacy.html still
+	#   @imports them from fonts.googleapis.com at two places in index.html,
+	#   which is why the legacy policy below keeps both hosts and this one
+	#   does not. Self-hosting them is what lets these two directives reach
+	#   'self' at all.
+	#
+	#   Two policies, because /legacy.html cannot meet the SPA's and should not
+	#   be allowed to weaken it. The deploy ships the legacy single-file app
+	#   beside the SPA (`cp ../index.html dist/legacy.html`), and that file loads
+	#   supabase-js from jsdelivr, holds the entire app in one inline <script>,
+	#   carries 58 inline event handlers, and pulls the Lawfare logo from
+	#   azureedge. Adding all of that site-wide would cost the
+	#   SPA the strict policy it actually meets, so the looser one is scoped to
+	#   the one path that needs it.
+	#
+	#   Both name /csp-report, which is a sink rather than a collector — see the
+	#   handle block below for what that does and does not tell you.
+	@legacy path /legacy.html
+	@app not path /legacy.html
+
+	header @app Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; report-uri /csp-report; report-to csp"
+
+	header @legacy Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://lawfare-assets-new.azureedge.net; connect-src 'self' {$API_ORIGIN} https://aikdbjprndgksibbvcfs.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; report-uri /csp-report; report-to csp"
+
+	# Vite content-hashes everything under /assets, so the filename changes when
+	# the bytes do and the response can be cached for a year. GitHub Pages sent a
+	# flat max-age=600 on these, which is the whole reason the app carries an
+	# APP_VERSION cache-buster.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# The shell must never be cached, or a deploy is invisible until the TTL.
+	@shell path / /index.html /404.html /legacy.html
+	header @shell Cache-Control "no-cache"
+
+	# The SPA router owns unknown paths. try_files serves the shell with a 200,
+	# which is the point: GitHub Pages served the same bytes as a 404, so every
+	# deep link — including the OAuth consent URL — was a 404 to anything reading
+	# status codes rather than pixels.
+	# The report sink. 204 and nothing else, and it is worth being plain about
+	# what that buys: Caddy does not log request bodies, so the access log
+	# records that a report arrived and for which page, never which directive
+	# was violated. That answers "is anything firing in the field, and how
+	# often" — it does not answer "what broke". For that, run
+	# `node deploy/check-csp.mjs https://<host>`, which reads each page's own
+	# bytes against the policy served for that page's own path and names the
+	# directive. Promote the report-only header on the checker being green,
+	# not on this endpoint being quiet.
+	handle /csp-report {
+		respond 204
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
