@@ -96,6 +96,7 @@ export function ResultsList({
   source,
   snippets,
   onOpenCase,
+  loadMore,
 }: {
   rows: readonly CaseDisplayRow[] | undefined
   count: number | undefined
@@ -115,6 +116,14 @@ export function ResultsList({
    *  the sheet inline; the stack runtime (PR 4g) will replace this with
    *  a stack-push that records the detail as its own page. */
   onOpenCase: (row: CaseDisplayRow) => void
+  /** Set when more rows can be fetched for this page (a CourtListener
+   *  cursor remains). Renders a "load more" control under the table. */
+  loadMore?: {
+    onLoadMore: () => void
+    disabled: boolean
+    loading: boolean
+    error?: string
+  }
 }) {
   if (!hasRun && !loading) {
     return (
@@ -177,6 +186,9 @@ export function ResultsList({
   // where at least one row has a value (the model omits annotations on
   // descriptive prompts, and may include only a subset of the four fields).
   const annotationCols = computeAnnotationCols(source, rows)
+  // Live-served rows carry no entry count; drop the column rather than fill
+  // it with dashes.
+  const showEntries = rows.some((r) => r.entry_count != null)
 
   return (
     <div className="px-6 py-4">
@@ -210,7 +222,7 @@ export function ResultsList({
                   <Th>Judge</Th>
                   <Th>Filed</Th>
                   <Th>Cause</Th>
-                  <Th className="text-right">Entries</Th>
+                  {showEntries && <Th className="text-right">Entries</Th>}
                   {source?.kind === 'claude_read' && <Th>AI reason</Th>}
                   {annotationCols.includes('rank') && (
                     <Th className="text-right">Rank</Th>
@@ -272,9 +284,11 @@ export function ResultsList({
                       >
                         {shortCause(r.cause)}
                       </Td>
-                      <Td className="text-right font-mono text-xs tabular-nums">
-                        {r.entry_count ?? '—'}
-                      </Td>
+                      {showEntries && (
+                        <Td className="text-right font-mono text-xs tabular-nums">
+                          {r.entry_count ?? '—'}
+                        </Td>
+                      )}
                       {source?.kind === 'claude_read' && (
                         <Td className="max-w-sm text-xs text-muted-foreground">
                           {verdict?.reason ?? '—'}
@@ -308,6 +322,21 @@ export function ResultsList({
           </div>
         )}
       </ResultWindow>
+      {loadMore && (
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={loadMore.onLoadMore}
+            disabled={loadMore.disabled || loadMore.loading}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loadMore.loading ? 'Loading…' : 'Load more cases'}
+          </button>
+          {loadMore.error && (
+            <p className="text-sm text-destructive">{loadMore.error}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -500,7 +529,7 @@ function SourceDisclosure({ source }: { source: ResultSource }) {
           ? `AI analyzed ${source.analyzedCount.toLocaleString()} cases`
           : source.kind === 'claude_ama'
             ? amaTitle(source)
-            : 'Executed SQL'
+            : 'How this was produced'
 
   return (
     // Provenance, not content: the criterion a model read against, the SQL it wrote, the

@@ -22,10 +22,12 @@ import { courtDisplayName } from '@/spokes/litigation/court-names'
  * here since the four presets map cleanly to the well-known circuit-vs-
  * district taxonomy in `isCircuitCourt`).
  *
- * Defaults: `from` = blank (no date floor — so historical collections like
- * the J6 library, whose cases predate the 2025-01-20 litigation coverage
- * floor, return results without the user having to clear the date), courts =
- * all-courts preset.
+ * Defaults: `from` = blank (no date floor — litigation is served live from
+ * CourtListener at any filing date), courts = all-courts preset.
+ *
+ * Judge: a dropdown when the facet data carries a judge list, a free-text
+ * name otherwise (CourtListener has no judge pick-list; its filter matches
+ * the assigned judge by name).
  */
 
 type FacetData = {
@@ -137,6 +139,9 @@ export function FilterForm({
   const showCourts = facetById.has('courts')
   const showCollection = facetById.has('collection')
   const showJudge = facetById.has('judge')
+  // A pick-list only when there is one to pick from; an empty list after the
+  // facets load means "match by name".
+  const judgeAsText = facetData != null && facetData.judges.length === 0
 
   return (
     <form
@@ -145,7 +150,7 @@ export function FilterForm({
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {facetById.has('fts') && (
-          <Field label="Full-text search" hint="Docket-entry descriptions">
+          <Field label="Full-text search" hint="Filings and docket entries">
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -274,7 +279,16 @@ export function FilterForm({
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {showJudge && (
+        {showJudge && judgeAsText && (
+          <Field label="Judge" hint="Name">
+            <Input
+              value={judge}
+              onChange={(e) => setJudge(e.target.value)}
+              placeholder={facetById.get('judge')?.placeholder ?? 'Judge name'}
+            />
+          </Field>
+        )}
+        {showJudge && !judgeAsText && (
           <Field label="Judge">
             <select
               value={judge}

@@ -11,9 +11,10 @@ import { ANALYSIS_HARD_CAP } from '@lawfare/ragtime-client'
  * per-case annotations (rank / score / category / label). Cases are NOT
  * narrowed — the analysis is a layer above the existing result page.
  *
- * Server-side hard cap: ANALYSIS_HARD_CAP (2000 cases). Beyond that the
- * context doesn't fit; the user must narrow the field first. The cap is
- * surfaced as a disabled state with an explanation, not a silent failure.
+ * Server-side hard cap: ANALYSIS_HARD_CAP (150 cases — one CourtListener
+ * call per case, against the service key's hourly budget). Beyond that the
+ * user must narrow the field first. The cap is surfaced as a disabled state
+ * with an explanation, not a silent failure.
  *
  * Placeholder is mechanic-flavored per brief #6 §7c (replacing the legacy
  * "rank by severity of non-compliance" framing that presupposed there's a

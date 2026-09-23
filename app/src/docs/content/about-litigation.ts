@@ -1,12 +1,9 @@
 import type { DocsEntry } from '../types'
 
 /**
- * Litigation spoke "How to use" entry.
- *
- * The coverage floor is unsettled, not stale: the corpus is mid-switch to a
- * new ingest (Thomas, 2026-09-18), so no date is safe to assert and this
- * entry quotes none. Do not "fix" that from `getHoldings`, which still
- * reports the old floor — settle the corpus first.
+ * Litigation spoke "How to use" entry — what's in the corpus (served live
+ * from CourtListener, all dates), what it's good for, demo queries, and two
+ * things to know about search today.
  */
 export const aboutLitigationEntry: DocsEntry = {
   slug: 'about-litigation',
@@ -15,24 +12,31 @@ export const aboutLitigationEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'litigation' },
   order: 9,
   content: `
-**What's in it.** Federal district-court and appellate dockets — case
-metadata (parties, court, judge, dates, cause / nature-of-suit), the docket
-entries themselves, and OCR text of attached filings where we have it. The
-set is deliberately over-inclusive, so it is a strong net for "show me
-everything in this space" and a good base for datasets built on definable
-criteria.
+**What's in it.** Federal district-court and appellate dockets, searched
+live on CourtListener's RECAP archive at any filing date: the case metadata
+(court, judge, dates, cause / nature-of-suit), the docket entries, and the
+text of attached filings where RECAP has them. RECAP holds only what
+someone has bought from PACER, so coverage is uneven by court and by case.
+An empty result means CourtListener holds nothing that matches, not that
+nothing was filed. RAGtime is not a substitute for PACER for complete,
+up-to-the-minute docket tracking.
 
-**Where the corpus starts is not one date.** The comprehensive floor is
-moving backward, and this page deliberately quotes no date for it: the figure
-would be wrong again before you read it. That floor is an artifact of what
-Lawfare first built the corpus for — identifying violated court orders in
-immigration habeas cases during the second Trump administration. Curated
-**collections** reach further back: January 6 prosecutions to 2021, AI
-liability, and others. So "how far back does this go" has two answers, and
-the **Collection** filter is where the second one lives.
+**What it's good for.** Tracking and analyzing live federal litigation:
+who's suing whom over what, where, and how the cases are moving. Because
+the set is deliberately over-inclusive (better to have a case you don't
+need than to miss one), it's a strong net for "show me everything in this
+space." Use it to build datasets of cases that meet easily-definable
+criteria:
 
-The corpus updates continuously but can run a few days behind any given
-docket, so it is not a substitute for PACER or CourtListener.
+- How many habeas cases were there in Minnesota during the recent ICE
+  surge? Limit the court to the District of Minnesota and the litigation
+  type to HABEAS.
+- Every criminal case in which a defendant moved for dismissal on selective-
+  or vindictive-prosecution grounds? Limit to criminal cases and full-text
+  search for "vindictive."
+- Criminal cases brought against protesters? Limit to criminal cases, then
+  ask an AI of your choice: "Show me cases in which the defendants are
+  facing charges in connection with political protests."
 
 **Demo queries to try:**
 
@@ -43,11 +47,11 @@ docket, so it is not a substitute for PACER or CourtListener.
 - Narrow to a field, then use Analyze to characterize patterns across the
   set.
 
-**Two limits on search today.** Full-text search runs over docket-entry
-descriptions, not the full text of attached documents, so a phrase buried
-inside a filed PDF is not findable here yet even though the PDF is. And the
-court selector opens with every court checked and sends exactly what is
-checked — unchecking them all asks for cases in no court, which is an empty
-search rather than a narrow one.
+**Two things to know about search today.**
+
+- Full-text search runs over docket entries and the text of the filings
+  RECAP holds. Results come newest first, 100 at a time.
+- Searching with no court selected returns nothing; "All courts" is the
+  default for a reason.
 `.trim(),
 }
