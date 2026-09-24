@@ -19,10 +19,15 @@ first is free; the two AI modes require an API key or a positive balance
 (see Access & cost).
 
 **Filter manually (free)** — the structured form includes full-text keyword
-search, case name, courts, judge, case type, cause/NOS, and date range. The
-search runs live on CourtListener and returns the newest 100 matching cases,
-with the total count; "Load more cases" fetches the next 100. Manual
-searches produce a result page you can read and export.
+search, case name, courts, judge, case type, cause/NOS, collection, and date
+range. The search runs live on CourtListener and returns the newest 100
+matching cases, with the total count; "Load more cases" fetches the next 100.
+Manual searches produce a result page you can read and export.
+
+A **collection** is a curated list of dockets, such as a litigation tracker,
+kept with the tracker's own columns for each case. Pick one to search only
+inside it, in any court its cases were filed in. "Browse collections" opens
+the list, and each collection's page shows its cases with those columns.
 
 **AI reads each case** — the AI reads each case in the set against a yes/no
 criterion you give it and keeps or drops each one, with a reason. Good for
