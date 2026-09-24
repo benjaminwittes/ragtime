@@ -94,6 +94,13 @@ jobs:
         run: npm run build
         env:
           VITE_BASE: /
+          # Hostname cutover (2026-09): the Worker's Lawfare-owned custom
+          # domain replaces the workers.dev host the code defaults to. Merge
+          # only once ragtime-api.lawfaremedia.org answers (ragtime-worker
+          # DEPLOY.md, "Hostnames: the cutover"); until then the default in
+          # lib/worker-client.ts, lib/usage-log.ts and auth/paid-context.tsx
+          # stays in effect.
+          VITE_WORKER_URL: https://ragtime-api.lawfaremedia.org
 
       - name: Preserve legacy single-file app at /legacy.html
         run: cp ../index.html dist/legacy.html
