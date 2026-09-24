@@ -46,6 +46,8 @@ criteria:
   order" across all district courts.
 - Narrow to a field, then use Analyze to characterize patterns across the
   set.
+- Pick a collection, such as AI Liability Litigation, and full-text search
+  inside it.
 
 **Two things to know about search today.**
 

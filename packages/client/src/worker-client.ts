@@ -267,18 +267,23 @@ export async function hubAmaExecute(
  * /corpus/facets
  * ------------------------------------------------------------------------- */
 
+/** A curated litigation collection: a named list of dockets kept by the
+ *  project (membership and per-case curated attributes), whose cases are
+ *  read live from CourtListener. */
 export type CollectionRef = {
   slug: string
   name: string
+  description?: string | null
+  case_count?: number
 }
 
 /** Litigation is served live from CourtListener (federate-api), so the facets
  *  are CourtListener's: the court list is its federal court table, and
  *  `case_count` its docket count over those courts — null when the count probe
  *  failed. `entry_count` and `last_synced` are null: there is no mirror and no
- *  sync. `judges` and `collections` are empty — there is no judge pick-list
- *  upstream (the filter matches a judge by name) and collections were a
- *  mirror-only curation. */
+ *  sync. `judges` is empty — there is no judge pick-list upstream (the filter
+ *  matches a judge by name). `collections` is the project's own curation;
+ *  `collections_unavailable` is true when it could not be read. */
 export type CorpusFacets = {
   case_count: number | null
   entry_count: number | null
@@ -290,6 +295,7 @@ export type CorpusFacets = {
   /** Judge names for a pick-list; empty when the corpus has none. */
   judges: string[]
   collections: CollectionRef[]
+  collections_unavailable?: boolean
 }
 
 export async function fetchCorpusFacets(): Promise<CorpusFacets> {
@@ -324,7 +330,9 @@ export type FilterFields = {
   judge?: string
   /** One of cv / cr / mj / mc (civil / criminal / magistrate / misc). */
   caseType?: 'cv' | 'cr' | 'mj' | 'mc'
-  /** Collection slug; joined via collection_cases. */
+  /** Collection slug (from facets `collections`). The Worker resolves it to
+   *  the collection's dockets and ANDs it with every other field; under
+   *  "all courts" it searches every court a member was filed in. */
   collection?: string
   /** ILIKE on cause or nature_of_suit (either match counts). */
   cause?: string
@@ -4609,6 +4617,56 @@ export async function fetchCasesByIds(
   if (!r.ok) throw await corpusError(r, '/corpus/cases')
   const body = (await r.json()) as { rows: CaseDisplayRow[] }
   return body.rows
+}
+
+/* ----------------------------------------------------------------------------
+ * /corpus/collections — curated litigation collections
+ * ------------------------------------------------------------------------- */
+
+/** Every litigation collection, with its size. */
+export async function fetchCollections(): Promise<CollectionRef[]> {
+  const r = await fetch(`${workerUrl()}/corpus/collections`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) throw await corpusError(r, '/corpus/collections')
+  const body = (await r.json()) as { collections: CollectionRef[] }
+  return body.collections
+}
+
+/** A collection member: CourtListener's display row plus the curated
+ *  attributes the collection keeps for that case. */
+export type CollectionCaseRow = CaseDisplayRow & {
+  attributes: Record<string, unknown>
+  member_source: string | null
+  added_at: string | null
+}
+
+export type CollectionCasesPage = {
+  collection: CollectionRef
+  /** This page's members, in curation order. */
+  rows: CollectionCaseRow[]
+  /** Members on this page that CourtListener did not return. */
+  missing: number[]
+  total: number
+  offset: number
+  /** Pass as `offset` for the next page; null on the last. */
+  next_offset: number | null
+}
+
+/** One page (≤100) of a collection's cases. */
+export async function fetchCollectionCases(
+  slug: string,
+  opts: { offset?: number; limit?: number } = {},
+): Promise<CollectionCasesPage> {
+  const r = await fetch(`${workerUrl()}/corpus/collections/cases`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ slug, offset: opts.offset ?? 0, limit: opts.limit ?? 100 }),
+  })
+  if (!r.ok) throw await corpusError(r, '/corpus/collections/cases')
+  return (await r.json()) as CollectionCasesPage
 }
 
 /* ----------------------------------------------------------------------------

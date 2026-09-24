@@ -58,8 +58,9 @@ export const litigationSpoke: CorpusSpoke = {
     paradigmatic: null,
   },
 
-  // Brief #6 §2's eight filter axes, less `collection` — a mirror-only
-  // curation the Worker now refuses by name.
+  // Brief #6 §2's eight filter axes. `collection` is the project's own
+  // curation: the Worker keeps each collection's docket list and resolves the
+  // slug to it, then searches CourtListener for those dockets.
   facets: [
     {
       id: 'fts',
@@ -105,6 +106,12 @@ export const litigationSpoke: CorpusSpoke = {
       label: 'Cause / NOS',
       control: 'text',
       placeholder: 'e.g. APA, 551, 1983…',
+    },
+    {
+      id: 'collection',
+      label: 'Collection',
+      control: 'dropdown',
+      optionsSource: 'corpus-query',
     },
     {
       id: 'date_range',
