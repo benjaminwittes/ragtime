@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { AppLink } from '@/components/AppLink'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -33,7 +34,7 @@ import { courtDisplayName } from '@/spokes/litigation/court-names'
 type FacetData = {
   courts: readonly string[]
   judges: readonly string[]
-  collections: readonly { slug: string; name: string }[]
+  collections: readonly { slug: string; name: string; case_count?: number }[]
 }
 
 export function FilterForm({
@@ -42,6 +43,7 @@ export function FilterForm({
   loading,
   onSubmit,
   initialSearch,
+  initialCollection,
 }: {
   facets: readonly FacetSpec[]
   facetData: FacetData | undefined
@@ -50,6 +52,8 @@ export function FilterForm({
   onSubmit: (fields: FilterFields) => void
   /** Seed for the FTS field — set when carried over from the hub (`?q=`). */
   initialSearch?: string
+  /** Seed for the collection field — set from a `?collection=` link. */
+  initialCollection?: string
 }) {
   const facetById = useMemo(() => {
     const m = new Map<string, FacetSpec>()
@@ -63,7 +67,7 @@ export function FilterForm({
   const [name, setName] = useState('')
   const [judge, setJudge] = useState('')
   const [caseType, setCaseType] = useState<'' | 'cv' | 'cr' | 'mj' | 'mc'>('')
-  const [collection, setCollection] = useState('')
+  const [collection, setCollection] = useState(initialCollection ?? '')
   const [cause, setCause] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -335,10 +339,18 @@ export function FilterForm({
               <option value="">— Any —</option>
               {(facetData?.collections ?? []).map((c) => (
                 <option key={c.slug} value={c.slug}>
-                  {c.name}
+                  {c.case_count != null
+                    ? `${c.name} (${c.case_count.toLocaleString('en-US')})`
+                    : c.name}
                 </option>
               ))}
             </select>
+            <AppLink
+              to={collection ? `/collections/${collection}` : '/collections'}
+              className="inline-block text-xs text-primary hover:underline"
+            >
+              {collection ? 'Browse this collection →' : 'Browse collections →'}
+            </AppLink>
           </Field>
         )}
       </div>

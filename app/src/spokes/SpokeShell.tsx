@@ -15,7 +15,7 @@ import {
   type QueryMode,
 } from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
-import { readCarryoverQuery } from '@/lib/routing'
+import { readCarryoverQuery, readDeepLink } from '@/lib/routing'
 import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
@@ -127,6 +127,12 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   // filter so we land on the responsive set, not the full corpus. The wired
   // effect lives below, after handleFilterSubmit is in scope.
   const carryover = useMemo(() => readCarryoverQuery(), [])
+  // A collection carried in the link (`?collection=<slug>`, e.g. from a
+  // collection page's "Search inside"): seeds the form and joins the run.
+  const carriedCollection = useMemo(() => {
+    const c = readDeepLink()?.facets.collection?.[0]
+    return c && /^[a-z0-9][a-z0-9-]{0,63}$/.test(c) ? c : null
+  }, [])
 
   // Mode selection. manual_filter is always functional; AI modes become
   // available once a BYOK is configured. claude_read / claude_analysis
@@ -283,11 +289,15 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   // so React StrictMode's double-invoke (dev) doesn't push two pages.
   const carriedOverRef = useRef(false)
   useEffect(() => {
-    if (carriedOverRef.current || !carryover) return
+    if (carriedOverRef.current || (!carryover && !carriedCollection)) return
     carriedOverRef.current = true
     // Mirror the filter form's defaults: all courts (omitting `allCourts`
     // would scope to zero courts → zero rows) and no date floor.
-    void handleFilterSubmit({ search: carryover, allCourts: true })
+    void handleFilterSubmit({
+      ...(carryover ? { search: carryover } : {}),
+      ...(carriedCollection ? { collection: carriedCollection } : {}),
+      allCourts: true,
+    })
     // Mount-only: handleFilterSubmit + carryover are stable for this mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -493,6 +503,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           loading={queryLoading}
           onSubmit={handleFilterSubmit}
           initialSearch={carryover ?? undefined}
+          initialCollection={carriedCollection ?? undefined}
         />
       )}
       {canSubmit && activeMode === 'claude_read' && (

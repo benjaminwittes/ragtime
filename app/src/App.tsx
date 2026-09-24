@@ -17,6 +17,7 @@ import { SanctionsSpokeShell } from '@/spokes/sanctions/SanctionsSpokeShell'
 import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import { ExplorerPage } from '@/explorer/ExplorerPage'
+import { CollectionPage, CollectionsIndex } from '@/collections/CollectionsPage'
 import { spokeSlugFor } from '@/lib/deep-link'
 import { navigateTo, toHref, toLogical } from '@/lib/routing'
 import { withViewTransition } from '@/lib/transition'
@@ -30,6 +31,8 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *   `/explorer`                  → the Explorer: a conversation that orients,
  *                                  proposes a brief, researches, and hands off
  *                                  into the spokes (`src/explorer/`)
+ *   `/collections`               → curated litigation collections
+ *   `/collections/<slug>`        → one collection's cases (`src/collections/`)
  *   `/corpus/<slug>`             → full `SpokeShell`
  *   `/corpus/<slug>/<id>`        → the same shell, which opens that
  *                                  document's detail sheet on mount (the
@@ -55,6 +58,8 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
 type Route =
   | { kind: 'hub' }
   | { kind: 'explorer' }
+  | { kind: 'collections' }
+  | { kind: 'collection'; slug: string }
   | { kind: 'privacy' }
   | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
@@ -69,6 +74,9 @@ function parseRoute(pathname: string): Route {
   if (pathname === '/privacy') return { kind: 'privacy' }
   if (pathname === '/terms') return { kind: 'terms' }
   if (pathname === '/explorer') return { kind: 'explorer' }
+  if (pathname === '/collections' || pathname === '/collections/') return { kind: 'collections' }
+  const coll = pathname.match(/^\/collections\/([a-z0-9][a-z0-9-]{0,63})\/?$/)
+  if (coll) return { kind: 'collection', slug: coll[1] }
   const link = links.parse(pathname)
   if (link) {
     // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
@@ -121,6 +129,10 @@ function App() {
   const surface =
     route.kind === 'explorer'
       ? <ExplorerPage />
+      : route.kind === 'collections'
+      ? <CollectionsIndex />
+      : route.kind === 'collection'
+      ? <CollectionPage key={route.slug} slug={route.slug} />
       : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
