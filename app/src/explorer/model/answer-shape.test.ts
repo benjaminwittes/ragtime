@@ -114,8 +114,12 @@ test('citations are read through the one resolver; the first number ignores ids'
   assert.equal(firstNumber('About 14 orders cite it.'), '14')
 })
 
-test('cents read with one decimal and never dollars; seconds round', () => {
+test('cents read with one decimal below a dollar and as dollars from one; seconds round', () => {
   assert.equal(cents(10.28), '10.3¢')
+  assert.equal(cents(99.94), '99.9¢')
+  assert.equal(cents(99.96), '$1.00')
+  assert.equal(cents(212.6), '$2.13')
+  assert.equal(cents(1234), '$12.34')
   assert.equal(cents(0.9458), '0.9¢')
   assert.equal(cents(4), '4¢')
   assert.equal(cents(0.02), '<0.1¢')

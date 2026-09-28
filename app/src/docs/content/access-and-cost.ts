@@ -48,13 +48,15 @@ once. A small **courtesy buffer** lets a query already under way finish a
 little past your balance, and new paid queries pause until you add credit.
 The Terms of Service state that commitment.
 
-**The Explorer has two limits of its own.** One conversation spends at most
-25¢; start a new one for a fresh 25¢. And a daily allowance — sixty model
-calls as this build is written, counted per network address rather than per
-tab, resetting at 00:00 UTC, with the Worker's own figure winning once a turn
-has reported one. A paid balance is metered on the balance instead and has no
-allowance. Both numbers live in the **trail**, with every tool call and what
-it cost, and a turn that is refused says which limit refused it.
+**The Explorer meters spend; it does not cap a conversation.** The running
+total for the conversation is at the top of the **trail**, and it moves after
+every model round, so you can watch it climb while a turn works. Beside it is
+each turn's cost and every tool call with what it cost. One limit remains: a
+daily allowance — sixty model calls as this build is written, counted per
+network address rather than per tab, resetting at 00:00 UTC, with the
+Worker's own figure winning once a turn has reported one. A paid balance is
+metered on the balance instead and has no allowance. A turn that is refused
+says which limit refused it.
 
 ## What's Free: The Metadata Floor
 

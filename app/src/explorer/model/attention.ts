@@ -1,5 +1,4 @@
 import { allowancePercent, type Allowance } from './allowance.ts'
-import { cents } from './format.ts'
 
 /**
  * What the trail control in the band says, and whether it asks to be looked at.
@@ -14,9 +13,9 @@ import { cents } from './format.ts'
  * strip this replaced.
  *
  * Precedence is by how hard the stop is. A spent daily allowance refuses the next turn
- * outright; a conversation at its cap ends this conversation but not the day; a filling
- * allowance is a warning about later. Reporting the softest of three would be the least
- * useful true thing to say.
+ * outright; a filling allowance is a warning about later. Spend is not a limit: the
+ * conversation cap was removed on 2026-09-28, so the running total is the Meter's to show
+ * and never makes this control hot.
  */
 export const HOT_AT = 80
 
@@ -27,7 +26,7 @@ export type Attention = {
    * What it reads on a phone, where the row runs out.
    *
    * Measured at 390: the band gives this control somewhere between 74 and 85px before the
-   * row wraps. "Trail" is 47px and "21¢ of 25¢" is 83px — one pixel of slack — while "54
+   * row wraps. "Trail" is 47px and "21¢ of 25¢" (a label retired with the cap) was 83px, while "54
    * of 60 calls" is 95px and "Allowance used up" is 126px, which pushed two other controls
    * down a row. So the two labels that only appear when a limit is close were the two that
    * did not fit, which is the worst possible place to spend the reader's screen.
@@ -46,10 +45,6 @@ export type Attention = {
 }
 
 export type AttentionInput = {
-  /** Spend so far in this conversation, in cents. */
-  spendCents: number
-  /** This conversation's cap, in cents. */
-  capCents: number
   /**
    * The daily pool, or null for a reader who has none — a paid account is metered on its
    * balance, so it has no allowance to run out and nothing to warn it about.
@@ -57,27 +52,12 @@ export type AttentionInput = {
   pool: Allowance | null
 }
 
-/** `cents` writes the unit, and the short forms carry it once at the end instead. */
-function bare(n: number): string {
-  const c = cents(n)
-  return c.endsWith('¢') ? c.slice(0, -1) : c
-}
-
-export function attention({ spendCents, capCents, pool }: AttentionInput): Attention {
+export function attention({ pool }: AttentionInput): Attention {
   // "Used up" rather than a count: a refusal is what says the pool is spent, and the cap
   // it is spent against is not always the one the last cost event reported — a demo
   // allowance refuses on its own number. The tail of the full wording asserts nothing that
   // could be wrong, and a reader who has seen either wording recognises the other.
   if (pool?.spent) return { label: 'Allowance used up', short: 'Used up', hot: true }
-
-  const spendPct = capCents > 0 ? (100 * spendCents) / capCents : 0
-  if (spendPct >= HOT_AT) {
-    return {
-      label: cents(spendCents) + ' of ' + capCents + '¢',
-      short: bare(spendCents) + '/' + capCents + '¢',
-      hot: true,
-    }
-  }
 
   // A spent pool is already returned above, so `allowancePercent` is non-null here only
   // when the worker has actually said a count — which is what makes the label safe.

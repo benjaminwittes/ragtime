@@ -81,7 +81,7 @@ const ctxWith = (seed) => ctxWithHarness(browser, { seed })
       index: 0, phase: 'research', prompt: 'A conversation from before the list existed',
       promptKind: 'ask', narration: [], answer: 'The answer that must not be lost.', question: null,
       brief: null, rounds: [], handoffs: [],
-      costs: [{ type: 'cost', turn_cents: 4.4, conversation_cents: 5, conversation_spend: 4.4, cap_cents: 25, steps: 2, step_cap: 12 }],
+      costs: [{ type: 'cost', turn_cents: 4.4, conversation_cents: 5, conversation_spend: 4.4, steps: 2, step_cap: 12 }],
       error: null, stop: 'end_turn', calls: 3, startedAt: 1, endedAt: 2, running: false, lastEvent: null, buffer: '',
     }],
     brief: null, proposed: null, pinned: [],

@@ -26,13 +26,13 @@ const CANDIDATES_MODE = process.argv.includes('--candidates')
  * script is serialised and run in the page, so a function closing over a variable here
  * arrives there with that variable undefined and silently seeds nothing.
  */
-function seedOf({ spend, cap, ipCalls, ipCap }) {
+function seedOf({ spend, ipCalls, ipCap }) {
   const blob = JSON.stringify({
     v: 1,
     turns: [{
       index: 1, phase: 'research', prompt: 'test', promptKind: 'ask', narration: [], answer: 'an answer',
       question: null, brief: null, rounds: [], handoffs: [],
-      costs: [{ type: 'cost', turn_cents: 1, conversation_cents: spend, conversation_spend: spend, cap_cents: cap, steps: 1, step_cap: 12, ip_calls: ipCalls, ip_cap: ipCap }],
+      costs: [{ type: 'cost', turn_cents: 1, conversation_cents: spend, conversation_spend: spend, steps: 1, step_cap: 12, ip_calls: ipCalls, ip_cap: ipCap }],
       error: null, stop: 'end_turn', calls: 1, startedAt: 1, endedAt: 2, running: false, lastEvent: null, buffer: '',
     }],
     brief: null, proposed: null, pinned: [], messages: [{ role: 'user', content: 'x' }], envelope: 'e',
@@ -42,9 +42,10 @@ function seedOf({ spend, cap, ipCalls, ipCap }) {
 }
 
 const STATES = [
-  { name: 'at rest', state: { spend: 1, cap: 25, ipCalls: 2, ipCap: 60 } },
-  { name: 'conversation near its cap', state: { spend: 21, cap: 25, ipCalls: 2, ipCap: 60 } },
-  { name: 'allowance filling', state: { spend: 1, cap: 25, ipCalls: 54, ipCap: 60 } },
+  { name: 'at rest', state: { spend: 1, ipCalls: 2, ipCap: 60 } },
+  // No cap, so spend alone leaves the control quiet however high it runs.
+  { name: 'a costly conversation', state: { spend: 212, ipCalls: 2, ipCap: 60 } },
+  { name: 'allowance filling', state: { spend: 1, ipCalls: 54, ipCap: 60 } },
 ]
 
 /**
@@ -73,7 +74,7 @@ const browser = await launch()
 if (CANDIDATES_MODE) {
   const CANDIDATES = process.env.E2E_LABELS
     ? process.env.E2E_LABELS.split(',')
-    : ['Trail', '21/25¢', '54/60', 'Used up', 'None left', 'No calls', 'No calls left', 'Out of calls', 'Allowance used up']
+    : ['Trail', '54/60', 'Used up', 'None left', 'No calls', 'No calls left', 'Out of calls', 'Allowance used up']
   const ctx = await ctxWith(browser, { viewport: { width: W, height: 844 }, seed: seedOf(STATES[0].state) })
   const page = await ctx.newPage()
   await page.goto(EXPLORER, { waitUntil: 'networkidle' })

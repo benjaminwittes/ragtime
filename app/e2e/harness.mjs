@@ -84,11 +84,11 @@ function installStub() {
       },
       corpus: 'olc', count: 14, cost_cents: 0, ms: 612,
     })],
-    [80, frame('cost', { type: 'cost', turn_cents: 0.42, conversation_cents: 1, conversation_spend: 0.42, cap_cents: 25, steps: 1, step_cap: 12, ip_calls: 3, ip_cap: 60 })],
+    [80, frame('cost', { type: 'cost', turn_cents: 0.42, conversation_cents: 1, conversation_spend: 0.42, steps: 1, step_cap: 12, ip_calls: 3, ip_cap: 60 })],
     [250, frame('text', { type: 'text', delta: 'There is enough here to be worth a brief. ' })],
     [200, frame('tool_call', { type: 'tool_call', step: 2, id: 'tu_2', name: 'propose_brief', input: { brief: BRIEF } })],
     [200, frame('phase', { type: 'phase', phase: 'orient', outcome: 'brief', brief: BRIEF })],
-    [80, frame('cost', { type: 'cost', turn_cents: 0.63, conversation_cents: 1, conversation_spend: 0.63, cap_cents: 25, steps: 2, step_cap: 12, ip_calls: 4, ip_cap: 60 })],
+    [80, frame('cost', { type: 'cost', turn_cents: 0.63, conversation_cents: 1, conversation_spend: 0.63, steps: 2, step_cap: 12, ip_calls: 4, ip_cap: 60 })],
     [60, frame('done', { type: 'done', envelope: 'env_stub_orient_1', stop: 'end_turn', history: [{ role: 'assistant', content: [{ type: 'text', text: 'brief proposed' }] }], calls: 2 })],
   ]
 
@@ -102,14 +102,14 @@ function installStub() {
       summary: 'a plan: 4 queries, about 3.1¢', detail: badDetail ?? { kind: 'plan', queries: 4, estimated_cost_cents: 3.1, has_token: true },
       cost_cents: 0, ms: 840,
     })],
-    [80, frame('cost', { type: 'cost', turn_cents: 1.1, conversation_cents: Math.ceil(spend * 0.4), conversation_spend: spend * 0.4, cap_cents: 25, steps: 1, step_cap: 12, ip_calls: ipCalls - 2, ip_cap: 60 })],
+    [80, frame('cost', { type: 'cost', turn_cents: 1.1, conversation_cents: Math.ceil(spend * 0.4), conversation_spend: spend * 0.4, steps: 1, step_cap: 12, ip_calls: ipCalls - 2, ip_cap: 60 })],
     [400, frame('tool_call', { type: 'tool_call', step: 2, id: 'tr_2', name: 'ask_corpus_execute', input: { token: 'plan_1' } })],
     [900, frame('tool_result', {
       type: 'tool_result', step: 2, id: 'tr_2', name: 'ask_corpus_execute', ok: true,
       summary: '3,140 characters, 9 citations', detail: { kind: 'answer', chars: 3140, citations: 9, candor: 2, cost_cents: 3.1 },
       corpus: 'olc', cost_cents: 3.1, ms: 4120,
     })],
-    [80, frame('cost', { type: 'cost', turn_cents: 4.4, conversation_cents: Math.ceil(spend), conversation_spend: spend, cap_cents: 25, steps: 2, step_cap: 12, ip_calls: ipCalls, ip_cap: 60 })],
+    [80, frame('cost', { type: 'cost', turn_cents: 4.4, conversation_cents: Math.ceil(spend), conversation_spend: spend, steps: 2, step_cap: 12, ip_calls: ipCalls, ip_cap: 60 })],
     [120, frame('handoff', { type: 'handoff', kind: 'document', url: '/corpus/olc/1996-08-13-removal', label: 'Removal of the head of an independent agency (1996)' })],
     [120, frame('handoff', { type: 'handoff', kind: 'workspace', url: '/corpus/olc?q=removal+for+cause', label: 'OLC — removal for cause' })],
     // `__MARK__` stamps an answer so a driver holding more than one conversation can tell
@@ -123,15 +123,15 @@ function installStub() {
     // because that is what an answer is: markdown a model wrote, mixing the two. Drivers
     // that ask where a link goes need both present to have anything to compare.
     [300, frame('text', { type: 'text', delta: 'Two later opinions (2009, 2019) narrow it without overruling it. See [rt://olc/1996-08-13-removal](rt://olc/1996-08-13-removal), and the commentary at [Lawfare](https://www.lawfaremedia.org/article/removal-power).' })],
-    [80, frame('cost', { type: 'cost', turn_cents: 4.4, conversation_cents: Math.ceil(spend), conversation_spend: spend, cap_cents: 25, steps: 2, step_cap: 12, ip_calls: ipCalls, ip_cap: 60 })],
+    [80, frame('cost', { type: 'cost', turn_cents: 4.4, conversation_cents: Math.ceil(spend), conversation_spend: spend, steps: 2, step_cap: 12, ip_calls: ipCalls, ip_cap: 60 })],
     [60, frame('done', { type: 'done', envelope: 'env_stub_research_1', stop: 'end_turn', history: [{ role: 'assistant', content: [{ type: 'text', text: 'answer' }] }], calls: 3 })],
   ]
 
   const scenarios = {
     // Turn 1 orients; turn 2 (after accepting the brief) researches to a modest total.
     research: [orient(), research(4.4, 7)],
-    // Same, but the conversation total lands past 80% of the 25¢ cap.
-    hot: [orient(), research(21.4, 7)],
+    // Same, but the conversation total runs past $2 — no cap stops it, and the meter reads dollars.
+    costly: [orient(), research(212.4, 7)],
     // Same, but the daily allowance is the thing that is nearly gone.
     hotpool: [orient(), research(4.4, 55)],
     // A slow research turn that never finishes: the page is taken away mid-stream.
