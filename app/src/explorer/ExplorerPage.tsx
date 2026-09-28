@@ -75,7 +75,7 @@ export function ExplorerPage() {
   // to be looked at. `attention` holds the whole rule for when it does.
   const trail = attention({
     spendCents: cost ? cost.conversation_spend : 0,
-    capCents: cost ? cost.cap_cents : 25,
+    capCents: cost ? cost.cap_cents : 200,
     pool: isPaid ? null : pool,
   })
   // Both of these are controls on a conversation, so neither exists before there is one.
