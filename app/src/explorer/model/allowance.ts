@@ -1,8 +1,9 @@
 /**
  * The daily allowance, which the page spends and never showed.
  *
- * Two limits sit under every turn and only one of them was on the screen. The conversation
- * cap (25¢) is in the `cost` event and the Meter renders it. The daily allowance is not:
+ * Two limits sat under every turn and only one of them was on the screen. The conversation
+ * cap (25¢, removed 2026-09-28) was in the `cost` event and the Meter rendered it. The daily
+ * allowance is not:
  * the worker counts model calls per address per UTC day (`IP_DAILY_MODEL_CALLS`) and
  * refuses past it, so the first thing a member learned about the limit was being refused.
  *
@@ -18,7 +19,7 @@
 
 import type { ExplorerCostEvent } from '@lawfare/ragtime-client'
 
-/** The refusals that mean an allowance ran out, as against a conversation reaching its cap. */
+/** The refusals that mean an allowance ran out, as against any other refusal. */
 export const QUOTA_CODES: ReadonlySet<string> = new Set(['ip_quota', 'demo_quota'])
 
 export type Allowance = {

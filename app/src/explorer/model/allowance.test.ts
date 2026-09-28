@@ -62,7 +62,7 @@ test('a quota refusal reads as spent, whichever bucket refused', () => {
 })
 
 test('a conversation reaching its own cap is not the allowance running out', () => {
-  // Two different limits: `cap_cents` is this conversation's 25¢, and the Meter shows it.
+  // Two different limits: `cap_cents` was the conversation's (retired), never the pool's.
   const a = allowance({ cost: cost(), fallbackCap: 60, shared: true, refusalCode: 'cap_cents' })
   assert.equal(a.spent, false)
 })
@@ -104,5 +104,7 @@ test('a reader can still find out when the pool comes back', () => {
   // And at any other moment, in the docs entry the prose moved to.
   assert.match(accessAndCostEntry.content, /00:00 UTC/)
   assert.match(accessAndCostEntry.content, /daily allowance/i)
-  assert.match(accessAndCostEntry.content, /25¢/)
+  // And that a conversation has no spend cap of its own (removed 2026-09-28).
+  assert.match(accessAndCostEntry.content, /does not cap a conversation/)
+  assert.doesNotMatch(accessAndCostEntry.content, /25¢/)
 })

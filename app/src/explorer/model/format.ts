@@ -1,17 +1,23 @@
 /**
- * The words on the page for numbers and states: cents with one decimal and
- * never dollars (item 6), a working indicator driven by the last event
+ * The words on the page for numbers and states: cents with one decimal below a
+ * dollar and dollars from there up (item 6), a working indicator driven by the last event
  * (item 9), the badge a stopped turn wears (item 7), the per-turn cost line.
  */
 
 import type { ExplorerStop } from '@lawfare/ragtime-client'
 import { elapsedMs, lastCost, type TrailCall, type Turn } from './turn.ts'
 
-/** `10.3¢`; under a tenth of a cent reads `<0.1¢`; zero reads `0¢`. */
+/**
+ * `10.3¢`; under a tenth of a cent reads `<0.1¢`; zero reads `0¢`; a dollar and up reads
+ * `$2.13`. Cents were the whole range while a conversation was capped at 25¢; with no cap
+ * a demo can run past a dollar, and `213.4¢` is a number nobody reads at a glance.
+ */
 export function cents(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0¢'
   if (n < 0.05) return '<0.1¢'
-  return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '') + '¢'
+  const tenths = Math.round(n * 10) / 10
+  if (tenths >= 100) return '$' + (Math.round(n) / 100).toFixed(2)
+  return tenths.toFixed(1).replace(/\.0$/, '') + '¢'
 }
 
 export function seconds(ms: number): string {
@@ -146,6 +152,8 @@ export function stopBadge(stop: ExplorerStop | null): { text: string; tone: 'lim
   switch (stop) {
     case 'step_cap':
       return { text: 'stopped at the round limit — ask a follow-up to keep going', tone: 'limit' }
+    // No worker stops on this since the cap was removed (2026-09-28); a conversation
+    // saved before then can still carry it.
     case 'cap_cents':
       return { text: 'this conversation’s budget is spent — start a new one', tone: 'budget' }
     case 'error':

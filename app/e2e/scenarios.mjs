@@ -3,17 +3,17 @@
  *
  * This is the widest of the drivers and the one to run first: it asks, accepts a brief,
  * researches, opens the trail and reloads, under six scripted streams — an ordinary
- * conversation, one that lands near its cap, one near the daily allowance, one that is
+ * conversation, one that runs past $2 (there is no cap), one near the daily allowance, one that is
  * taken away mid-stream, one the worker refuses outright, and one whose tool results carry
  * a shape this build has never heard of. The last two are the ones that used to white-screen.
  *
  *   node e2e/scenarios.mjs                       # all of them
- *   node e2e/scenarios.mjs hot,quota             # a couple
+ *   node e2e/scenarios.mjs costly,quota          # a couple
  */
 import { launch, ctxWith, conversation, installStub, state, settle, log, SHOTS, EXPLORER, PHONE, scoreboard } from './harness.mjs'
 
 const browser = await launch()
-const only = process.argv[2] || 'research,hot,hotpool,interrupt,quota,baddetail'
+const only = process.argv[2] || 'research,costly,hotpool,interrupt,quota,baddetail'
 const URL = EXPLORER
 
 async function run(scenario) {

@@ -73,11 +73,7 @@ export function ExplorerPage() {
   })
   // Nothing is on the screen at rest, so the trail control is the one thing that can ask
   // to be looked at. `attention` holds the whole rule for when it does.
-  const trail = attention({
-    spendCents: cost ? cost.conversation_spend : 0,
-    capCents: cost ? cost.cap_cents : 200,
-    pool: isPaid ? null : pool,
-  })
+  const trail = attention({ pool: isPaid ? null : pool })
   // Both of these are controls on a conversation, so neither exists before there is one.
   // "Start over" used to render disabled from the first paint, which is a button teaching
   // a reader nothing at the moment they have the least room for it.
@@ -106,7 +102,8 @@ export function ExplorerPage() {
         : 'What do you want to know? Planning runs first, before anything spends.'
 
   // A refusal the page already renders somewhere it is being looked at is not worth a
-  // third copy in the band: the conversation cap wears a badge on the answer, and an
+  // third copy in the band: a conversation cap (retired; an older worker can still send it)
+  // wears a badge on the answer, and an
   // exhausted allowance stops the turn with its own error block — which is now the only
   // place it is said in prose, since the Allowance panel that used to turn red is behind
   // the trail. It is still said twice: the trail control reads "Allowance used up" and

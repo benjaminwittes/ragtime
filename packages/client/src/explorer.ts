@@ -146,11 +146,15 @@ export type ExplorerCostEvent = {
   type: 'cost'
   /** Exact cents this turn so far (four decimals). */
   turn_cents: number
-  /** Integer cents, the ceiling of `conversation_spend`; what the cap compares against. */
+  /** Integer cents, the ceiling of `conversation_spend`. */
   conversation_cents: number
   /** Exact cents for the conversation (four decimals). */
   conversation_spend: number
-  cap_cents: number
+  /**
+   * The retired per-conversation spend cap. Sent only by a worker deployed before
+   * 2026-09-28, when the cap was removed; nothing reads it now.
+   */
+  cap_cents?: number
   steps: number
   step_cap: number
   /**
