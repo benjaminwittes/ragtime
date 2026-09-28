@@ -51,11 +51,11 @@ The Terms of Service state that commitment.
 **The Explorer meters spend; it does not cap a conversation.** The running
 total for the conversation is at the top of the **trail**, and it moves after
 every model round, so you can watch it climb while a turn works. Beside it is
-each turn's cost and every tool call with what it cost. One limit remains: a
-daily allowance — sixty model calls as this build is written, counted per
-network address rather than per tab, resetting at 00:00 UTC, with the
-Worker's own figure winning once a turn has reported one. A paid balance is
-metered on the balance instead and has no allowance. A turn that is refused
+each turn's cost and every tool call with what it cost. With a demo password
+there is one limit: the password's daily allowance of model calls, shared by
+everyone using it and resetting at 00:00 UTC. The trail shows how much of it
+is used today. A paid balance is metered on the balance instead, and your own
+key spends your own account; neither has an allowance. A turn that is refused
 says which limit refused it.
 
 ## What's Free: The Metadata Floor

@@ -6,7 +6,7 @@ import { readCarryoverQuery } from '@/lib/routing'
 import { useAuth } from '@/lib/use-auth'
 import type { AuthArg } from '@lawfare/ragtime-client'
 
-import { DAILY_MODEL_CALLS, WORKER_URL } from './config.ts'
+import { WORKER_URL } from './config.ts'
 import { useExplorer } from './hooks/useExplorer.ts'
 import { QUOTA_CODES, allowance } from './model/allowance.ts'
 import { attention } from './model/attention.ts'
@@ -61,13 +61,12 @@ export function ExplorerPage() {
   // The hub's handoff: asked straight away when there is something to pay with,
   // left standing in the composer when there is not.
   const carried = useCarriedQuestion(credential, x.ask)
-  // The daily allowance is the visitor's own network's (nothing here is mounted behind
-  // a shared gate). A paid account is metered on its balance and has no such pool, so
-  // the panel is not shown to it.
+  // The daily pool the worker reports for this caller: the demo password's bucket (or,
+  // from a worker before 2026-09-28, the network's). None for a paid account or an own
+  // key, and none before the first turn — the page no longer guesses a number.
   const cost = conversationCost(x.turns)
   const pool = allowance({
     cost,
-    fallbackCap: DAILY_MODEL_CALLS,
     shared: false,
     refusalCode: x.refusal?.code ?? null,
   })
@@ -253,7 +252,7 @@ export function ExplorerPage() {
                       this panel replaces the conversation rather than sitting beside it,
                       so what is here costs the answer nothing. */}
                   <Meter turns={x.turns} />
-                  {!isPaid && <Allowance value={pool} />}
+                  {!isPaid && pool && <Allowance value={pool} />}
                   <Trail turns={x.turns} />
                 </div>
               </aside>

@@ -1,4 +1,4 @@
-import { allowancePercent, type Allowance } from './allowance.ts'
+import { allowancePercent, calls, type Allowance } from './allowance.ts'
 
 /**
  * What the trail control in the band says, and whether it asks to be looked at.
@@ -64,11 +64,11 @@ export function attention({ pool }: AttentionInput): Attention {
   const poolPct = pool ? allowancePercent(pool) : null
   if (pool && pool.used !== null && poolPct !== null && poolPct >= HOT_AT) {
     return {
-      label: pool.used + ' of ' + pool.cap + ' calls',
-      // The word "calls" is what makes this long, and it is the word a reader on a phone
-      // can spare: the control it is written on is the one that opens the trail, where
-      // the same number is spelled out in full.
-      short: pool.used + '/' + pool.cap,
+      label: calls(pool.used) + ' of ' + calls(pool.cap) + ' calls',
+      // A percentage rather than the two counts: "54/60" fit the phone's row, and
+      // "1300/1500" (the demo bucket, from 2026-09-28) does not. The control it is written
+      // on is the one that opens the trail, where the counts are spelled out in full.
+      short: poolPct + '% used',
       hot: true,
     }
   }

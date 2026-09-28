@@ -158,14 +158,17 @@ export type ExplorerCostEvent = {
   steps: number
   step_cap: number
   /**
-   * Model calls charged today against the caller's daily allowance, and the allowance
-   * itself. Both absent from a worker deployed before ragtime-worker#118, and absent for
-   * a paid caller, who has no daily allowance — so a renderer must handle their absence
-   * rather than defaulting them.
-   *
-   * The worker counts per address per UTC day. Behind a mount that adds the credential on
-   * its own side the address is the mount's, so this is one pool shared by everyone the
-   * mount admits, not a limit on the reader.
+   * Model calls charged today against the demo password's daily bucket, and the bucket
+   * itself. Sent only to a demo-password caller: a paid caller spends a balance and an
+   * own-key caller spends their own key, so neither has a bucket — a renderer must handle
+   * their absence rather than defaulting them. Everyone using the same password draws on
+   * one bucket, so the count is theirs together, not the reader's.
+   */
+  demo_calls?: number
+  demo_quota?: number
+  /**
+   * The retired per-network daily allowance (60 model calls per address). Sent only by a
+   * worker deployed before 2026-09-28, when it was removed.
    */
   ip_calls?: number
   ip_cap?: number
