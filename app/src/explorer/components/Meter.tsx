@@ -14,7 +14,7 @@ import { conversationCost, type Turn } from '../model/turn.ts'
 export function Meter({ turns }: { turns: Turn[] }) {
   const last = conversationCost(turns)
   const spend = last ? last.conversation_spend : 0
-  const cap = last ? last.cap_cents : 25
+  const cap = last ? last.cap_cents : 200
   const pct = Math.min(100, (100 * spend) / cap)
   return (
     <div className="meter">
