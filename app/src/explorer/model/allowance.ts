@@ -1,18 +1,18 @@
 /**
  * The daily allowance, which the page spends and never showed.
  *
- * Two limits sat under every turn and only one of them was on the screen. The conversation
- * cap (25¢, removed 2026-09-28) was in the `cost` event and the Meter rendered it. The daily
- * allowance is not:
- * the worker counts model calls per address per UTC day (`IP_DAILY_MODEL_CALLS`) and
- * refuses past it, so the first thing a member learned about the limit was being refused.
+ * With no conversation cap (removed 2026-09-28) the one limit a caller can meet is a daily
+ * count of model calls, and a limit nobody sees until it refuses is the flaw this module
+ * exists to fix. Which count it is depends on the worker:
  *
- * Behind a mount that holds the credential, the address the worker counts is **the
- * mount's**, not the reader's. Everyone the gate admits therefore draws down one pool
- * between them, which is the opposite of what a page that says nothing implies. That is
- * the fact this module exists to put on the screen, and it is why the wording differs by
- * mount rather than being one sentence for both: on the page's own model the allowance is
- * the visitor's network, and telling them it is "shared" would be false.
+ * - **The demo password's bucket** (`demo_calls` / `demo_quota`), from 2026-09-28. Every
+ *   caller using the same password draws on it, wherever they are.
+ * - **The network's allowance** (`ip_calls` / `ip_cap`), from a worker before then: 60
+ *   calls per address per day, shared by everyone on one network. Read only so the page is
+ *   right against either worker while the two deploy.
+ *
+ * A caller the worker reports no bucket for — a paid account, an own key — has no
+ * allowance at all, and the page shows none rather than a number it was built knowing.
  *
  * Pure, so `node --test` covers the wording; the component is thin over it.
  */
@@ -25,8 +25,10 @@ export const QUOTA_CODES: ReadonlySet<string> = new Set(['ip_quota', 'demo_quota
 export type Allowance = {
   /** Calls charged against the pool today, or null when no turn has said yet. */
   used: number | null
-  /** The pool. Live from the worker when it said, else what the page was built knowing. */
+  /** The pool, as the worker reported it; 0 when only a refusal has spoken. */
   cap: number
+  /** Whose pool: the demo password's, or (an older worker) the network's. */
+  kind: 'demo' | 'network'
   /** Whether everyone behind the same gate draws on this one pool. */
   shared: boolean
   /** A refusal has said the pool is used up. */
@@ -38,18 +40,26 @@ export type Allowance = {
 export type AllowanceInput = {
   /** The last `cost` event of the conversation, or null before the first turn. */
   cost: ExplorerCostEvent | null
-  /** The allowance the page was built knowing; superseded by any `ip_cap` the worker sends. */
-  fallbackCap: number
   shared: boolean
   /** The code of the refusal on screen, if any. */
   refusalCode?: string | null
 }
 
-export function allowance({ cost, fallbackCap, shared, refusalCode }: AllowanceInput): Allowance {
-  const used = typeof cost?.ip_calls === 'number' ? cost.ip_calls : null
-  const cap = typeof cost?.ip_cap === 'number' && cost.ip_cap > 0 ? cost.ip_cap : fallbackCap
+/** The pool this caller draws on, or null when the worker has reported none. */
+export function allowance({ cost, shared, refusalCode }: AllowanceInput): Allowance | null {
   const spent = !!refusalCode && QUOTA_CODES.has(refusalCode)
-  return { used, cap, shared, spent, live: used !== null }
+  if (typeof cost?.demo_quota === 'number' && cost.demo_quota > 0) {
+    const used = typeof cost.demo_calls === 'number' ? cost.demo_calls : null
+    return { used, cap: cost.demo_quota, kind: 'demo', shared, spent, live: used !== null }
+  }
+  if (typeof cost?.ip_cap === 'number' && cost.ip_cap > 0) {
+    const used = typeof cost.ip_calls === 'number' ? cost.ip_calls : null
+    return { used, cap: cost.ip_cap, kind: 'network', shared, spent, live: used !== null }
+  }
+  if (spent) {
+    return { used: null, cap: 0, kind: refusalCode === 'ip_quota' ? 'network' : 'demo', shared, spent, live: false }
+  }
+  return null
 }
 
 /** How full the pool is, 0–100, or null when nothing has said. A spent pool reads full. */
@@ -59,11 +69,16 @@ export function allowancePercent(a: Allowance): number | null {
   return Math.min(100, Math.round((100 * a.used) / a.cap))
 }
 
+/** `1,500` — the demo bucket runs to four digits, which read badly bare. */
+export function calls(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
 /** The one line above the bar. */
 export function allowanceLine(a: Allowance): string {
-  if (a.spent) return shareWord(a) + ' allowance — used up for today'
-  if (a.used === null) return shareWord(a) + ' allowance — ' + a.cap + ' model calls a day'
-  return shareWord(a) + ' allowance — ' + a.used + ' of ' + a.cap + ' model calls today'
+  if (a.spent) return poolWord(a) + ' — used up for today'
+  if (a.used === null) return poolWord(a) + ' — ' + calls(a.cap) + ' model calls a day'
+  return poolWord(a) + ' — ' + calls(a.used) + ' of ' + calls(a.cap) + ' model calls today'
 }
 
 /*
@@ -92,6 +107,7 @@ export function explainRefusal(code: string | null, message: string, shared: boo
   return "Today's shared allowance is used up. Everyone with the access code draws on one pool of model calls; it resets at 00:00 UTC."
 }
 
-function shareWord(a: Allowance): string {
-  return a.shared ? 'Shared' : 'Daily'
+function poolWord(a: Allowance): string {
+  if (a.kind === 'demo') return 'Demo code allowance'
+  return (a.shared ? 'Shared' : 'Daily') + ' allowance'
 }

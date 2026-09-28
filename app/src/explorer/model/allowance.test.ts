@@ -11,64 +11,64 @@ function cost(patch: Partial<ExplorerCostEvent> = {}): ExplorerCostEvent {
     turn_cents: 4.4,
     conversation_cents: 6,
     conversation_spend: 5.3,
-    cap_cents: 25,
     steps: 2,
     step_cap: 8,
     ...patch,
   }
 }
 
-test('before any turn the pool is the number the page was built knowing', () => {
-  const a = allowance({ cost: null, fallbackCap: 60, shared: true })
-  assert.equal(a.cap, 60)
-  assert.equal(a.used, null)
-  assert.equal(a.live, false)
-  assert.equal(allowancePercent(a), null)
-  assert.equal(allowanceLine(a), 'Shared allowance — 60 model calls a day')
+test('before any turn there is no pool to show — the page no longer guesses one', () => {
+  assert.equal(allowance({ cost: null, shared: false }), null)
 })
 
-test('a worker that reports the day supersedes the built-in number', () => {
-  const a = allowance({ cost: cost({ ip_calls: 23, ip_cap: 80 }), fallbackCap: 60, shared: true })
-  assert.equal(a.used, 23)
-  assert.equal(a.cap, 80)
+test("a demo caller's pool is the password's bucket, as the worker reports it", () => {
+  const a = allowance({ cost: cost({ demo_calls: 412, demo_quota: 1500 }), shared: false })!
+  assert.equal(a.kind, 'demo')
+  assert.equal(a.used, 412)
+  assert.equal(a.cap, 1500)
   assert.equal(a.live, true)
-  assert.equal(allowancePercent(a), 29)
-  assert.equal(allowanceLine(a), 'Shared allowance — 23 of 80 model calls today')
+  assert.equal(allowancePercent(a), 27)
+  assert.equal(allowanceLine(a), 'Demo code allowance — 412 of 1,500 model calls today')
 })
 
-test('a worker deployed before the fields says nothing rather than zero', () => {
-  // The old `cost` event carries neither field; reading a missing count as 0 would put an
-  // empty bar on the screen and call it a measurement.
-  const a = allowance({ cost: cost(), fallbackCap: 60, shared: true })
-  assert.equal(a.used, null)
-  assert.equal(a.live, false)
-  assert.equal(allowancePercent(a), null)
+test('a caller the worker reports no bucket for has no allowance at all', () => {
+  // A paid account or an own key: the cost event carries neither pair, and reading a
+  // missing count as 0 would put an empty bar on the screen and call it a measurement.
+  assert.equal(allowance({ cost: cost(), shared: false }), null)
 })
 
-test('behind a gate the pool is shared; on the page own model it is the network', () => {
-  const shared = allowance({ cost: cost({ ip_calls: 5, ip_cap: 60 }), fallbackCap: 60, shared: true })
-  const own = allowance({ cost: cost({ ip_calls: 5, ip_cap: 60 }), fallbackCap: 60, shared: false })
-  assert.match(allowanceLine(shared), /^Shared allowance/)
+test('a worker from before 2026-09-28 still reads, as the network allowance it was', () => {
+  const shared = allowance({ cost: cost({ ip_calls: 5, ip_cap: 60 }), shared: true })!
+  const own = allowance({ cost: cost({ ip_calls: 5, ip_cap: 60 }), shared: false })!
+  assert.equal(own.kind, 'network')
+  assert.equal(allowanceLine(shared), 'Shared allowance — 5 of 60 model calls today')
   assert.match(allowanceLine(own), /^Daily allowance/)
 })
 
-test('a quota refusal reads as spent, whichever bucket refused', () => {
-  for (const code of ['ip_quota', 'demo_quota']) {
-    const a = allowance({ cost: cost({ ip_calls: 60, ip_cap: 60 }), fallbackCap: 60, shared: true, refusalCode: code })
-    assert.equal(a.spent, true)
-    assert.equal(allowancePercent(a), 100)
-    assert.equal(allowanceLine(a), 'Shared allowance — used up for today')
-  }
+test('the demo bucket wins when a worker sends both', () => {
+  const a = allowance({ cost: cost({ demo_calls: 9, demo_quota: 1500, ip_calls: 50, ip_cap: 60 }), shared: false })!
+  assert.equal(a.kind, 'demo')
+  assert.equal(a.used, 9)
 })
 
-test('a conversation reaching its own cap is not the allowance running out', () => {
-  // Two different limits: `cap_cents` was the conversation's (retired), never the pool's.
-  const a = allowance({ cost: cost(), fallbackCap: 60, shared: true, refusalCode: 'cap_cents' })
-  assert.equal(a.spent, false)
+test('a quota refusal reads as spent, whichever bucket refused', () => {
+  const demo = allowance({ cost: cost({ demo_calls: 1500, demo_quota: 1500 }), shared: false, refusalCode: 'demo_quota' })!
+  assert.equal(demo.spent, true)
+  assert.equal(allowancePercent(demo), 100)
+  assert.equal(allowanceLine(demo), 'Demo code allowance — used up for today')
+  // Refused before any cost event said which pool: the refusal alone is enough to show.
+  const bare = allowance({ cost: null, shared: false, refusalCode: 'demo_quota' })!
+  assert.equal(allowanceLine(bare), 'Demo code allowance — used up for today')
+  const net = allowance({ cost: null, shared: true, refusalCode: 'ip_quota' })!
+  assert.equal(allowanceLine(net), 'Shared allowance — used up for today')
+})
+
+test('a refusal that is not a quota is not the allowance running out', () => {
+  assert.equal(allowance({ cost: cost(), shared: false, refusalCode: 'cap_cents' }), null)
 })
 
 test('the bar never runs past full', () => {
-  const a = allowance({ cost: cost({ ip_calls: 75, ip_cap: 60 }), fallbackCap: 60, shared: true })
+  const a = allowance({ cost: cost({ demo_calls: 1600, demo_quota: 1500 }), shared: false })!
   assert.equal(allowancePercent(a), 100)
 })
 
@@ -104,7 +104,7 @@ test('a reader can still find out when the pool comes back', () => {
   // And at any other moment, in the docs entry the prose moved to.
   assert.match(accessAndCostEntry.content, /00:00 UTC/)
   assert.match(accessAndCostEntry.content, /daily allowance/i)
-  // And that a conversation has no spend cap of its own (removed 2026-09-28).
+  // And that neither retired limit is still promised (both removed 2026-09-28).
   assert.match(accessAndCostEntry.content, /does not cap a conversation/)
-  assert.doesNotMatch(accessAndCostEntry.content, /25¢/)
+  assert.doesNotMatch(accessAndCostEntry.content, /25¢|sixty|network address/)
 })

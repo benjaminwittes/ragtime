@@ -5,7 +5,7 @@ import { allowance, type Allowance } from './allowance.ts'
 import { HOT_AT, attention } from './attention.ts'
 
 function pool(patch: Partial<Allowance> = {}): Allowance {
-  return { used: 10, cap: 60, shared: false, spent: false, live: true, ...patch }
+  return { used: 10, cap: 60, kind: 'demo', shared: false, spent: false, live: true, ...patch }
 }
 
 test('at rest it says nothing but its own name', () => {
@@ -35,7 +35,14 @@ test('a filling daily allowance warns about later', () => {
   const a = attention({ pool: pool({ used: 54, cap: 60 }) })
   assert.equal(a.hot, true)
   assert.equal(a.label, '54 of 60 calls')
-  assert.equal(a.short, '54/60')
+  assert.equal(a.short, '90% used')
+})
+
+test('the demo bucket reads in thousands, and its short form still fits', () => {
+  const a = attention({ pool: pool({ used: 1300, cap: 1500 }) })
+  assert.equal(a.hot, true)
+  assert.equal(a.label, '1,300 of 1,500 calls')
+  assert.equal(a.short, '87% used')
 })
 
 test('a spent allowance says so', () => {
@@ -54,6 +61,7 @@ test('every label a phone can be shown fits the row it has to fit', () => {
   const cases = [
     attention({ pool: pool({ used: 0 }) }),
     attention({ pool: pool({ used: 54, cap: 60 }) }),
+    attention({ pool: pool({ used: 1500, cap: 1500 }) }),
     attention({ pool: pool({ spent: true }) }),
   ]
   for (const a of cases) {
@@ -70,7 +78,11 @@ test('a paid reader has no pool, so nothing warns about one', () => {
 
 test('a pool the worker has not counted yet cannot be hot', () => {
   // `live: false` is the page not knowing, and an empty bar is not a measurement.
-  const quiet = allowance({ cost: null, fallbackCap: 60, shared: false })
+  const quiet = allowance({
+    cost: { type: 'cost', turn_cents: 0, conversation_cents: 0, conversation_spend: 0, steps: 0, step_cap: 2, demo_quota: 1500 },
+    shared: false,
+  })
+  assert.ok(quiet && !quiet.live)
   const a = attention({ pool: quiet })
   assert.equal(a.hot, false)
 })

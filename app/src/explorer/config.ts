@@ -13,17 +13,6 @@
 export { WORKER_URL } from '@/lib/worker-url'
 
 /**
- * The daily allowance on model calls for a caller without a paid account:
- * `IP_DAILY_MODEL_CALLS` in the worker's `explorer.js`, counted per address per UTC day.
- *
- * Stated here so the page can say what the limit is before a turn has told it. A `cost`
- * event carrying `ip_cap` supersedes it, and is the number to believe; this one only has
- * to be right on the first screen a member sees. If the worker's constant moves, this
- * follows it.
- */
-export const DAILY_MODEL_CALLS = 60
-
-/**
  * Where a note about this page goes (`model/point.ts`), named at build time. Empty — the
  * default — draws no widget at all: a page with nowhere honest to file a note is better
  * off without a button that fails.
