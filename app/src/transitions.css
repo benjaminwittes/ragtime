@@ -160,6 +160,9 @@
   ::view-transition-old(hub-card-14),
   ::view-transition-old(hub-card-15),
   ::view-transition-old(hub-card-16),
+  ::view-transition-old(hub-card-17),
+  ::view-transition-old(hub-card-18),
+  ::view-transition-old(hub-card-19),
   ::view-transition-old(about-panel),
   ::view-transition-old(hub-footer),
   ::view-transition-old(explorer-examples),
@@ -186,6 +189,9 @@
   ::view-transition-new(hub-card-14),
   ::view-transition-new(hub-card-15),
   ::view-transition-new(hub-card-16),
+  ::view-transition-new(hub-card-17),
+  ::view-transition-new(hub-card-18),
+  ::view-transition-new(hub-card-19),
   ::view-transition-new(about-panel),
   ::view-transition-new(hub-footer),
   ::view-transition-new(explorer-examples),
@@ -271,13 +277,25 @@
   ::view-transition-new(hub-card-16) {
     animation-delay: calc(16 * var(--vt-stagger));
   }
+  ::view-transition-old(hub-card-17),
+  ::view-transition-new(hub-card-17) {
+    animation-delay: calc(17 * var(--vt-stagger));
+  }
+  ::view-transition-old(hub-card-18),
+  ::view-transition-new(hub-card-18) {
+    animation-delay: calc(18 * var(--vt-stagger));
+  }
+  ::view-transition-old(hub-card-19),
+  ::view-transition-new(hub-card-19) {
+    animation-delay: calc(19 * var(--vt-stagger));
+  }
   ::view-transition-old(about-panel),
   ::view-transition-new(about-panel) {
-    animation-delay: calc(17 * var(--vt-stagger));
+    animation-delay: calc(20 * var(--vt-stagger));
   }
   ::view-transition-old(hub-footer),
   ::view-transition-new(hub-footer) {
-    animation-delay: calc(18 * var(--vt-stagger));
+    animation-delay: calc(21 * var(--vt-stagger));
   }
 
   /* The Explorer's two are the one place old and new need different delays, and the
