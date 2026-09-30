@@ -13,7 +13,8 @@ import { spokes } from './registry'
  *
  * It reads the live registry because the Worker deploys on its own, so a
  * checked-in copy would only drift the same way. The fetch happens once, in
- * `beforeAll`, with its own timeouts, so no test waits on the network.
+ * `beforeAll`, with its own timeouts, so no test waits on the network. The
+ * registry is slow when its edge cache is cold; see FETCH_TIMEOUT_MS.
  *
  * If the Worker cannot be reached: on a developer machine the two comparison
  * tests skip with a warning (an offline laptop is not drift). In CI they FAIL,
@@ -30,7 +31,10 @@ const HOSTED_ELSEWHERE: Record<string, string> = {
   lawfare: "kept in the client's slug union for old types only; the live spoke for this material is commentary",
 }
 
-const FETCH_TIMEOUT_MS = 8_000
+// GET /corpus/registry runs the coverage probes when its 30-minute edge cache is
+// cold (~9s measured 2026-09-30, 70ms warm), and CI always calls it cold. The
+// timeout has to outlast that call, or the guard aborts just before it answers.
+const FETCH_TIMEOUT_MS = 25_000
 const ATTEMPTS = 2
 
 let slugs: string[] | null = null
