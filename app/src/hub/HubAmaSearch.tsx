@@ -654,6 +654,10 @@ function shortLabel(slug: HubCorpusSlug): string {
       return 'FBI'
     case 'sanctions':
       return 'Sanctions'
+    // Not in either hub fan (the Worker keeps the catalogue out of both); the
+    // label covers the slug so the switch stays exhaustive.
+    case 'books':
+      return 'Books'
   }
 }
 
@@ -688,6 +692,8 @@ function longLabel(slug: HubCorpusSlug): string {
     // label covers the slug for handoff chips should the Worker route there.
     case 'sanctions':
       return 'Sanctions'
+    case 'books':
+      return 'Book catalogue'
   }
 }
 

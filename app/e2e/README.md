@@ -36,8 +36,10 @@ node e2e/cross.mjs                       # the seam: a citation followed out, an
 E2E_W=1440 node e2e/cross.mjs            # the same at desktop width
 node e2e/band.mjs                        # whether the band keeps to one row
 node e2e/band.mjs --candidates           # measure wordings before choosing one
-node e2e/spokes.mjs                      # the hub and all eleven spokes, which this
+node e2e/spokes.mjs                      # the hub and all twelve spokes, which this
                                          #   branch changed without being about them
+node e2e/books.mjs                       # the book catalogue against a stubbed Worker:
+                                         #   the three Explorer handoffs, floors, the ladder
 ```
 
 `E2E_SHOTS` moves the screenshots; they land in `e2e/shots/`, which is gitignored.

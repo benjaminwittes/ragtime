@@ -1,4 +1,5 @@
 import type { CorpusSpoke, CorpusSlug } from '@lawfare/ragtime-client'
+import { booksSpoke } from './books'
 import { cfrSpoke } from './cfr'
 import { commentarySpoke } from './commentary'
 import { congressSpoke } from './congress'
@@ -12,7 +13,7 @@ import { sanctionsSpoke } from './sanctions'
 import { uscSpoke } from './usc'
 
 /**
- * Central registry of declared spokes, in four groups.
+ * Central registry of declared spokes, in five groups.
  *
  * The hub renders these groups under their headings, one entry per spoke;
  * spoke routes are resolved through `getSpokeBySlug`, which mounts that
@@ -29,7 +30,10 @@ import { uscSpoke } from './usc'
  * government actually did under all of that, once the files came out:
  * diplomacy, the Bureau's FOIA releases, the Treasury's designations.
  * **Commentary** stands apart because it is not a primary source at all, and
- * a reader who mistakes it for one has been misled by the page.
+ * a reader who mistakes it for one has been misled by the page. **The
+ * catalogue** stands apart for the opposite reason: it is not a source of
+ * text at all. It records that books exist and what the Library says they are
+ * about, and a reader who expects to quote from it has been misled too.
  *
  * Order within a group, and the order of the groups, is the order shown on
  * the hub — `spokes` is derived from `spokeGroups` rather than kept beside
@@ -56,6 +60,10 @@ export const spokeGroups: readonly {
   {
     heading: 'Commentary',
     spokes: [commentarySpoke],
+  },
+  {
+    heading: 'The catalogue',
+    spokes: [booksSpoke],
   },
 ]
 

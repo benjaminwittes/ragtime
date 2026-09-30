@@ -66,8 +66,13 @@ gsap.registerPlugin(useGSAP)
  * HUB_CORPORA: its keyword union includes the same federal_register documents
  * the fr section already surfaces, so fanning both would double-surface every
  * FR sanctions doc under two id schemes (the commentary/lawfare lesson).
+ * The book catalogue is excluded for the Worker's reason too: it is absent
+ * from HUB_CORPORA because a catalogue record among document hits reads like
+ * something we hold and can quote (ragtime-worker#145).
  */
-const HUB_KEYWORD_SPOKES = spokes.filter((s) => s.slug !== 'sanctions')
+const HUB_KEYWORD_SPOKES = spokes.filter(
+  (s) => s.slug !== 'sanctions' && s.slug !== 'books',
+)
 
 /**
  * What every hub query searches: all of them. This was a `useState<Set<…>>`
@@ -924,6 +929,10 @@ function shortLabel(slug: CorpusSlug): string {
       return 'FBI'
     case 'sanctions':
       return 'Sanctions'
+    // Not in either hub fan (the Worker keeps the catalogue out of both); the
+    // label covers the slug so the switch stays exhaustive.
+    case 'books':
+      return 'Books'
   }
 }
 
@@ -953,5 +962,7 @@ function longLabel(slug: CorpusSlug): string {
       return 'FBI Records'
     case 'sanctions':
       return 'Sanctions'
+    case 'books':
+      return 'Book catalogue'
   }
 }

@@ -23,7 +23,7 @@ const viewport = W >= 700 ? { ...DESKTOP, width: W } : { ...PHONE, width: W }
 
 const SPOKES = [
   'litigation', 'olc', 'usc', 'cfr', 'frus', 'commentary',
-  'presidential', 'fr', 'congress', 'fbi', 'sanctions',
+  'presidential', 'fr', 'congress', 'fbi', 'sanctions', 'books',
 ]
 
 /** One row of these controls is 28px; a wrap makes it roughly twice that. */

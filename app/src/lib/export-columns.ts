@@ -9,6 +9,7 @@
  */
 import type { CsvColumn } from './export-csv'
 import type {
+  BookDisplayRow,
   CaseDisplayRow,
   CfrSectionDisplayRow,
   ClemencyGrantDisplayRow,
@@ -170,6 +171,29 @@ export const FBI_COLUMNS: CsvColumn<FbiDocumentDisplayRow>[] = [
   { header: 'vault_url', value: (r) => r.source_url },
   { header: 'pdf_url', value: (r) => r.pdf_url },
   { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+/** Book catalogue records. `count_is_floor` rides in the CSV meta, not here:
+ * a row is a record, and a record is exact. loc_permalink is rebuilt from the
+ * LCCN so every exported row is checkable against LC's live catalogue. */
+export const BOOKS_COLUMNS: CsvColumn<BookDisplayRow>[] = [
+  { header: 'title', value: (r) => r.title },
+  { header: 'subtitle', value: (r) => r.subtitle },
+  { header: 'authors', value: (r) => (r.authors ?? []).join('; ') },
+  { header: 'publisher', value: (r) => r.publisher },
+  { header: 'pub_date', value: (r) => r.pub_date },
+  { header: 'pub_year', value: (r) => r.pub_date_normalized },
+  { header: 'edition', value: (r) => r.edition },
+  { header: 'page_count', value: (r) => r.page_count },
+  { header: 'language', value: (r) => r.language },
+  { header: 'classification', value: (r) => r.classification },
+  { header: 'subjects', value: (r) => (r.subject_strings ?? []).join('; ') },
+  { header: 'series', value: (r) => (r.series ?? []).join('; ') },
+  { header: 'isbn', value: (r) => (r.isbn ?? []).join('; ') },
+  { header: 'lccn', value: (r) => r.lccn_normalized ?? r.lccn },
+  { header: 'loc_permalink', value: (r) => (r.lccn_normalized ? `https://lccn.loc.gov/${r.lccn_normalized}` : null) },
+  { header: 'work_cluster_key', value: (r) => r.work_cluster_key },
   { header: 'id', value: (r) => r.id },
 ]
 

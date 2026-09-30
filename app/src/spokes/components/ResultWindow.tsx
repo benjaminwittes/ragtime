@@ -42,6 +42,7 @@ export function ResultWindow<T>({
   rows,
   count,
   noun,
+  countIsFloor,
   children,
 }: {
   rows: readonly T[]
@@ -49,6 +50,10 @@ export function ResultWindow<T>({
   count: number | undefined
   /** Already pluralised for the total — "sections", "opinions", "cases". */
   noun: string
+  /** The Worker stopped counting at `count` (books: a 10,000-id cap over
+   *  10.5M rows). Rendered as "10,000+" — a floor printed bare reads like a
+   *  total. */
+  countIsFloor?: boolean
   children: (visible: readonly T[]) => ReactNode
 }) {
   const [limit, setLimit] = useState(ROW_PAGE)
@@ -79,7 +84,9 @@ export function ResultWindow<T>({
         className="mb-3 font-mono text-xs text-muted-foreground"
         aria-live="polite"
       >
-        {total.toLocaleString()} {noun}
+        {total.toLocaleString()}
+        {countIsFloor && '+'} {noun}
+        {countIsFloor && <> · more match than the catalogue will count</>}
         {fetched < total && <> · first {fetched.toLocaleString()} fetched</>}
         {shown < fetched && <> · showing {shown.toLocaleString()}</>}
       </p>

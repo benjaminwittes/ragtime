@@ -31,6 +31,8 @@ export type CorpusSlug =
   | 'congress'
   | 'fbi'
   | 'sanctions'
+  // The Library of Congress catalogue: bibliographic records, not documents.
+  | 'books'
 
 /**
  * A spoke's lifecycle status. Drives whether it shows up in nav and how
