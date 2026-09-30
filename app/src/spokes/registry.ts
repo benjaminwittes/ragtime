@@ -1,4 +1,10 @@
-import type { CorpusSpoke, CorpusSlug } from '@lawfare/ragtime-client'
+import {
+  CORPORA,
+  HUB_GROUPS,
+  type CorpusSlug,
+  type CorpusSpoke,
+  type HubCardSlug,
+} from '@lawfare/ragtime-client'
 import { booksSpoke } from './books'
 import { cfrSpoke } from './cfr'
 import { commentarySpoke } from './commentary'
@@ -41,52 +47,50 @@ import { uscSpoke } from './usc'
  * Collection sub-spokes (per brief #7) will land in a separate registry that
  * inherits from this one when the collections architecture ships.
  */
+/**
+ * The UI for each corpus that has a hub card. Typed by the registry's own list
+ * of hub slugs, so a corpus the Worker gives a card with no entry here is a
+ * compile error, never a card that silently fails to appear (the book
+ * catalogue shipped that way before this list was derived).
+ */
+const spokeImplementations: Record<HubCardSlug, CorpusSpoke> = {
+  usc: uscSpoke,
+  cfr: cfrSpoke,
+  congress: congressSpoke,
+  fr: frSpoke,
+  presidential: presidentialSpoke,
+  olc: olcSpoke,
+  litigation: litigationSpoke,
+  frus: frusSpoke,
+  fbi: fbiSpoke,
+  sanctions: sanctionsSpoke,
+  commentary: commentarySpoke,
+  books: booksSpoke,
+}
+
+/** The hub's title for a corpus is the registry's, not the spoke module's own. */
+function hubTitle(slug: string): string {
+  const entry = CORPORA.find((c) => c.slug === slug)
+  if (!entry || !entry.hub) throw new Error(`spokes/registry: ${slug} has no hub title in the generated registry`)
+  return entry.hub.title
+}
+
+/**
+ * The hub's groups: headings, order and membership all come from the Worker
+ * registry (generated into the client package). Only the spoke UI is written
+ * here.
+ */
 export const spokeGroups: readonly {
   heading: string
   spokes: readonly CorpusSpoke[]
-}[] = [
-  {
-    heading: 'The law',
-    spokes: [uscSpoke, cfrSpoke, congressSpoke, frSpoke, presidentialSpoke],
-  },
-  {
-    heading: 'As read',
-    spokes: [olcSpoke, litigationSpoke],
-  },
-  {
-    heading: 'The record',
-    spokes: [frusSpoke, fbiSpoke, sanctionsSpoke],
-  },
-  {
-    heading: 'Commentary',
-    spokes: [commentarySpoke],
-  },
-  {
-    heading: 'The catalogue',
-    spokes: [booksSpoke],
-  },
-]
-
-/**
- * Sources RAGtime reads live from someone else's API, listed beside the corpora
- * so the two are never confused. A corpus is something we hold; these are
- * not held, not searched with our corpora and not quotable as ours. They have
- * no spoke page, so they are not spokes and stay out of `spokes` (and out of
- * the drift test against the Worker registry, which lists only held corpora).
- * Ruled 2026-09-30: two sections, clear names, `books` stays the catalogue's slug.
- */
-export const liveApiSources: readonly {
-  slug: string
-  title: string
-  description: string
-}[] = [
-  {
-    slug: 'google-books',
-    title: 'Google Books',
-    description:
-      'Live API, not held. The Explorer asks it to check a quotation against book text, and each catalogue record links to it. Nothing from it is stored here.',
-  },
-]
+}[] = HUB_GROUPS.map((group) => ({
+  heading: group.heading,
+  spokes: group.corpora.map((slug) => {
+    const spoke = spokeImplementations[slug as HubCardSlug]
+    if (!spoke) throw new Error(`spokes/registry: no spoke implementation for hub corpus ${slug}`)
+    return { ...spoke, title: hubTitle(slug) }
+  }),
+}))
 
 export const spokes: readonly CorpusSpoke[] = spokeGroups.flatMap(
   (g) => g.spokes,

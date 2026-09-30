@@ -9,6 +9,8 @@ import {
   type HubAmaReport,
   type HubCorpusSlug,
   HubAmaError,
+  corpusLongLabel,
+  corpusShortLabel,
   hubAmaExecute,
   hubAmaPlan,
 } from '@lawfare/ragtime-client'
@@ -626,75 +628,14 @@ function CountRowsTable({ rows }: { rows: Record<string, unknown>[] }) {
   )
 }
 
-/** Short label for chips and the routing summary. */
+/** Short label for chips and the routing summary. Derived from the Worker registry. */
 function shortLabel(slug: HubCorpusSlug): string {
-  switch (slug) {
-    case 'litigation':
-      return 'litigation'
-    case 'usc':
-      return 'USC'
-    case 'cfr':
-      return 'CFR'
-    case 'olc':
-      return 'OLC'
-    case 'frus':
-      return 'FRUS'
-    case 'lawfare':
-    case 'commentary':
-      return 'Commentary'
-    case 'presidential':
-      return 'Presidential'
-    case 'clemency':
-      return 'Clemency'
-    case 'fr':
-      return 'Fed. Register'
-    case 'congress':
-      return 'Congress'
-    case 'fbi':
-      return 'FBI'
-    case 'sanctions':
-      return 'Sanctions'
-    // Not in either hub fan (the Worker keeps the catalogue out of both); the
-    // label covers the slug so the switch stays exhaustive.
-    case 'books':
-      return 'Books'
-  }
+  return corpusShortLabel(slug)
 }
 
-/** Longer label for the routing/handoff chips. */
+/** Longer label for the routing/handoff chips. Derived from the Worker registry. */
 function longLabel(slug: HubCorpusSlug): string {
-  switch (slug) {
-    case 'litigation':
-      return 'Federal litigation'
-    case 'usc':
-      return 'U.S. Code'
-    case 'cfr':
-      return 'CFR'
-    case 'olc':
-      return 'OLC opinions'
-    case 'frus':
-      return 'FRUS'
-    case 'lawfare':
-    case 'commentary':
-      return 'Commentary'
-    case 'presidential':
-      return 'Presidential Docs'
-    case 'clemency':
-      return 'Clemency grants'
-    case 'fr':
-      return 'Federal Register'
-    case 'congress':
-      return 'Congress'
-    case 'fbi':
-      return 'FBI Records'
-    // Sanctions is NOT in SEMANTIC_HUB_CORPORA (the Worker excludes it from
-    // the hub fan — its semantic space overlaps the fr card's), but the
-    // label covers the slug for handoff chips should the Worker route there.
-    case 'sanctions':
-      return 'Sanctions'
-    case 'books':
-      return 'Library of Congress catalogue'
-  }
+  return corpusLongLabel(slug)
 }
 
 /** Markdown register — matches the spoke AMA result styles for consistency. */

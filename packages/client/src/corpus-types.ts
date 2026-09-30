@@ -14,25 +14,15 @@
  * - brief #7 (collections) — decisions 2, 5, 6, 7, 8, 9, 12, 13
  * - 2026-05-27 "more like this" hook decision
  */
+import { CORPORA } from './generated/registry.ts'
 
-/** Slugs of all loaded corpora. New corpora extend this union. */
-export type CorpusSlug =
-  | 'litigation'
-  | 'olc'
-  | 'usc'
-  | 'cfr'
-  | 'frus'
-  // 'lawfare' retained in the union so the (now-unreferenced) Lawfare spoke +
-  // worker-client Lawfare types still compile; the live spoke is 'commentary'.
-  | 'lawfare'
-  | 'commentary'
-  | 'presidential'
-  | 'fr'
-  | 'congress'
-  | 'fbi'
-  | 'sanctions'
-  // The Library of Congress catalogue: bibliographic records, not documents.
-  | 'books'
+
+/**
+ * Slugs of all corpora the Worker registry holds. Derived from the generated
+ * registry (`npm run registry:sync`), so a corpus added on the Worker is a
+ * type error here until the app handles it, and never a silent omission.
+ */
+export type CorpusSlug = (typeof CORPORA)[number]['slug']
 
 /**
  * A spoke's lifecycle status. Drives whether it shows up in nav and how
