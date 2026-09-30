@@ -63,6 +63,8 @@ const TOOL_LABELS: Record<string, string> = {
   ask_hub_execute: 'ask across corpora',
   summarize_document: 'summarize',
   find_similar: 'similar documents',
+  lookup_books: 'book catalogue',
+  google_books: 'Google Books',
   ask_user: 'asked a question',
   propose_brief: 'proposed a brief',
 }
@@ -104,6 +106,10 @@ export function toolVerb(call: Pick<TrailCall, 'name' | 'input'>): string {
       return 'summarizing a document'
     case 'find_similar':
       return `finding similar documents in ${where}`
+    case 'lookup_books':
+      return 'checking the book catalogue'
+    case 'google_books':
+      return 'reading Google Books (connected to RAGtime)'
     case 'propose_brief':
       return 'writing the brief'
     case 'ask_user':

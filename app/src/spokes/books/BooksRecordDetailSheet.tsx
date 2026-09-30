@@ -31,8 +31,8 @@ import {
  *   - Title, the "catalogue record" badge, authors · year · publisher
  *   - Where to read it: the handoff ladder (P3) — LOC entry, free full text
  *     when likely public domain, a library — then Google Books under its own
- *     "outside RAGtime" heading, because it is someone else's rights-limited
- *     index, not ours
+ *     "Connected to RAGtime" heading, because it is a rights-limited index
+ *     RAGtime connects to but does not hold (the same label the Explorer uses)
  *   - Contributors with their roles and LC name-authority links
  *   - Publication facts, subjects, series and identifiers
  *   - Contents / summary notes where the record has them, labelled as
@@ -160,7 +160,7 @@ function RecordBody({
               {google && (
                 <>
                   <h4 className="mt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Outside RAGtime
+                    Connected to RAGtime
                   </h4>
                   <HandoffList items={[google]} />
                 </>

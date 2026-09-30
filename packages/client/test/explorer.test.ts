@@ -101,6 +101,25 @@ test('a tool_result from a worker without detail still types; a failed one carri
   for (const r of results) if (r.type === 'tool_result') assert.equal(r.detail, undefined)
 })
 
+test('a brief naming a connected source and a google_books round carrying its source label both parse', async () => {
+  const connectedBrief: ExplorerBrief = { goal: 'Where is it from?', corpora: ['books'], answer_shape: 'the earliest source', connected: ['google_books'] }
+  const raw =
+    frame('phase', { phase: 'orient' }) +
+    frame('phase', { phase: 'orient', outcome: 'brief', brief: connectedBrief }) +
+    frame('tool_result', {
+      step: 1, id: 'toolu_gb', name: 'google_books', ok: true, summary: 'Google Books 4', cost_cents: 0, ms: 90,
+      source: { id: 'google_books', name: 'Google Books', connected: true, disclosure: 'When I use Google Books I am limited…' },
+    }) +
+    frame('done', { envelope: 'e.m', stop: 'end_turn', history: [], calls: 1 })
+  const events = await collect(streamOf([raw]))
+  const outcome = events.filter((e) => e.type === 'phase')[1]
+  assert.ok(outcome && outcome.type === 'phase')
+  if (outcome?.type === 'phase') assert.deepEqual(outcome.brief?.connected, ['google_books'])
+  const result = events.find((e) => e.type === 'tool_result')
+  assert.ok(result && result.type === 'tool_result')
+  if (result?.type === 'tool_result') assert.deepEqual(result.source, { id: 'google_books', name: 'Google Books', connected: true, disclosure: 'When I use Google Books I am limited…' })
+})
+
 test('frames split across chunk boundaries reassemble', async () => {
   const chunks: string[] = []
   for (let i = 0; i < orientTurn.length; i += 7) chunks.push(orientTurn.slice(i, i + 7))

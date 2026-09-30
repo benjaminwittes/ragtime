@@ -3,6 +3,7 @@ import type { CorpusRegistry, ExplorerBrief } from '@lawfare/ragtime-client'
 
 import { ANSWER_SHAPES, detectShape } from '../model/answer-shape.ts'
 import { briefJson, moveCorpus, normalizeBrief, sameBrief } from '../model/brief.ts'
+import { CONNECTED_HEADING, connectedLabel, connectedName } from '../model/connected.ts'
 
 type Props = {
   brief: ExplorerBrief
@@ -24,7 +25,9 @@ type Props = {
  * free-text option, constraints as tags. Accept = "Research". The JSON stays
  * underneath: it is what the worker hashes into the envelope. Item 8: an
  * accepted brief shows compact; editing it and accepting again starts a new
- * research phase with the edited brief.
+ * research phase with the edited brief. Sources connected to RAGtime (the
+ * brief's `connected`, today Google Books) sit in their own row under that
+ * label, never among the corpora: RAGtime does not hold them.
  */
 export function BriefCard({ brief, registry, editable, accepted, disabled, startOpen = true, onAccept }: Props) {
   const [draft, setDraft] = useState<ExplorerBrief>(brief)
@@ -44,11 +47,17 @@ export function BriefCard({ brief, registry, editable, accepted, disabled, start
   const known = registry?.corpora ?? []
   const nameOf = (slug: string) => known.find((c) => c.slug === slug)?.name ?? slug
   const remaining = known.filter((c) => !draft.corpora.includes(c.slug))
+  // Only what the worker offered can be added back: it alone knows which
+  // connected sources this deployment can read.
+  const offeredConnected = Array.from(new Set((brief.connected ?? []).concat(accepted?.connected ?? [])))
+  const connectedNow = draft.connected ?? []
+  const connectedRemaining = offeredConnected.filter((s) => !connectedNow.includes(s))
   const shape = detectShape(draft.answer_shape)
   const changed = !sameBrief(normalizeBrief(draft), accepted ?? brief)
 
   const set = (patch: Partial<ExplorerBrief>) => setDraft((d) => ({ ...d, ...patch }))
   const removeCorpus = (slug: string) => set({ corpora: draft.corpora.filter((c) => c !== slug) })
+  const removeConnected = (slug: string) => set({ connected: connectedNow.filter((c) => c !== slug) })
   const addConstraint = () => {
     const c = constraint.trim()
     if (!c) return
@@ -97,6 +106,18 @@ export function BriefCard({ brief, registry, editable, accepted, disabled, start
             </span>
           ))}
         </div>
+        {(shown.connected ?? []).length > 0 && (
+          <div className="brief-connected">
+            <span className="label">{CONNECTED_HEADING}</span>
+            <div className="chips">
+              {(shown.connected ?? []).map((s) => (
+                <span key={s} className="chip chip-static chip-connected" title={s}>
+                  {connectedLabel(s)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {accepted && (
           <div className="brief-actions">
             <button type="button" className="link" onClick={() => setEditing(true)} disabled={disabled}>
@@ -160,6 +181,34 @@ export function BriefCard({ brief, registry, editable, accepted, disabled, start
         </div>
         {draft.corpora.length === 0 && <span className="hint warn">name at least one corpus</span>}
       </div>
+
+      {offeredConnected.length > 0 && (
+        <div className="field">
+          <span className="label">{CONNECTED_HEADING}</span>
+          <div className="chips">
+            {connectedNow.map((s) => (
+              <span key={s} className="chip chip-connected" title={s}>
+                {connectedLabel(s)}
+                <button type="button" className="chip-x" aria-label={'Remove ' + connectedName(s)} onClick={() => removeConnected(s)} disabled={disabled}>
+                  ×
+                </button>
+              </span>
+            ))}
+            {connectedRemaining.map((s) => (
+              <button
+                type="button"
+                key={s}
+                className="chip chip-choice"
+                onClick={() => set({ connected: connectedNow.concat(s) })}
+                disabled={disabled}
+              >
+                + {connectedName(s)}
+              </button>
+            ))}
+          </div>
+          <span className="hint">read live and cited as its publisher's, not RAGtime's: RAGtime does not hold it</span>
+        </div>
+      )}
 
       <div className="field">
         <span className="label">Answer shape</span>
