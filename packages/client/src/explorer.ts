@@ -32,6 +32,13 @@ export type ExplorerBrief = {
   answer_shape: string
   /** Optional: dates, jurisdictions, parties. */
   constraints?: string[]
+  /**
+   * Optional: sources connected to RAGtime that RAGtime does not hold, which
+   * research reads live and cites as their publisher's (today only
+   * `google_books`). Additive to the #168 brief; the worker offers it only when
+   * the source is configured and refuses research on one it cannot read.
+   */
+  connected?: string[]
 }
 
 /**
@@ -134,7 +141,15 @@ export type ExplorerToolResultEvent = {
   /** Cents the tool itself billed (the AI tools); 0 for the free ones. */
   cost_cents: number
   ms: number
+  /**
+   * Present when the round read a source connected to RAGtime rather than a
+   * corpus (today a `google_books` round): what to call it, and the disclosure
+   * to show beside it. Additive; absent on every other tool.
+   */
+  source?: ExplorerToolSource
 }
+
+export type ExplorerToolSource = { id: string; name: string; connected: boolean; disclosure: string }
 export type ExplorerHandoffEvent = {
   type: 'handoff'
   kind: ExplorerHandoffKind

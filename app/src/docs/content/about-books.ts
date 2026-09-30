@@ -48,7 +48,8 @@ catalogue will count, and the count then reads *10,000+*.
 
 **Where to read the book.** Every record ends with where to go next: the
 Library of Congress entry, free full text when the book is old enough to be
-likely public domain, a library that holds it, and Google Books, which is
+likely public domain, a library that holds it, and Google Books, listed as
+*connected to RAGtime*: a source RAGtime can reach but does not hold, so it is
 Google's index rather than ours.
 `.trim(),
 }

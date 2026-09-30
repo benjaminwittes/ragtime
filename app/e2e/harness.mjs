@@ -127,7 +127,50 @@ function installStub() {
     [60, frame('done', { type: 'done', envelope: 'env_stub_research_1', stop: 'end_turn', history: [{ role: 'assistant', content: [{ type: 'text', text: 'answer' }] }], calls: 3 })],
   ]
 
+  // A books question that names Google Books, the one source connected to RAGtime: the
+  // brief carries it in `connected` (never among the corpora), and the research round that
+  // reads it carries the worker's `source` label and disclosure. The answer cites the
+  // catalogue as rt://books and the Google volume as a plain external link.
+  const GB_BRIEF = {
+    goal: "Find where 'the law is a ass' comes from.",
+    corpora: ['books'],
+    answer_shape: 'the earliest source',
+    connected: ['google_books'],
+  }
+  const GB_DISCLOSURE = 'When I use Google Books I am limited by what its API may return under copyright and licensing.'
+  const orientGb = () => [
+    [0, frame('phase', { type: 'phase', phase: 'orient' })],
+    [200, frame('tool_call', { type: 'tool_call', step: 1, id: 'tg_1', name: 'lookup_books', input: { query: 'Oliver Twist' } })],
+    [400, frame('tool_result', {
+      type: 'tool_result', step: 1, id: 'tg_1', name: 'lookup_books', ok: true, summary: 'books 2',
+      detail: { kind: 'search', total: 2, hits: [{ corpus: 'books', count: 2, top: [{ id: 8812, title: 'Oliver Twist' }] }] },
+      corpus: 'books', ids: [8812, 8813], count: 2, cost_cents: 0, ms: 210,
+    })],
+    [80, frame('cost', { type: 'cost', turn_cents: 0.3, conversation_cents: 1, conversation_spend: 0.3, steps: 1, step_cap: 2, demo_calls: 2, demo_quota: 1500 })],
+    [200, frame('tool_call', { type: 'tool_call', step: 2, id: 'tg_2', name: 'propose_brief', input: GB_BRIEF })],
+    [200, frame('phase', { type: 'phase', phase: 'orient', outcome: 'brief', brief: GB_BRIEF })],
+    [80, frame('cost', { type: 'cost', turn_cents: 0.5, conversation_cents: 1, conversation_spend: 0.5, steps: 2, step_cap: 2, demo_calls: 3, demo_quota: 1500 })],
+    [60, frame('done', { type: 'done', envelope: 'env_stub_orient_gb', stop: 'end_turn', history: [{ role: 'assistant', content: [{ type: 'text', text: 'brief proposed' }] }], calls: 2 })],
+  ]
+  const researchGb = () => [
+    [0, frame('phase', { type: 'phase', phase: 'research' })],
+    [200, frame('tool_call', { type: 'tool_call', step: 1, id: 'tg_3', name: 'google_books', input: { mode: 'quote_origin', quote: 'the law is a ass' } })],
+    [500, frame('tool_result', {
+      type: 'tool_result', step: 1, id: 'tg_3', name: 'google_books', ok: true, summary: 'Google Books 4, 1 in our catalogue',
+      detail: { kind: 'search', total: 4, hits: [{ corpus: 'Google Books', count: 4, top: [{ id: null, title: 'Oliver Twist' }] }, { corpus: 'books', count: 1, top: [{ id: 8812, title: 'Oliver Twist' }] }] },
+      source: { id: 'google_books', name: 'Google Books', connected: true, disclosure: GB_DISCLOSURE },
+      cost_cents: 0, ms: 640,
+    })],
+    [80, frame('cost', { type: 'cost', turn_cents: 1.2, conversation_cents: 2, conversation_spend: 1.7, steps: 1, step_cap: 6, demo_calls: 5, demo_quota: 1500 })],
+    [120, frame('handoff', { type: 'handoff', kind: 'document', url: '/corpus/books/8812', label: 'Oliver Twist' })],
+    [200, frame('text', { type: 'text', delta: GB_DISCLOSURE + ' The earliest attestation found is [Oliver Twist](rt://books/8812), also in [Oliver Twist](https://books.google.com/books?id=GBtest0001) (Google Books).' })],
+    [80, frame('cost', { type: 'cost', turn_cents: 1.4, conversation_cents: 2, conversation_spend: 1.9, steps: 1, step_cap: 6, demo_calls: 6, demo_quota: 1500 })],
+    [60, frame('done', { type: 'done', envelope: 'env_stub_research_gb', stop: 'end_turn', history: [{ role: 'assistant', content: [{ type: 'text', text: 'answer' }] }], calls: 2 })],
+  ]
+
   const scenarios = {
+    // A books question that names Google Books (connected to RAGtime) in the brief.
+    googlebooks: [orientGb(), researchGb()],
     // Turn 1 orients; turn 2 (after accepting the brief) researches to a modest total.
     research: [orient(), research(4.4, 7)],
     // Same, but the conversation total runs past $2 — no cap stops it, and the meter reads dollars.

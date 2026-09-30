@@ -1,6 +1,7 @@
 /**
  * The brief as the card edits it (design item 1): a form over the same four
- * fields the worker validates, with the JSON underneath as what is sent —
+ * fields the worker validates, plus the optional sources connected to RAGtime
+ * (`connected`, today only Google Books), with the JSON underneath as what is sent —
  * the worker hashes that into the envelope, so what the card shows is what
  * research runs against. Item 8: a follow-up reuses the accepted brief;
  * only an edit makes a new one.
@@ -16,6 +17,10 @@ export function normalizeBrief(b: ExplorerBrief): ExplorerBrief {
   }
   const constraints = (b.constraints ?? []).map((c) => c.trim()).filter(Boolean)
   if (constraints.length) out.constraints = constraints
+  // Absent unless named, so a brief without connected sources hashes exactly as
+  // it always did (the worker hashes what the card sends into the envelope).
+  const connected = Array.from(new Set((b.connected ?? []).map((c) => c.trim()).filter(Boolean)))
+  if (connected.length) out.connected = connected
   return out
 }
 

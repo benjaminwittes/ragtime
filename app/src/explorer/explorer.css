@@ -125,6 +125,10 @@
 .explorer .chip-order { color: var(--faint); font-size: 11px; }
 .explorer .chip-x { border: 0; background: none; color: var(--dim); padding: 0 0 0 2px; line-height: 1; font-size: 15px; }
 .explorer .chip-tag { background: var(--bg); }
+/* A source connected to RAGtime (the brief's `connected`): dashed, because RAGtime does not hold it. */
+.explorer .chip-connected { border-style: dashed; background: var(--bg); color: var(--dim); }
+.explorer .brief-connected { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.explorer .brief-connected .label { font-size: 12px; color: var(--faint); }
 .explorer .chip-shape { border-style: dashed; color: var(--dim); }
 .explorer .chip-add, .explorer .chip-input { border: 1px dashed var(--line-strong); background: transparent; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
 .explorer .chip-input { min-width: 240px; }
@@ -390,6 +394,9 @@
 .explorer .hit { margin-right: 10px; }
 .explorer .hit-top { color: var(--dim); font-size: 12px; margin-left: 4px; }
 .explorer .hit-miss { color: var(--faint); font-size: 12px; }
+/* A trail round that read a connected source: its name, and the disclosure it carries. */
+.explorer .call-source { margin: 2px 0 0 18px; font-size: 12px; color: var(--faint); display: flex; flex-direction: column; gap: 2px; }
+.explorer .call-source-label { color: var(--dim); }
 .explorer .hit-chars { color: var(--faint); font-size: 11px; }
 .explorer .handoff { display: block; margin: 4px 0; font-size: 13px; text-decoration: none; }
 .explorer .handoff::before { content: '→ '; }

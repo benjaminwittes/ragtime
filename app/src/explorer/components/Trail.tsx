@@ -78,6 +78,14 @@ function Call({ call }: { call: TrailCall }) {
       ) : (
         <div className="call-result pending">…</div>
       )}
+      {r?.source?.connected && (
+        <div className="call-source">
+          <span className="call-source-label">
+            {r.source.name} · connected to RAGtime, not held by it
+          </span>
+          {r.source.disclosure && <span className="call-source-disclosure">{r.source.disclosure}</span>}
+        </div>
+      )}
     </div>
   )
 }
