@@ -48,6 +48,7 @@ import { fbiNarrativeSynthesisEntry } from './content/fbi-narrative-synthesis'
 import { fbiDocumentSummaryEntry } from './content/fbi-document-summary'
 // Sanctions spoke.
 import { aboutSanctionsEntry } from './content/about-sanctions'
+import { aboutBooksEntry } from './content/about-books'
 
 /**
  * Central docs registry. 35 entries: 5 global and 30 spoke-scoped.
@@ -124,6 +125,8 @@ export const docsEntries: readonly DocsEntry[] = [
   fbiDocumentSummaryEntry,
   // Sanctions
   aboutSanctionsEntry,
+  // Book catalogue
+  aboutBooksEntry,
 ]
 
 /**

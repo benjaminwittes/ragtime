@@ -5,6 +5,7 @@ import { Hub } from '@/hub/Hub'
 import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
 import { TermsOfService } from '@/legal/TermsOfService'
 import { SpokeShell } from '@/spokes/SpokeShell'
+import { BooksSpokeShell } from '@/spokes/books/BooksSpokeShell'
 import { CfrSpokeShell } from '@/spokes/cfr/CfrSpokeShell'
 import { CommentarySpokeShell } from '@/spokes/commentary/CommentarySpokeShell'
 import { CongressSpokeShell } from '@/spokes/congress/CongressSpokeShell'
@@ -178,6 +179,8 @@ function spokeShell(spoke: CorpusSpoke) {
       <UscSpokeShell spoke={spoke} />
     ) : spoke.slug === 'cfr' ? (
       <CfrSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'books' ? (
+      <BooksSpokeShell spoke={spoke} />
     ) : spoke.slug === 'olc' ? (
       <OlcSpokeShell spoke={spoke} />
     ) : spoke.slug === 'frus' ? (

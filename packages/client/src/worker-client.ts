@@ -4965,6 +4965,15 @@ export function fetchOlcItemsByIds(
   )
 }
 
+export function fetchBooksItemsByIds(
+  ids: readonly number[],
+): Promise<BookDisplayRow[]> {
+  return fetchItemsByIds<BookDisplayRow>(
+    `${workerUrl()}/corpus/books/items-by-ids`,
+    ids,
+  )
+}
+
 export function fetchFrusItemsByIds(
   ids: readonly number[],
 ): Promise<FrusDocumentDisplayRow[]> {
@@ -5271,6 +5280,214 @@ export async function runMoreLikeThis(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/books/* — the book catalogue (ragtime-worker#145)
+ *
+ * The Library of Congress bibliographic catalogue: 10,543,015 records from
+ * LC's *Books All* bulk MARC, a 2016 snapshot. A MAP of books, not their
+ * contents — there is no full text, no chunks and no embeddings, so this
+ * corpus has no semantic pane, no AI modes and no more-like-this. Design:
+ * ragtime-dev `docs/briefs/book-corpus-query-architecture.md`.
+ *
+ * Three things every surface over these routes has to carry, because the
+ * routes carry them:
+ * - `count_is_floor`: a broad filter cannot be counted exactly against
+ *   10.5M rows, so the Worker caps the id set at 10,000 and says so. A
+ *   floor rendered as a total is a false statement about the catalogue.
+ * - `coverage` on /facets: each sparse field ships with its denominator
+ *   (audience is coded on 3.9% of records), so a filter on it can say how
+ *   much of the catalogue it can see at all.
+ * - `limits` on /facets: the snapshot date and the incompleteness inside
+ *   it, as the Worker's own prose. Render it; don't restate it.
+ * ------------------------------------------------------------------------- */
+
+export type BooksFacetCount = { value: string; count: number }
+
+/** A field's coverage: how many records carry it, out of how many. */
+export type BooksCoverage = { present: number; total: number }
+
+export type BooksFacets = {
+  record_count: number
+  pub_year_min: number | undefined
+  pub_year_max: number | undefined
+  /** The source file's year token — 2016. The catalogue's edition, not a freshness date. */
+  source_vintage: number | undefined
+  /** Works published on or before this year are likely public domain in the
+   *  US. Computed by the Worker from the current year; a routing heuristic,
+   *  never a legal determination. */
+  public_domain_floor: number
+  /** MARC 008/35-37 three-letter codes ('eng', 'ger'). */
+  languages: BooksFacetCount[]
+  /** MARC 008/22, with the Worker's label ('c' → 'pre-adolescent (grades 4-8)'). */
+  audiences: { value: string; label: string | null; count: number }[]
+  /** Decade → record count, ascending. */
+  decades: BooksFacetCount[]
+  /** Which kinds of subject heading records carry (topical, personal, geographic, genre …). */
+  subject_kinds: BooksFacetCount[]
+  /** Keyed by column name: audience, language, page_count, illustrations,
+   *  subject_strings, contributors, isbn, lccn_normalized, … */
+  coverage: Record<string, BooksCoverage>
+  /** The catalogue's known limits, as prose — rendered verbatim. */
+  limits: string[]
+  facets_computed_at: string | null
+}
+
+export async function fetchBooksFacets(): Promise<BooksFacets> {
+  const r = await fetch(`${workerUrl()}/corpus/books/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) throw await corpusError(r, '/corpus/books/facets')
+  return (await r.json()) as BooksFacets
+}
+
+export type BookDisplayRow = {
+  id: number
+  lccn: string | null
+  lccn_normalized: string | null
+  title: string | null
+  subtitle: string | null
+  uniform_title: string | null
+  /** Main entry first, then added entries — personal and corporate. MARC
+   *  punctuation included ('Wittes, Benjamin.'). Roles are on the record. */
+  authors: string[] | null
+  publisher: string | null
+  /** As catalogued — 'c1974', '[1998?]'. */
+  pub_date: string | null
+  /** Best-effort four-digit year. */
+  pub_date_normalized: number | null
+  edition: string | null
+  classification: string | null
+  language: string | null
+  original_language: string | null
+  audience: string | null
+  /** MARC 300 $a — 'xii, 364 p.'. */
+  extent: string | null
+  page_count: number | null
+  /** True when the record has illustration prose (300 $b). */
+  illustrated: boolean | null
+  series: string[] | null
+  subject_strings: string[] | null
+  isbn: string[] | null
+  /** Uniform-title-or-title + first author. An edition hint, not an identifier. */
+  work_cluster_key: string | null
+}
+
+export type BooksFilterFields = {
+  /** Full-text over title, subtitle, authors and subject headings. */
+  search?: string
+  title?: string
+  /** An exact name in catalogue form — 'Goldsmith, Jack'. No fuzzy matching, by design. */
+  author?: string
+  /** Substring over the subject headings. */
+  subject?: string
+  /** The whole heading, subdivisions included. */
+  subjectExact?: string
+  /** An exact LC class number ('KF9223'). */
+  classification?: string
+  /** A class range, letters only ('KF'). */
+  classificationPrefix?: string
+  /** Three-letter MARC code ('ger'). */
+  language?: string
+  /** The language a translation came from. */
+  originalLanguage?: string
+  uniformTitle?: string
+  series?: string
+  /** MARC 008/22 single character. */
+  audience?: string
+  yearFrom?: number
+  yearTo?: number
+  pagesMin?: number
+  pagesMax?: number
+  illustrated?: boolean
+  likelyPublicDomain?: boolean
+  lccn?: string
+  isbn?: string
+}
+
+export type BooksFilterResult = {
+  ids: number[]
+  /** The first 500 of `ids`, as display rows. */
+  display_rows: BookDisplayRow[]
+  /** Exact unless `count_is_floor`, when it is the 10,000-id cap. */
+  count: number
+  /** True when the filter matched more than the Worker will count. */
+  count_is_floor: boolean
+  catalogue_vintage: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runBooksFilter(
+  fields: BooksFilterFields,
+): Promise<BooksFilterResult> {
+  const r = await fetch(`${workerUrl()}/corpus/books/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  })
+  if (!r.ok) throw await corpusError(r, '/corpus/books/filter')
+  return (await r.json()) as BooksFilterResult
+}
+
+/** One 1xx/7xx entry, with the role and authority URI the display row drops. */
+export type BookContributor = {
+  name: string
+  tag?: string
+  /** 'personal' | 'corporate' | 'meeting'. */
+  kind?: string
+  /** The main entry (1xx) — the author, not someone added to the record. */
+  primary?: boolean
+  roles?: string[] | null
+  /** An id.loc.gov name-authority URI, when the record carries one. */
+  authority?: string | null
+}
+
+export type BookRecord = BookDisplayRow & {
+  control_number: string | null
+  title_normalized: string | null
+  contributors: BookContributor[] | null
+  subject_headings: unknown
+  /** Structured 6xx headings; their shape is the pipeline's, rendered loosely. */
+  subjects: unknown
+  oclc_number: string | null
+  languages: string[] | null
+  illustrations: string | null
+  illustration_codes: string[] | null
+  /** MARC 505. Held on 6.3% of records; not searchable. */
+  contents: string | null
+  /** MARC 520. Held on 6.9% of records; not searchable. */
+  summary: string | null
+  source_file: string | null
+  source_vintage: number | null
+  ingested_at: string | null
+}
+
+export type BookRecordResponse = {
+  record: BookRecord
+  /** lccn.loc.gov/<lccn> — the first rung of the handoff ladder. Null without an LCCN. */
+  loc_permalink: string | null
+  likely_public_domain: boolean
+  audience_label: string | null
+  /** Fields held on this record that could not have been searched for. */
+  text_fields_are_not_searchable: string[]
+}
+
+/** One catalogue record by id or LCCN. A 404 carries `catalogue_absent`:
+ *  not in our 2016 snapshot, which is not evidence the work doesn't exist. */
+export async function fetchBooksRecord(
+  key: { id: number } | { lccn: string },
+): Promise<BookRecordResponse> {
+  const r = await fetch(`${workerUrl()}/corpus/books/record`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(key),
+  })
+  if (!r.ok) throw await corpusError(r, '/corpus/books/record')
+  return (await r.json()) as BookRecordResponse
+}
+
+/* ----------------------------------------------------------------------------
  * Helpers
  * ------------------------------------------------------------------------- */
 
@@ -5285,6 +5502,9 @@ const READER_FACING_CODES = new Set([
   'retired_federated',
   'scope_too_large',
   'scope_unsupported',
+  // Books: not in the 2016 catalogue snapshot — the Worker's message says why
+  // that is not evidence the work does not exist.
+  'catalogue_absent',
 ])
 
 /** A corpus-route failure with the Worker's error code attached. */
