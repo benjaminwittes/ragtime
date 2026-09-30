@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { formatCount } from '@/lib/format-count'
 import { getHoldingsCached, readHoldingsSnapshot } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
-import { liveApiSources, spokeGroups, spokes } from '@/spokes/registry'
-import type { CorpusHoldings, CorpusSpoke } from '@lawfare/ragtime-client'
+import { spokeGroups, spokes } from '@/spokes/registry'
+import { LIVE_APIS, type CorpusHoldings, type CorpusSpoke } from '@lawfare/ragtime-client'
 import { HubKeywordSearch } from './HubKeywordSearch'
 
 /**
@@ -87,7 +87,7 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
   // of their own, so a row and not a link. Numbered in the same pass so the exit
   // wave still runs top to bottom.
   const liveHeadingIndex = cursor++
-  const liveEntries = liveApiSources.map((source) => ({ source, index: cursor++ }))
+  const liveEntries = LIVE_APIS.map((source) => ({ source, index: cursor++ }))
 
   return (
     // The id is what the first screen's foot line scrolls to. `scroll-mt-6` is
@@ -173,7 +173,7 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
               style={{ viewTransitionName: `hub-card-${index + 1}` }}
             >
               <h4 className="font-serif text-lg font-semibold text-foreground">
-                {source.title}
+                {source.name}
               </h4>
               <p className="mt-1 text-sm text-lawfare-text-warm">
                 {source.description}

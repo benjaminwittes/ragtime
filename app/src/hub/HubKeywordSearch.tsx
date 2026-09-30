@@ -9,6 +9,8 @@ import { navigateTo, toHref } from '@/lib/routing'
 import {
   type HubCorpusSlug,
   type HubKeywordResponse,
+  corpusLongLabel,
+  corpusShortLabel,
   runHubKeyword,
   type CorpusSlug,
 } from '@lawfare/ragtime-client'
@@ -903,66 +905,12 @@ function CorpusResultCard({
   )
 }
 
-/** Short label for the result-count header. */
+/** Short label for chips and the routing summary. Derived from the Worker registry. */
 function shortLabel(slug: CorpusSlug): string {
-  switch (slug) {
-    case 'litigation':
-      return 'litigation'
-    case 'usc':
-      return 'USC'
-    case 'cfr':
-      return 'CFR'
-    case 'olc':
-      return 'OLC'
-    case 'frus':
-      return 'FRUS'
-    case 'lawfare':
-    case 'commentary':
-      return 'Commentary'
-    case 'presidential':
-      return 'Presidential'
-    case 'fr':
-      return 'Fed. Register'
-    case 'congress':
-      return 'Congress'
-    case 'fbi':
-      return 'FBI'
-    case 'sanctions':
-      return 'Sanctions'
-    // Not in either hub fan (the Worker keeps the catalogue out of both); the
-    // label covers the slug so the switch stays exhaustive.
-    case 'books':
-      return 'Books'
-  }
+  return corpusShortLabel(slug)
 }
 
-/** Longer label for the per-corpus section header. */
+/** Longer label for the routing/handoff chips. Derived from the Worker registry. */
 function longLabel(slug: CorpusSlug): string {
-  switch (slug) {
-    case 'litigation':
-      return 'Federal litigation'
-    case 'usc':
-      return 'United States Code'
-    case 'cfr':
-      return 'Code of Federal Regulations'
-    case 'olc':
-      return 'OLC opinions'
-    case 'frus':
-      return 'FRUS'
-    case 'lawfare':
-    case 'commentary':
-      return 'Commentary'
-    case 'presidential':
-      return 'Presidential Documents'
-    case 'fr':
-      return 'Federal Register'
-    case 'congress':
-      return 'Congress'
-    case 'fbi':
-      return 'FBI Records'
-    case 'sanctions':
-      return 'Sanctions'
-    case 'books':
-      return 'Library of Congress catalogue'
-  }
+  return corpusLongLabel(slug)
 }
