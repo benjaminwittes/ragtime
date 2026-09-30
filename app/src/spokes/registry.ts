@@ -67,6 +67,27 @@ export const spokeGroups: readonly {
   },
 ]
 
+/**
+ * Sources RAGtime reads live from someone else's API, listed beside the corpora
+ * so the two are never confused. A corpus is something we hold; these are
+ * not held, not searched with our corpora and not quotable as ours. They have
+ * no spoke page, so they are not spokes and stay out of `spokes` (and out of
+ * the drift test against the Worker registry, which lists only held corpora).
+ * Ruled 2026-09-30: two sections, clear names, `books` stays the catalogue's slug.
+ */
+export const liveApiSources: readonly {
+  slug: string
+  title: string
+  description: string
+}[] = [
+  {
+    slug: 'google-books',
+    title: 'Google Books',
+    description:
+      'Live API, not held. The Explorer asks it to check a quotation against book text, and each catalogue record links to it. Nothing from it is stored here.',
+  },
+]
+
 export const spokes: readonly CorpusSpoke[] = spokeGroups.flatMap(
   (g) => g.spokes,
 )

@@ -963,6 +963,6 @@ function longLabel(slug: CorpusSlug): string {
     case 'sanctions':
       return 'Sanctions'
     case 'books':
-      return 'Book catalogue'
+      return 'Library of Congress catalogue'
   }
 }

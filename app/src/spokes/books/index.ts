@@ -22,7 +22,7 @@ import { type CorpusSpoke, fetchBooksFacets } from '@lawfare/ragtime-client'
  */
 export const booksSpoke: CorpusSpoke = {
   slug: 'books',
-  title: 'Book catalogue',
+  title: 'Library of Congress catalogue',
   description:
     'The Library of Congress catalogue: ten million books, who wrote them and what they are about — records, not text.',
   status: 'active',
