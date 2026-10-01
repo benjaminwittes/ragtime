@@ -1,8 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Owl } from '@/components/Owl'
 import { Button } from '@/components/ui/button'
+import { Owl } from '@/components/Owl'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
 
 /**
  * Soft outer-gate for the closed beta. Sits in front of everything (the whole
@@ -57,7 +56,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       <div className="w-full max-w-sm">
         {/* The owl keeps the door. A wrong code gets a shake of the head, which runs again
             on each refusal because typing clears `error` and takes the class off with it. */}
-        <Owl className={cn('mb-4 w-16', error && 'owl-no')} />
+        <Owl className={error ? 'mb-4 w-16 owl-no' : 'mb-4 w-16'} />
         <h1 className="font-serif text-3xl font-bold tracking-tight">RAGtime</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           A Lawfare research surface. This beta is access-restricted — enter the
