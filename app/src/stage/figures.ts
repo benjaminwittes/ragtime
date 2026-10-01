@@ -1,5 +1,7 @@
 import type { ComponentType } from 'react'
 
+import { ComingFigure } from './ComingFigure.tsx'
+import { GrowthFigure } from './GrowthFigure.tsx'
 import { HoldingsFigure } from './HoldingsFigure.tsx'
 
 /**
@@ -29,6 +31,8 @@ export type FigureEntry = {
 /** The figures this build knows. */
 export const FIGURES: Record<string, FigureEntry> = {
   holdings: { title: 'What RAGtime holds', Figure: HoldingsFigure },
+  growth: { title: 'How RAGtime has grown', Figure: GrowthFigure },
+  coming: { title: 'Corpora coming soon', Figure: ComingFigure },
 }
 
 export function figureNamed(name: string): FigureEntry | undefined {
