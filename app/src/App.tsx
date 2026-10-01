@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
+import { Owl } from '@/components/Owl'
 import { SiteBar, SiteBarSlotProvider } from '@/components/SiteBar'
 import { Hub } from '@/hub/Hub'
 import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
@@ -216,6 +217,8 @@ function NotFound({
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-2xl px-6 py-16">
+        {/* Out with the lantern, looking for the page that is not here. */}
+        <Owl lantern="searching" className="mb-5 w-20" />
         <h1 className="font-serif text-3xl font-bold">Not found</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           No surface matches <code className="font-mono">{pathname}</code>.

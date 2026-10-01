@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { AskBox } from '@/components/AskBox'
+import { Owl } from '@/components/Owl'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { useDocs } from '@/docs/DocsContext'
 import { cn } from '@/lib/utils'
@@ -236,6 +237,19 @@ export function HubKeywordSearch({
         <SurfaceIntro
           level={1}
           className="text-center"
+          // The paragraph below says "I am RAGtime", and this is who says it: the owl on
+          // the stacks, from the same hand as the words. It sits above the title rather
+          // than beside the paragraph because the title fades and re-wraps every third
+          // beat and the owl must not move when it does — above, it is outside all of that.
+          // The block under the bar is centred, so the owl's height is split above and
+          // below it: measured at 1440x900 and 390x844, the box's top is at 608 and 591,
+          // where it was at 540 and 537, and the foot line is still on the first screen.
+          //
+          // Its lantern comes up while a search is out, and is lit after dark regardless.
+          figure={
+            <Owl pose="stacks" lantern={loading ? 'searching' : 'dark'} keepsHours className="w-full" />
+          }
+          figureClassName="mx-auto mb-5 w-[5.5rem] sm:mb-6 sm:w-28"
           // One whole sentence per corpus, and the h1 holds nothing but the
           // sentence: no span, no live region, no second heading, no button.
           // What crosses between two corpora is the whole line's opacity, which

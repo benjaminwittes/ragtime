@@ -143,6 +143,9 @@
 
 /* Empty state */
 .explorer .empty { max-width: var(--x-empty-measure); margin: 24px auto; }
+/* The owl above the heading, on the heading's own left edge. A class rather than utilities
+ * because this is inside `.explorer`, where the sheet's rules are the ones that hold. */
+.explorer .empty .owl-figure { width: 56px; margin: 0 0 12px; }
 .explorer .empty h2 { font: 600 26px/1.2 var(--serif); margin: 0 0 8px; }
 .explorer .lede { color: var(--dim); margin: 0 0 18px; }
 .explorer .examples { display: grid; gap: 8px; margin-bottom: 22px; }
