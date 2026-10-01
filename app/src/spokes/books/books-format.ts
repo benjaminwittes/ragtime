@@ -16,8 +16,37 @@
 import type {
   BookDisplayRow,
   BooksCoverage,
+  BooksFacets,
   BooksFilterFields,
 } from '@lawfare/ragtime-client'
+
+/** 10,543,015 → '10.5 million'. Whole numbers below a million keep their commas. */
+export function formatMillions(n: number): string {
+  if (n < 1_000_000) return n.toLocaleString('en-US')
+  return `${(Math.round(n / 100_000) / 10).toLocaleString('en-US')} million`
+}
+
+/** 'a 2016 snapshot', or 'a snapshot' while the edition is unknown. */
+export function snapshotPhrase(vintage: number | undefined): string {
+  return vintage != null ? `a ${vintage} snapshot` : 'a snapshot'
+}
+
+/**
+ * The header disclosure, with the record count and the snapshot year read from
+ * the Worker's /facets rather than typed here. Without facets (loading, or the
+ * call failed) it says the same things with no figures.
+ */
+export function booksDisclosure(facets: BooksFacets | undefined): string {
+  const records = facets ? `${formatMillions(facets.record_count)} books` : 'books'
+  const vintage = facets?.source_vintage
+  const since = vintage != null ? ` since ${vintage}` : ' after the snapshot'
+  return `Catalogue records for ${records} from the Library of Congress — author, title, publisher, date, length and subject headings. We hold the catalogue, not the books: there is no text to search or quote. The records are LC’s bulk snapshot${vintage != null ? ` of ${vintage}` : ''}, so nothing catalogued${since} is here, and the snapshot is incomplete even for the years it covers.`
+}
+
+/** The default no-match text. */
+export function booksEmptyHint(vintage: number | undefined): string {
+  return `No records matched. That is a fact about this catalogue — ${snapshotPhrase(vintage)} that is incomplete even for its own years — not evidence the book does not exist. Author names must match the catalogue form exactly (Surname, Forename); a subject substring usually finds more than an exact heading.`
+}
 
 /** The Worker's id cap; a floor count is exactly this. */
 export const BOOKS_COUNT_CAP = 10_000

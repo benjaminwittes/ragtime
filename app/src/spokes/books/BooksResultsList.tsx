@@ -4,6 +4,7 @@ import {
   displayAuthors,
   displayTitle,
   displayYear,
+  booksEmptyHint,
   editionCounts,
   languageName,
 } from './books-format'
@@ -31,6 +32,7 @@ export function BooksResultsList({
   executedSql,
   onOpenRecord,
   emptyHint,
+  snapshotYear,
 }: {
   rows: readonly BookDisplayRow[] | undefined
   count: number | undefined
@@ -42,6 +44,8 @@ export function BooksResultsList({
   onOpenRecord: (row: BookDisplayRow) => void
   /** Overrides the default no-match text (the id-set handoff has its own). */
   emptyHint?: string
+  /** The catalogue's edition year from /facets, when it has loaded. */
+  snapshotYear?: number
 }) {
   if (!hasRun && !loading) {
     return (
@@ -77,8 +81,7 @@ export function BooksResultsList({
       <div className="space-y-4 px-6 py-8">
         {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
         <p className="mx-auto max-w-xl text-center text-sm text-muted-foreground">
-          {emptyHint ??
-            'No records matched. That is a fact about this catalogue — a 2016 snapshot that is incomplete even for its own years — not evidence the book does not exist. Author names must match the catalogue form exactly (Surname, Forename); a subject substring usually finds more than an exact heading.'}
+          {emptyHint ?? booksEmptyHint(snapshotYear)}
         </p>
       </div>
     )
