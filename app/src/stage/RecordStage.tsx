@@ -1,5 +1,6 @@
 import { useMemo, useState, type MouseEvent } from 'react'
 
+import { Owl } from '@/components/Owl'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { toHref } from '@/lib/routing'
 
@@ -94,13 +95,20 @@ export function RecordStage({
   return (
     <div className="record mx-auto flex w-full max-w-[92rem] flex-1 flex-col px-[clamp(1rem,4cqi,4rem)] pb-12 pt-[clamp(0.75rem,2cqi,2rem)]" data-record={scene.pending ? 'pending' : 'on'}>
       <header>
+        {/* The owl is the archivist, and this is the archive being fetched: it stands
+            beside what was asked for, with its lantern up for as long as the collection
+            has not answered. It is the app's own owl, so its eyes follow the reader's
+            pointer across the ground. The name of the collection is set above the phrase,
+            though `SurfaceIntro` writes the heading first. */}
         <SurfaceIntro
           level={1}
-          className="flex flex-col-reverse gap-[0.4cqi]"
+          className="grid grid-cols-[auto_1fr] items-center gap-x-[clamp(0.6rem,1.4cqi,1.4rem)] gap-y-[0.3cqi]"
+          figure={<Owl lantern={scene.pending ? 'searching' : 'dark'} className="w-full" />}
+          figureClassName="col-start-1 row-span-2 row-start-1 w-[clamp(3rem,5.2cqi,4.75rem)]"
           heading={<>&ldquo;{scene.query}&rdquo;</>}
           lede={scene.label}
-          headingClassName="font-serif text-[clamp(1.4rem,3.2cqi,3rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
-          ledeClassName="font-sans text-[clamp(0.68rem,1.1cqi,0.95rem)] font-semibold uppercase tracking-[0.18em] text-[color:var(--house-accent)]"
+          headingClassName="col-start-2 row-start-2 font-serif text-[clamp(1.4rem,3.2cqi,3rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
+          ledeClassName="col-start-2 row-start-1 self-end font-sans text-[clamp(0.68rem,1.1cqi,0.95rem)] font-semibold uppercase tracking-[0.18em] text-[color:var(--house-accent)]"
         />
         <p className="mt-[0.4cqi] font-mono text-[clamp(0.68rem,1.05cqi,0.9rem)] text-[color:var(--house-ink-faint)]" role="status">
           {scene.pending
