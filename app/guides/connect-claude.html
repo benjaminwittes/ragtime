@@ -1,0 +1,366 @@
+<!doctype html>
+<!--
+  The source of `public/guides/connect-claude.pdf`. Edit this file, then run
+  `node app/scripts/build-guide.mjs` and commit both.
+
+  The same guide is the docs page `src/docs/content/connecting-claude.ts`.
+  When one changes, change the other.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How to Connect to RAGtime: A Step-by-Step Guide</title>
+<style>
+  /* The app's own faces, read from where the app keeps them. */
+  @font-face {
+    font-family: 'EB Garamond';
+    font-style: normal;
+    font-weight: 400 800;
+    src: url('../src/assets/fonts/eb-garamond-normal-latin-var.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Lato';
+    font-style: normal;
+    font-weight: 400;
+    src: url('../src/assets/fonts/lato-normal-latin-400.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Lato';
+    font-style: italic;
+    font-weight: 400;
+    src: url('../src/assets/fonts/lato-italic-latin-400.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Lato';
+    font-style: normal;
+    font-weight: 700;
+    src: url('../src/assets/fonts/lato-normal-latin-700.woff2') format('woff2');
+  }
+
+  html { font-size: 10.25pt; }
+  body {
+    margin: 0;
+    font-family: 'Lato', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.45;
+    color: #1f1e1d;
+  }
+  h1, h2, h3 {
+    font-family: 'EB Garamond', Georgia, serif;
+    font-weight: 500;
+    line-height: 1.15;
+    break-after: avoid;
+  }
+  h1 { font-size: 27pt; margin: 0 0 14pt; }
+  h2 { font-size: 18pt; margin: 18pt 0 6pt; }
+  h3 { font-size: 13.5pt; margin: 14pt 0 5pt; }
+  p { margin: 0 0 8pt; orphans: 3; widows: 3; }
+  ol, ul { margin: 0 0 8pt; padding-left: 18pt; }
+  li { margin: 0 0 3pt; break-inside: avoid; }
+  li > ul { margin-top: 3pt; }
+
+  /* A row never splits across two pages, and a short table never does. */
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; }
+  table.whole { break-inside: avoid; }
+  tr { break-inside: avoid; }
+  th, td { border: 1pt solid #e3e0d6; padding: 4.5pt 8pt; text-align: left; vertical-align: top; }
+  th { background: #f3f1ea; font-weight: 400; color: #55524b; }
+
+  code, pre { font-family: Menlo, Consolas, 'Courier New', monospace; font-size: 9pt; }
+  code { background: #f1efe9; border-radius: 2pt; padding: 1pt 3pt; }
+  pre { background: #f6f5f1; border-radius: 3pt; padding: 7pt 9pt; margin: 4pt 0 6pt; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  /* The one address a reader has to paste: keep it on one line. */
+  pre.address code { font-size: 8.5pt; }
+
+  blockquote {
+    margin: 6pt 0 10pt;
+    padding: 5pt 0 5pt 12pt;
+    border-left: 3pt solid #d8d5cb;
+    break-inside: avoid;
+  }
+  ul.check { list-style: none; padding-left: 0; }
+  ul.check li::before {
+    content: '';
+    display: inline-block;
+    width: 7.5pt;
+    height: 7.5pt;
+    margin-right: 6pt;
+    border: 1pt solid #c9c5b9;
+    border-radius: 2pt;
+    vertical-align: -1pt;
+  }
+  .label { font-weight: 700; margin: 8pt 0 3pt; }
+  .keep { break-inside: avoid; }
+  .foot { margin-top: 14pt; color: #55524b; }
+</style>
+</head>
+<body>
+
+<h1>How to Connect to the RAGtime MCP Server: A Step-by-Step Guide</h1>
+
+<p>"Connecting" to the RAGtime MCP server means giving Claude permission to search RAGtime for
+you, so you can ask Claude questions and get answers that cite real documents.</p>
+
+<h2>Start here: which way should you connect?</h2>
+
+<p>Most people at Lawfare should use <b>Path A</b>, the Claude website or app. It takes about
+two minutes and needs no passwords.</p>
+
+<table class="whole">
+  <tr><th>If you…</th><th>Use</th><th>Time</th></tr>
+  <tr>
+    <td>Sign in to Claude with your <b>Lawfare</b> account, in a web browser or the Claude app</td>
+    <td><b>Path&nbsp;A</b></td>
+    <td>About 2 minutes</td>
+  </tr>
+  <tr>
+    <td>Use <b>Claude Code</b>, the version of Claude you type into in a text window on your computer</td>
+    <td><b>Path&nbsp;B</b></td>
+    <td>About 10 minutes, once</td>
+  </tr>
+  <tr>
+    <td>Sign in to Claude with a <b>personal</b> account, not a Lawfare one</td>
+    <td><b>Path&nbsp;C</b></td>
+    <td>About 3 minutes</td>
+  </tr>
+</table>
+
+<p>Not sure? Start with Path A. If RAGtime is not in your list at step 3, use Path C.</p>
+
+<h2>Before you start</h2>
+
+<p>You need the items below. You do not need to know how to code.</p>
+
+<p class="label">For Path A (Claude website or app, Lawfare account)</p>
+<ul class="check">
+  <li>You can sign in to Claude with your <b>Lawfare</b> email.</li>
+</ul>
+
+<p class="label">For Path B (Claude Code), the above, plus:</p>
+<ul class="check">
+  <li>A Mac or Windows computer you're allowed to install apps on.</li>
+  <li>RAGtime turned on in your Claude account (Path A, steps 1–3).</li>
+</ul>
+
+<p class="label">For Path C (personal account)</p>
+<ul class="check">
+  <li>Any Claude account. A free one works.</li>
+</ul>
+
+<div class="keep">
+<h2>Path A: Turn on RAGtime in the Claude website or app</h2>
+
+<p>Lawfare's Claude administrator has already added RAGtime for everyone at Lawfare. All you do
+is switch it on. You never type a password.</p>
+
+<ol>
+  <li>Go to <b>claude.ai</b> and sign in with your Lawfare account.</li>
+  <li>In the sidebar on the left, click <b>Customize</b>, then <b>Connectors</b>. Or go straight
+    to <b>claude.ai/customize/connectors</b>.</li>
+  <li>Find <b>RAGtime</b> in the list. It has a <b>Custom</b> label. If it says <b>Connect</b>,
+    click it. If it already says <b>Connected</b>, go to step 4.</li>
+  <li>Start a <b>new chat</b>.</li>
+  <li>Click the <b>+</b> button at the lower left of the message box, choose <b>Connectors</b>,
+    and make sure <b>RAGtime</b> is switched on.</li>
+  <li>Ask a test question. See <i>Check that it worked</i> below.</li>
+</ol>
+</div>
+
+<p>The Claude desktop and phone apps use the same account. Once RAGtime is on at claude.ai, it's
+on in the apps too.</p>
+
+<p>Don't see RAGtime under Connectors? Your account may not be in Lawfare's Claude organization
+yet. Ask the RAGtime team, who will check with the Claude administrator. Until then, Path C
+works with any account.</p>
+
+<h2>Path B: Use RAGtime in Claude Code</h2>
+
+<p>Claude Code is a version of Claude you type into in a text window on your computer. You
+don't need to be a programmer to use it. RAGtime comes into Claude Code <b>automatically</b>
+from your Claude account, so there is nothing to copy, download or configure, and no
+password.</p>
+
+<p>One step uses <b>Terminal</b> (Mac) or <b>PowerShell</b> (Windows), the built-in
+text-command apps. When a step says "paste this," copy the grey text exactly, paste it, and
+press <b>Return</b> (Mac) or <b>Enter</b> (Windows).</p>
+
+<ul>
+  <li><b>Open Terminal on a Mac:</b> press <b>Command (⌘) + Space</b>, type <b>Terminal</b>,
+    and press <b>Return</b>.</li>
+  <li><b>Open PowerShell on Windows:</b> click <b>Start</b>, type <b>PowerShell</b>, and press
+    <b>Enter</b>.</li>
+</ul>
+
+<h3>One-time setup (about 10 minutes)</h3>
+
+<ol>
+  <li><b>Turn RAGtime on in your Claude account first.</b> Follow Path A, steps 1–3. On a
+    personal account, follow Path C, steps 1–6. Claude Code uses the same account, so this is
+    what makes RAGtime show up there.</li>
+  <li><b>Install Claude Code.</b> Paste the line for your computer:
+    <ul>
+      <li>Mac:
+        <pre><code>curl -fsSL https://claude.ai/install.sh | bash</code></pre></li>
+      <li>Windows:
+        <pre><code>irm https://claude.ai/install.ps1 | iex</code></pre></li>
+    </ul>
+    When it finishes, close the window and open it again.</li>
+  <li><b>Start Claude Code.</b> Paste <code>claude</code> and press Return or Enter.</li>
+  <li><b>Sign in.</b> Claude Code asks how you want to sign in. Choose the option to sign in
+    with your <b>Claude account</b> (not an API key). A browser window opens: sign in with the
+    same account you used in step 1 and approve. Then go back to the Terminal or PowerShell
+    window.</li>
+  <li><b>Check RAGtime is there.</b> Type <code>/mcp</code> and press Return or Enter. You
+    should see <b>claude.ai RAGtime</b> marked as connected. Press <b>Esc</b> to close the
+    list.</li>
+</ol>
+
+<div class="keep">
+<h3>Every time you want to use RAGtime</h3>
+
+<ol>
+  <li>Open Terminal (Mac) or PowerShell (Windows).</li>
+  <li>Paste <code>claude</code> and press Return or Enter.</li>
+  <li>Ask your question. RAGtime is already connected.</li>
+</ol>
+
+<p>To leave Claude Code, type <code>/exit</code>.</p>
+</div>
+
+<h2>Path C: Add RAGtime to a personal Claude account</h2>
+
+<p>If your Claude account is your own, and not part of Lawfare's Claude organization, you add
+RAGtime yourself. It needs no password. You get the <b>free</b> tools: search, filters and
+reading documents. The AI tools are not available on a personal account yet.</p>
+
+<ol>
+  <li>Go to <b>claude.ai</b> and sign in.</li>
+  <li>In the sidebar on the left, click <b>Customize</b>, then <b>Connectors</b>. Or go straight
+    to <b>claude.ai/customize/connectors</b>.</li>
+  <li>Click <b>+</b>, then <b>Add custom connector</b>.</li>
+  <li>Type <b>RAGtime</b> as the name. For the address (URL), paste this exactly:
+    <pre class="address"><code>https://ragtime-mcp.benjamin-wittes.workers.dev/mcp</code></pre></li>
+  <li>If Claude asks how people sign in, choose <b>No sign-in</b>. Leave every other setting as
+    it is.</li>
+  <li>Click <b>Add</b>.</li>
+  <li>Start a <b>new chat</b>. Click the <b>+</b> button at the lower left of the message box,
+    choose <b>Connectors</b>, and make sure <b>RAGtime</b> is switched on.</li>
+  <li>Ask the first test question under <i>Check that it worked</i> below.</li>
+</ol>
+
+<ul>
+  <li>Claude may warn you that a custom connector is not verified. That is expected: RAGtime is
+    not in Claude's public directory yet.</li>
+  <li>A free Claude account can hold one custom connector.</li>
+  <li>Want Claude Code as well? Do steps 1–6 here, then Path B from step 2.</li>
+</ul>
+
+<div class="keep">
+<h2>Check that it worked</h2>
+
+<p>Ask Claude this:</p>
+
+<blockquote>Using RAGtime, how many OLC opinions are in the corpus, and what's the date
+range?</blockquote>
+</div>
+
+<p>It worked if Claude says it is using a RAGtime tool (you may see a small note such as
+"get_facets") and answers with a number of opinions and a range of dates. If Claude answers
+from general knowledge without mentioning RAGtime, see <i>Troubleshooting</i> below.</p>
+
+<p>That question only needs a free tool. On Path A or B, check the AI level too:</p>
+
+<blockquote>Using RAGtime, summarize one OLC opinion about emergency powers.</blockquote>
+
+<p>It worked if Claude uses a tool such as "summarize_document" and answers from the opinion. If
+Claude says a password or a key is needed, the connector is on but its AI access is not: tell
+the RAGtime team. On Path C that message is expected.</p>
+
+<p>RAGtime has two levels of tools:</p>
+
+<table class="whole">
+  <tr><th>Level</th><th>What it does</th><th>Examples</th><th>Who gets it</th></tr>
+  <tr>
+    <td><b>Free</b></td>
+    <td>Finds and opens documents</td>
+    <td>Keyword search, filters, fetching a document, reading court filings</td>
+    <td>Everyone who is connected, on any path</td>
+  </tr>
+  <tr>
+    <td><b>AI</b></td>
+    <td>Has RAGtime do the research and write answers</td>
+    <td>Asking a whole corpus a question, summarizing a document, finding similar documents</td>
+    <td>Lawfare accounts, on Path A or B. Not personal accounts yet</td>
+  </tr>
+</table>
+
+<p>AI requests come from Lawfare's shared allowance of <b>5,000 a day</b>, which resets daily.
+Paths A and B both draw on it.</p>
+
+<h2>Troubleshooting</h2>
+
+<table>
+  <thead><tr><th>What you see</th><th>What it means</th><th>What to do</th></tr></thead>
+  <tr>
+    <td>Claude answers without mentioning RAGtime</td>
+    <td>RAGtime isn't switched on</td>
+    <td>Path A or C: click the <b>+</b> button by the message box, choose <b>Connectors</b>, and
+      switch RAGtime on. Path B: type <code>/mcp</code> and check that <b>claude.ai RAGtime</b>
+      is connected.</td>
+  </tr>
+  <tr>
+    <td>RAGtime isn't listed under <b>Customize → Connectors</b></td>
+    <td>Your account isn't in Lawfare's Claude organization yet</td>
+    <td>Ask the RAGtime team. Until then, use Path C.</td>
+  </tr>
+  <tr>
+    <td><code>/mcp</code> in Claude Code doesn't list <b>claude.ai RAGtime</b></td>
+    <td>Claude Code is signed in to a different account, or RAGtime isn't on in your Claude
+      account</td>
+    <td>Do Path A, steps 1–3 (or Path C, steps 1–6). Then in Claude Code type
+      <code>/logout</code>, then <code>/login</code>, and sign in with that same account.</td>
+  </tr>
+  <tr>
+    <td>AI tools stop working, but search still works</td>
+    <td>Lawfare's daily AI allowance is used up</td>
+    <td>Try again tomorrow, or tell the RAGtime team.</td>
+  </tr>
+  <tr>
+    <td>Claude says a RAGtime tool needs a password or a key</td>
+    <td>On a personal account, the AI tools aren't available yet. On a Lawfare account, the
+      connector's AI access is off</td>
+    <td>Path C: nothing is broken, and search still works. Path A or B: tell the RAGtime
+      team.</td>
+  </tr>
+  <tr>
+    <td><b>"Rate limit exceeded"</b></td>
+    <td>Too many RAGtime requests arrived in the same minute, which happens when many people
+      try it at once</td>
+    <td>Wait a minute and ask again.</td>
+  </tr>
+  <tr>
+    <td>Claude can't add or reach the connector (Path C)</td>
+    <td>The address doesn't match</td>
+    <td>Remove the connector and add it again. Paste the address exactly; it ends in
+      <code>/mcp</code>.</td>
+  </tr>
+  <tr>
+    <td><b>"command not found: claude"</b> (Mac) or <b>"claude is not recognized"</b>
+      (Windows)</td>
+    <td>Claude Code isn't installed, or the window needs reopening</td>
+    <td>Close and reopen Terminal or PowerShell. If that doesn't help, redo Path B step 2.</td>
+  </tr>
+  <tr>
+    <td>A newly added RAGtime collection doesn't appear</td>
+    <td>Claude loaded RAGtime's old list when the chat started</td>
+    <td>Start a <b>new</b> chat (Path A or C), or quit Claude Code with <code>/exit</code> and
+      start it again (Path B).</td>
+  </tr>
+</table>
+
+<p class="foot">Directions generated from a Claude Code session and checked against Claude's
+own documentation on October 1, 2026. Claude's menus change. If a step does not match what you
+see, use the <b>Feedback</b> button at ragtime.lawfaremedia.org and say which step.</p>
+
+</body>
+</html>
