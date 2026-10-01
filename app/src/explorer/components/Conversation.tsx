@@ -3,7 +3,7 @@ import type { CorpusRegistry, ExplorerBrief } from '@lawfare/ragtime-client'
 
 import { normalizeBrief, sameBrief } from '../model/brief.ts'
 import { phasePill, plural, workingLabel } from '../model/format.ts'
-import { acceptMarker, type Turn } from '../model/turn.ts'
+import { acceptMarker, type Turn, answerText } from '../model/turn.ts'
 import { Answer } from './Answer.tsx'
 import { BriefCard } from './BriefCard.tsx'
 import { Mark } from './Mark.tsx'
@@ -54,7 +54,10 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
         const showBrief = !!shownBrief && (!brief || !sameBrief(normalizeBrief(shownBrief), brief))
         // What the marker says depends on what came before it — see `acceptMarker`.
         return (
-          <article key={turn.index + ':' + turn.startedAt} className={'turn turn-' + turn.phase}>
+          // `data-running`: whether the turn is still going is a fact about the turn, and it
+          // is said here rather than left to be read off the working indicator, which is
+          // not shown while the answer is being written.
+          <article key={turn.index + ':' + turn.startedAt} className={'turn turn-' + turn.phase} data-running={turn.running ? '' : undefined}>
             {turn.promptKind === 'accept' ? (
               <div className="marker">{acceptMarker(turns, i)}</div>
             ) : (
@@ -102,7 +105,9 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
               />
             )}
 
-            {turn.answer && (
+            {/* From the first word that arrives, not from the end of the turn: the answer
+                is written while it streams (`Answer`, `Brush`). */}
+            {answerText(turn) && (
               <Answer turn={turn} priorTurns={turns.slice(0, i)} brief={brief} now={now} reveal={watched.has(turn.startedAt)} onPainting={setPainting} />
             )}
 
@@ -113,7 +118,10 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
               </div>
             )}
 
-            {turn.running && (
+            {/* The working mark says the turn is busy with something the reader cannot
+                see. While words are arriving they can see it: the mark is at the end of
+                them, writing. */}
+            {turn.running && !answerText(turn) && (
               <div className="working" aria-live="polite">
                 <Mark />
                 {label || (turn.phase === 'orient' ? 'planning…' : 'researching…')}

@@ -1,11 +1,13 @@
 /**
- * The mark as the cursor: an answer that arrives while the reader watches is painted in behind
- * the five-line mark, and one restored from storage is just shown.
+ * The mark as the cursor: an answer is written in behind the five-line mark while it
+ * arrives, and one restored from storage is just shown.
  *
- * Samples the page while the brush runs and holds it to what the design promised: the answer's
- * box never changes size (nothing reflows), the glyph keeps one height per line (it cannot
- * wobble), every letter is ink at the end, the mark is left behind as the signature, the page
- * follows the brush, and a reload does not paint again.
+ * Samples the page while the brush runs and holds it to what the design promises now: the
+ * words are on the page before the turn has finished, the answer's box is never taller
+ * than what has been written (no blank the size of the whole answer), the brush is done
+ * within a moment of the last word arriving, nothing that has appeared goes back, the text
+ * itself is untouched, the mark is left behind as the signature, the page follows the
+ * brush, and a reload does not paint again.
  *
  *   node e2e/mark.mjs                    # phone width
  *   E2E_W=1440 node e2e/mark.mjs         # desktop
@@ -53,8 +55,10 @@ await page.waitForSelector('.working canvas.mark', { timeout: 8000 })
 check('the working indicator is the mark', true)
 await page.screenshot({ path: `${SHOTS}/mark-1-working-${tag}.png` })
 
-// The answer arrives: sample until the brush is gone.
-await page.waitForSelector('.brush[data-painting]', { timeout: 20000 })
+// The answer arrives: sample until the brush is gone. The turn says something before its
+// tool calls too, and that is written and then folded into its steps; the samples that
+// count here are the ones of the answer itself.
+await page.waitForFunction(() => document.querySelector('.brush')?.textContent.includes('Three opinions'), null, { timeout: 20000 })
 const samples = []
 const t0 = Date.now()
 let shot = 0
@@ -62,80 +66,84 @@ while (Date.now() - t0 < 15000) {
   const s = await page.evaluate(() => {
     const b = document.querySelector('.brush')
     if (!b) return null
+    const inner = b.querySelector('.brush-page')
     const g = b.querySelector('.brush-glyph')
-    const letters = [...b.querySelectorAll('[data-c]')]
-    let hidden = 0
-    let teal = 0
-    let ink = 0
-    for (const l of letters) {
-      const o = parseFloat(l.style.opacity)
-      if (o < 0.02) hidden++
-      else if (l.style.color) teal++
-      else ink++
-    }
     const m = g && /translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(g.style.transform)
+    const sig = b.querySelector('.mark-sig')
     return {
+      at: performance.now(),
       painting: b.hasAttribute('data-painting'),
+      // Every word is down and the mark is making its flourish.
+      signing: b.getAttribute('data-painting') === 'signing',
+      // The turn is over once what belongs under a finished answer is there.
+      turnOver: !!document.querySelector('.answer .cost-line'),
       h: b.getBoundingClientRect().height,
+      full: inner.scrollHeight,
+      chars: inner.textContent.length,
       gx: m ? +m[1] : null,
       gy: m ? +m[2] : null,
-      glyphOpacity: g ? +g.style.opacity : null,
-      hidden,
-      teal,
-      ink,
-      n: letters.length,
-      scrollY: window.scrollY,
+      wrapped: b.querySelectorAll('[data-c]').length,
+      masked: !!inner.style.getPropertyValue('mask-image') || !!inner.style.getPropertyValue('-webkit-mask-image'),
       glyphBottom: g ? g.getBoundingClientRect().bottom : null,
       vh: window.innerHeight,
-      sigHidden: getComputedStyle(b.querySelector('.mark-sig')).visibility === 'hidden',
+      sigHidden: sig ? getComputedStyle(sig).visibility === 'hidden' : null,
     }
   })
   if (!s) break
   samples.push(s)
-  if (samples.length === 6 + shot * 12 && shot < 2) {
+  if (samples.length === 3 + shot * 5 && shot < 2) {
     await page.screenshot({ path: `${SHOTS}/mark-2-painting-${shot}-${tag}.png` })
     shot++
   }
   if (!s.painting) break
-  await page.waitForTimeout(80)
+  await page.waitForTimeout(30)
 }
 const painted = samples.filter((s) => s.painting)
-check('the brush ran', painted.length > 5, `${painted.length} samples`)
-const heights = new Set(samples.map((s) => Math.round(s.h * 10)))
-check('nothing reflows: the answer keeps one height', heights.size === 1, [...heights].map((h) => h / 10).join(', '))
-check('the signature is hidden while the brush paints', painted.every((s) => s.sigHidden))
+check('the brush ran', painted.length > 3, `${painted.length} samples`)
+const early = painted.filter((s) => !s.turnOver)
+check('the answer is being written before the turn has finished', early.length > 0 && early.some((s) => s.h > 10 && s.chars > 20), `${early.length} samples while the turn ran`)
+const last = samples.at(-1)
+check('its box is never the size of the whole answer before the answer is written: it grows', painted[0].h < last.h * 0.7, `${Math.round(painted[0].h)}px at first, ${Math.round(last.h)}px at the end`)
+check('and is never taller than what has been laid out', samples.every((s) => s.h <= s.full + 6))
+const grows = painted.every((s, i) => i === 0 || s.h >= painted[i - 1].h - 1)
+check('what has been written never goes back', grows, painted.map((s) => Math.round(s.h)).join(' '))
+const over = samples.find((s) => s.turnOver)
+const written = samples.find((s) => s.signing || !s.painting)
+check('every word is down within a moment of the last one arriving', !!over && !!written && written.at - over.at < 700, over && written ? `${Math.round(written.at - over.at)}ms after the turn ended` : 'never finished')
+const first = painted[0]
+check('and the whole answer is written in about as long as it took to arrive', !!written && written.at - first.at < 1600, written ? `${Math.round(written.at - first.at)}ms from its first word to its last` : '')
+check('the text is not taken apart: no letter is wrapped, the page stays the app\u2019s own', samples.every((s) => s.wrapped === 0))
+check('what is not yet written is masked, not laid out blank', painted.some((s) => s.masked))
+check('the signature is hidden while the brush writes', painted.every((s) => s.sigHidden !== false))
 const ys = painted.map((s) => s.gy).filter((y) => y !== null)
-const distinct = [...new Set(ys.map((y) => Math.round(y * 100) / 100))]
-check('the glyph keeps one height per line', distinct.length <= Math.ceil(painted[0].n / 28) + 3, `${distinct.length} heights over ${painted[0].n} letters`)
-const mono = painted.every((s, i) => i === 0 || s.hidden <= painted[i - 1].hidden)
-check('a letter that has appeared never goes back', mono)
-const startedHidden = painted[0].hidden / painted[0].n
-check('the answer starts hidden', startedHidden > 0.8, `${Math.round(startedHidden * 100)}% hidden at first sample`)
-const sawTeal = painted.some((s) => s.teal > 0)
-check('letters wear the mark colour on the way in', sawTeal)
-check('the glyph stays in view (the page follows the brush when it must)', painted.every((s) => s.glyphBottom === null || s.glyphBottom <= s.vh + 2), `scroll ${painted[0].scrollY} → ${painted.at(-1).scrollY}`)
+const distinct = [...new Set(ys.map((y) => Math.round(y)))]
+check('the glyph sits on a line: it takes a few heights, not one per sample', distinct.length <= 14, `${distinct.length} heights over ${painted.length} samples`)
+check('the glyph stays in view (the page follows the brush when it must)', painted.every((s) => s.glyphBottom === null || s.glyphBottom <= s.vh + 2))
 
 await page.waitForSelector('.brush:not([data-painting])', { timeout: 10000 })
 const end = await page.evaluate(() => {
   const b = document.querySelector('.brush')
-  const letters = [...b.querySelectorAll('[data-c]')]
+  const inner = b.querySelector('.brush-page')
   const sig = b.querySelector('.mark-sig')
   const r = sig.getBoundingClientRect()
   const tail = sig.closest('.mark-tail')
   return {
-    allInk: letters.every((l) => l.style.opacity === '1' && l.style.color === ''),
+    clean: !inner.style.maxHeight && !inner.style.overflow && !inner.style.getPropertyValue('mask-image') && !inner.style.getPropertyValue('-webkit-mask-image'),
+    whole: Math.abs(b.getBoundingClientRect().height - inner.scrollHeight) < 2,
     sigVisible: getComputedStyle(sig).visibility === 'visible' && r.width > 0,
-    canvasGone: !b.querySelector('.brush-glyph'),
+    canvasGone: !b.querySelector('.brush-glyph') && !b.querySelector('.brush-wash'),
     text: b.textContent.replace(/\s+/g, ' ').trim(),
     tailWord: tail ? tail.textContent : null,
     sigTop: r.top,
     tailTop: tail ? tail.getBoundingClientRect().top : null,
+    under: !!document.querySelector('.answer .cost-line'),
   }
 })
-check('every letter ends as ink', end.allInk)
+check('when it is done nothing of the brush is left on the answer', end.clean && end.whole, JSON.stringify({ clean: end.clean, whole: end.whole }))
 check('the mark is left as the signature', end.sigVisible && end.canvasGone)
 check('the text is whole', end.text.includes('Three opinions are on point') && end.text.endsWith('removal-power') === false && end.text.includes('Lawfare'), end.text.slice(0, 80))
 check('the glyph is held with the last word', end.tailWord && end.tailWord.length > 0 && Math.abs(end.sigTop - end.tailTop) < 30, JSON.stringify({ w: end.tailWord }))
+check('the cost and the sources are under the finished answer', end.under)
 await page.screenshot({ path: `${SHOTS}/mark-3-signature-${tag}.png` })
 
 // A reload restores the conversation; the answer is shown, not painted.

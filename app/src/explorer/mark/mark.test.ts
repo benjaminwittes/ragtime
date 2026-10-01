@@ -1,7 +1,7 @@
 /**
- * The mark's arithmetic: what a letter looks like at a given distance behind the brush, how the
- * brush walks the letters at a constant speed, how lines are numbered across blocks, and where
- * the signature goes. The DOM and the canvas are not tested here; these are the parts a refactor
+ * The mark's arithmetic: which lines the brush walks and where it is on them, how fast it closes
+ * on the end of what has arrived, how lines are numbered across blocks, and where the signature
+ * goes. The DOM and the canvas are not tested here; these are the parts a refactor
  * could break without anyone seeing it until a phone does.
  */
 
@@ -10,39 +10,8 @@ import type { Element, Root } from 'hast'
 
 import { MARK } from './config.ts'
 import { parseColor } from './glyph.ts'
-import { advance, letterColor, letterLook, lineIds, SETTLE_RUNWAY } from './reveal.ts'
+import { advance, lineIds, linesOf, locate, pathLength } from './reveal.ts'
 import { rehypeSignature } from './tail.ts'
-
-describe('letterLook', () => {
-  it('is invisible at the brush, solid ink well behind it, and never goes back', () => {
-    expect(letterLook(0)).toEqual({ opacity: 0, settle: 0 })
-    expect(letterLook(-50).opacity).toBe(0)
-    const behind = letterLook(MARK.edge + MARK.solid)
-    expect(behind).toEqual({ opacity: 1, settle: 1 })
-    let last = -1
-    for (let d = 0; d <= MARK.edge + MARK.solid; d += 5) {
-      const o = letterLook(d).opacity
-      expect(o).toBeGreaterThanOrEqual(last)
-      last = o
-    }
-  })
-
-  it('leaves a letter fully visible but still in the mark colour at the end of the edge', () => {
-    const l = letterLook(MARK.edge)
-    expect(l.opacity).toBe(1)
-    expect(l.settle).toBe(0)
-  })
-})
-
-describe('letterColor', () => {
-  const teal = [0, 100, 120] as const
-  const ink = [10, 20, 30] as const
-  it('blends from the mark colour to ink, and hands back to the page once it is ink', () => {
-    expect(letterColor(teal, ink, 0)).toBe('rgb(0,100,120)')
-    expect(letterColor(teal, ink, 0.5)).toBe('rgb(5,60,75)')
-    expect(letterColor(teal, ink, 1)).toBe('')
-  })
-})
 
 describe('lineIds', () => {
   const box = (left: number, right: number, top: number) => ({ left, right, top, bottom: top + 20 })
@@ -57,21 +26,77 @@ describe('lineIds', () => {
   })
 })
 
+describe('linesOf', () => {
+  const box = (left: number, top: number, w = 40, h = 20) => ({ left, right: left + w, top, bottom: top + h })
+  it('joins the runs of one line into one line, and starts another when the text wraps or moves down', () => {
+    // A line of two runs (a word, then a link), a wrapped second line, then a paragraph below.
+    const lines = linesOf([box(0, 0, 100), box(100, 0, 60), box(0, 24, 80), box(0, 60, 50)])
+    expect(lines).toEqual([
+      { left: 0, right: 160, top: 0, bottom: 20 },
+      { left: 0, right: 80, top: 24, bottom: 44 },
+      { left: 0, right: 50, top: 60, bottom: 80 },
+    ])
+    expect(pathLength(lines)).toBe(290)
+  })
+  it('is nothing for nothing', () => {
+    expect(linesOf([])).toEqual([])
+    expect(pathLength([])).toBe(0)
+  })
+})
+
+describe('locate', () => {
+  const lines = [
+    { left: 10, right: 110, top: 0, bottom: 20 },
+    { left: 10, right: 60, top: 24, bottom: 44 },
+  ]
+  it('finds the line and the place on it', () => {
+    expect(locate(lines, 0)).toEqual({ line: 0, x: 10 })
+    expect(locate(lines, 40)).toEqual({ line: 0, x: 50 })
+    expect(locate(lines, 100)).toEqual({ line: 1, x: 10 })
+    expect(locate(lines, 125)).toEqual({ line: 1, x: 35 })
+  })
+  it('is at the end of the last line once the brush has gone as far as there is', () => {
+    expect(locate(lines, 150)).toEqual({ line: 1, x: 60 })
+    expect(locate(lines, 9999)).toEqual({ line: 1, x: 60 })
+  })
+  it('is nowhere when there are no lines', () => {
+    expect(locate([], 10)).toBeNull()
+  })
+})
+
 describe('advance', () => {
-  it('moves at the constant brush speed, whatever the letter width', () => {
-    // 530 px/s over 10px letters: one letter every 1/53 s.
-    expect(advance(0, 1, [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10])).toBeCloseTo(53, 5)
-    // a 20 px letter takes twice as long as a 10 px one.
-    const wide = advance(0, 0.01, [20, 10])
-    const narrow = advance(0, 0.01, [10, 10])
-    expect(narrow / wide).toBeCloseTo(2, 5)
+  it('never moves slower than the floor, so the last few letters are not crept up on', () => {
+    expect(advance(0, 10_000, 0.001)).toBeGreaterThanOrEqual(MARK.speed * 0.001)
+    // Twenty px from the end, a share of what is left would be almost nothing.
+    expect(advance(980, 1000, 0.005)).toBeCloseTo(980 + MARK.speed * 0.005, 5)
   })
-  it('stops at the last letter', () => {
-    expect(advance(2.9, 5, [10, 10, 10])).toBe(3)
-    expect(advance(3, 1, [10, 10, 10])).toBe(3)
+  it('closes on the end of what has arrived in about the catch-up time, however much that is', () => {
+    for (const total of [2_000, 20_000, 200_000]) {
+      let shown = 0
+      let t = 0
+      while (shown < total * 0.95) {
+        shown = advance(shown, total, 1 / 60)
+        t += 1 / 60
+      }
+      // A whole answer landing at once is crossed in well under a second.
+      expect(t).toBeLessThan(MARK.catchUp * 3.5)
+    }
   })
-  it('does not stall on a zero-width letter', () => {
-    expect(advance(0, 0.1, [0, 10])).toBeGreaterThan(0)
+  it('keeps pace with an answer that streams: it is never far behind what has arrived', () => {
+    let shown = 0
+    let total = 0
+    let worst = 0
+    for (let frame = 0; frame < 600; frame++) {
+      total += 900 / 60 // text arriving at 900 px a second
+      shown = advance(shown, total, 1 / 60)
+      worst = Math.max(worst, total - shown)
+    }
+    expect(worst).toBeLessThan(40)
+  })
+  it('stops at the end, and never goes back', () => {
+    expect(advance(500, 500, 1)).toBe(500)
+    expect(advance(600, 500, 1)).toBe(600)
+    expect(advance(499, 500, 1)).toBe(500)
   })
 })
 
@@ -81,12 +106,6 @@ describe('parseColor', () => {
     expect(parseColor('rgb(1, 2, 3)')).toEqual([1, 2, 3])
     expect(parseColor('rgba(1,2,3,0.5)')).toEqual([1, 2, 3])
     expect(parseColor('teal')).toBeNull()
-  })
-})
-
-describe('SETTLE_RUNWAY', () => {
-  it('is long enough for the last letter to finish settling to ink', () => {
-    expect(SETTLE_RUNWAY).toBeGreaterThan(MARK.edge + MARK.solid + MARK.lead)
   })
 })
 

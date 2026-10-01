@@ -4,7 +4,7 @@ import { AppLink } from '@/components/AppLink'
 import { detectShape, firstCitation, firstNumber, linkifyCitations, splitListAnswer } from '../model/answer-shape.ts'
 import { costLine, stopBadge } from '../model/format.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from '../model/sources.ts'
-import type { Turn } from '../model/turn.ts'
+import { answerText, type Turn } from '../model/turn.ts'
 import { Brush } from './Brush.tsx'
 import { Markdown } from './Markdown.tsx'
 
@@ -13,7 +13,7 @@ type Props = {
   priorTurns: readonly Turn[]
   brief: ExplorerBrief | null
   now: number
-  /** The answer arrived while the reader watched: paint it in with the mark. A restored answer is just shown. */
+  /** The answer is arriving while the reader watches: write it in with the mark. A restored answer is just shown. */
   reveal?: boolean
   onPainting?: (painting: boolean) => void
 }
@@ -25,6 +25,11 @@ type Props = {
  * detail sheet. Under it: the badge a capped turn wears (item 7), the
  * per-turn cost line (item 6), and the sources (item 12) with the
  * search-only state said plainly.
+ *
+ * It is rendered while the turn is still running, from what has arrived so far
+ * ({@link answerText}), so the answer is on the page as it is written and not
+ * after it. What belongs under a finished answer — its badge, its cost, its
+ * sources — waits until there is a finished answer to put it under.
  */
 export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Props) {
   const shape = turn.phase === 'research' ? detectShape(brief?.answer_shape) : 'narrative'
@@ -32,8 +37,9 @@ export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Pro
   const report = sourcesOf(turn, priorTurns)
   const workspaces = workspaceHandoffs(turn)
   const titles = knownTitles(turn, priorTurns)
+  const text = answerText(turn)
   // Every citation form as a link before anything renders; the raw text stays for the count, whose first number must not be an id.
-  const answer = linkifyCitations(turn.answer, titles)
+  const answer = linkifyCitations(text, titles)
 
   let body: React.ReactNode
   if (shape === 'list') {
@@ -57,7 +63,7 @@ export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Pro
       <Markdown text={answer} titles={titles} signature />
     )
   } else if (shape === 'count') {
-    const n = firstNumber(turn.answer)
+    const n = firstNumber(text)
     const ws = workspaces[0]
     body = (
       <>
@@ -92,12 +98,16 @@ export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Pro
 
   return (
     <div className="answer">
-      <Brush active={!!reveal} onPainting={onPainting}>
+      <Brush active={!!reveal} live={turn.running} onPainting={onPainting}>
         {body}
       </Brush>
-      {badge && <div className={'badge badge-' + badge.tone}>{badge.text}</div>}
-      <div className="cost-line">{costLine(turn, now)}</div>
-      {turn.phase === 'research' && (report.sources.length > 0 || report.readUncited.length > 0 || turn.answer) && <Sources report={report} />}
+      {!turn.running && (
+        <>
+          {badge && <div className={'badge badge-' + badge.tone}>{badge.text}</div>}
+          <div className="cost-line">{costLine(turn, now)}</div>
+          {turn.phase === 'research' && (report.sources.length > 0 || report.readUncited.length > 0 || turn.answer) && <Sources report={report} />}
+        </>
+      )}
     </div>
   )
 }

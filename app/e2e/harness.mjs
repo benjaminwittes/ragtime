@@ -239,7 +239,9 @@ function installStub() {
     const trailBtn = [...document.querySelectorAll('header button')].find((b) => b.getAttribute('aria-controls') === 'trail')
     return {
       composerDisabled: ta ? ta.disabled : null,
-      working: !!document.querySelector('.working'),
+      // A turn is working for as long as it is running. The working indicator is not the
+      // test: it steps aside while the answer is being written.
+      working: !!document.querySelector('.turn[data-running]'),
       workingText: (document.querySelector('.working') || {}).textContent?.trim().slice(0, 80) ?? null,
       turns: document.querySelectorAll('.conversation .turn').length,
       trail: trailBtn

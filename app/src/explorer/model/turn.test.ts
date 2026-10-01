@@ -2,7 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
 import type { ExplorerBrief, ExplorerEvent, ExplorerToolResultEvent } from '@lawfare/ragtime-client'
-import { acceptMarker, applyEvent, lastCost, newTurn, roundCosts, type Turn } from './turn.ts'
+import { acceptMarker, answerText, applyEvent, lastCost, newTurn, roundCosts, type Turn } from './turn.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from './sources.ts'
 import { costLine, phasePill, stopBadge, workingLabel } from './format.ts'
 
@@ -270,4 +270,29 @@ test('a result whose call was never seen is kept in its round', () => {
   ])
   assert.equal(t.rounds[0]?.calls[0]?.id, 'lost')
   assert.equal(t.rounds[0]?.calls[0]?.result?.summary, '7 filterable fields')
+})
+
+test('the answer is on the page from its first word, not from the end of the turn', () => {
+  const start = newTurn(0, 'research', 'q', 'accept', 1000)
+  assert.equal(answerText(start), '')
+  // The model starts talking: that is what there is of the answer so far.
+  const talking = fold(start, [{ type: 'phase', phase: 'research' }, { type: 'text', delta: 'Three opinions ' }, { type: 'text', delta: 'are on point.' }])
+  assert.equal(talking.answer, '')
+  assert.equal(answerText(talking), 'Three opinions are on point.')
+  // A tool call follows: it was the model saying what it was about to do, and it goes with the steps.
+  const working = fold(talking, [{ type: 'tool_call', step: 1, id: 't1', name: 'search_corpora', input: {} }])
+  assert.equal(answerText(working), '')
+  assert.deepEqual(working.narration, ['Three opinions are on point.'])
+  // More text, then the turn ends: the same words, now the answer.
+  const more = fold(working, [{ type: 'text', delta: 'The 1996 opinion is the closest.' }])
+  assert.equal(answerText(more), 'The 1996 opinion is the closest.')
+  const done = fold(more, [{ type: 'done', envelope: 'e', stop: 'end_turn', history: [], calls: 1 }])
+  assert.equal(done.running, false)
+  assert.equal(answerText(done), 'The 1996 opinion is the closest.')
+  assert.equal(answerText(done), done.answer)
+})
+
+test('a turn that stopped with nothing said has no answer, whatever was left in its buffer', () => {
+  const stopped: Turn = { ...newTurn(0, 'research', 'q', 'accept', 1000), running: false, buffer: 'half a sent' }
+  assert.equal(answerText(stopped), '')
 })
