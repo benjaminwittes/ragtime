@@ -198,6 +198,16 @@ export function pendingRecord(corpus: string, query: string): RecordScene | null
   }
 }
 
+/**
+ * The scene for documents a page already holds: a collection's own page has asked its own
+ * filter and has the rows, so its ground is drawn from those and nothing more is asked.
+ * The first of them, like a search brought on, with the count of all of them beside it.
+ */
+export function recordOf(corpus: string, query: string, docs: readonly StageDoc[], total: number): RecordScene | null {
+  const pending = pendingRecord(corpus, query)
+  return pending && { ...pending, docs: docs.slice(0, ON_STAGE), total, pending: false }
+}
+
 /** Ask, and return the scene with its documents on. Throws what the request throws. */
 export async function gatherRecord(pending: RecordScene): Promise<RecordScene> {
   const got = await COLLECTIONS[pending.corpus].run(pending.query)

@@ -108,6 +108,49 @@ for (const where of ['', ...SPOKES.map((s) => `/corpus/${s}`)]) {
   board.check(`${name}: threw nothing`, errors.length === before, errors.slice(before))
 }
 
+// A collection page's results as ground: a second view of the rows the table holds, drawn
+// from those rows. The search is the live worker's, like everything else here.
+{
+  const asked = []
+  page.on('request', (request) => {
+    if (request.url().includes('/corpus/olc/filter')) asked.push(request.url())
+  })
+  await page.goto(BASE + '/corpus/olc?q=habeas+corpus', { waitUntil: 'networkidle' })
+  const offered = await page.waitForSelector('[data-results-view]', { timeout: 20000 }).then(
+    () => true,
+    () => false,
+  )
+  // No rows, no switch: the worker allows an address that is not signed in ten searches a
+  // minute, so a run straight after another can be refused. What the page said is printed.
+  board.check(
+    'olc: a search offers the table and the terrain, and opens on the table',
+    offered && (await page.getAttribute('[data-results-view]', 'data-results-view')) === 'table',
+    offered ? undefined : { asked: asked.length, pageSaid: (await page.locator('body').innerText()).slice(-240) },
+  )
+  if (offered) {
+    const rows = await page.locator('table tbody tr').count()
+    const before = asked.length
+    await page.click('[data-results-view] button:has-text("Terrain")')
+    await page.waitForSelector('[data-results-terrain] .terrain-cell', { timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(1500)
+    const columns = await page.locator('[data-terrain="cells"] .terrain-cell').count()
+    board.check('olc: the terrain draws the rows the table held', columns > 0 && columns === Math.min(rows, 60), { rows, columns })
+    board.check('olc: and asks the service for nothing more', asked.length === before, asked.slice(before))
+    board.check('olc: it has no heading of its own, the page has said what was asked', (await page.locator('[data-results-terrain] h1').count()) === 0)
+    // The first click reads the label where there is no pointer to point with; the next opens it.
+    const top = page.locator('[data-terrain="cells"] .terrain-cell [data-part="top"]').last()
+    const tabs = page.context().pages().length
+    await top.click({ force: true })
+    if ((await page.locator('[role="dialog"]').count()) === 0) await top.click({ force: true })
+    await page.waitForTimeout(800)
+    board.check('olc: a column opens the page’s own sheet, not another tab', (await page.locator('[role="dialog"]').count()) === 1 && page.context().pages().length === tabs)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(400)
+    await page.click('[data-results-view] button:has-text("Table")')
+    board.check('olc: and the table comes back with its rows', (await page.locator('table tbody tr').count()) === rows && (await page.locator('[data-results-terrain]').count()) === 0)
+  }
+}
+
 // And that the masthead actually navigates rather than reloading — the AppLink rewrite.
 await page.goto(BASE + '/corpus/olc', { waitUntil: 'networkidle' })
 await page.waitForTimeout(400)
