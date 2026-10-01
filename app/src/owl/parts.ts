@@ -24,7 +24,7 @@ import type { PoseGeometry } from './types'
  * what makes breathing a thing the head rides on rather than a thing it is part of.
  *
  * Each part carries its own pivot, so any number of behaviours can act on one part: they
- * add transforms to it (`standing/kit.ts`), and the pivot is the part's, not theirs.
+ * add transforms to it (`standing/core/host.ts`), and the pivot is the part's, not theirs.
  */
 export const OWL_PARTS = [
   'page',

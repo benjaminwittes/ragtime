@@ -65,6 +65,10 @@ function remove(el: SVGSVGElement) {
     frame = 0
     observer?.disconnect()
     observer = null
+    // With no listener the pointer is no longer being followed, so the last position seen
+    // is stale: an owl that arrives later must start straight ahead, as it did before the
+    // listener was shared, and not turn to wherever the pointer was a page ago.
+    pointer = null
   }
 }
 

@@ -69,7 +69,10 @@ describe('plate', () => {
       { fidelity: 'fine' },
     ]
     for (const k of knobs) expect(text(plate(k)), JSON.stringify(k)).not.toBe(text(base))
-  })
+    // Thirty-one full-size plates: about 0.4 s alone, but it was seen to pass the 5 s default
+    // on a machine busy with other work. Small sizes cannot stand in, because
+    // coarsening there hides some knobs on purpose.
+  }, 30_000)
 
   it('coarsens a small figure: fewer, heavier lines, no cross-hatch', () => {
     const big = plate({}, 320)

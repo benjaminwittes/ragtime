@@ -312,7 +312,7 @@ export type StandingContext = {
  * data plus code. The root carries `data-standing="<ids>"` for every one that is on, and
  * `start` — only called for a reader who has not asked for reduced motion — builds the
  * motion with the context's `loop` and `gesture`, which add to one another instead of
- * replacing (`standing/kit.ts` says how), so behaviours never need to know about each
+ * replacing (`standing/core/host.ts` says how), so behaviours never need to know about each
  * other. Cleanup is the context's: what a behaviour made through it is undone with it.
  *
  * The house rule applies: nothing a standing behaviour does may move a pixel outside the
