@@ -295,6 +295,18 @@ const browser = await launch()
   const longRead = await until(stage, 'long label', async () => (await stage.locator('[data-record="label"]').innerText()).includes('One with no length'), 3000)
   const groundIs = await groundAt()
   board.check('a title that runs to several lines does not move the ground', longRead && groundWas[0] === groundIs[0] && groundWas[1] === groundIs[1], { longRead, groundWas, groundIs })
+  // The console's own small stage is the same drawing in a box of a fixed shape, and it
+  // is where the presenter points while the room watches.
+  const previewAt = () =>
+    present.locator('[data-present="preview"] svg.terrain-ground').evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      return [Math.round(box.top + window.scrollY), Math.round(box.height)]
+    })
+  const previewWas = await previewAt()
+  await present.locator('[data-present="preview"] .terrain-cell[data-terrain-doc="4"]').hover({ force: true })
+  const previewRead = await until(present, 'preview label', async () => (await present.locator('[data-present="preview"] [data-record="label"]').innerText()).includes('One with no length'), 3000)
+  const previewIs = await previewAt()
+  board.check('nor in the presenter’s own preview of it', previewRead && previewWas[0] === previewIs[0] && previewWas[1] === previewIs[1], { previewRead, previewWas, previewIs })
   board.check('the legend names only the forms that are on stage', await stage.locator('[data-record="legend"]').innerText().then((legend) => legend.includes('FOIA') && legend.includes('poor scan') && legend.includes('not recorded')))
   await stage.screenshot({ path: `${SHOTS}/stage-record.png` })
   // The presenter brings one forward, for the room.
