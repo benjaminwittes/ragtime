@@ -61,6 +61,21 @@ const KIT = {
 const SEALED = JSON.stringify({ ...(await seal(JSON.stringify(KIT), PASS)), stage: { pub: KEYS.pub } })
 const OLD_KIT = JSON.stringify(await seal(JSON.stringify({ ...KIT, stage: undefined }), PASS))
 
+// What the OLC filter answers with, for the search the driver brings on: four opinions
+// whose fields differ in exactly the ways the stage is supposed to show.
+const OLC = {
+  ids: [1, 2, 3, 4],
+  count: 4,
+  generated_sql: '',
+  executed_sql: '',
+  display_rows: [
+    { id: 1, title: 'A short one', author: 'Theodore B. Olson', date_issued: '1984-10-01', source: 'doj-published', source_url_doj: null, source_url_knight: null, page_count: 4, text_length: 9000, ocr_quality: 'clean' },
+    { id: 2, title: 'The longer one', author: 'Jay S. Bybee', date_issued: '2002-08-01', source: 'doj-published', source_url_doj: null, source_url_knight: null, page_count: 50, text_length: 160000, ocr_quality: 'clean' },
+    { id: 3, title: 'A released one', author: null, date_issued: '1962-03-12', source: 'knight-foia', source_url_doj: null, source_url_knight: null, page_count: 12, text_length: 30000, ocr_quality: 'degraded' },
+    { id: 4, title: 'One with no length', author: null, date_issued: '1975-06-30', source: 'doj-published', source_url_doj: null, source_url_knight: null, page_count: null, text_length: null, ocr_quality: null },
+  ],
+}
+
 const CHANNEL =
   'stage:' +
   createHash('sha256').update(`${KEYS.pub.x}.${KEYS.pub.y}`).digest('hex').slice(0, 16) +
@@ -156,25 +171,28 @@ const browser = await launch()
 
   await present.click('button:has-text("Go live")')
   await present.waitForSelector('[data-present="live"]')
-  board.check('going live puts the first slide on stage, with no reload', await until(stage, 'slide 1', async () => (await sceneOf(stage)) === 'slide' && (await stage.locator('main h2').innerText()) === 'A demo'))
+  board.check('going live puts the first slide on stage, with no reload', await until(stage, 'slide 1', async () => (await sceneOf(stage)) === 'slide' && (await stage.locator('[data-stage="words"] h1').innerText()) === 'A demo'))
   board.check('the room is not sent the notes', !(await stage.content()).includes('PRESENTER-ONLY'))
-  const fits = await stage.evaluate(() => {
-    const slide = document.querySelector('main section')
-    return { over: slide.scrollHeight > slide.clientHeight + 1, ratio: +(slide.clientWidth / slide.clientHeight).toFixed(2), wide: document.documentElement.scrollWidth > window.innerWidth }
-  })
-  board.check('the slide fills the window at 16:9 and nothing runs off it', !fits.over && !fits.wide && Math.abs(fits.ratio - 1.78) < 0.02, fits)
+  const set = await stage.evaluate(() => ({
+    wide: document.documentElement.scrollWidth > window.innerWidth,
+    title: parseFloat(getComputedStyle(document.querySelector('[data-stage="words"] h1')).fontSize),
+    body: parseFloat(getComputedStyle(document.querySelector('.stage-words')).fontSize),
+    house: document.querySelectorAll('.amp .amp-tier').length,
+  }))
+  board.check('the words are set large in the window, not scaled into a rectangle', !set.wide && set.title >= 40 && set.body >= 17, set)
+  board.check('and the theatre is standing under them', set.house >= 10, set.house)
   await stage.screenshot({ path: `${SHOTS}/stage-slide.png` })
 
   await present.keyboard.press('ArrowRight')
-  board.check('→ on the console moves the stage', await until(stage, 'slide 2', async () => (await stage.locator('main h2').innerText()) === 'Three tiers'))
-  const link = await stage.locator('main section a').evaluate((a) => [a.getAttribute('href'), a.target])
+  board.check('→ on the console moves the stage', await until(stage, 'slide 2', async () => (await stage.locator('[data-stage="words"] h1').innerText()) === 'Three tiers'))
+  const link = await stage.locator('[data-stage="words"] .stage-words a').evaluate((a) => [a.getAttribute('href'), a.target])
   board.check('a link on a slide is a real link, and opens beside the stage', link[0] === new URL(BASE).pathname + '/' && link[1] === '_blank', link)
   await present.screenshot({ path: `${SHOTS}/present-console.png` })
 
   // A reader who arrives late.
   const late = await ctx.newPage()
   await late.goto(BASE + '/stage', { waitUntil: 'networkidle' })
-  board.check('a reader who arrives mid-presentation gets the slide that is up', await until(late, 'late slide', async () => (await sceneOf(late)) === 'slide' && (await late.locator('main h2').innerText()) === 'Three tiers', 4000))
+  board.check('a reader who arrives mid-presentation gets the slide that is up', await until(late, 'late slide', async () => (await sceneOf(late)) === 'slide' && (await late.locator('[data-stage="words"] h1').innerText()) === 'Three tiers', 4000))
   await late.close()
 
   // A forgery: the channel is open, so anyone can say anything on it.
@@ -191,7 +209,7 @@ const browser = await launch()
     [CHANNEL],
   )
   await stage.waitForTimeout(700)
-  board.check('a slide nobody signed is not shown', (await stage.locator('main h2').innerText()) === 'Three tiers')
+  board.check('a slide nobody signed is not shown', (await stage.locator('[data-stage="words"] h1').innerText()) === 'Three tiers')
 
   // ── A figure: named by the presenter, drawn and explored by the reader ──────────────
   log('— a figure —')
@@ -208,8 +226,62 @@ const browser = await launch()
   await until(stage, 'slide again', async () => (await sceneOf(stage)) === 'slide')
 
   await present.keyboard.press('ArrowRight')
-  board.check('a slide can hold a figure too', await until(stage, 'figure in slide', async () => (await stage.locator('main section [data-figure="holdings"]').count()) === 1 && (await stage.locator('main h2').first().innerText()) === 'What we hold'))
+  board.check('a slide can hold a figure too', await until(stage, 'figure in slide', async () => (await stage.locator('[data-stage="words"] [data-figure="holdings"]').count()) === 1 && (await stage.locator('[data-stage="words"] h1').innerText()) === 'What we hold'))
   await stage.screenshot({ path: `${SHOTS}/stage-slide-figure.png` })
+
+  // ── The record, brought on ──────────────────────────────────────────────────────────
+  log('— a search, brought on —')
+  let asked = 0
+  let release
+  const held = new Promise((resolve) => (release = resolve))
+  await ctx.route('**/corpus/olc/filter', async (route) => {
+    asked += 1
+    await held
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(OLC) })
+  })
+  const fromStage = []
+  stage.on('request', (request) => {
+    if (request.url().includes('/corpus/')) fromStage.push(request.url())
+  })
+  await present.selectOption('[data-present="record"] select', 'olc')
+  await present.fill('[data-present="record"] input', 'habeas corpus')
+  await present.click('[data-present="record"] button[type="submit"]')
+  board.check('the floor goes up at once, empty, with the question over it', await until(stage, 'pending', async () => (await sceneOf(stage)) === 'record' && (await stage.locator('[data-record="pending"]').count()) === 1 && (await stage.locator('.record-slab').count()) === 0))
+  board.check('and says who is being asked', (await stage.locator('.record [role="status"]').innerText()).startsWith('Asking'))
+  release()
+  board.check('the documents are flown in when the collection answers', await until(stage, 'on', async () => (await stage.locator('.record-slab').count()) === 4))
+  board.check('one request was made, by the presenter; the stage asked the service for nothing', asked === 1 && fromStage.length === 0, { asked, fromStage })
+  board.check('they stand on the theatre’s own stage', (await stage.locator('.amp-stage .record-slab').count()) === 4)
+  const forms = await stage.locator('.record-slab').evaluateAll((slabs) =>
+    Object.fromEntries(slabs.map((el) => [el.dataset.recordDoc, { face: el.dataset.face, rough: 'rough' in el.dataset, film: 'film' in el.dataset, h: parseFloat(getComputedStyle(el).height), x: parseFloat(getComputedStyle(el).left) }])),
+  )
+  board.check('a longer document stands taller', forms['2'].h > forms['1'].h * 1.5, forms)
+  board.check('an earlier one stands further to stage left', forms['3'].x < forms['1'].x && forms['1'].x < forms['2'].x, forms)
+  board.check('one released under FOIA has a torn edge, and a poor scan a film', forms['3'].rough && forms['3'].film && !forms['1'].rough && !forms['1'].film, forms)
+  board.check('one with no length on record is an outline, not a guess', forms['4'].face === 'open', forms['4'])
+  const href = await stage.locator('.record-slab[data-record-doc="2"]').evaluate((a) => [a.getAttribute('href'), a.target])
+  board.check('each is a link to the real document', href[0].endsWith('/corpus/olc/2') && href[1] === '_blank', href)
+  // Let them land: a thing still being flown in is not where it will stand.
+  await stage.waitForTimeout(1800)
+  await stage.locator('.record-slab[data-record-doc="2"]').hover({ force: true })
+  board.check('pointing at one reads its label: title, date, author, length', await until(stage, 'label', async () => {
+    const label = await stage.locator('[data-record="label"]').innerText()
+    return label.includes('The longer one') && label.includes('2002-08-01') && label.includes('Jay S. Bybee') && label.includes('50 pages')
+  }, 3000), await stage.locator('[data-record="label"]').innerText())
+  board.check('the legend names only the forms that are on stage', await stage.locator('[data-record="legend"]').innerText().then((legend) => legend.includes('FOIA') && legend.includes('poor scan') && legend.includes('not recorded')))
+  await stage.screenshot({ path: `${SHOTS}/stage-record.png` })
+  // The presenter brings one forward, for the room.
+  await present.locator('[data-present="preview"] .record-slab[data-record-doc="3"]').click({ force: true })
+  await stage.mouse.move(4, 4)
+  board.check('the presenter brings one forward, and it comes forward on the stage', await until(stage, 'forward', async () => (await stage.locator('.record-slab[data-record-doc="3"][data-active]').count()) === 1))
+  board.check('and that was not a navigation: the console is still the console', (await present.locator('[data-present="live"]').count()) === 1)
+  const lateToRecord = await ctx.newPage()
+  await lateToRecord.goto(BASE + '/stage', { waitUntil: 'networkidle' })
+  const lateGot = await until(lateToRecord, 'late record', async () => (await lateToRecord.locator('.record-slab').count()) === 4 && (await lateToRecord.locator('.record-slab[data-record-doc="3"][data-active]').count()) === 1, 5000)
+  board.check('a reader who arrives now gets the set, and what is forward', lateGot, lateGot ? undefined : { slabs: await lateToRecord.locator('.record-slab').count(), active: await lateToRecord.locator('.record-slab[data-active]').evaluateAll((els) => els.map((el) => el.dataset.recordDoc)), scene: await sceneOf(lateToRecord) })
+  await lateToRecord.close()
+  await present.click('button:has-text("Back to the slide")')
+  await until(stage, 'slide again', async () => (await sceneOf(stage)) === 'slide')
 
   // ── The app itself ──────────────────────────────────────────────────────────────────
   log('— the app —')
@@ -254,7 +326,7 @@ const browser = await launch()
 
   await present.click('[data-stage="dock"] a:has-text("Slides")')
   await present.waitForSelector('[data-present="live"]')
-  board.check('back on the console, the stage is back on the slide', await until(stage, 'slide back', async () => (await sceneOf(stage)) === 'slide' && (await stage.locator('main h2').first().innerText()) === 'What we hold'))
+  board.check('back on the console, the stage is back on the slide', await until(stage, 'slide back', async () => (await sceneOf(stage)) === 'slide' && (await stage.locator('[data-stage="words"] h1').innerText()) === 'What we hold'))
 
   // ── A second presenter takes the stage ──────────────────────────────────────────────
   log('— a second presenter —')
@@ -264,7 +336,7 @@ const browser = await launch()
   board.check('a second console sees that someone is presenting', await until(other, 'other', async () => (await other.locator('[data-present="status"]').innerText()).includes('is presenting')))
   await other.keyboard.press('End')
   await other.click('button:has-text("Take the stage")')
-  board.check('taking the stage moves it to the second presenter’s slide', await until(stage, 'taken', async () => (await stage.locator('main h2').first().innerText()) === 'Questions'))
+  board.check('taking the stage moves it to the second presenter’s slide', await until(stage, 'taken', async () => (await stage.locator('[data-stage="words"] h1').innerText()) === 'Questions'))
   board.check('and the first console stops, and says who has it', await until(present, 'yielded', async () => (await present.locator('main').getAttribute('data-present')) === 'ready' && (await present.locator('[data-present="status"]').innerText()).includes('is presenting')))
 
   await other.click('button:has-text("Stop")')
@@ -301,10 +373,10 @@ if (NET) {
   const stage = await b.newPage()
   await stage.goto(BASE + '/stage', { waitUntil: 'networkidle' })
   await present.click('button:has-text("Go live")')
-  board.check('a reader in another browser profile gets the slide over the network', await until(stage, 'net slide', async () => (await sceneOf(stage)) === 'slide' && (await stage.locator('main h2').innerText()) === 'A demo', 10000))
+  board.check('a reader in another browser profile gets the slide over the network', await until(stage, 'net slide', async () => (await sceneOf(stage)) === 'slide' && (await stage.locator('[data-stage="words"] h1').innerText()) === 'A demo', 10000))
   board.check('the console counts them', await until(present, 'count', async () => (await present.locator('[data-present="status"]').innerText()).includes('1 person'), 10000))
   await present.keyboard.press('ArrowRight')
-  board.check('and follows', await until(stage, 'net slide 2', async () => (await stage.locator('main h2').innerText()) === 'Three tiers', 5000))
+  board.check('and follows', await until(stage, 'net slide 2', async () => (await stage.locator('[data-stage="words"] h1').innerText()) === 'Three tiers', 5000))
   await present.click('button:has-text("Show the app")')
   board.check('the app crosses the network as a page', await until(stage, 'net mirror', async () => (await sceneOf(stage)) === 'mirror' && (await stage.locator('[data-stage="mirror"] header').count()) === 1, 10000))
   await stage.screenshot({ path: `${SHOTS}/stage-net-mirror.png` })

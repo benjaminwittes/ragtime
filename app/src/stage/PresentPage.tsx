@@ -3,15 +3,19 @@ import { useEffect, useRef, useState } from 'react'
 import { AppLink } from '@/components/AppLink'
 import { Button } from '@/components/ui/button'
 import { slideAfter } from '@/demo/kit'
-import { KitMarkdown, Locked, SlideFace } from '@/demo/parts'
+import { KitMarkdown, Locked } from '@/demo/parts'
 import { PROSE } from '@/demo/prose'
 import { useKit } from '@/demo/useKit'
 import { navigateTo, toHref } from '@/lib/routing'
 import { cn } from '@/lib/utils'
 
+import { Amphitheatre } from './Amphitheatre.tsx'
 import { FigureByName } from './FigureByName.tsx'
 import { FIGURES } from './figures.ts'
-import { arm, goLive, goTo, presenterKit, setShowApp, setWho, showFace, stop } from './presenter.ts'
+import { arm, bringForward, bringOn, goLive, goTo, presenterKit, setShowApp, setWho, showFace, stop } from './presenter.ts'
+import { STAGEABLE } from './recordGather.ts'
+import { RecordStage } from './RecordStage.tsx'
+import { StageWords } from './StageWords.tsx'
 import { usePresenter } from './useStage.ts'
 
 /** The words. */
@@ -40,6 +44,12 @@ const SAID = {
   showAppMore: 'The stage follows you into the app, and comes back to this slide when you come back here.',
   figures: 'Figures',
   backToSlide: 'Back to the slide',
+  record: 'Bring a search on',
+  recordMore: 'One collection, one phrase. Its documents come on as objects: click one here to bring it forward for the room.',
+  collection: 'Collection',
+  phrase: 'A phrase to search for',
+  bringOn: 'Bring on',
+  trouble: 'That search could not be brought on:',
   notes: 'Notes',
   noNotes: 'No notes for this slide.',
   keys: '← → move',
@@ -67,6 +77,8 @@ export function PresentPage() {
   const presenter = usePresenter()
   const [refused, setRefused] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [corpus, setCorpus] = useState(STAGEABLE[0].slug)
+  const [phrase, setPhrase] = useState('')
 
   useEffect(() => {
     if (state.at !== 'open') return
@@ -105,9 +117,7 @@ export function PresentPage() {
       <main className="min-h-[60vh] bg-lawfare-paper text-foreground">
         <div className="mx-auto max-w-md px-6 py-20">
           {state.at === 'missing' && <p className="text-sm text-lawfare-text-secondary">{SAID.missing}</p>}
-          {state.at === 'locked' && (
-            <Locked title={SAID.locked} said={state.why === null ? null : SAID[state.why]} onTry={tryPassphrase} />
-          )}
+          {state.at === 'locked' && <Locked title={SAID.locked} said={state.why === null ? null : SAID[state.why]} onTry={tryPassphrase} />}
           {state.at === 'open' && refused && <p className="text-sm text-lawfare-text-secondary">{SAID.old}</p>}
           {(state.at === 'loading' || (state.at === 'open' && !refused)) && (
             <p className="text-sm text-lawfare-text-secondary">{SAID.loading}</p>
@@ -120,16 +130,14 @@ export function PresentPage() {
   const slide = kit.slides[presenter.at]
   const stageUrl = window.location.origin + toHref('/stage')
   const figure = presenter.face.kind === 'figure' ? presenter.face.name : null
+  const record = presenter.face.kind === 'record' ? presenter.face.scene : null
+  const onSlide = figure === null && record === null
 
   return (
     // `data-stage-skip`: the notes are on this page. The stage never shows it — being
     // here means the stage is on a slide — and this makes that true of every frame,
     // including one taken in the instant between leaving and the next page arriving.
-    <main
-      className="min-h-screen bg-lawfare-paper text-foreground"
-      data-present={presenter.live ? 'live' : 'ready'}
-      data-stage-skip=""
-    >
+    <main className="min-h-screen bg-lawfare-paper text-foreground" data-present={presenter.live ? 'live' : 'ready'} data-stage-skip="">
       <div className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
         <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-lawfare-line py-4">
           <div className="min-w-0 flex-1">
@@ -191,38 +199,49 @@ export function PresentPage() {
 
         <div className="grid gap-8 md:grid-cols-[1fr_18rem]">
           <div>
-            <p className="mb-1.5 font-sans text-xs font-semibold uppercase tracking-[0.14em] text-lawfare-muted">
-              {SAID.onStage}
-            </p>
-            {figure === null ? (
-              slide && (
-                <SlideFace
-                  slide={slide}
-                  at={presenter.at}
-                  of={kit.slides.length}
-                  className="rounded-md border border-lawfare-line-strong shadow-sm"
-                />
-              )
-            ) : (
-              <section className="flex aspect-video flex-col rounded-md border border-lawfare-line-strong bg-card px-[5cqw] py-[4cqw] shadow-sm [container-type:inline-size]">
-                <h2 className="mb-[2cqw] font-serif text-[3.4cqw] font-medium leading-tight tracking-tight">
-                  {FIGURES[figure]?.title}
-                </h2>
-                <div className="min-h-0 flex-1">
-                  <FigureByName name={figure} />
+            <p className="mb-1.5 font-sans text-xs font-semibold uppercase tracking-[0.14em] text-lawfare-muted">{SAID.onStage}</p>
+            {/* The stage, small: the same components the room is looking at, in a box the
+                shape of a wide window. What is in it is laid out for the box's own width,
+                as the stage lays it out for each reader's. */}
+            <div className="stage-house overflow-hidden rounded-md border border-lawfare-line-strong shadow-sm" data-present="preview">
+              <Amphitheatre near={record !== null}>
+                <div className="pointer-events-none relative z-10 flex aspect-[16/10] flex-col overflow-y-auto [container-type:inline-size]">
+                  {record !== null ? (
+                    <RecordStage scene={record} focus={presenter.focus} onPick={bringForward} />
+                  ) : figure !== null ? (
+                    <div className="m-[4cqi] rounded-md bg-lawfare-paper p-[3cqi] text-foreground [container-type:inline-size]">
+                      <h2 className="mb-[2cqw] font-serif text-[3.4cqw] font-medium leading-tight tracking-tight">
+                        {FIGURES[figure]?.title}
+                      </h2>
+                      <FigureByName name={figure} />
+                    </div>
+                  ) : (
+                    slide && (
+                      <StageWords
+                        scene={{
+                          kind: 'slide',
+                          at: presenter.at,
+                          of: kit.slides.length,
+                          part: slide.part,
+                          title: slide.title,
+                          body: slide.body,
+                        }}
+                      />
+                    )
+                  )}
                 </div>
-              </section>
-            )}
+              </Amphitheatre>
+            </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-lawfare-muted">
-              <Button variant="outline" size="sm" onClick={() => goTo(presenter.at - 1)} disabled={presenter.at === 0 && figure === null}>
+              <Button variant="outline" size="sm" onClick={() => goTo(presenter.at - 1)} disabled={presenter.at === 0 && onSlide}>
                 ←
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => goTo(presenter.at + 1)}
-                disabled={presenter.at === kit.slides.length - 1 && figure === null}
+                disabled={presenter.at === kit.slides.length - 1 && onSlide}
               >
                 →
               </Button>
@@ -242,9 +261,7 @@ export function PresentPage() {
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-lawfare-muted">
-                {SAID.figures}
-              </span>
+              <span className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-lawfare-muted">{SAID.figures}</span>
               {Object.entries(FIGURES).map(([name, entry]) => (
                 <button
                   key={name}
@@ -256,12 +273,51 @@ export function PresentPage() {
                   {entry.title}
                 </button>
               ))}
-              {figure !== null && (
+              {!onSlide && (
                 <button type="button" className="text-primary underline underline-offset-2" onClick={() => showFace({ kind: 'slide' })}>
                   {SAID.backToSlide}
                 </button>
               )}
             </div>
+
+            <form
+              className="mt-4 flex flex-wrap items-center gap-2 text-sm"
+              title={SAID.recordMore}
+              data-present="record"
+              onSubmit={(event) => {
+                event.preventDefault()
+                bringOn(corpus, phrase)
+              }}
+            >
+              <span className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-lawfare-muted">{SAID.record}</span>
+              <select
+                value={corpus}
+                onChange={(event) => setCorpus(event.target.value)}
+                aria-label={SAID.collection}
+                className="rounded-md border border-lawfare-line-strong bg-background px-2 py-1.5"
+              >
+                {STAGEABLE.map((each) => (
+                  <option key={each.slug} value={each.slug}>
+                    {each.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={phrase}
+                onChange={(event) => setPhrase(event.target.value)}
+                placeholder={SAID.phrase}
+                aria-label={SAID.phrase}
+                className="min-w-40 flex-1 rounded-md border border-lawfare-line-strong bg-background px-2.5 py-1.5 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+              <Button type="submit" size="sm" variant="outline" disabled={!phrase.trim()}>
+                {SAID.bringOn}
+              </Button>
+              {presenter.trouble && (
+                <p role="alert" className="basis-full text-sm text-destructive">
+                  {SAID.trouble} {presenter.trouble}
+                </p>
+              )}
+            </form>
 
             <section aria-label={SAID.notes} className="mt-6">
               <h3 className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-lawfare-muted">{SAID.notes}</h3>
@@ -279,7 +335,7 @@ export function PresentPage() {
                 <button
                   type="button"
                   onClick={() => goTo(index)}
-                  aria-current={index === presenter.at && figure === null ? 'true' : undefined}
+                  aria-current={index === presenter.at && onSlide ? 'true' : undefined}
                   className="flex w-full gap-2 rounded px-2 py-1 text-left text-lawfare-text-secondary hover:bg-muted aria-[current=true]:bg-lawfare-teal-bg aria-[current=true]:text-foreground"
                 >
                   <span className="w-5 shrink-0 text-right tabular-nums text-lawfare-muted">{index + 1}</span>

@@ -1,0 +1,284 @@
+/*
+ * The record, on the stage (`record.ts` says what each form means; this draws them).
+ *
+ * The floor is the theatre's own stage (`amphitheatre.css`): a plane tipped back under a
+ * real perspective, with the far rows seen over the near. Each document is a second plane
+ * standing on it — a slab, ruled with its own leaves. No canvas and no picture: every slab
+ * is a link, and its label is text.
+ *
+ * Every measure is in `cqw` of the house, so the set is the same set in the console's
+ * small preview, in a phone and on a projector.
+ *
+ * What moves, and why: a slab is *flown in* — lowered from above onto its mark, which is
+ * how a theatre brings on scenery, and which is honest about what these are: set, not
+ * cast. Nothing else moves unless someone points at it.
+ */
+
+/* The words that go with a set: what was asked, above the theatre; what is pointed at,
+ * below it. Laid over the scenery, and out of the pointer's way except where they are. */
+.record {
+  container-type: inline-size;
+  width: 100%;
+  pointer-events: none;
+}
+.record a,
+.record [data-record='caption'] {
+  pointer-events: auto;
+}
+
+/* Everything brought on, as one piece on the stage. Also where the light falls when one
+ * thing is brought forward. */
+.record-set {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  background: radial-gradient(circle 13cqw at var(--fx, 50%) var(--fz, 50%), rgb(255 255 255 / var(--fa, 0)), rgb(255 255 255 / 0));
+  transition: --fa 300ms;
+}
+
+/* A rule across the whole depth of the floor at each mark of the axis. */
+.record-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--house-rule);
+}
+
+/* The wings: where what has no place on the axis stands. Set off by a heavier rule. */
+.record-wings {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-right: 1px dashed var(--house-ink-faint);
+  background: rgb(0 0 0 / 0.14);
+}
+
+/* A row's back edge, and its name lettered on the floor. Stretched tall, because the
+ * floor is seen at a slant and letters on it are foreshortened to under half their height. */
+.record-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--house-rule);
+}
+.record-lane-name {
+  position: absolute;
+  left: 1cqw;
+  bottom: 0.6cqw;
+  transform: scaleY(2.1);
+  transform-origin: 0 100%;
+  font-family: var(--font-sans);
+  font-size: 1.05cqw;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--house-ink-faint);
+}
+
+/* Lines on the floor between documents that are one proceeding. */
+.record-families {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.record-families polyline {
+  fill: none;
+  stroke: var(--house-accent);
+  stroke-opacity: 0.55;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* What a slab casts toward the house: it is lit from behind, as a set is. */
+.record-shadow {
+  position: absolute;
+  left: var(--x);
+  top: var(--z);
+  width: var(--w);
+  height: calc(var(--h) * 0.5);
+  margin-left: calc(var(--w) / -2);
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0));
+  filter: blur(0.18cqw);
+  pointer-events: none;
+}
+
+/*
+ * A document. It lies in the floor's plane with its foot on its mark, and is turned up
+ * about that foot by exactly as much as the floor is tipped back — so its face is square
+ * to the reader. Not through a right angle, which is what would make it truly upright on
+ * a raked floor: seen through a lens, everything truly upright leans away from the centre
+ * line, and a document that leans looks as if the lean means something. Square to the
+ * reader, a height is a height and every one of them can be compared.
+ */
+.record-slab {
+  position: absolute;
+  left: var(--x);
+  top: var(--z);
+  width: var(--w);
+  height: var(--h);
+  margin-left: calc(var(--w) / -2);
+  margin-top: calc(var(--h) * -1);
+  transform: rotateX(calc(var(--rake) * -1));
+  transform-origin: 50% 100%;
+  opacity: 0.93;
+  cursor: pointer;
+  outline: none;
+  transition:
+    filter 180ms,
+    opacity 180ms,
+    transform 220ms;
+}
+
+/*
+ * The form: what a document looks like, apart from where it stands. Its own class,
+ * because the legend draws the same forms small and flat, and a key that was drawn by
+ * different rules from the thing it explains would be a second thing to keep true.
+ */
+.record-form {
+  --paper: #f4f1e8;
+  box-sizing: border-box;
+  border: 1px solid rgb(255 255 255 / 0.85);
+  /* The cap: a finished thing has a top. */
+  border-top: 0.3cqw solid var(--paper);
+  /* The leaves, seen edge-on. The ruling is at one pitch for every slab, so a taller one
+   * has more of them: the strata are the length, counted. */
+  background-color: var(--paper);
+  background-image: repeating-linear-gradient(0deg, rgb(48 48 48 / 0.3) 0 1px, rgb(48 48 48 / 0) 1px 0.4cqw);
+}
+
+/* A form in the legend: small, flat, in the line of text that says what it means. */
+.record-key {
+  display: inline-block;
+  width: 0.85cqw;
+  min-width: 9px;
+  height: 1.7cqw;
+  min-height: 18px;
+  margin-right: 0.5em;
+  vertical-align: -0.35em;
+}
+
+/* Proposed, repealed, not in force: the face is hatched rather than ruled. It has the
+ * shape of a document and not yet, or no longer, the standing of one. */
+.record-form[data-face='hatched'] {
+  background-color: rgb(244 241 232 / 0.34);
+  background-image: repeating-linear-gradient(45deg, rgb(244 241 232 / 0.75) 0 1px, rgb(244 241 232 / 0) 1px 0.5cqw);
+  border-top-color: rgb(244 241 232 / 0.6);
+}
+
+/* No text held, or no length known: an outline, with nothing inside it to count. */
+.record-form[data-face='open'] {
+  background: none;
+  border: 1px solid rgb(244 241 232 / 0.7);
+  border-top-width: 1px;
+}
+
+/* Released, not published — a FOIA suit, an archive's copy. One side is torn. */
+.record-form[data-rough] {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    74% 5%,
+    100% 10%,
+    70% 16%,
+    100% 22%,
+    78% 29%,
+    100% 35%,
+    72% 42%,
+    100% 49%,
+    76% 56%,
+    100% 63%,
+    70% 70%,
+    100% 77%,
+    78% 84%,
+    100% 91%,
+    74% 96%,
+    100% 100%,
+    0 100%
+  );
+}
+
+/* Still open — a case not terminated, a rule still taking comments. It has no top yet,
+ * and thins out upward: there is more of it to come. */
+.record-form[data-uncapped] {
+  border-top-color: transparent;
+  mask-image: linear-gradient(0deg, #000 55%, rgb(0 0 0 / 0.15) 100%);
+}
+
+/* A poor scan. The leaves are there and cannot be read clearly. */
+.record-form[data-film] {
+  filter: blur(calc(var(--film) * 0.07cqw)) contrast(calc(1 - var(--film) * 0.3));
+}
+
+/* The collection's own "this one matters". One band of the accent, at the top. */
+.record-form[data-marked] {
+  border-top-color: var(--house-accent);
+}
+
+.record-slab:hover,
+.record-slab:focus-visible,
+.record-slab[data-active] {
+  opacity: 1;
+  filter: brightness(1.18);
+  transform: translateZ(0.7cqw) rotateX(calc(var(--rake) * -1));
+}
+.record-slab[data-active] {
+  outline: 2px solid var(--house-accent);
+  outline-offset: 0.12cqw;
+}
+/* When one is brought forward, the rest step back into the dark a little. */
+.record-set[data-forward] .record-slab:not([data-active]) {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes record-fly-in {
+    from {
+      opacity: 0;
+      transform: translateZ(55cqw) rotateX(calc(var(--rake) * -1));
+    }
+    35% {
+      opacity: 0.93;
+    }
+    to {
+      transform: translateZ(0) rotateX(calc(var(--rake) * -1));
+    }
+  }
+  @keyframes record-shadow-in {
+    from {
+      opacity: 0;
+    }
+  }
+  .record-slab {
+    animation: record-fly-in 1100ms cubic-bezier(0.16, 0.84, 0.3, 1) backwards;
+    animation-delay: calc(var(--i) * 38ms);
+  }
+  .record-shadow {
+    animation: record-shadow-in 500ms ease-out backwards;
+    animation-delay: calc(var(--i) * 38ms + 800ms);
+  }
+}
+
+/* The marks of the axis, lettered on the floor along its front edge, and stretched for
+ * the same reason the rows' names are. */
+.record-mark {
+  position: absolute;
+  bottom: 0.5cqw;
+  transform: translateX(-50%) scaleY(2);
+  transform-origin: 50% 100%;
+  font-family: var(--font-mono);
+  font-size: 0.95cqw;
+  white-space: nowrap;
+  color: var(--house-ink-faint);
+}
+
+@property --fa {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}

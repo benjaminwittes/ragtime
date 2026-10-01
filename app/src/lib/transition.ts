@@ -37,7 +37,13 @@ export function withViewTransition(update: () => void): void {
     update()
     return
   }
-  document.startViewTransition(() => {
+  const transition = document.startViewTransition(() => {
     flushSync(update)
   })
+  // A transition that is overtaken by the next one is skipped, and says so by rejecting
+  // these. That is not a failure — the DOM was updated either way — and unhandled it is
+  // reported as one. Two route changes rarely land that close together; a presenter
+  // stepping through beats on the stage does it routinely.
+  transition.ready.catch(() => {})
+  transition.finished.catch(() => {})
 }

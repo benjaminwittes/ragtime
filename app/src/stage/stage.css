@@ -1,0 +1,135 @@
+/*
+ * The house: the open air the theatre stands in (`Amphitheatre.tsx`, `amphitheatre.css`).
+ *
+ * Everywhere else in this app the ground is paper, because everywhere else is a page to be
+ * read. The stage is a place to be looked into, so its ground is ground: the site's own
+ * teal, as a hillside falling away from the reader, darker near and lighter far, the way
+ * distance looks from above. The theatre itself is drawn over it.
+ *
+ * What is on stage is never a picture of a slide. Words are set in the air above the
+ * theatre, in the reader's own window at the reader's own size (`StageWords.tsx`); the
+ * record is brought on to the stage as objects (`RecordStage.tsx`); and when the presenter
+ * shows the app, it is simply the app, on paper — which is why none of this applies there.
+ */
+.stage-house {
+  --house-ink: #f6f3ea;
+  --house-ink-soft: rgb(246 243 234 / 0.78);
+  --house-ink-faint: rgb(246 243 234 / 0.5);
+  --house-accent: #9adfe3;
+  --house-rule: rgb(246 243 234 / 0.18);
+  position: relative;
+  isolation: isolate;
+  color: var(--house-ink);
+  background-color: #073a3f;
+  background-image:
+    radial-gradient(ellipse 120% 70% at 50% 108%, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 65%),
+    linear-gradient(180deg, #136c6f 0%, #0c555a 34%, #073a3f 70%, #04282d 100%);
+}
+
+.stage-house ::selection {
+  background: rgb(143 213 218 / 0.35);
+}
+
+/*
+ * Words on the wall. Markdown, sized against the column it is set in (`cqi`) between a
+ * floor and a ceiling: on a projector the type is large, on a phone it stops shrinking
+ * and the lines re-wrap instead, because this is a page and not a picture of one.
+ */
+.stage-words {
+  font-size: clamp(1.0625rem, 2.35cqi, 1.9rem);
+  line-height: 1.38;
+  color: var(--house-ink-soft);
+}
+.stage-words p {
+  margin-block: 0.7em;
+}
+.stage-words ul,
+.stage-words ol {
+  margin-block: 0.7em;
+  padding-left: 1.3em;
+}
+.stage-words ul {
+  list-style: disc;
+}
+.stage-words ol {
+  list-style: decimal;
+}
+.stage-words li {
+  margin-block: 0.4em;
+}
+.stage-words li::marker {
+  color: var(--house-accent);
+}
+.stage-words strong {
+  font-weight: 600;
+  color: var(--house-ink);
+}
+.stage-words em {
+  font-style: italic;
+}
+.stage-words a {
+  color: var(--house-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.stage-words code {
+  border-radius: 0.2em;
+  background: rgb(255 255 255 / 0.1);
+  padding: 0.05em 0.3em;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.86em;
+}
+.stage-words blockquote {
+  margin-block: 0.9em;
+  border-left: 0.14em solid var(--house-accent);
+  padding-left: 0.8em;
+  font-family: var(--font-serif, serif);
+  font-size: 1.3em;
+  line-height: 1.2;
+  color: var(--house-ink);
+}
+.stage-words table {
+  margin-block: 0.8em;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82em;
+}
+.stage-words th {
+  border-bottom: 1px solid var(--house-ink-faint);
+  padding: 0.35em 0.5em;
+  text-align: left;
+  font-weight: 600;
+  color: var(--house-ink);
+}
+.stage-words td {
+  border-bottom: 1px solid var(--house-rule);
+  padding: 0.35em 0.5em;
+  vertical-align: top;
+}
+.stage-words h2 {
+  margin-top: 0.9em;
+  font-family: var(--font-serif, serif);
+  font-size: 1.25em;
+  color: var(--house-ink);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The words under a title leave and arrive as the hub's cards do: down and out, up and
+   * in (`transitions.css` has the keyframes). The title itself is named `surface-intro`,
+   * the name every surface's opening line carries, so between two beats it travels, and
+   * on the way into the app it becomes the page's own headline. */
+  .stage-body {
+    view-transition-name: stage-body;
+  }
+  ::view-transition-old(stage-body) {
+    animation-name: vt-leave-down;
+    animation-duration: var(--vt-exit);
+    animation-fill-mode: both;
+  }
+  ::view-transition-new(stage-body) {
+    animation-name: vt-enter-up;
+    animation-duration: var(--vt-enter);
+    animation-delay: calc(var(--vt-exit) * 0.6);
+    animation-fill-mode: both;
+  }
+}
