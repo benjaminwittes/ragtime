@@ -18,6 +18,8 @@ import { hubKeywordSpokes, spokeGroups, spokes } from '@/spokes/registry'
 import { numberWord } from '@/lib/number-words'
 import { useAuth } from '@/lib/use-auth'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { startTour } from '@/tour/start'
+import { TOUR } from '@/tour/steps'
 import { TICKS, type SampleSet } from './samples'
 import { useTick } from './tune'
 
@@ -509,6 +511,21 @@ export function HubKeywordSearch({
               className="text-primary underline-offset-2 hover:underline"
             >
               Start here →
+            </button>
+            {/* The second way in, for the reader who would rather be shown than read:
+                the tour points at this page's own controls in turn (`tour/Tour.tsx`).
+                On the same line as the link it sits beside, so it costs the first
+                screen no height — the box above does not move for it. */}
+            <span aria-hidden="true" className="mx-2 text-lawfare-muted">
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={startTour}
+              data-tour="start"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              {TOUR.start}
             </button>
           </p>
         </div>

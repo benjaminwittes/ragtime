@@ -22,6 +22,7 @@ import { CollectionPage, CollectionsIndex } from '@/collections/CollectionsPage'
 import { spokeSlugFor } from '@/lib/deep-link'
 import { navigateTo, toHref, toLogical } from '@/lib/routing'
 import { withViewTransition } from '@/lib/transition'
+import { Tour } from '@/tour/Tour'
 import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-client'
 
 /**
@@ -163,6 +164,9 @@ function App() {
         {surface}
       </div>
       <CheckoutReturnGate />
+      {/* Beside the route for the same reason the bar is above it: the tour crosses
+          routes, and one mounted inside a route would end at the first step that left it. */}
+      <Tour />
     </SiteBarSlotProvider>
   )
 }

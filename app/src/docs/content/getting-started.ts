@@ -18,6 +18,9 @@ import type { DocsEntry } from '../types'
  * The "Getting Around" heading is not editorial dressing: without it the
  * hub/spoke material after the merged section would render underneath that
  * section's own `h2`.
+ *
+ * The tour link under that heading is a logical path (`/?tour=1`), the form
+ * every in-app address takes in this app; `tour/Tour.tsx` starts on it.
  */
 export const gettingStartedEntry: DocsEntry = {
   slug: 'getting-started',
@@ -57,6 +60,9 @@ AI to descriptive accounts and requiring it to present the documents under
 every claim.
 
 ## Getting Around
+
+**New here?** [Take the tour](/?tour=1). It points at each control on the page
+in turn, and you can end it at any step.
 
 **The hub** is the cross-corpus entry point. **Search** fans a keyword query
 across {{corpora.fan}} of the {{corpora.held}} corpora at once, free and without AI; use it when
