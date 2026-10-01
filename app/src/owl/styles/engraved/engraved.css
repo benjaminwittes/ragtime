@@ -1,0 +1,36 @@
+/* The engraved style's own rules (`styles/engraved/`). Everything is scoped to `.eng-frame`,
+ * the group the style wraps the figure in, so none of it touches an owl in another style.
+ *
+ * The scaffold draws the eyes and the rims from the palette. In a one-ink print they have
+ * to be that ink and that paper whatever the palette says, so they are recoloured here
+ * from the two custom properties the frame carries. A presentation attribute loses to a
+ * rule, so this needs nothing from the scaffold.
+ */
+
+.eng-frame .owl-eyes > circle {
+  fill: var(--eng-paper);
+}
+.eng-frame .owl-pupils circle {
+  fill: var(--eng-ink);
+}
+.eng-frame > circle[fill='none'] {
+  stroke: var(--eng-ink);
+}
+
+/* The rays round a lit lantern. Always in the figure and clear while it is dark, as the glow
+ * is, so lighting it adds nothing to the drawing. The fade is the glow's. */
+.eng-rays {
+  opacity: 0;
+  transition: opacity var(--owl-glow-fade) ease;
+}
+.owl[data-lantern='lit'] .eng-rays,
+.owl[data-lantern='searching'] .eng-rays {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* `owl-search` is the glow's own breathing (`owl.css`), so the rays and the halo pulse as one. */
+  .owl[data-lantern='searching'] .eng-rays {
+    animation: owl-search var(--owl-search-period) ease-in-out infinite alternate;
+  }
+}

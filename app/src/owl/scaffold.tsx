@@ -1,4 +1,4 @@
-import { useId, type CSSProperties, type RefObject } from 'react'
+import { useId, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { enabledStanding } from './standing'
 import type { LayerProps, OwlDesign, OwlLantern, OwlPose, OwlStyle } from './types'
 import { motionStyle } from './vars'
@@ -39,7 +39,7 @@ export function OwlDrawing({
   const pose = design.poses[poseId]
   const { palette, stroke, shape } = design
   const layer: LayerProps = { design, poseId, pose }
-  const { defs: Defs, behind: Behind, eyeDetail: EyeDetail, front: Front, lantern: Lantern } = renderStyle
+  const { defs: Defs, frame: Frame, behind: Behind, eyeDetail: EyeDetail, front: Front, lantern: Lantern } = renderStyle
   // One gradient per owl, named per owl: two on a page sharing an id would both paint
   // with whichever the document found first.
   const glow = 'owl-glow-' + useId().replace(/[^a-zA-Z0-9_-]/g, '')
@@ -49,6 +49,7 @@ export function OwlDrawing({
   }
   const standing = enabledStanding(design.standing).join(' ')
   const { eyes } = pose
+  const wrap = (children: ReactNode) => (Frame ? <Frame {...layer}>{children}</Frame> : children)
 
   return (
     <svg
@@ -71,29 +72,33 @@ export function OwlDrawing({
         </radialGradient>
         {Defs ? <Defs {...layer} /> : null}
       </defs>
-      <Behind {...layer} />
-      {/* The lenses and the pupils close together and the rims do not: a blink that
-          squashed the spectacles with the eyes behind them would be the owl taking its
-          glasses off every six seconds. So what the concept draws as one circle with a
-          stroke is two here — the fill, which blinks, and the rim over it, which stays.
-          At rest the two are the concept's circle exactly. */}
-      <g className="owl-eyes">
-        <circle cx={eyes.left} cy={eyes.cy} r={eyes.r} fill={palette.lens} />
-        <circle cx={eyes.right} cy={eyes.cy} r={eyes.r} fill={palette.lens} />
-        <g className="owl-pupils">
-          <circle cx={eyes.left} cy={eyes.cy} r={eyes.pupil} fill={palette.pupil} />
-          <circle cx={eyes.right} cy={eyes.cy} r={eyes.pupil} fill={palette.pupil} />
-        </g>
-      </g>
-      <circle cx={eyes.left} cy={eyes.cy} r={eyes.r} fill="none" stroke={palette.gold} strokeWidth={stroke.rim} />
-      <circle cx={eyes.right} cy={eyes.cy} r={eyes.r} fill="none" stroke={palette.gold} strokeWidth={stroke.rim} />
-      {EyeDetail ? <EyeDetail {...layer} /> : null}
-      <Front {...layer} />
-      {/* Under the lantern and over the owl, so a lit lantern lights the wing that holds
-          it. Always in the document and transparent while dark, so lighting it is a
-          change of ink and nothing is added to or taken from the figure. */}
-      <circle className="owl-glow" cx={flame.cx} cy={flame.cy} r={shape.glowRadius} fill={`url(#${glow})`} />
-      <Lantern {...layer} />
+      {wrap(
+        <>
+          <Behind {...layer} />
+          {/* The lenses and the pupils close together and the rims do not: a blink that
+              squashed the spectacles with the eyes behind them would be the owl taking its
+              glasses off every six seconds. So what the concept draws as one circle with a
+              stroke is two here — the fill, which blinks, and the rim over it, which stays.
+              At rest the two are the concept's circle exactly. */}
+          <g className="owl-eyes">
+            <circle cx={eyes.left} cy={eyes.cy} r={eyes.r} fill={palette.lens} />
+            <circle cx={eyes.right} cy={eyes.cy} r={eyes.r} fill={palette.lens} />
+            <g className="owl-pupils">
+              <circle cx={eyes.left} cy={eyes.cy} r={eyes.pupil} fill={palette.pupil} />
+              <circle cx={eyes.right} cy={eyes.cy} r={eyes.pupil} fill={palette.pupil} />
+            </g>
+          </g>
+          <circle cx={eyes.left} cy={eyes.cy} r={eyes.r} fill="none" stroke={palette.gold} strokeWidth={stroke.rim} />
+          <circle cx={eyes.right} cy={eyes.cy} r={eyes.r} fill="none" stroke={palette.gold} strokeWidth={stroke.rim} />
+          {EyeDetail ? <EyeDetail {...layer} /> : null}
+          <Front {...layer} />
+          {/* Under the lantern and over the owl, so a lit lantern lights the wing that holds
+              it. Always in the document and transparent while dark, so lighting it is a
+              change of ink and nothing is added to or taken from the figure. */}
+          <circle className="owl-glow" cx={flame.cx} cy={flame.cy} r={shape.glowRadius} fill={`url(#${glow})`} />
+          <Lantern {...layer} />
+        </>,
+      )}
     </svg>
   )
 }

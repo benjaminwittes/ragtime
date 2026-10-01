@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { TuneValue } from '@/tune/types'
 
 /**
@@ -167,6 +167,13 @@ export type OwlStyle = {
   label: string
   /** Extra `<defs>` content — patterns, filters. The glow gradient is the scaffold's. */
   defs?: ComponentType<LayerProps>
+  /**
+   * Wraps everything painted after `defs` — the eyes and the glow included — in one element
+   * of the style's own, for what has to act on the whole figure at once (a filter, a
+   * transform). It must render its children and nothing around them that the DOM contract
+   * needs.
+   */
+  frame?: ComponentType<LayerProps & { children: ReactNode }>
   /** Ground, books, body, head, face: everything behind the eyes. */
   behind: ComponentType<LayerProps>
   /** Over the eyes and their rims, under the beak. Optional. */
