@@ -6,6 +6,7 @@ import { phasePill, plural, workingLabel } from '../model/format.ts'
 import { acceptMarker, type Turn } from '../model/turn.ts'
 import { Answer } from './Answer.tsx'
 import { BriefCard } from './BriefCard.tsx'
+import { Mark } from './Mark.tsx'
 import { Markdown } from './Markdown.tsx'
 
 type Props = {
@@ -20,9 +21,11 @@ type Props = {
 
 export function Conversation({ turns, brief, proposed, registry, now, busy, onAccept }: Props) {
   const end = useRef<HTMLDivElement>(null)
+  // While the brush paints an answer in it follows its own glyph down the page, so the page must not jump to the end under it.
+  const [painting, setPainting] = useState(false)
   useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end' })
-  }, [turns])
+    if (!painting) end.current?.scrollIntoView({ block: 'end' })
+  }, [turns, painting])
 
   // The working label of the one running turn (always the last). A keepalive carries no
   // label of its own and shows the previous one, so the previous one has to outlive a
@@ -31,6 +34,11 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
   const [lastLabel, setLastLabel] = useState('')
   const runningLabel = running ? workingLabel(running, lastLabel) : ''
   if (runningLabel !== lastLabel) setLastLabel(runningLabel)
+
+  // The turns whose answer the reader watched arrive. Only those get painted in; one restored from
+  // storage is just shown. Keyed by `startedAt`, since `index` repeats from one conversation to the next.
+  const [watched, setWatched] = useState<ReadonlySet<number>>(new Set())
+  if (running && !watched.has(running.startedAt)) setWatched(new Set(watched).add(running.startedAt))
 
   return (
     <div className="conversation">
@@ -46,7 +54,7 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
         const showBrief = !!shownBrief && (!brief || !sameBrief(normalizeBrief(shownBrief), brief))
         // What the marker says depends on what came before it — see `acceptMarker`.
         return (
-          <article key={turn.index} className={'turn turn-' + turn.phase}>
+          <article key={turn.index + ':' + turn.startedAt} className={'turn turn-' + turn.phase}>
             {turn.promptKind === 'accept' ? (
               <div className="marker">{acceptMarker(turns, i)}</div>
             ) : (
@@ -94,7 +102,9 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
               />
             )}
 
-            {turn.answer && <Answer turn={turn} priorTurns={turns.slice(0, i)} brief={brief} now={now} />}
+            {turn.answer && (
+              <Answer turn={turn} priorTurns={turns.slice(0, i)} brief={brief} now={now} reveal={watched.has(turn.startedAt)} onPainting={setPainting} />
+            )}
 
             {turn.error && (
               <div className="error">
@@ -105,7 +115,7 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
 
             {turn.running && (
               <div className="working" aria-live="polite">
-                <span className="dot" />
+                <Mark />
                 {label || (turn.phase === 'orient' ? 'planning…' : 'researching…')}
               </div>
             )}

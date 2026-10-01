@@ -5,6 +5,7 @@ import { detectShape, firstCitation, firstNumber, linkifyCitations, splitListAns
 import { costLine, stopBadge } from '../model/format.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from '../model/sources.ts'
 import type { Turn } from '../model/turn.ts'
+import { Brush } from './Brush.tsx'
 import { Markdown } from './Markdown.tsx'
 
 type Props = {
@@ -12,6 +13,9 @@ type Props = {
   priorTurns: readonly Turn[]
   brief: ExplorerBrief | null
   now: number
+  /** The answer arrived while the reader watched: paint it in with the mark. A restored answer is just shown. */
+  reveal?: boolean
+  onPainting?: (painting: boolean) => void
 }
 
 /**
@@ -22,7 +26,7 @@ type Props = {
  * per-turn cost line (item 6), and the sources (item 12) with the
  * search-only state said plainly.
  */
-export function Answer({ turn, priorTurns, brief, now }: Props) {
+export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Props) {
   const shape = turn.phase === 'research' ? detectShape(brief?.answer_shape) : 'narrative'
   const badge = stopBadge(turn.stop)
   const report = sourcesOf(turn, priorTurns)
@@ -43,14 +47,14 @@ export function Answer({ turn, priorTurns, brief, now }: Props) {
               <div className="card-title">
                 {c.path ? <AppLink to={c.path}>{c.title}</AppLink> : c.title}
               </div>
-              {c.body && <Markdown text={c.body} className="card-body" titles={titles} />}
+              {c.body && <Markdown text={c.body} className="card-body" titles={titles} signature={!split.rest && i === split.cards.length - 1} />}
             </li>
           ))}
         </ol>
-        {split.rest && <Markdown text={split.rest} titles={titles} />}
+        {split.rest && <Markdown text={split.rest} titles={titles} signature />}
       </>
     ) : (
-      <Markdown text={answer} titles={titles} />
+      <Markdown text={answer} titles={titles} signature />
     )
   } else if (shape === 'count') {
     const n = firstNumber(turn.answer)
@@ -67,7 +71,7 @@ export function Answer({ turn, priorTurns, brief, now }: Props) {
             )}
           </div>
         )}
-        <Markdown text={answer} titles={titles} />
+        <Markdown text={answer} titles={titles} signature />
       </>
     )
   } else if (shape === 'document') {
@@ -79,16 +83,18 @@ export function Answer({ turn, priorTurns, brief, now }: Props) {
             Open {titles.get(c.path) ?? c.title} →
           </AppLink>
         )}
-        <Markdown text={answer} titles={titles} />
+        <Markdown text={answer} titles={titles} signature />
       </>
     )
   } else {
-    body = <Markdown text={answer} titles={titles} />
+    body = <Markdown text={answer} titles={titles} signature />
   }
 
   return (
     <div className="answer">
-      {body}
+      <Brush active={!!reveal} onPainting={onPainting}>
+        {body}
+      </Brush>
       {badge && <div className={'badge badge-' + badge.tone}>{badge.text}</div>}
       <div className="cost-line">{costLine(turn, now)}</div>
       {turn.phase === 'research' && (report.sources.length > 0 || report.readUncited.length > 0 || turn.answer) && <Sources report={report} />}
