@@ -126,9 +126,18 @@ export class Speaker {
     else if (this.input.config.poke && this.input.site.occasions.includes('poke')) this.say('poke')
   }
 
-  /** The reader has been away for the idle interval. Said only if nothing is up and the rules allow it. */
+  /** The reader has been away for the idle interval. Said only if nothing is up or waiting (a line due for a true state comes first) and the rules allow it. */
   idle(): void {
-    if (!this.current && this.allowed('idle')) this.say('idle')
+    if (!this.current && !this.waiting && this.allowed('idle')) this.say('idle')
+  }
+
+  /**
+   * The state a line was about has ended (a search came back, a refused code was typed
+   * over): takes that line down if it is the one up, and leaves any other. A line that
+   * says "pending" must not outlive the wait.
+   */
+  retire(occasion: OccasionId): void {
+    if (this.current?.occasion === occasion) this.dismiss()
   }
 
   /** Drops a line still waiting for its delay. A line already up is left to its dwell. */

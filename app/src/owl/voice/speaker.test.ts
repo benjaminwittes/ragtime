@@ -150,6 +150,24 @@ describe('Speaker', () => {
     expect(off.events).toHaveLength(0)
   })
 
+  it('takes a line down when the state it was about ends, and leaves any other line', () => {
+    const { speaker, events } = setup()
+    speaker.say('searching')
+    speaker.retire('search-results')
+    expect(last(events)?.occasion).toBe('searching')
+    speaker.retire('searching')
+    expect(last(events)).toBeNull()
+    expect(events.filter(Boolean)).toHaveLength(1)
+  })
+
+  it('does not let an idle line cancel a line that is waiting for its delay', () => {
+    const { speaker, events } = setup()
+    speaker.schedule('search-empty')
+    speaker.idle()
+    vi.advanceTimersByTime(600)
+    expect(events.filter(Boolean).map((e) => e?.occasion)).toEqual(['search-empty'])
+  })
+
   it('is silent with no voice', () => {
     const { speaker, events, input } = setup()
     speaker.update({ ...input, voice: null })

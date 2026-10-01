@@ -80,10 +80,15 @@ export function useOwlVoice(
     return () => speaker.cancel()
   }, [speaker, voiceId, arrival])
 
-  // The page says something true has happened.
+  // The page says something true has happened. When it stops being true (the search came
+  // back, the refused code was typed over) the line about it comes down with it, rather
+  // than standing out its dwell as a statement about a state the page has left.
   useEffect(() => {
     if (voiceId && occasion) speaker.schedule(occasion)
-    return () => speaker.cancel()
+    return () => {
+      speaker.cancel()
+      if (occasion) speaker.retire(occasion)
+    }
   }, [speaker, voiceId, occasion])
 
   // A line comes down when the voice goes, and when the owl does.
