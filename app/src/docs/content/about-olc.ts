@@ -1,8 +1,8 @@
 import type { DocsEntry } from '../types'
 
 /**
- * OLC spoke "How to use" entry. The count is 2,151 = 1,445 DOJ-published +
- * 706 Knight FOIA, read off the worker. Do not re-derive it.
+ * OLC spoke "How to use" entry. The counts are read from the Worker's /facets
+ * at render time (docs/figures.ts); do not type them here.
  */
 export const aboutOlcEntry: DocsEntry = {
   slug: 'about-olc',
@@ -13,9 +13,9 @@ export const aboutOlcEntry: DocsEntry = {
   content: `
 **What's in it.** Opinions of the Justice Department's Office of Legal
 Counsel — the executive branch's own authoritative legal interpretations,
-binding within the executive. DOJ's published archive (1,445) plus opinions
-the Knight First Amendment Institute obtained in FOIA litigation (706), so
-2,151 in all, reaching back to the 1930s.
+binding within the executive. DOJ's published archive ({{olc.doj}}) plus opinions
+the Knight First Amendment Institute obtained in FOIA litigation ({{olc.knight}}), so
+{{olc.opinions}} in all, reaching back to {{olc.since}}.
 
 **Released, not issued.** Counts and date distributions reflect when opinions
 were released, not when they were written, and many OLC opinions are never

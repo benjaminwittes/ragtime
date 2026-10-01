@@ -2,7 +2,8 @@ import type { DocsEntry } from '../types'
 
 /**
  * Presidential Documents spoke "How to use" entry. The hub card's count is
- * ROUNDED by design — do not write a live figure here to "fix" the gap.
+ * ROUNDED by design; the figures here are exact and read live (docs/figures.ts).
+ * The 1940–1947 finding-aid and 1993/94 floor years are source facts, not counts.
  */
 export const aboutPresidentialEntry: DocsEntry = {
   slug: 'about-presidential',
@@ -13,20 +14,19 @@ export const aboutPresidentialEntry: DocsEntry = {
   content: `
 **What's in it.** The formal signed instruments by which the President
 directs the executive branch and the public, as published in the Federal
-Register: executive orders (5,900+, reaching back to 1940), proclamations
-(4,400), memoranda (800), determinations (790) and notices (770) — about
-12,700 documents, updated daily. This spoke's holdings band carries the exact
-live figures; the count on the hub is rounded on purpose.
+Register: executive orders ({{presidential.executive_orders}}, reaching back to {{presidential.since}}), proclamations
+({{presidential.proclamations}}), memoranda ({{presidential.memoranda}}), determinations ({{presidential.determinations}}) and notices ({{presidential.notices}}) —
+{{presidential.documents}} documents, updated daily. The count on the hub is rounded on purpose.
 
 **The lineage graph.** The Office of the Federal Register tracks what each
 document does to earlier ones — revokes, amends, supersedes — and the corpus
-parses that into a queryable graph of 14,000+ edges. It powers "is this
+parses that into a queryable graph of those edges. It powers "is this
 executive order still in effect", the amendment trail on every document, and
 questions like how many of one president's orders the next revoked. The graph
 records *explicit* dispositions only, so "no recorded revocation" is not
 proof a document remains in effect.
 
-**Two coverage caveats.** Executive orders reach back to 1940, but the other
+**Two coverage caveats.** Executive orders reach back to {{presidential.since}}, but the other
 four types begin in 1993/94, the Federal Register API's floor for them, so a
 count of Truman's proclamations reflects the corpus floor rather than history
 — and the system flags that. And executive orders from 1940–1947 are

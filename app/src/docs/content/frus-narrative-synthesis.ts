@@ -19,7 +19,7 @@ attributed inline. *"Has the U.S. ever done X?"* returns a yes-or-no verdict
 plus its supporting documents; for a *no*, the candor notes list the search
 terms and date ranges tried, so you can interrogate the formulation. *"Show
 me the cables on Y"* is a scoped lookup. Analytical questions work too, and
-the denominator is always stated: *"of 314,483 documents in the corpus, 437
+the denominator is always stated: *"of {{frus.documents}} documents in the corpus, 437
 mention Stalin in that range."*
 
 **Editorial conventions.** FRUS terrain includes covert operations,

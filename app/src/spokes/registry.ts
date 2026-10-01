@@ -96,6 +96,20 @@ export const spokes: readonly CorpusSpoke[] = spokeGroups.flatMap(
   (g) => g.spokes,
 )
 
+/**
+ * The spokes the hub keyword fan searches. Sanctions is registry-listed (it
+ * has a row in the corpus list) but EXCLUDED here, mirroring the Worker's
+ * HUB_CORPORA: its keyword union includes the same federal_register documents
+ * the fr section already surfaces, so fanning both would double-surface every
+ * FR sanctions doc under two id schemes (the commentary/lawfare lesson).
+ * The book catalogue is excluded for the Worker's reason too: it is absent
+ * from HUB_CORPORA because a catalogue record among document hits reads like
+ * something we hold and can quote (ragtime-worker#145).
+ */
+export const hubKeywordSpokes: readonly CorpusSpoke[] = spokes.filter(
+  (s) => s.slug !== 'sanctions' && s.slug !== 'books',
+)
+
 export function getSpokeBySlug(slug: CorpusSlug): CorpusSpoke | undefined {
   return spokes.find((s) => s.slug === slug)
 }

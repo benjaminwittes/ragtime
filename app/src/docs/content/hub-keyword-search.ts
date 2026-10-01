@@ -52,9 +52,9 @@ export const hubKeywordSearchEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 2,
   content: `
-**Search** runs across ten corpora at once and returns the top five results
-from each, plus the total count per corpus. Free, no AI. Nine of the ten are
-primary sources; the tenth is Commentary, published analysis from Lawfare and
+**Search** runs across {{corpora.fan}} corpora at once and returns the top five results
+from each, plus the total count per corpus. Free, no AI. {{corpora.fan_primary|cap}} of the {{corpora.fan}} are
+primary sources; the other is Commentary, published analysis from Lawfare and
 Executive Functions. **Explorer** sends the same words to a conversation that
 plans the research, runs it across the corpora and hands you into them; that
 reads with AI and costs money. Switching keeps what you have typed.
@@ -74,14 +74,14 @@ scattered through a document. A leading minus excludes the word after it:
 those marks as instructions: a minus will not exclude there and quotes
 are not what make a phrase, so search that corpus in plain words.
 
-**Ten of the eleven corpora.** Sanctions sits out the fan, because its
+**{{corpora.fan|cap}} of the {{corpora.held}} corpora.** Sanctions sits out the fan, because its
 documents include the Federal Register's sanctions notices, which that
 section already returns. Search Sanctions from its own workspace, where the
 entity lists and OFAC's guidance are searchable too.
 
 **Results are grouped by corpus rather than merged into one ranking**, since
 each corpus scores relevance off its own index and those scores are not
-comparable. Nothing narrows the fan: every Search query goes to all ten, and
+comparable. Nothing narrows the fan: every Search query goes to all {{corpora.fan}}, and
 the narrowing happens afterwards.
 
 **Inside a corpus, search does more.** Open the section that holds your

@@ -19,7 +19,7 @@ title and collection. The Plan disclosure shows the SQL it ran.
 - "What was removed from the Vault about [subject]?" — the recovered
   documents are filterable, and answers cite each one's Wayback capture date.
 - "What do the files say about [person / event / program]?" — topical
-  search across 10,700+ OCR'd documents.
+  search across {{fbi.documents}} OCR'd documents.
 
 **Describe, never editorialize.** These are historical FBI investigative
 records on politically charged terrain. The synthesis describes what the

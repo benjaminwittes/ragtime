@@ -14,7 +14,8 @@ import {
   runHubKeyword,
   type CorpusSlug,
 } from '@lawfare/ragtime-client'
-import { spokeGroups, spokes } from '@/spokes/registry'
+import { hubKeywordSpokes, spokeGroups, spokes } from '@/spokes/registry'
+import { numberWord } from '@/lib/number-words'
 import { useAuth } from '@/lib/use-auth'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { TICKS, type SampleSet } from './samples'
@@ -63,20 +64,6 @@ gsap.registerPlugin(useGSAP)
  */
 
 /**
- * The spokes the hub keyword fan searches. Sanctions is registry-listed (it
- * has a row in the corpus list) but EXCLUDED here, mirroring the Worker's
- * HUB_CORPORA: its keyword union includes the same federal_register documents
- * the fr section already surfaces, so fanning both would double-surface every
- * FR sanctions doc under two id schemes (the commentary/lawfare lesson).
- * The book catalogue is excluded for the Worker's reason too: it is absent
- * from HUB_CORPORA because a catalogue record among document hits reads like
- * something we hold and can quote (ragtime-worker#145).
- */
-const HUB_KEYWORD_SPOKES = spokes.filter(
-  (s) => s.slug !== 'sanctions' && s.slug !== 'books',
-)
-
-/**
  * What every hub query searches: all of them. This was a `useState<Set<…>>`
  * seeded with exactly these slugs, back when the chip row could add and
  * remove them. With the chips gone the set had one reachable value for the
@@ -85,7 +72,7 @@ const HUB_KEYWORD_SPOKES = spokes.filter(
  * in the usage log, because what was searched stays worth knowing even when
  * nobody chose it.
  */
-const HUB_KEYWORD_CORPORA: CorpusSlug[] = HUB_KEYWORD_SPOKES.map((s) => s.slug)
+const HUB_KEYWORD_CORPORA: CorpusSlug[] = hubKeywordSpokes.map((s) => s.slug)
 
 /** Which surface takes the sentence. Not persisted — see the note at the top. */
 type Mode = 'search' | 'explorer'
@@ -749,15 +736,6 @@ function keystroke(previous: string | undefined): number {
  * this line is prose. It reads the registry, so the day a twelfth corpus lands
  * the sentence says twelve without anyone remembering to come here.
  */
-const NUMBER_WORDS = [
-  'zero', 'one', 'two', 'three', 'four', 'five', 'six',
-  'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
-]
-
-function numberWord(n: number): string {
-  return NUMBER_WORDS[n] ?? String(n)
-}
-
 function sentenceCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }

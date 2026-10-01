@@ -15,14 +15,14 @@ export const aboutBooksEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'books' },
   order: 9,
   content: `
-**What's in it.** Catalogue records for 10.5 million books from the Library
+**What's in it.** Catalogue records for {{books.records}} books from the Library
 of Congress: who wrote or edited each one, the title, publisher, date, length,
 language, and the subject headings the Library assigned. **We hold the
 catalogue, not the books.** There is no text to search, read, quote or
 summarise, so this spoke has no AI modes.
 
-**It is a 2016 snapshot, and incomplete even for its own years.** The records
-come from LC's *Books All* bulk file. Nothing catalogued after 2016 is here,
+**It is a {{books.snapshot}} snapshot, and incomplete even for its own years.** The records
+come from LC's *Books All* bulk file. Nothing catalogued after {{books.snapshot}} is here,
 and the Library's live catalogue holds records for earlier books that this
 snapshot does not. An empty result means "not in this catalogue", not "no
 such book".
@@ -38,13 +38,13 @@ decades, so an exact heading can miss books a looser search finds. Use
 *Subject heading contains* first; the exact-heading field is for when you
 already know the form — clicking a heading on a record fills it in for you.
 
-**Sparse fields say how sparse they are.** Audience is coded on about 4% of
-records, illustrations on about half and page counts on most. Each filter
+**Sparse fields say how sparse they are.** Audience is coded on {{books.audience_pct}} of
+records, illustrations on {{books.illustrations_pct}} and page counts on {{books.page_count_pct}}. Each filter
 shows its coverage, and a filter on a sparse field can only see the records
 that carry it.
 
 **Counts can be floors.** A broad filter matches more records than the
-catalogue will count, and the count then reads *10,000+*.
+catalogue will count, and the count then reads *{{books.cap}}+*.
 
 **Where to read the book.** Every record ends with where to go next: the
 Library of Congress entry, free full text when the book is old enough to be

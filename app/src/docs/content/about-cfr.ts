@@ -8,8 +8,8 @@ export const aboutCfrEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'cfr' },
   order: 9,
   content: `
-**What's in it.** The entire Code of Federal Regulations — all 49 titles,
-more than 227,000 sections — the codified rules of the federal executive
+**What's in it.** The entire Code of Federal Regulations — all {{cfr.titles}} titles,
+{{cfr.sections}} sections — the codified rules of the federal executive
 agencies.
 
 **Currency is per-section.** The CFR is amended piecemeal, agency by agency,
