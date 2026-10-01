@@ -49,7 +49,11 @@ export function fitNote(args: {
     // The side asked for, when it holds the note or at least a readable column of it.
     if (want >= Math.min(note.width, MIN_BESIDE)) return { place: wantPlace, maxWidth: Math.max(0, want), shift: 0 }
     if (other >= Math.min(note.width, MIN_BESIDE)) return { place: otherPlace, maxWidth: Math.max(0, other), shift: 0 }
-    return below(anchor, note, viewport, margin)
+    // No readable column on either side: centred on the owl, and above it when the paper
+    // above has room. Below is where the title and the field a page puts under its owl are,
+    // so it is the last resort (seen on a 320px phone, where the hub's note landed on the title).
+    const roomAbove = anchor.top - gap - note.height - margin
+    return centred(roomAbove >= 0 ? 'above' : 'below', anchor, note, viewport, margin)
   }
 
   // Above or below, centred on the owl. Flip when the near side is off the screen and the other is not.
@@ -58,10 +62,6 @@ export function fitNote(args: {
   const flipped: SpeechPlace = place === 'above' ? 'below' : 'above'
   const chosen = room(place) < 0 && room(flipped) >= 0 ? flipped : place
   return centred(chosen, anchor, note, viewport, margin)
-}
-
-function below(anchor: Box, note: Size, viewport: Size, margin: number): Fit {
-  return centred('below', anchor, note, viewport, margin)
 }
 
 function centred(place: SpeechPlace, anchor: Box, note: Size, viewport: Size, margin: number): Fit {

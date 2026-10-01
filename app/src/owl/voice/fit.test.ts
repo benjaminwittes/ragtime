@@ -23,10 +23,15 @@ describe('fitNote', () => {
     expect(fit.maxWidth).toBe(280 - 16)
   })
 
-  it('goes below, centred, when neither side has room', () => {
+  it('goes above, centred, when neither side has room and the paper above does', () => {
     // 84px to the right and 94px to the left: both under the readable minimum.
     const fit = fitNote({ ...base, place: 'beside', anchor: box(110, 100, 90), note: { width: 200, height: 40 }, viewport: { width: 300, height: 844 } })
     expect(MIN_BESIDE).toBeGreaterThan(94)
+    expect(fit.place).toBe('above')
+  })
+
+  it('goes below, centred, only when neither side nor the top has room', () => {
+    const fit = fitNote({ ...base, place: 'beside', anchor: box(110, 20, 90), note: { width: 200, height: 40 }, viewport: { width: 300, height: 844 } })
     expect(fit.place).toBe('below')
   })
 
