@@ -1,0 +1,208 @@
+/*
+ * The terrain, drawn (`terrain.ts` is the geometry and why it looks the way it does;
+ * `record.ts` is what each form means).
+ *
+ * One weight of line, in the site's ink, on white. No gradient anywhere: the only shading
+ * is one flat tint on the walls that face right, and the only colour is the accent, kept
+ * for the two things that are someone's judgement — a document its own collection calls
+ * significant, and the one being pointed at.
+ *
+ * Strokes do not scale with the drawing (`non-scaling-stroke`), so the line is one pixel
+ * on a phone and on a projector, which is what keeps it crisp at both.
+ */
+.terrain {
+  --ink: #2b2b29;
+  --strata: #b9b4a6;
+  --tint: #ebe7dc;
+  --hollow: #d6d1c3;
+  --cast: #e2ddd0;
+  --contour: #d3cdbd;
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+/*
+ * The ground itself fills the box it is given, exactly, and keeps its shape inside it:
+ * whoever shows it gives it whatever height the heading, the label and the legend leave
+ * (`RecordStage`), so on a short window the ground is smaller, not cut off, and the four
+ * of them are one page without anyone having to say how tall the words are.
+ */
+.terrain-ground {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+.terrain * {
+  vector-effect: non-scaling-stroke;
+}
+
+.terrain-cell {
+  cursor: pointer;
+  outline: none;
+  transition: opacity 250ms;
+}
+.t-edge,
+.t-top,
+.t-inner,
+.t-crack {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.t-edge {
+  fill: none;
+}
+.t-wall,
+.t-top {
+  fill: #fffefa;
+}
+
+/* The ground. A contour is a line with the ground's own colour laid inside it, so only
+ * the outermost edge of each ring of an outcrop shows; a shadow is one flat tone with a
+ * hard edge. Neither takes the pointer. */
+.t-contour {
+  fill: none;
+  stroke: var(--contour);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.t-ground {
+  fill: var(--house-ground, #f4f1e9);
+  pointer-events: none;
+}
+.t-cast {
+  fill: var(--cast);
+  pointer-events: none;
+}
+.t-shade {
+  fill: var(--tint);
+}
+/* The leaves, seen edge-on. One pitch for every column, so a taller one has more of them:
+ * the strata are the length, counted. */
+.t-strata {
+  fill: none;
+  stroke: var(--strata);
+  stroke-width: 0.75;
+}
+.t-inner,
+.t-crack {
+  display: none;
+  fill: none;
+}
+
+/* Proposed, repealed, not in force: drawn in broken line, the way a drawing shows what is
+ * not there yet or not there any more. */
+:is(.terrain-cell, .terrain-form)[data-face='hatched'] .t-edge,
+:is(.terrain-cell, .terrain-form)[data-face='hatched'] .t-top {
+  stroke-dasharray: 3.5 2.5;
+}
+
+/* No text held, or no length known: the outline of a column, with nothing in it to count.
+ * It still takes the pointer across its whole face, or it could hardly be pointed at. */
+:is(.terrain-cell, .terrain-form)[data-face='open'] .t-wall,
+:is(.terrain-cell, .terrain-form)[data-face='open'] .t-top {
+  fill: none;
+  pointer-events: all;
+}
+:is(.terrain-cell, .terrain-form)[data-face='open'] .t-strata {
+  display: none;
+}
+
+/* Released, not published — a FOIA suit, an archive's copy. It came out broken: a crack
+ * runs across its top. */
+:is(.terrain-cell, .terrain-form)[data-rough] .t-crack {
+  display: inline;
+}
+
+/* Still open — a case not terminated, a rule still taking comments. It has no top: the
+ * column is a tube, and more is going into it. */
+:is(.terrain-cell, .terrain-form)[data-uncapped] .t-inner {
+  display: inline;
+  fill: var(--hollow);
+}
+
+/* A poor scan: the leaves are there and cannot be read clearly. */
+:is(.terrain-cell, .terrain-form)[data-film] .t-strata {
+  stroke-dasharray: 1 3;
+}
+
+/* The collection's own "this one matters": the top, in the accent. */
+:is(.terrain-cell, .terrain-form)[data-marked] .t-top {
+  fill: var(--color-lawfare-teal);
+}
+
+/* The one being pointed at, or brought forward: the top in the site's own highlight, and
+ * a heavier line. */
+.terrain-cell:hover .t-top,
+.terrain-cell:focus-visible .t-top,
+.terrain-cell[data-active] .t-top {
+  fill: var(--color-lawfare-mark);
+}
+.terrain-cell[data-active] .t-edge,
+.terrain-cell[data-active] .t-top {
+  stroke-width: 2;
+}
+.terrain[data-forward] .terrain-cell:not([data-active]) {
+  opacity: 0.28;
+}
+
+/* Words on the ground are drawn over it, with the paper's colour round each letter. */
+.terrain-lane,
+.terrain-axis text,
+text.terrain-axis {
+  paint-order: stroke;
+  stroke: var(--house-ground, #f4f1e9);
+  stroke-width: 5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.terrain-lane {
+  font-family: var(--font-sans);
+  font-size: 1.05px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  fill: var(--color-lawfare-muted);
+}
+.terrain-axis line {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+.terrain-axis text,
+text.terrain-axis {
+  font-family: var(--font-mono);
+  font-size: 1.05px;
+  fill: var(--color-lawfare-muted);
+}
+
+/* A form in the legend: the same column, small, drawn by the same rules. */
+.terrain-key {
+  display: inline-block;
+  width: 1.5em;
+  height: 2em;
+  margin-right: 0.45em;
+  vertical-align: -0.6em;
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* It is standing, not fixed. Each column rises and falls by a little over one part in a
+   * hundred, about its own foot, slowly, and out of step with its neighbours along the
+   * ground — so the movement passes through an outcrop like a breath. Small enough that
+   * nothing can be misread from it; enough that it does not look like a chart. */
+  @keyframes terrain-breathe {
+    from {
+      transform: scaleY(1);
+    }
+    to {
+      transform: scaleY(1.016);
+    }
+  }
+  .terrain-cell {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: terrain-breathe 4200ms ease-in-out var(--lag, 0ms) infinite alternate;
+  }
+}

@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, type MouseEvent } from 'react'
 
 import { Owl } from '@/components/Owl'
-import { SlideFace } from '@/demo/parts'
+import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { toHref } from '@/lib/routing'
+import { cn } from '@/lib/utils'
 
 import { FigureByName } from './FigureByName.tsx'
 import { figureNamed } from './figures.ts'
 import { applyScrolls, clean, lookAt, morph, resolve, scrollToFraction } from './mirror.ts'
-import { unpack, type FrameMsg, type PointMsg, type ScrollMsg } from './protocol.ts'
-import { useStage } from './useStage.ts'
+import type { PointMsg, ScrollMsg } from './protocol.ts'
+import { RecordStage } from './RecordStage.tsx'
+import { StageWords } from './StageWords.tsx'
+import { useStage, type Page } from './useStage.ts'
 
 /** The words. */
 const SAID = {
@@ -20,24 +23,24 @@ const SAID = {
   site: 'RAGtime',
   yourself: 'Open this page yourself',
   arriving: 'The presenter is opening the app.',
+  older: 'This page is older than the presentation. Reload it to see what is on.',
 } as const
 
 /** After the reader scrolls for themselves, how long the presenter's scrolling leaves them alone. */
 const OWN_SCROLL_MS = 4_000
 
-/** A slide or a figure fills the window, 16:9, whichever way the window is the tighter fit. */
-const FILL = { width: 'min(100vw, calc(100dvh * 16 / 9))' } as const
-
 /**
  * The stage: where an audience sits.
  *
- * One address for the whole presentation. Whatever the presenter puts up appears here —
- * a slide, a figure, or the app itself as they use it — as real text in the reader's own
- * window, at the reader's own size. Nothing here needs a password and nothing here can be
- * driven: the presenter drives (`/present`), and what they send is believed only because
- * it is signed with the key sealed in their kit (`protocol.ts`).
+ * One address for the whole presentation. Whatever the presenter puts up appears here, in
+ * the reader's own window, and none of it is a picture: words are lettered on the wall
+ * (`StageWords`), a search is brought on as objects standing on a floor (`RecordStage`),
+ * a figure is drawn live, and when the presenter walks into the app the house lights come
+ * up and it is the app itself (`mirror.ts`). Nothing here needs a password and nothing
+ * here can be driven: the presenter drives (`/present`), and what they send is believed
+ * only because it is signed with the key sealed in their kit (`protocol.ts`).
  *
- * When nobody is presenting the stage is quiet, and says so. It goes live by itself.
+ * When nobody is presenting the house is dark, and says so. It goes live by itself.
  */
 export function StagePage() {
   const now = useStage()
@@ -57,20 +60,18 @@ export function StagePage() {
   }, [])
 
   if (now.phase === 'opening') {
-    return <main className="min-h-dvh bg-lawfare-paper" data-stage="opening" />
+    return <main className="stage-house min-h-dvh" data-stage="opening" />
   }
-  if (now.phase !== 'live' || !now.following.state) {
+  if (now.phase !== 'live') {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-lawfare-paper px-6 text-foreground" data-stage="quiet">
+      <main className="stage-house flex min-h-dvh items-center justify-center px-6" data-stage="quiet">
         <div className="max-w-md text-center">
           {/* The owl keeps the house while it is empty, as it keeps the door. */}
           <Owl lantern="dark" keepsHours className="mx-auto w-24" title="RAGtime" />
-          <h1 className="mt-6 font-serif text-3xl font-medium tracking-tight">
-            {now.phase === 'closed' ? SAID.closed : SAID.quiet}
-          </h1>
-          {now.phase !== 'closed' && <p className="mt-3 text-sm text-lawfare-text-secondary">{SAID.quietMore}</p>}
+          <h1 className="mt-6 font-serif text-3xl font-medium tracking-tight">{now.phase === 'closed' ? SAID.closed : SAID.quiet}</h1>
+          {now.phase !== 'closed' && <p className="mt-3 text-sm text-[color:var(--house-ink-soft)]">{SAID.quietMore}</p>}
           <p className="mt-8 text-sm">
-            <a href={toHref('/')} className="text-primary underline underline-offset-4">
+            <a href={toHref('/')} className="text-[color:var(--house-accent)] underline underline-offset-4">
               {SAID.home}
             </a>
           </p>
@@ -79,33 +80,60 @@ export function StagePage() {
     )
   }
 
-  const { state, frame, scroll, point } = now.following
-  const scene = state.scene
+  const { scene } = now
+  if (scene.kind === 'mirror') {
+    // The house lights are up: this is a page of the app, on the app's own paper.
+    return (
+      <main className="min-h-dvh bg-lawfare-paper text-foreground" data-stage="live" data-stage-scene="mirror">
+        <Mirror page={now.page} scroll={now.scroll} point={now.point} />
+        <Pill path={now.page?.path ?? null} />
+      </main>
+    )
+  }
+
   return (
-    <main className="min-h-dvh bg-lawfare-paper text-foreground" data-stage="live" data-stage-scene={scene.kind}>
-      {scene.kind === 'slide' && (
-        <div className="flex min-h-dvh items-center justify-center">
-          <SlideFace slide={scene} at={scene.at} of={scene.of} style={FILL} />
-        </div>
-      )}
-      {scene.kind === 'figure' && (
-        <div className="flex min-h-dvh items-center justify-center">
-          <section
-            aria-label={figureNamed(scene.name)?.title ?? scene.name}
-            style={FILL}
-            className="flex aspect-video flex-col bg-card px-[5cqw] py-[4cqw] [container-type:inline-size]"
-          >
-            <h2 className="mb-[2cqw] font-serif text-[3.4cqw] font-medium leading-tight tracking-tight">
-              {figureNamed(scene.name)?.title}
-            </h2>
-            <div className="min-h-0 flex-1">
-              <FigureByName name={scene.name} />
+    <main className="stage-house flex min-h-dvh flex-col" data-stage="live" data-stage-scene={scene.kind}>
+      {/* The measure everything on the paper is sized against. An inner element, because
+          a container is also the frame its fixed descendants are placed in, and the
+          corner pill belongs to the window. */}
+      <div className="flex flex-1 flex-col [container-type:inline-size]">
+          {scene.kind === 'slide' ? (
+            <div className="grid flex-1 items-center">
+              <StageWords scene={scene} />
             </div>
-          </section>
+          ) : scene.kind === 'record' ? (
+            <RecordStage scene={scene} focus={now.focus} />
+          ) : scene.kind === 'figure' ? (
+            <article className="mx-auto my-auto w-full max-w-[76rem] px-[clamp(1.25rem,5cqi,5rem)] py-[clamp(2rem,5cqi,4rem)]">
+              <SurfaceIntro
+                level={1}
+                heading={figureNamed(scene.name)?.title ?? scene.name}
+                lede={null}
+                headingClassName="font-serif text-[clamp(1.75rem,4.6cqi,4rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
+                ledeClassName="hidden"
+              />
+              <div className="stage-body mt-[clamp(1rem,2.4cqi,2rem)] rounded-md border border-[color:var(--house-rule)] bg-card p-[clamp(1rem,3cqi,2.5rem)] text-foreground [container-type:inline-size]">
+                <FigureByName name={scene.name} />
+              </div>
+            </article>
+          ) : (
+            <p className="my-auto px-6 text-center text-sm text-[color:var(--house-ink-soft)]">{SAID.older}</p>
+          )}
+      </div>
+      {scene.kind === 'slide' && (
+        // Where the presentation is, as a line along the foot of the wall. Named, so it
+        // lengthens across a change of beat instead of being redrawn at its new length.
+        <div className="fixed inset-x-0 bottom-0 z-20 h-[3px] bg-black/10" aria-hidden="true">
+          <div
+            className="h-full bg-[color:var(--house-accent)]"
+            style={{
+              width: `${((scene.at + 1) / scene.of) * 100}%`,
+              viewTransitionName: 'stage-progress',
+            }}
+          />
         </div>
       )}
-      {scene.kind === 'mirror' && <Mirror frame={frame} scroll={scroll} point={point} />}
-      <Pill path={scene.kind === 'mirror' ? (frame?.path ?? null) : null} />
+      <Pill path={null} />
     </main>
   )
 }
@@ -115,14 +143,19 @@ export function StagePage() {
  * itself, or — while the presenter is in the app — the very page they are on, opened for
  * real in a tab of the reader's own, with the same search in it.
  */
-function Pill({ path }: { path: string | null }) {
+function Pill({ path, dark = false }: { path: string | null; dark?: boolean }) {
   return (
     <div
-      className="fixed bottom-3 left-3 z-[70] flex items-center gap-2.5 rounded-full border border-lawfare-line-strong bg-card/95 px-3 py-1.5 text-xs text-lawfare-text-secondary shadow-md"
+      className={cn(
+        'fixed bottom-3 left-3 z-[70] flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-xs shadow-md',
+        dark
+          ? 'border-white/15 bg-black/35 text-[color:var(--house-ink-soft)] backdrop-blur-sm'
+          : 'border-lawfare-line-strong bg-card/95 text-lawfare-text-secondary',
+      )}
       data-stage="pill"
     >
-      <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
-        <span className="size-2 rounded-full bg-red-600" aria-hidden="true" />
+      <span className={cn('inline-flex items-center gap-1.5 font-semibold', dark ? 'text-[color:var(--house-ink)]' : 'text-foreground')}>
+        <span className="size-2 rounded-full bg-red-500" aria-hidden="true" />
         {SAID.live}
       </span>
       {path !== null && path !== '/stage' && path !== '/present' && (
@@ -130,7 +163,12 @@ function Pill({ path }: { path: string | null }) {
           {SAID.yourself}
         </a>
       )}
-      <a href={toHref('/')} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
+      <a
+        href={toHref('/')}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={dark ? 'hover:text-[color:var(--house-ink)]' : 'hover:text-foreground'}
+      >
         {SAID.site}
       </a>
     </div>
@@ -139,13 +177,17 @@ function Pill({ path }: { path: string | null }) {
 
 /**
  * The presenter's page (`mirror.ts`). React owns the empty element and nothing inside it:
- * each frame is morphed into place by hand, so React is never asked to reconcile markup
+ * each picture is morphed into place by hand, so React is never asked to reconcile markup
  * it did not write.
+ *
+ * In a layout effect, not an effect: a new page arrives inside a view transition
+ * (`useStage`), and the transition takes its picture of "after" the moment React has
+ * committed. The page has to be in the document by then, and a layout effect is the last
+ * thing that runs before it is.
  */
-function Mirror({ frame, scroll, point }: { frame: FrameMsg | null; scroll: ScrollMsg | null; point: PointMsg | null }) {
+function Mirror({ page, scroll, point }: { page: Page | null; scroll: ScrollMsg | null; point: PointMsg | null }) {
   const root = useRef<HTMLDivElement>(null)
   const dot = useRef<HTMLDivElement>(null)
-  const [drawn, setDrawn] = useState(false)
   const own = useRef(0)
   const path = useRef<string | null>(null)
 
@@ -164,38 +206,23 @@ function Mirror({ frame, scroll, point }: { frame: FrameMsg | null; scroll: Scro
     }
   }, [])
 
-  useEffect(() => {
-    if (!frame) return
-    let cancelled = false
-    void unpack(frame.html).then(
-      (html) => {
-        const el = root.current
-        // A newer frame has arrived while this one was unpacking: draw that one.
-        if (cancelled || !el) return
-        morph(el, clean(html))
-        el.className = frame.cls
-        for (const name of [...el.style]) if (name.startsWith('--') && !(name in frame.vars)) el.style.removeProperty(name)
-        for (const [name, value] of Object.entries(frame.vars)) {
-          if (name.startsWith('--')) el.style.setProperty(name, value)
-        }
-        const following = Date.now() - own.current > OWN_SCROLL_MS
-        if (following) applyScrolls(el)
-        // The window's own scroll travels in scroll messages; a frame only places it
-        // when the page under it has changed, where "where it was" means nothing.
-        if (path.current !== frame.path) {
-          path.current = frame.path
-          scrollToFraction(document.documentElement, frame.y)
-        }
-        setDrawn(true)
-      },
-      () => {
-        /* a frame that will not unpack is skipped; the next one replaces it */
-      },
-    )
-    return () => {
-      cancelled = true
+  useLayoutEffect(() => {
+    const el = root.current
+    if (!el || !page) return
+    morph(el, clean(page.html))
+    el.className = page.cls
+    for (const name of [...el.style]) if (name.startsWith('--') && !(name in page.vars)) el.style.removeProperty(name)
+    for (const [name, value] of Object.entries(page.vars)) {
+      if (name.startsWith('--')) el.style.setProperty(name, value)
     }
-  }, [frame])
+    if (Date.now() - own.current > OWN_SCROLL_MS) applyScrolls(el)
+    // The window's own scroll travels in scroll messages; a picture only places it when
+    // the page under it has changed, where "where it was" means nothing.
+    if (path.current !== page.path) {
+      path.current = page.path
+      scrollToFraction(document.documentElement, page.y)
+    }
+  }, [page])
 
   useEffect(() => {
     if (!scroll || !root.current || Date.now() - own.current < OWN_SCROLL_MS) return
@@ -245,7 +272,7 @@ function Mirror({ frame, scroll, point }: { frame: FrameMsg | null; scroll: Scro
 
   return (
     <>
-      {!drawn && <p className="px-6 py-10 text-sm text-lawfare-text-secondary">{SAID.arriving}</p>}
+      {!page && <p className="px-6 py-10 text-sm text-lawfare-text-secondary">{SAID.arriving}</p>}
       <div ref={root} data-stage="mirror" onClickCapture={onClick} onSubmitCapture={(event) => event.preventDefault()} />
       <div
         ref={dot}
