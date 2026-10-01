@@ -256,11 +256,24 @@ export function HubKeywordSearch({
           // Search mode, and the widest is still the same litigation "Ask" line,
           // so the cap did not move.
           headingClassName="mx-auto max-w-5xl font-serif text-[2.2rem] font-medium leading-[1.12] tracking-tight text-balance text-foreground sm:text-[3.25rem]"
-          ledeClassName="mx-auto mt-4 max-w-xl font-serif text-lg italic text-lawfare-text-secondary"
+          // The site speaking for itself, in Ben Wittes's words (2026-09-30), where one
+          // line used to name the four groups below. It is a paragraph rather than a
+          // line, so it takes a wider measure than that line had and a size down at
+          // phone width, where it runs to seven lines and the box still has to be on
+          // the first screen under it (measured at 390x844: the box's top is at 537).
+          //
+          // "Tens of millions" is the one figure on this page that is typed rather
+          // than read from the worker. It is an order of magnitude and not a count —
+          // the book catalogue alone is past ten million — but it is still a claim
+          // nothing re-checks, so it is worth a look whenever a large corpus leaves.
+          ledeClassName="mx-auto mt-4 max-w-2xl font-serif text-base italic leading-snug text-lawfare-text-secondary text-pretty sm:text-lg sm:leading-normal"
           lede={
             <>
-              The law, how it has been read, what government did with it, and the
-              commentary on all three.
+              I am RAGtime. I have tens of millions of records: litigation documents, court
+              opinions, pardons, administrative records, rule-makings, published analyses,
+              legislative hearings and bills, declassified records, giant catalogs of books,
+              and hundreds of years of diplomatic history. I can help you look broadly. I can
+              help you go deep. Ask me anything.
             </>
           }
         />
