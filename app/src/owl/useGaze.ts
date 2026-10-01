@@ -7,7 +7,67 @@ import { lookOwlAt } from './contract'
  * Only the listener lives here: the arithmetic is `gaze.ts`, and turning an owl toward a
  * point — shared with the stage's mirror, which turns a copy of the owl toward the
  * presenter's pointer — is `lookOwlAt` in `contract.ts`.
+ *
+ * Every following owl shares one `pointermove` listener and one animation frame, and only
+ * the owls on (or just off) the screen are turned: a page with dozens of owls would
+ * otherwise restyle every one of them on every pointer move, seen or not. An owl that
+ * scrolls into view is turned toward the last known pointer position at that moment.
  */
+
+const following = new Set<SVGSVGElement>()
+const visible = new Set<SVGSVGElement>()
+let pointer: { x: number; y: number } | null = null
+let frame = 0
+let observer: IntersectionObserver | null = null
+
+function look() {
+  frame = 0
+  // Written to the elements rather than to state: this runs on every pointer move,
+  // and a render per move for two circles would be the costliest thing on the page.
+  if (pointer) for (const el of visible) lookOwlAt(el, pointer)
+}
+
+function onMove(e: PointerEvent) {
+  pointer = { x: e.clientX, y: e.clientY }
+  if (!frame) frame = requestAnimationFrame(look)
+}
+
+function onIntersect(entries: IntersectionObserverEntry[]) {
+  for (const { target, isIntersecting } of entries) {
+    const el = target as SVGSVGElement
+    if (!isIntersecting) {
+      visible.delete(el)
+    } else {
+      visible.add(el)
+      if (pointer) lookOwlAt(el, pointer)
+    }
+  }
+}
+
+function add(el: SVGSVGElement) {
+  if (following.size === 0) window.addEventListener('pointermove', onMove, { passive: true })
+  following.add(el)
+  if (typeof IntersectionObserver === 'undefined') {
+    visible.add(el)
+    return
+  }
+  observer ??= new IntersectionObserver(onIntersect, { rootMargin: '120px' })
+  observer.observe(el)
+}
+
+function remove(el: SVGSVGElement) {
+  following.delete(el)
+  visible.delete(el)
+  observer?.unobserve(el)
+  if (following.size === 0) {
+    window.removeEventListener('pointermove', onMove)
+    if (frame) cancelAnimationFrame(frame)
+    frame = 0
+    observer?.disconnect()
+    observer = null
+  }
+}
+
 export function useGaze(svg: RefObject<SVGSVGElement | null>, follow: boolean): void {
   useEffect(() => {
     const el = svg.current
@@ -18,24 +78,7 @@ export function useGaze(svg: RefObject<SVGSVGElement | null>, follow: boolean): 
     if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-    let frame = 0
-    let x = 0
-    let y = 0
-    function look() {
-      frame = 0
-      // Written to the element rather than to state: this runs on every pointer move,
-      // and a render per move for two circles would be the costliest thing on the page.
-      if (el) lookOwlAt(el, { x, y })
-    }
-    function onMove(e: PointerEvent) {
-      x = e.clientX
-      y = e.clientY
-      if (!frame) frame = requestAnimationFrame(look)
-    }
-    window.addEventListener('pointermove', onMove, { passive: true })
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      if (frame) cancelAnimationFrame(frame)
-    }
+    add(el)
+    return () => remove(el)
   }, [svg, follow])
 }

@@ -94,7 +94,6 @@ function CopySheet({ voice, treated }: { voice: OwlVoice; treated: Treated }) {
 
 function Copy() {
   const [treated, setTreated] = useState<Treated>('all')
-  const [dark, setDark] = useState(false)
   const [only, setOnly] = useState('all')
   const shown = voiceList().filter((voice) => only === 'all' || voice.id === only)
   return (
@@ -121,11 +120,8 @@ function Copy() {
             ))}
           </select>
         </Field>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={dark} onChange={(e) => setDark(e.target.checked)} /> On the dark stage
-        </label>
       </div>
-      <div className={dark ? 'stage-house mt-4 rounded p-4' : 'mt-4'}>
+      <div className="mt-4">
         {shown.map((voice) => (
           <div key={voice.id} className="mb-10">
             <h3 className="font-serif text-xl font-semibold">{voice.label}</h3>
@@ -162,7 +158,7 @@ function LiveOwl({ voice, treatment, place }: { voice: string; treatment: Treatm
     <div>
       <div className="flex min-h-40 items-start justify-center rounded-md border bg-background p-8">
         <div className="owl-spot w-28">
-          <Owl pose="archivist" lantern="dark" title="The owl" className="w-full" />
+          <Owl pose="stacks" lantern="dark" title="The owl" className="w-full" />
           {speaking && <OwlSpeech voice={speaking} />}
         </div>
       </div>
