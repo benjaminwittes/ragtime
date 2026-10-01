@@ -92,14 +92,14 @@ export function RecordStage({
   }
 
   return (
-    <div className="record mx-auto flex w-full max-w-[92rem] flex-1 flex-col px-[clamp(1rem,4cqi,4rem)] pb-14 pt-[clamp(1rem,3cqi,3rem)]" data-record={scene.pending ? 'pending' : 'on'}>
+    <div className="record mx-auto flex w-full max-w-[92rem] flex-1 flex-col px-[clamp(1rem,4cqi,4rem)] pb-12 pt-[clamp(0.75rem,2cqi,2rem)]" data-record={scene.pending ? 'pending' : 'on'}>
       <header>
         <SurfaceIntro
           level={1}
           className="flex flex-col-reverse gap-[0.4cqi]"
           heading={<>&ldquo;{scene.query}&rdquo;</>}
           lede={scene.label}
-          headingClassName="font-serif text-[clamp(1.5rem,4cqi,3.75rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
+          headingClassName="font-serif text-[clamp(1.4rem,3.2cqi,3rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
           ledeClassName="font-sans text-[clamp(0.68rem,1.1cqi,0.95rem)] font-semibold uppercase tracking-[0.18em] text-[color:var(--house-accent)]"
         />
         <p className="mt-[0.4cqi] font-mono text-[clamp(0.68rem,1.05cqi,0.9rem)] text-[color:var(--house-ink-faint)]" role="status">
@@ -111,9 +111,9 @@ export function RecordStage({
         </p>
       </header>
 
-      {/* As wide as there is room, or as wide as lets the whole ground be seen without
-          scrolling, whichever is less. */}
-      <div className="mx-auto my-auto w-full py-[1.5cqi]" style={{ maxWidth: 'calc((100dvh - 17rem) * 2.6)' }}>
+      {/* The ground takes whatever height the words leave it (`record.css`), and no less
+          than it needs to be read at all. */}
+      <div className="relative my-[0.6cqi] min-h-[11rem] w-full flex-1">
         <Terrain
           docs={scene.docs}
           laid={laid}
@@ -127,7 +127,7 @@ export function RecordStage({
       </div>
 
       <footer className="grid gap-[0.7cqi]">
-        <div className="min-h-[clamp(4.2rem,5.6cqi,6rem)]" data-record="label" aria-live="polite">
+        <div className="min-h-[clamp(3.9rem,4.9cqi,5.2rem)]" data-record="label" aria-live="polite">
           {chosen ? (
             <Label doc={chosen} scene={scene} />
           ) : (
@@ -182,7 +182,7 @@ function Label({ doc, scene }: { doc: StageDoc; scene: RecordScene }) {
       <p className="font-mono text-[clamp(0.68rem,1.05cqi,0.9rem)] text-[color:var(--house-accent)]">
         {[doc.number, doc.when].filter(Boolean).join(' · ') || ' '}
       </p>
-      <p className="font-serif text-[clamp(1.05rem,1.9cqi,1.75rem)] leading-tight text-[color:var(--house-ink)] text-balance">
+      <p className="font-serif text-[clamp(1.05rem,1.7cqi,1.55rem)] leading-tight text-[color:var(--house-ink)] text-balance">
         <a
           href={own ? toHref(doc.href) : doc.href}
           target="_blank"

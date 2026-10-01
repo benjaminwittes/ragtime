@@ -249,6 +249,13 @@ export function shadow(poly: readonly Pt[], h: number): string {
 /** How far out from a column each contour of the ground runs, as multiples of its reach. */
 export const CONTOURS = [3.3, 2.5, 1.75] as const
 
+/**
+ * How far the ground runs on in front of the last row, drawn: the outermost contour of
+ * the nearest column, and the longest shadow. The axis is ruled below this, so that
+ * nothing on the ground is ever drawn across its marks.
+ */
+export const SKIRT = (CONTOURS[0] - 2) * REACH * LIE + 1.1
+
 /** Where everything stands, before any of it is drawn. */
 export type Ground = {
   /** A place for each document, by id. `h` is its full height; `r` its full reach. */
@@ -290,8 +297,8 @@ export function ground(docs: readonly StageDoc[]): Ground {
   const unplaced = docs.filter((doc) => doc.at === null).length
   // The left of the ground is kept for the rows' names, and, when anything is undated,
   // for the huddle of what has no place on the axis.
-  const from = unplaced > 0 ? 26 : 14
-  const to = WIDE - 4
+  const from = unplaced > 0 ? 29 : 17
+  const to = WIDE - 6
   const step = APART * 0.9
 
   const seeds: Seed[] = []
@@ -317,7 +324,7 @@ export function ground(docs: readonly StageDoc[]): Ground {
     loose.forEach((doc, index) => {
       const column = index % 3
       const row = Math.floor(index / 3)
-      placed.push({ x: 14 + column * APART + (row % 2) * (APART / 2), o: (row - Math.floor((loose.length - 1) / 6)) * step, doc })
+      placed.push({ x: 17 + column * APART + (row % 2) * (APART / 2), o: (row - Math.floor((loose.length - 1) / 6)) * step, doc })
     })
     const most = placed.reduce((max, p) => Math.max(max, Math.abs(p.o)), 0)
     const y = edge + most

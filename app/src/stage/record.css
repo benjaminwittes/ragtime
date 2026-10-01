@@ -22,6 +22,17 @@
   height: auto;
   overflow: visible;
 }
+/*
+ * The ground itself fills the box it is given, exactly, and keeps its shape inside it:
+ * whoever shows it gives it whatever height the heading, the label and the legend leave
+ * (`RecordStage`), so on a short window the ground is smaller, not cut off, and the four
+ * of them are one page without anyone having to say how tall the words are.
+ */
+.terrain-ground {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
 .terrain * {
   vector-effect: non-scaling-stroke;
 }
@@ -137,6 +148,16 @@
   opacity: 0.28;
 }
 
+/* Words on the ground are drawn over it, with the paper's colour round each letter. */
+.terrain-lane,
+.terrain-axis text,
+text.terrain-axis {
+  paint-order: stroke;
+  stroke: var(--house-ground, #f4f1e9);
+  stroke-width: 5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
 .terrain-lane {
   font-family: var(--font-sans);
   font-size: 1.05px;

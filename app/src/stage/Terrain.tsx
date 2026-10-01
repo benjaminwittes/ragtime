@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { toHref } from '@/lib/routing'
 
 import type { StageDoc } from './record.ts'
-import { CONTOURS, LIE, REACH, WIDE, draw, outline, shadow, type Drawn, type Ground, type Seed } from './terrain.ts'
+import { CONTOURS, LIE, REACH, SKIRT, WIDE, draw, outline, shadow, type Drawn, type Ground, type Seed } from './terrain.ts'
 
 /** How quickly a column closes on where it is going: the time to cover about two thirds of the way. */
 const EASE_MS = 190
@@ -249,25 +249,19 @@ export function Terrain({
   // Room above the ground for the tallest thing on it, and no more: a search of short
   // documents is a low landscape, and is not drawn at the bottom of a tall empty box.
   const high = Math.max(4, ...laid.seeds.map((seed) => seed.h)) * 1.02 + 1.4
+  // Where the axis is ruled: clear of everything the ground draws in front of itself.
+  const rule = Math.max(front, 6) + SKIRT
   const along = (x: number) => laid.from + x * (laid.to - laid.from)
 
   return (
     <svg
       ref={svg}
-      className="terrain"
-      viewBox={`0 ${-high} ${WIDE} ${high + Math.max(front, 9) + 4.6}`}
+      className="terrain terrain-ground"
+      viewBox={`0 ${-high} ${WIDE} ${high + rule + 3.4}`}
       data-forward={forward ? '' : undefined}
       role="group"
       aria-label={`${docs.length} documents`}
     >
-      {laid.lanes.map(
-        (lane) =>
-          lane.name && (
-            <text key={lane.name} className="terrain-lane" x={0.2} y={lane.y * LIE + 0.4}>
-              {lane.name}
-            </text>
-          ),
-      )}
       {/* The ground: contours round each outcrop, and what each column casts on it. Each
           contour is every column's ring drawn twice — all the lines, then all the fills
           over them in the ground's own colour — so that what is left showing is one line
@@ -300,14 +294,25 @@ export function Terrain({
           />
         ))}
       </g>
+      {/* The words on the ground — the rows' names, the axis — are drawn last, over
+          everything, each with a margin of the paper's own colour round it, so that an
+          outcrop that reaches one runs behind it and not across it. */}
+      {laid.lanes.map(
+        (lane) =>
+          lane.name && (
+            <text key={lane.name} className="terrain-lane" x={0.2} y={lane.y * LIE + 0.4}>
+              {lane.name}
+            </text>
+          ),
+      )}
       {/* The axis: one rule along the front of the dated ground, and its marks. */}
       {laid.span && (
         <g className="terrain-axis" aria-hidden="true">
-          <line x1={laid.from - REACH} x2={laid.to + REACH} y1={front + 1} y2={front + 1} />
+          <line x1={laid.from - REACH} x2={laid.to + REACH} y1={rule} y2={rule} />
           {marks.map((mark) => (
             <g key={mark.label}>
-              <line x1={along(mark.x)} x2={along(mark.x)} y1={front + 1} y2={front + 1.7} />
-              <text x={along(mark.x)} y={front + 3.2} textAnchor="middle">
+              <line x1={along(mark.x)} x2={along(mark.x)} y1={rule} y2={rule + 0.6} />
+              <text x={along(mark.x)} y={rule + 2.1} textAnchor="middle">
                 {mark.label}
               </text>
             </g>
@@ -315,7 +320,7 @@ export function Terrain({
         </g>
       )}
       {laid.unplaced > 0 && (
-        <text className="terrain-axis" x={laid.from - 6} y={front + 3.2} textAnchor="middle" aria-hidden="true">
+        <text className="terrain-axis" x={laid.from - 7} y={rule + 2.1} textAnchor="middle" aria-hidden="true">
           {wingsSaid}
         </text>
       )}
