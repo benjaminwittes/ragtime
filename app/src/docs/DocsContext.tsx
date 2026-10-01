@@ -9,6 +9,8 @@ import {
 } from 'react'
 import type { CorpusSlug } from '@lawfare/ragtime-client'
 import { DocsOverlay } from './DocsOverlay'
+import { getDocsEntry } from './registry'
+import { docsRequested } from './request'
 
 /**
  * Docs-overlay context.
@@ -27,6 +29,11 @@ import { DocsOverlay } from './DocsOverlay'
  * when the user is typing in an input, textarea, select or contenteditable so
  * it doesn't fight with normal typing. It keys on the character `?`, not on
  * Shift+/, so a layout that puts `?` elsewhere still works.
+ *
+ * A page opened with `?docs=<slug>` arrives with the overlay open on that
+ * entry (`request.ts`) — how a link in a message lands a reader on one page
+ * of the docs. A slug that names nothing opens nothing: an overlay on its
+ * list would be an answer to a question the link did not ask.
  */
 export type DocsContextValue = {
   isOpen: boolean
@@ -40,8 +47,12 @@ export type DocsContextValue = {
 const DocsContext = createContext<DocsContextValue | undefined>(undefined)
 
 export function DocsProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeSlug, setActiveSlug] = useState<string | undefined>(undefined)
+  const [asked] = useState(() => {
+    const slug = docsRequested(window.location.search)
+    return slug !== null && getDocsEntry(slug) ? slug : undefined
+  })
+  const [isOpen, setIsOpen] = useState(asked !== undefined)
+  const [activeSlug, setActiveSlug] = useState<string | undefined>(asked)
   const [activeSpokeSlug, setActiveSpokeSlug] = useState<
     CorpusSlug | undefined
   >(undefined)

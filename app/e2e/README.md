@@ -36,6 +36,7 @@ node e2e/cross.mjs                       # the seam: a citation followed out, an
 node e2e/mark.mjs                        # the mark: a live answer painted in, a restored one just shown
 node e2e/feedback.mjs                    # the feedback button on every surface; files nothing
 node e2e/tour.mjs                        # the guided tour, every step, at a desk and on a phone
+node e2e/demo.mjs                        # the presenter's kit at /demo, sealed by the driver itself; and ?docs=
 E2E_W=1440 node e2e/cross.mjs            # the same at desktop width
 node e2e/band.mjs                        # whether the band keeps to one row
 node e2e/band.mjs --candidates           # measure wordings before choosing one
