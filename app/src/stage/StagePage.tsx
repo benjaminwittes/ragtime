@@ -5,7 +5,6 @@ import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { toHref } from '@/lib/routing'
 import { cn } from '@/lib/utils'
 
-import { Amphitheatre } from './Amphitheatre.tsx'
 import { FigureByName } from './FigureByName.tsx'
 import { figureNamed } from './figures.ts'
 import { applyScrolls, clean, morph, resolve, scrollToFraction } from './mirror.ts'
@@ -61,27 +60,21 @@ export function StagePage() {
   }, [])
 
   if (now.phase === 'opening') {
-    return (
-      <main className="stage-house min-h-dvh" data-stage="opening">
-        <Amphitheatre fixed near={false} />
-      </main>
-    )
+    return <main className="stage-house min-h-dvh" data-stage="opening" />
   }
   if (now.phase !== 'live') {
     return (
-      <main className="stage-house flex min-h-dvh justify-center px-6 pt-[14dvh]" data-stage="quiet">
-        <Amphitheatre fixed near={false}>
-          <div className="relative z-10 max-w-md text-center [text-shadow:0_1px_18px_rgb(4_40_45/0.85)]">
-            <Mark size={48} className="mx-auto text-[color:var(--house-ink-faint)]" title="RAGtime" />
-            <h1 className="mt-6 font-serif text-3xl font-medium tracking-tight">{now.phase === 'closed' ? SAID.closed : SAID.quiet}</h1>
-            {now.phase !== 'closed' && <p className="mt-3 text-sm text-[color:var(--house-ink-soft)]">{SAID.quietMore}</p>}
-            <p className="mt-8 text-sm">
-              <a href={toHref('/')} className="text-[color:var(--house-accent)] underline underline-offset-4">
-                {SAID.home}
-              </a>
-            </p>
-          </div>
-        </Amphitheatre>
+      <main className="stage-house flex min-h-dvh items-center justify-center px-6" data-stage="quiet">
+        <div className="max-w-md text-center">
+          <Mark size={48} className="mx-auto text-[color:var(--house-ink-faint)]" title="RAGtime" />
+          <h1 className="mt-6 font-serif text-3xl font-medium tracking-tight">{now.phase === 'closed' ? SAID.closed : SAID.quiet}</h1>
+          {now.phase !== 'closed' && <p className="mt-3 text-sm text-[color:var(--house-ink-soft)]">{SAID.quietMore}</p>}
+          <p className="mt-8 text-sm">
+            <a href={toHref('/')} className="text-[color:var(--house-accent)] underline underline-offset-4">
+              {SAID.home}
+            </a>
+          </p>
+        </div>
       </main>
     )
   }
@@ -99,20 +92,18 @@ export function StagePage() {
 
   return (
     <main className="stage-house flex min-h-dvh flex-col" data-stage="live" data-stage-scene={scene.kind}>
-      {/* One theatre for every scene that is not the app, so it is still standing when
-          the scene changes and the view can move instead of cut: far for words, in close
-          when something is brought on. */}
-      <Amphitheatre fixed near={scene.kind === 'record'}>
-        {/* The measure everything set over the theatre is sized against. An inner
-            element, because a container is also the frame its fixed descendants are
-            placed in, and the corner pill and the theatre belong to the window. */}
-        <div className="pointer-events-none relative z-10 flex flex-1 flex-col [container-type:inline-size]">
+      {/* The measure everything on the paper is sized against. An inner element, because
+          a container is also the frame its fixed descendants are placed in, and the
+          corner pill belongs to the window. */}
+      <div className="flex flex-1 flex-col [container-type:inline-size]">
           {scene.kind === 'slide' ? (
-            <StageWords scene={scene} />
+            <div className="grid flex-1 items-center">
+              <StageWords scene={scene} />
+            </div>
           ) : scene.kind === 'record' ? (
             <RecordStage scene={scene} focus={now.focus} />
           ) : scene.kind === 'figure' ? (
-            <article className="pointer-events-auto mx-auto w-full max-w-[76rem] px-[clamp(1.25rem,5cqi,5rem)] py-[clamp(2rem,5cqi,4rem)]">
+            <article className="mx-auto my-auto w-full max-w-[76rem] px-[clamp(1.25rem,5cqi,5rem)] py-[clamp(2rem,5cqi,4rem)]">
               <SurfaceIntro
                 level={1}
                 heading={figureNamed(scene.name)?.title ?? scene.name}
@@ -120,19 +111,18 @@ export function StagePage() {
                 headingClassName="font-serif text-[clamp(1.75rem,4.6cqi,4rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
                 ledeClassName="hidden"
               />
-              <div className="stage-body mt-[clamp(1rem,2.4cqi,2rem)] rounded-md bg-lawfare-paper p-[clamp(1rem,3cqi,2.5rem)] text-foreground [container-type:inline-size]">
+              <div className="stage-body mt-[clamp(1rem,2.4cqi,2rem)] rounded-md border border-[color:var(--house-rule)] bg-card p-[clamp(1rem,3cqi,2.5rem)] text-foreground [container-type:inline-size]">
                 <FigureByName name={scene.name} />
               </div>
             </article>
           ) : (
-            <p className="px-6 pt-[14dvh] text-center text-sm text-[color:var(--house-ink-soft)]">{SAID.older}</p>
+            <p className="my-auto px-6 text-center text-sm text-[color:var(--house-ink-soft)]">{SAID.older}</p>
           )}
-        </div>
-      </Amphitheatre>
+      </div>
       {scene.kind === 'slide' && (
         // Where the presentation is, as a line along the foot of the wall. Named, so it
         // lengthens across a change of beat instead of being redrawn at its new length.
-        <div className="fixed inset-x-0 bottom-0 z-20 h-[3px] bg-white/10" aria-hidden="true">
+        <div className="fixed inset-x-0 bottom-0 z-20 h-[3px] bg-black/10" aria-hidden="true">
           <div
             className="h-full bg-[color:var(--house-accent)]"
             style={{
@@ -142,7 +132,7 @@ export function StagePage() {
           />
         </div>
       )}
-      <Pill path={null} dark />
+      <Pill path={null} />
     </main>
   )
 }

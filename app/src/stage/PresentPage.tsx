@@ -9,7 +9,6 @@ import { useKit } from '@/demo/useKit'
 import { navigateTo, toHref } from '@/lib/routing'
 import { cn } from '@/lib/utils'
 
-import { Amphitheatre } from './Amphitheatre.tsx'
 import { FigureByName } from './FigureByName.tsx'
 import { FIGURES } from './figures.ts'
 import { arm, bringForward, bringOn, goLive, goTo, presenterKit, setShowApp, setWho, showFace, stop } from './presenter.ts'
@@ -204,8 +203,7 @@ export function PresentPage() {
                 shape of a wide window. What is in it is laid out for the box's own width,
                 as the stage lays it out for each reader's. */}
             <div className="stage-house overflow-hidden rounded-md border border-lawfare-line-strong shadow-sm" data-present="preview">
-              <Amphitheatre near={record !== null}>
-                <div className="pointer-events-none relative z-10 flex aspect-[16/10] flex-col overflow-y-auto [container-type:inline-size]">
+                <div className="flex aspect-[16/10] flex-col justify-center overflow-y-auto [container-type:inline-size]">
                   {record !== null ? (
                     <RecordStage scene={record} focus={presenter.focus} onPick={bringForward} />
                   ) : figure !== null ? (
@@ -230,7 +228,6 @@ export function PresentPage() {
                     )
                   )}
                 </div>
-              </Amphitheatre>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-lawfare-muted">

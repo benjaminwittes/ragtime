@@ -33,7 +33,6 @@
 /* After it, for once: the stage names two pieces of its own and animates them with the
  * keyframes and the `--vt-*` timings that sheet defines. */
 @import './stage/stage.css';
-@import './stage/amphitheatre.css';
 @import './stage/record.css';
 
 @custom-variant dark (&:is(.dark *));

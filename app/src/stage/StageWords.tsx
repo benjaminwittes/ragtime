@@ -4,7 +4,7 @@ import { KitMarkdown } from '@/demo/parts'
 import type { SlideScene } from './protocol.ts'
 
 /**
- * Words in the air over the theatre: a beat of the presentation, as the stage shows it.
+ * Words on the paper: a beat of the presentation, as the stage shows it.
  *
  * Not a slide. A slide is a rectangle of a fixed shape with type scaled to fit it, which
  * is the right thing to send down a cable to a projector and the wrong thing to put in a
@@ -23,10 +23,7 @@ import type { SlideScene } from './protocol.ts'
  */
 export function StageWords({ scene }: { scene: SlideScene }) {
   return (
-    <article
-      className="pointer-events-auto relative mx-auto w-full max-w-[76rem] px-[clamp(1.25rem,7cqi,7rem)] pb-[30cqi] pt-[clamp(1.5rem,5cqi,4.5rem)] [text-shadow:0_1px_18px_rgb(4_40_45/0.85)]"
-      data-stage="words"
-    >
+    <article className="mx-auto w-full max-w-[76rem] px-[clamp(1.25rem,7cqi,7rem)] py-[clamp(2rem,6cqi,5rem)]" data-stage="words">
       <SurfaceIntro
         level={1}
         className="flex flex-col-reverse gap-[clamp(0.5rem,1.4cqi,1.25rem)]"

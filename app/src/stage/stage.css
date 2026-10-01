@@ -1,37 +1,45 @@
 /*
- * The house: the open air the theatre stands in (`Amphitheatre.tsx`, `amphitheatre.css`).
+ * The house: what the stage is drawn on.
  *
- * Everywhere else in this app the ground is paper, because everywhere else is a page to be
- * read. The stage is a place to be looked into, so its ground is ground: the site's own
- * teal, as a hillside falling away from the reader, darker near and lighter far, the way
- * distance looks from above. The theatre itself is drawn over it.
+ * Paper, not white: the site's own ground, a shade warmer and a shade deeper than a page
+ * of the app, with a fine grain laid over everything on it — the words, the terrain, the
+ * shadows — the way ink and paper share one texture in print. The grain is the only thing
+ * here that is not a flat colour or a line, and it is there so that flat colours and
+ * lines do not look like a screen.
  *
- * What is on stage is never a picture of a slide. Words are set in the air above the
- * theatre, in the reader's own window at the reader's own size (`StageWords.tsx`); the
- * record is brought on to the stage as objects (`RecordStage.tsx`); and when the presenter
- * shows the app, it is simply the app, on paper — which is why none of this applies there.
+ * What is on stage is never a picture of a slide and never a set. Words are set on the
+ * paper, in the reader's own window at the reader's own size (`StageWords.tsx`); a search
+ * is drawn as the ground it makes (`RecordStage.tsx`, `terrain.ts`); and when the
+ * presenter shows the app, it is simply the app — which is why none of this applies there.
  */
 .stage-house {
-  --house-ink: #f6f3ea;
-  --house-ink-soft: rgb(246 243 234 / 0.78);
-  --house-ink-faint: rgb(246 243 234 / 0.5);
-  --house-accent: #9adfe3;
-  --house-rule: rgb(246 243 234 / 0.18);
+  --house-ground: #f4f1e9;
+  --house-ink: #262624;
+  --house-ink-soft: #55534d;
+  --house-ink-faint: #8b877c;
+  --house-accent: var(--color-lawfare-teal);
+  --house-rule: #d8d3c5;
   position: relative;
   isolation: isolate;
   color: var(--house-ink);
-  background-color: #073a3f;
-  background-image:
-    radial-gradient(ellipse 120% 70% at 50% 108%, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 65%),
-    linear-gradient(180deg, #136c6f 0%, #0c555a 34%, #073a3f 70%, #04282d 100%);
+  background-color: var(--house-ground);
+}
+.stage-house::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.33 0 0 0 0 0.27 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .stage-house ::selection {
-  background: rgb(143 213 218 / 0.35);
+  background: rgb(0 106 114 / 0.2);
 }
 
 /*
- * Words on the wall. Markdown, sized against the column it is set in (`cqi`) between a
+ * Words on the paper. Markdown, sized against the column it is set in (`cqi`) between a
  * floor and a ceiling: on a projector the type is large, on a phone it stops shrinking
  * and the lines re-wrap instead, because this is a page and not a picture of one.
  */
@@ -74,7 +82,7 @@
 }
 .stage-words code {
   border-radius: 0.2em;
-  background: rgb(255 255 255 / 0.1);
+  background: rgb(0 0 0 / 0.06);
   padding: 0.05em 0.3em;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.86em;

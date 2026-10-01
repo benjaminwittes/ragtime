@@ -1,23 +1,21 @@
 /**
  * The record on stage: a search brought on as objects.
  *
- * The house (`stage.css`) is a theatre, and what it is a theatre *of* is the record, not
- * the people talking about it. So a result is not a row and not a card: it is a thing
- * standing on a floor, and everything about how it stands says something true about the
- * document it is. Nothing here is decoration, and nothing is a character. The rule that
- * keeps it honest:
+ * What the stage shows is the record, not the people talking about it. So a result is not
+ * a row and not a card: it is a thing standing on the ground, and everything about how it
+ * stands says something true about the document it is. Nothing here is decoration, and
+ * nothing is a character. The rule that keeps it honest:
  *
  * **A visible property is a field, or it is absent.** Height is length. Where it stands
- * along the floor is its date, or its place in the Code. Which row it stands in is what
- * kind of document it is. Its face is whether it is in force; its edge is how it reached
- * the public; its cap is whether it is finished; the film over it is how well its text
- * was read. A document whose length is unknown is drawn hollow rather than given a
- * plausible height, and one with no date stands in the wings rather than being placed.
+ * along the ground is its date, or its place in the Code. Which row it stands in is what
+ * kind of document it is. Its line is whether it is in force; a crack is how it reached
+ * the public; its top is whether it is finished; the state of its strata is how well its
+ * text was read. A document whose length is unknown is drawn hollow rather than given a
+ * plausible height, and one with no date stands apart rather than being placed.
  *
- * This file is the grammar and the arithmetic, and it is pure: the per-collection
- * mappers turn a row the Worker returns into a {@link StageDoc}, and {@link layOut}
- * decides where each one stands. The fetching is `recordGather.ts`; the drawing is
- * `RecordStage.tsx`.
+ * This file is the grammar, and it is pure: the per-collection mappers turn a row the
+ * Worker returns into a {@link StageDoc}. Where each one stands, and what shape it has,
+ * is `terrain.ts`; the fetching is `recordGather.ts`; the drawing is `RecordStage.tsx`.
  */
 
 import type {
@@ -305,32 +303,7 @@ export function commentaryDoc(row: CommentaryDisplayRow): StageDoc {
   }
 }
 
-// ── Where each one stands ───────────────────────────────────────────────────────────────
-
-/** A document, placed. Every measure is a fraction: of the floor, or of the tallest thing allowed on it. */
-export type Placed = {
-  doc: StageDoc
-  /** 0 (stage left) to 1 (stage right) along the dated part of the floor; null in the wings. */
-  x: number | null
-  /** 0 (the back wall) to 1 (the front edge). */
-  z: number
-  /** 0 to 1. */
-  height: number
-  /** Its place in the entrance, so the nearest row lands last. */
-  order: number
-}
-
-export type Laid = {
-  placed: Placed[]
-  /** The rows, back to front, with the band of depth each has. */
-  lanes: { name: string | null; from: number; to: number; count: number }[]
-  /** The floor's ends, in the axis's unit; null when nothing on it has a place. */
-  span: { from: number; to: number } | null
-  /** How many stand in the wings. */
-  unplaced: number
-  /** Lines along the floor between documents that are one proceeding, in order. */
-  families: { key: string; ids: string[] }[]
-}
+// ── Measures the drawing shares ─────────────────────────────────────────────────────────
 
 /**
  * Length → height, on a scale that does not change from one search to the next: a
@@ -348,91 +321,6 @@ export function heightOf(doc: StageDoc): number {
   if (doc.count !== null && doc.count > 0) return scale(doc.count, 1, 2_500)
   // Unknown. A fixed, low, hollow thing — not a guess.
   return 0.16
-}
-
-/** The least distance two things in one file may stand apart, as a fraction of the floor. */
-const GAP = 0.021
-
-/**
- * How many files deep a row is: how many times a thing may step toward the audience to
- * keep clear of its neighbours. A row that has the whole floor to itself is nine deep; a
- * floor of five rows gives each of them three. When a crowded year fills every file, the
- * next thing takes whichever file has been clear the longest — it overlaps, but with the
- * thing furthest from it, and a crowd then reads as a crowd, which it is.
- */
-function filesIn(band: number): number {
-  return Math.max(2, Math.min(9, Math.round(band * 9)))
-}
-
-export function layOut(docs: StageDoc[]): Laid {
-  const names: (string | null)[] = []
-  for (const doc of docs) if (!names.includes(doc.lane)) names.push(doc.lane)
-  // The rows in the order the documents arrive: the collection's own order of kinds.
-  const span = (() => {
-    const at = docs.map((doc) => doc.at).filter((value): value is number => value !== null)
-    if (at.length === 0) return null
-    const from = Math.min(...at)
-    const to = Math.max(...at)
-    // One date is a floor a year wide, with the document in the middle of it.
-    return from === to ? { from: from - 183, to: to + 183 } : { from, to }
-  })()
-
-  // A row's share of the floor's depth follows how much has to stand in it — by the
-  // square root, so one crowded row does not flatten the others to a line, and never
-  // less than a floor under which a row cannot be told from a rule.
-  const counts = names.map((name) => docs.filter((doc) => doc.lane === name).length)
-  const weights = counts.map((count) => Math.max(Math.sqrt(count), 1.6))
-  const whole = weights.reduce((sum, weight) => sum + weight, 0) || 1
-  let from = 0
-  const lanes = names.map((name, index) => {
-    const lane = { name, from, to: from + weights[index] / whole, count: counts[index] }
-    from = lane.to
-    return lane
-  })
-
-  const placed: Placed[] = []
-  for (const lane of lanes) {
-    const mine = docs.filter((doc) => doc.lane === lane.name)
-    const dated = mine.filter((doc) => doc.at !== null).sort((a, b) => (a.at as number) - (b.at as number))
-    const wings = mine.filter((doc) => doc.at === null)
-    // Things too close along the floor step toward the audience instead of being moved
-    // along it: where a document stands in time is the one thing here that is not
-    // negotiable, and depth inside a row means nothing, so depth is what gives.
-    const band = lane.to - lane.from
-    const files = filesIn(band)
-    const depth = (file: number) => lane.from + band * (0.16 + (0.72 * file) / (files - 1))
-    const last: number[] = new Array<number>(files).fill(-1)
-    for (const doc of dated) {
-      const x = span ? ((doc.at as number) - span.from) / (span.to - span.from) : 0.5
-      let file = last.findIndex((taken) => x - taken >= GAP)
-      if (file === -1) file = last.indexOf(Math.min(...last))
-      last[file] = x
-      placed.push({ doc, x, z: depth(file), height: heightOf(doc), order: 0 })
-    }
-    wings.forEach((doc, index) => {
-      placed.push({ doc, x: null, z: depth(index % files), height: heightOf(doc), order: 0 })
-    })
-  }
-  // Back row first, and left to right within it: a set is built from the wall forward.
-  placed
-    .sort((a, b) => a.z - b.z || (a.x ?? -1) - (b.x ?? -1))
-    .forEach((each, index) => {
-      each.order = index
-    })
-
-  const byFamily = new Map<string, Placed[]>()
-  for (const each of placed) {
-    if (!each.doc.family || each.x === null) continue
-    byFamily.set(each.doc.family, [...(byFamily.get(each.doc.family) ?? []), each])
-  }
-  const families = [...byFamily.entries()]
-    .filter(([, members]) => members.length > 1)
-    .map(([key, members]) => ({
-      key,
-      ids: members.sort((a, b) => (a.x as number) - (b.x as number)).map((each) => each.doc.id),
-    }))
-
-  return { placed, lanes, span, unplaced: placed.filter((each) => each.x === null).length, families }
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

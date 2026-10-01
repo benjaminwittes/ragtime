@@ -27,6 +27,7 @@ import { withViewTransition } from '@/lib/transition'
 import { PresentPage } from '@/stage/PresentPage'
 import { StageDock } from '@/stage/StageDock'
 import { StagePage } from '@/stage/StagePage'
+import { TerrainPage } from '@/stage/TerrainPage'
 import { Tour } from '@/tour/Tour'
 import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-client'
 
@@ -47,6 +48,8 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *                                  is showing, live, as real text (`src/stage/`)
  *   `/present`                   → the presenter's console, opened by the kit's
  *                                  passphrase; it drives `/stage`
+ *   `/terrain`                   → one collection's answer to one phrase, drawn
+ *                                  as ground (`?c=<collection>&q=<phrase>`)
  *   `/corpus/<slug>`             → full `SpokeShell`
  *   `/corpus/<slug>/<id>`        → the same shell, which opens that
  *                                  document's detail sheet on mount (the
@@ -77,6 +80,7 @@ type Route =
   | { kind: 'demo'; view: DemoView }
   | { kind: 'stage' }
   | { kind: 'present' }
+  | { kind: 'terrain' }
   | { kind: 'privacy' }
   | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
@@ -98,6 +102,7 @@ function parseRoute(pathname: string): Route {
   if (demo) return { kind: 'demo', view: demo }
   if (pathname === '/stage' || pathname === '/stage/') return { kind: 'stage' }
   if (pathname === '/present' || pathname === '/present/') return { kind: 'present' }
+  if (pathname === '/terrain' || pathname === '/terrain/') return { kind: 'terrain' }
   const link = links.parse(pathname)
   if (link) {
     // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
@@ -160,6 +165,8 @@ function App() {
       ? <StagePage />
       : route.kind === 'present'
       ? <PresentPage />
+      : route.kind === 'terrain'
+      ? <TerrainPage />
       : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)

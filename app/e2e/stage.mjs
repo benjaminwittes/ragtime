@@ -76,6 +76,9 @@ const OLC = {
   ],
 }
 
+/** A document on the ground. The legend draws the same forms small; those are not these. */
+const CELL = '[data-terrain="cells"] .terrain-cell'
+
 const CHANNEL =
   'stage:' +
   createHash('sha256').update(`${KEYS.pub.x}.${KEYS.pub.y}`).digest('hex').slice(0, 16) +
@@ -177,10 +180,9 @@ const browser = await launch()
     wide: document.documentElement.scrollWidth > window.innerWidth,
     title: parseFloat(getComputedStyle(document.querySelector('[data-stage="words"] h1')).fontSize),
     body: parseFloat(getComputedStyle(document.querySelector('.stage-words')).fontSize),
-    house: document.querySelectorAll('.amp .amp-tier').length,
+    slides: document.querySelectorAll('[aria-roledescription="slide"]').length,
   }))
-  board.check('the words are set large in the window, not scaled into a rectangle', !set.wide && set.title >= 40 && set.body >= 17, set)
-  board.check('and the theatre is standing under them', set.house >= 10, set.house)
+  board.check('the words are set large in the window, not scaled into a rectangle', !set.wide && set.title >= 40 && set.body >= 17 && set.slides === 0, set)
   await stage.screenshot({ path: `${SHOTS}/stage-slide.png` })
 
   await present.keyboard.press('ArrowRight')
@@ -246,24 +248,28 @@ const browser = await launch()
   await present.selectOption('[data-present="record"] select', 'olc')
   await present.fill('[data-present="record"] input', 'habeas corpus')
   await present.click('[data-present="record"] button[type="submit"]')
-  board.check('the floor goes up at once, empty, with the question over it', await until(stage, 'pending', async () => (await sceneOf(stage)) === 'record' && (await stage.locator('[data-record="pending"]').count()) === 1 && (await stage.locator('.record-slab').count()) === 0))
+  board.check('the floor goes up at once, empty, with the question over it', await until(stage, 'pending', async () => (await sceneOf(stage)) === 'record' && (await stage.locator('[data-record="pending"]').count()) === 1 && (await stage.locator(CELL).count()) === 0))
   board.check('and says who is being asked', (await stage.locator('.record [role="status"]').innerText()).startsWith('Asking'))
   release()
-  board.check('the documents are flown in when the collection answers', await until(stage, 'on', async () => (await stage.locator('.record-slab').count()) === 4))
+  board.check('the documents grow where they stand when the collection answers', await until(stage, 'on', async () => (await stage.locator(CELL).count()) === 4))
   board.check('one request was made, by the presenter; the stage asked the service for nothing', asked === 1 && fromStage.length === 0, { asked, fromStage })
-  board.check('they stand on the theatre’s own stage', (await stage.locator('.amp-stage .record-slab').count()) === 4)
-  const forms = await stage.locator('.record-slab').evaluateAll((slabs) =>
-    Object.fromEntries(slabs.map((el) => [el.dataset.recordDoc, { face: el.dataset.face, rough: 'rough' in el.dataset, film: 'film' in el.dataset, h: parseFloat(getComputedStyle(el).height), x: parseFloat(getComputedStyle(el).left) }])),
+  // Let them finish growing: a column half-grown is not yet the height it will be.
+  await stage.waitForTimeout(1800)
+  const forms = await stage.locator(CELL).evaluateAll((cells) =>
+    Object.fromEntries(
+      cells.map((el) => {
+        const box = el.getBBox()
+        return [el.dataset.terrainDoc, { face: el.dataset.face, rough: 'rough' in el.dataset, film: 'film' in el.dataset, h: box.height, x: box.x + box.width / 2 }]
+      }),
+    ),
   )
   board.check('a longer document stands taller', forms['2'].h > forms['1'].h * 1.5, forms)
-  board.check('an earlier one stands further to stage left', forms['3'].x < forms['1'].x && forms['1'].x < forms['2'].x, forms)
-  board.check('one released under FOIA has a torn edge, and a poor scan a film', forms['3'].rough && forms['3'].film && !forms['1'].rough && !forms['1'].film, forms)
+  board.check('an earlier one stands further to the left', forms['3'].x < forms['1'].x && forms['1'].x < forms['2'].x, forms)
+  board.check('one released under FOIA is cracked, and a poor scan has broken strata', forms['3'].rough && forms['3'].film && !forms['1'].rough && !forms['1'].film, forms)
   board.check('one with no length on record is an outline, not a guess', forms['4'].face === 'open', forms['4'])
-  const href = await stage.locator('.record-slab[data-record-doc="2"]').evaluate((a) => [a.getAttribute('href'), a.target])
+  const href = await stage.locator('.terrain-cell[data-terrain-doc="2"]').evaluate((a) => [a.getAttribute('href'), a.getAttribute('target')])
   board.check('each is a link to the real document', href[0].endsWith('/corpus/olc/2') && href[1] === '_blank', href)
-  // Let them land: a thing still being flown in is not where it will stand.
-  await stage.waitForTimeout(1800)
-  await stage.locator('.record-slab[data-record-doc="2"]').hover({ force: true })
+  await stage.locator('.terrain-cell[data-terrain-doc="2"]').hover({ force: true })
   board.check('pointing at one reads its label: title, date, author, length', await until(stage, 'label', async () => {
     const label = await stage.locator('[data-record="label"]').innerText()
     return label.includes('The longer one') && label.includes('2002-08-01') && label.includes('Jay S. Bybee') && label.includes('50 pages')
@@ -271,14 +277,14 @@ const browser = await launch()
   board.check('the legend names only the forms that are on stage', await stage.locator('[data-record="legend"]').innerText().then((legend) => legend.includes('FOIA') && legend.includes('poor scan') && legend.includes('not recorded')))
   await stage.screenshot({ path: `${SHOTS}/stage-record.png` })
   // The presenter brings one forward, for the room.
-  await present.locator('[data-present="preview"] .record-slab[data-record-doc="3"]').click({ force: true })
+  await present.locator('[data-present="preview"] .terrain-cell[data-terrain-doc="3"]').click({ force: true })
   await stage.mouse.move(4, 4)
-  board.check('the presenter brings one forward, and it comes forward on the stage', await until(stage, 'forward', async () => (await stage.locator('.record-slab[data-record-doc="3"][data-active]').count()) === 1))
+  board.check('the presenter brings one forward, and it comes forward on the stage', await until(stage, 'forward', async () => (await stage.locator('.terrain-cell[data-terrain-doc="3"][data-active]').count()) === 1))
   board.check('and that was not a navigation: the console is still the console', (await present.locator('[data-present="live"]').count()) === 1)
   const lateToRecord = await ctx.newPage()
   await lateToRecord.goto(BASE + '/stage', { waitUntil: 'networkidle' })
-  const lateGot = await until(lateToRecord, 'late record', async () => (await lateToRecord.locator('.record-slab').count()) === 4 && (await lateToRecord.locator('.record-slab[data-record-doc="3"][data-active]').count()) === 1, 5000)
-  board.check('a reader who arrives now gets the set, and what is forward', lateGot, lateGot ? undefined : { slabs: await lateToRecord.locator('.record-slab').count(), active: await lateToRecord.locator('.record-slab[data-active]').evaluateAll((els) => els.map((el) => el.dataset.recordDoc)), scene: await sceneOf(lateToRecord) })
+  const lateGot = await until(lateToRecord, 'late record', async () => (await lateToRecord.locator(CELL).count()) === 4 && (await lateToRecord.locator('.terrain-cell[data-terrain-doc="3"][data-active]').count()) === 1, 5000)
+  board.check('a reader who arrives now gets the set, and what is forward', lateGot, lateGot ? undefined : { cells: await lateToRecord.locator(CELL).count(), active: await lateToRecord.locator(CELL + '[data-active]').evaluateAll((els) => els.map((el) => el.dataset.terrainDoc)), scene: await sceneOf(lateToRecord) })
   await lateToRecord.close()
   await present.click('button:has-text("Back to the slide")')
   await until(stage, 'slide again', async () => (await sceneOf(stage)) === 'slide')

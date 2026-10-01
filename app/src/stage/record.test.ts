@@ -5,7 +5,6 @@ import {
   dayOf,
   frDoc,
   heightOf,
-  layOut,
   lengthSaid,
   olcDoc,
   ordinalTicks,
@@ -101,61 +100,6 @@ describe('height', () => {
     expect(heightOf(doc({ chars: null, count: 400 }))).toBeGreaterThan(heightOf(doc({ chars: null, count: 4 })))
     expect(heightOf(doc({ chars: null, count: null }))).toBe(0.16)
     expect(heightOf(doc({ chars: 1 }))).toBeGreaterThan(0)
-  })
-})
-
-describe('where things stand', () => {
-  it('puts each document at its date, earliest at stage left', () => {
-    const laid = layOut([doc({ id: 'late', at: dayOf('2020-01-01') }), doc({ id: 'early', at: dayOf('1950-01-01') }), doc({ id: 'mid', at: dayOf('1985-01-01') })])
-    const x = Object.fromEntries(laid.placed.map((each) => [each.doc.id, each.x]))
-    expect(x.early).toBe(0)
-    expect(x.late).toBe(1)
-    expect(x.mid).toBeCloseTo(0.5, 1)
-    expect(laid.unplaced).toBe(0)
-  })
-
-  it('never moves a document along the floor to make room: neighbours step toward the audience instead', () => {
-    const same = dayOf('2001-09-18')
-    const laid = layOut([doc({ id: 'a', at: same }), doc({ id: 'b', at: same }), doc({ id: 'c', at: same })].concat(doc({ id: 'z', at: dayOf('1990-01-01') })))
-    const crowd = laid.placed.filter((each) => each.doc.id !== 'z')
-    expect(new Set(crowd.map((each) => each.x)).size).toBe(1)
-    expect(new Set(crowd.map((each) => each.z)).size).toBe(3)
-  })
-
-  it('stands what has no date in the wings, and says how many', () => {
-    const laid = layOut([doc({ id: 'dated' }), doc({ id: 'undated', at: null, when: null })])
-    expect(laid.unplaced).toBe(1)
-    expect(laid.placed.find((each) => each.doc.id === 'undated')?.x).toBeNull()
-  })
-
-  it('gives each kind a row, back to front in the order they arrive, deeper where more stands', () => {
-    const many = Array.from({ length: 30 }, (_, i) => doc({ id: `n${i}`, lane: 'notice', at: 10_000 + i * 40 }))
-    const laid = layOut([...many, doc({ id: 'r', lane: 'rule' })])
-    expect(laid.lanes.map((lane) => lane.name)).toEqual(['notice', 'rule'])
-    expect(laid.lanes[0].to - laid.lanes[0].from).toBeGreaterThan(laid.lanes[1].to - laid.lanes[1].from)
-    expect(laid.lanes[1].to).toBeCloseTo(1)
-    const rule = laid.placed.find((each) => each.doc.id === 'r')
-    expect(rule && rule.z).toBeGreaterThan(laid.lanes[0].to)
-  })
-
-  it('lands the back row first', () => {
-    const laid = layOut([doc({ id: 'front', lane: 'rule' }), doc({ id: 'back', lane: 'notice' })].reverse())
-    const order = Object.fromEntries(laid.placed.map((each) => [each.doc.id, each.order]))
-    expect(order.back).toBeLessThan(order.front)
-  })
-
-  it('joins documents that are one proceeding, in date order, and no document to itself', () => {
-    const laid = layOut([
-      doc({ id: 'final', family: 'RIN-1', at: dayOf('2026-01-01') }),
-      doc({ id: 'proposed', family: 'RIN-1', at: dayOf('2025-01-01') }),
-      doc({ id: 'alone', family: 'RIN-2' }),
-    ])
-    expect(laid.families).toEqual([{ key: 'RIN-1', ids: ['proposed', 'final'] }])
-  })
-
-  it('makes a floor for one date, and none for nothing', () => {
-    expect(layOut([doc()]).placed[0].x).toBeCloseTo(0.5)
-    expect(layOut([]).span).toBeNull()
   })
 })
 
