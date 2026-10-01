@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import { AppLink } from '@/components/AppLink'
 import { Mark } from '@/components/Mark'
 import { DocsTrigger } from '@/docs/DocsTrigger'
+import { Feedback } from '@/feedback/Feedback'
 import { AccessSettings } from '@/llm/AccessSettings'
 import { cn } from '@/lib/utils'
 
@@ -29,9 +30,10 @@ import { cn } from '@/lib/utils'
  * a stranded slash would read as "RAGtime / Explorer", a rule drawn between the brand
  * and a link instead of between the tagline and the link after it.
  *
- * Right is global: the docs overlay, AI access, and whose project this is. Both controls
- * used to be rendered again by every page that wanted them; they are state about the
- * reader rather than about the page, so they live here once.
+ * Right is global: the docs overlay, feedback, AI access, and whose project this is. The
+ * docs and access controls used to be rendered again by every page that wanted them; they
+ * are state about the reader rather than about the page, so they live here once — and
+ * feedback joined them for the same reason (`feedback/Feedback.tsx`).
  *
  * Between the two is the slot — {@link SiteBarActions} — which is how a route puts its
  * own controls in this bar without the bar knowing anything about them.
@@ -165,6 +167,7 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
           className="flex min-w-0 flex-1 items-center gap-2 has-[button]:min-w-fit"
         />
         <DocsTrigger />
+        <Feedback />
         <AccessSettings />
         {/* Last to appear, first to go: see the tagline above. At `sm` this note and its
             gap were 121px of the 20px the row was over at 640, and it wrapped. */}
