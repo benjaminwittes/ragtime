@@ -135,12 +135,19 @@ export function RecordStage({
       </div>
 
       <footer className="grid gap-[0.7cqi]">
-        <div className="min-h-[clamp(3.9rem,4.9cqi,5.2rem)]" data-record="label" aria-live="polite">
+        {/* The label is as tall as it is whatever it says, and when it says nothing: the
+            ground above takes the height the words leave it, so a label that grew with its
+            title moved the ground under the pointer, and the pointer was then on another
+            column. */}
+        <div className="relative" data-record="label" aria-live="polite">
+          <LabelRoom />
           {chosen ? (
             <Label doc={chosen} scene={scene} />
           ) : (
             !scene.pending &&
-            scene.docs.length > 0 && <p className="text-[clamp(0.8rem,1.3cqi,1.05rem)] text-[color:var(--house-ink-faint)]">{SAID.point}</p>
+            scene.docs.length > 0 && (
+              <p className="absolute inset-x-0 top-0 text-[clamp(0.8rem,1.3cqi,1.05rem)] text-[color:var(--house-ink-faint)]">{SAID.point}</p>
+            )
           )}
         </div>
         <p
@@ -180,27 +187,55 @@ export function RecordStage({
   )
 }
 
-/** What the column pointed at is: its real title, as a real link, and its form put into words. */
+/** The label's three lines of type: its number and date, its title, and what it is. */
+const TYPE = {
+  number: 'font-mono text-[clamp(0.68rem,1.05cqi,0.9rem)]',
+  title: 'font-serif text-[clamp(1.05rem,1.7cqi,1.55rem)] leading-tight',
+  facts: 'text-[clamp(0.78rem,1.2cqi,1.02rem)]',
+} as const
+
+/**
+ * The room a label is given, which is the most one may take: one line for its number, two
+ * for its title and one for what it is, and on a narrow page a line more for each of the
+ * last two. Empty and unseen, and the only thing that gives the label's box a height: the
+ * label is laid over it, so the box is this tall whatever is in it. `Label` cuts each line
+ * where this stops.
+ */
+function LabelRoom() {
+  return (
+    <div className="invisible grid gap-[0.25cqi]" aria-hidden="true">
+      <p className={`${TYPE.number} h-[1lh]`} />
+      <p className={`${TYPE.title} h-[2lh] @max-2xl:h-[3lh]`} />
+      <p className={`${TYPE.facts} h-[1lh] @max-2xl:h-[2lh]`} />
+    </div>
+  )
+}
+
+/**
+ * What the column pointed at is: its real title, as a real link, and its form put into words.
+ *
+ * It never takes more than its room (`LabelRoom`): a title that runs past its lines is cut
+ * there, and the link's own title has the rest.
+ */
 function Label({ doc, scene }: { doc: StageDoc; scene: RecordScene }) {
   const own = doc.href.startsWith('/')
   const facts = [doc.line, lengthSaid(doc, scene.unit), doc.lane].filter(Boolean)
   const forms = FORMS.filter(({ key }) => scene.legend[key] && has(doc, key)).map(({ key }) => scene.legend[key] as string)
   return (
-    <div className="grid gap-[0.25cqi]">
-      <p className="font-mono text-[clamp(0.68rem,1.05cqi,0.9rem)] text-[color:var(--house-accent)]">
-        {[doc.number, doc.when].filter(Boolean).join(' · ') || ' '}
-      </p>
-      <p className="font-serif text-[clamp(1.05rem,1.7cqi,1.55rem)] leading-tight text-[color:var(--house-ink)] text-balance">
+    <div className="absolute inset-0 grid content-start gap-[0.25cqi] overflow-hidden">
+      <p className={`${TYPE.number} line-clamp-1 min-h-[1lh] text-[color:var(--house-accent)]`}>{[doc.number, doc.when].filter(Boolean).join(' · ')}</p>
+      <p className={`${TYPE.title} line-clamp-2 text-[color:var(--house-ink)] text-balance @max-2xl:line-clamp-3`}>
         <a
           href={own ? toHref(doc.href) : doc.href}
           target="_blank"
           rel="noopener noreferrer"
+          title={doc.title}
           className="underline decoration-[color:var(--house-rule)] underline-offset-[0.18em] hover:decoration-[color:var(--house-accent)]"
         >
           {doc.title}
         </a>
       </p>
-      <p className="text-[clamp(0.78rem,1.2cqi,1.02rem)] text-[color:var(--house-ink-soft)]">{[...facts, ...forms].join(' · ')}</p>
+      <p className={`${TYPE.facts} line-clamp-1 text-[color:var(--house-ink-soft)] @max-2xl:line-clamp-2`}>{[...facts, ...forms].join(' · ')}</p>
     </div>
   )
 }
