@@ -31,6 +31,10 @@
  * `--vt-*` against them, so it reads them rather than the other way round. What happens
  * between two routes — which pieces travel, which leave, in what order. */
 @import './transitions.css';
+/* After it, for once: the stage names two pieces of its own and animates them with the
+ * keyframes and the `--vt-*` timings that sheet defines. */
+@import './stage/stage.css';
+@import './stage/record.css';
 
 @custom-variant dark (&:is(.dark *));
 

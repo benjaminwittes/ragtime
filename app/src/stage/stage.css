@@ -1,0 +1,143 @@
+/*
+ * The house: what the stage is drawn on.
+ *
+ * Paper, not white: the site's own ground, a shade warmer and a shade deeper than a page
+ * of the app, with a fine grain laid over everything on it — the words, the terrain, the
+ * shadows — the way ink and paper share one texture in print. The grain is the only thing
+ * here that is not a flat colour or a line, and it is there so that flat colours and
+ * lines do not look like a screen.
+ *
+ * What is on stage is never a picture of a slide and never a set. Words are set on the
+ * paper, in the reader's own window at the reader's own size (`StageWords.tsx`); a search
+ * is drawn as the ground it makes (`RecordStage.tsx`, `terrain.ts`); and when the
+ * presenter shows the app, it is simply the app — which is why none of this applies there.
+ */
+.stage-house {
+  --house-ground: #f4f1e9;
+  --house-ink: #262624;
+  --house-ink-soft: #55534d;
+  --house-ink-faint: #8b877c;
+  --house-accent: var(--color-lawfare-teal);
+  --house-rule: #d8d3c5;
+  position: relative;
+  isolation: isolate;
+  color: var(--house-ink);
+  background-color: var(--house-ground);
+}
+.stage-house::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.33 0 0 0 0 0.27 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.stage-house ::selection {
+  background: rgb(0 106 114 / 0.2);
+}
+
+/*
+ * Words on the paper. Markdown, sized against the column it is set in (`cqi`) between a
+ * floor and a ceiling: on a projector the type is large, on a phone it stops shrinking
+ * and the lines re-wrap instead, because this is a page and not a picture of one.
+ */
+.stage-words {
+  font-size: clamp(1.0625rem, 2.35cqi, 1.9rem);
+  line-height: 1.38;
+  color: var(--house-ink-soft);
+}
+.stage-words p {
+  margin-block: 0.7em;
+}
+.stage-words ul,
+.stage-words ol {
+  margin-block: 0.7em;
+  padding-left: 1.3em;
+}
+.stage-words ul {
+  list-style: disc;
+}
+.stage-words ol {
+  list-style: decimal;
+}
+.stage-words li {
+  margin-block: 0.4em;
+}
+.stage-words li::marker {
+  color: var(--house-accent);
+}
+.stage-words strong {
+  font-weight: 600;
+  color: var(--house-ink);
+}
+.stage-words em {
+  font-style: italic;
+}
+.stage-words a {
+  color: var(--house-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.stage-words code {
+  border-radius: 0.2em;
+  background: rgb(0 0 0 / 0.06);
+  padding: 0.05em 0.3em;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.86em;
+}
+.stage-words blockquote {
+  margin-block: 0.9em;
+  border-left: 0.14em solid var(--house-accent);
+  padding-left: 0.8em;
+  font-family: var(--font-serif, serif);
+  font-size: 1.3em;
+  line-height: 1.2;
+  color: var(--house-ink);
+}
+.stage-words table {
+  margin-block: 0.8em;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82em;
+}
+.stage-words th {
+  border-bottom: 1px solid var(--house-ink-faint);
+  padding: 0.35em 0.5em;
+  text-align: left;
+  font-weight: 600;
+  color: var(--house-ink);
+}
+.stage-words td {
+  border-bottom: 1px solid var(--house-rule);
+  padding: 0.35em 0.5em;
+  vertical-align: top;
+}
+.stage-words h2 {
+  margin-top: 0.9em;
+  font-family: var(--font-serif, serif);
+  font-size: 1.25em;
+  color: var(--house-ink);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The words under a title leave and arrive as the hub's cards do: down and out, up and
+   * in (`transitions.css` has the keyframes). The title itself is named `surface-intro`,
+   * the name every surface's opening line carries, so between two beats it travels, and
+   * on the way into the app it becomes the page's own headline. */
+  .stage-body {
+    view-transition-name: stage-body;
+  }
+  ::view-transition-old(stage-body) {
+    animation-name: vt-leave-down;
+    animation-duration: var(--vt-exit);
+    animation-fill-mode: both;
+  }
+  ::view-transition-new(stage-body) {
+    animation-name: vt-enter-up;
+    animation-duration: var(--vt-enter);
+    animation-delay: calc(var(--vt-exit) * 0.6);
+    animation-fill-mode: both;
+  }
+}

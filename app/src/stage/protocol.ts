@@ -15,6 +15,8 @@
  * node (`protocol.test.ts`) without a browser or a network.
  */
 
+import type { RecordScene } from './record.ts'
+
 /** A deck slide, as the audience sees it. The presenter's notes are never in one. */
 export type SlideScene = {
   kind: 'slide'
@@ -29,10 +31,13 @@ export type SlideScene = {
 /** A figure this build knows by name (`figures.tsx`), drawn live in each reader's browser. */
 export type FigureScene = { kind: 'figure'; name: string }
 
+/** A search, brought on as objects (`record.ts`). The documents travel with it: a stage asks the service for nothing. */
+export type { RecordScene } from './record.ts'
+
 /** The presenter's own page of the app. The picture arrives separately, as frames. */
 export type MirrorScene = { kind: 'mirror' }
 
-export type Scene = SlideScene | FigureScene | MirrorScene
+export type Scene = SlideScene | FigureScene | MirrorScene | RecordScene
 
 /** On every signed message: who sent it, its place in their sequence, and when. */
 type Stamp = { v: 1; sid: string; n: number; t: number }
@@ -76,10 +81,13 @@ export type ScrollMsg = Stamp & { kind: 'scroll'; at: number[]; y: number }
 /** Where the presenter is pointing, as a place inside an element, or nowhere. */
 export type PointMsg = Stamp & { kind: 'point'; at: number[] | null; x: number; y: number }
 
+/** Which object the presenter has brought forward in a record scene, or none. */
+export type FocusMsg = Stamp & { kind: 'focus'; id: string | null }
+
 /** "I have stopped." So the stage goes quiet now, not when the beats run out. */
 export type ByeMsg = Stamp & { kind: 'bye' }
 
-export type Msg = StateMsg | BeatMsg | FrameMsg | ScrollMsg | PointMsg | ByeMsg
+export type Msg = StateMsg | BeatMsg | FrameMsg | ScrollMsg | PointMsg | FocusMsg | ByeMsg
 
 /** A message as signed: the exact text that was signed, and the signature over it. */
 export type Signed = { p: string; s: string }
@@ -254,6 +262,8 @@ export type Following = {
   frame: FrameMsg | null
   scroll: ScrollMsg | null
   point: PointMsg | null
+  /** The object brought forward in a record scene. */
+  focus: string | null
   /** The highest sequence number taken from each sender: a message is used once. */
   seen: Record<string, number>
   /** How far each sender's clock is from this one, where a `hello` has measured it. */
@@ -267,6 +277,7 @@ export const NOBODY: Following = {
   frame: null,
   scroll: null,
   point: null,
+  focus: null,
   seen: {},
   skew: {},
 }
@@ -318,10 +329,13 @@ export function accept(following: Following, msg: Msg, now: number, nonce: strin
       frame: holds ? following.frame : null,
       scroll: holds ? following.scroll : null,
       point: holds ? following.point : null,
+      // Brought forward in the scene that was up; a new scene starts with nothing forward.
+      focus: null,
     }
   }
   if (!holds) return noted
-  if (msg.kind === 'bye') return { ...noted, holder: null, state: null, frame: null, scroll: null, point: null }
+  if (msg.kind === 'bye') return { ...noted, holder: null, state: null, frame: null, scroll: null, point: null, focus: null }
+  if (msg.kind === 'focus') return { ...noted, heard: now, focus: msg.id }
   if (msg.kind === 'beat') return { ...noted, heard: now }
   if (msg.kind === 'frame') return { ...noted, heard: now, frame: msg, scroll: null }
   if (msg.kind === 'scroll') return { ...noted, heard: now, scroll: msg }

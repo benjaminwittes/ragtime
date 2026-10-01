@@ -3,6 +3,8 @@ import { toLogical } from '@/lib/routing'
 
 import { openLink, type Link } from './link.ts'
 import { capture, pathOf, windowFraction } from './mirror.ts'
+import type { RecordScene } from './record.ts'
+import { gatherRecord, pendingRecord } from './recordGather.ts'
 import {
   BEAT_EVERY_MS,
   NOBODY,
@@ -34,7 +36,7 @@ import {
  */
 
 /** What the console can put on stage that is not a page of the app. */
-export type Face = { kind: 'slide' } | { kind: 'figure'; name: string }
+export type Face = { kind: 'slide' } | { kind: 'figure'; name: string } | { kind: 'record'; scene: RecordScene }
 
 export type PresenterView = {
   /** The kit is open and can sign. */
@@ -53,6 +55,10 @@ export type PresenterView = {
   other: { who: string } | null
   /** This tab was presenting and someone else took the stage from it. */
   yielded: boolean
+  /** In a record scene, the object brought forward for the room. */
+  focus: string | null
+  /** Why the last search could not be brought on, in the service's own words. */
+  trouble: string | null
   /** This tab is on `/present`. */
   onConsole: boolean
   /**
@@ -91,6 +97,8 @@ let view: PresenterView = {
   joined: false,
   other: null,
   yielded: false,
+  focus: null,
+  trouble: null,
   onConsole: false,
   backstage: true,
   scene: null,
@@ -183,6 +191,7 @@ function sceneNow(): Scene | null {
   if (!kit) return null
   if (!view.backstage && view.showApp) return { kind: 'mirror' }
   if (view.face.kind === 'figure') return { kind: 'figure', name: view.face.name }
+  if (view.face.kind === 'record') return view.face.scene
   const slide = kit.slides[view.at]
   if (!slide) return null
   // Never the notes: they are the presenter's, and a slide scene goes to the room.
@@ -211,6 +220,9 @@ function tell(re?: string[]) {
       if (scene.kind !== 'mirror') frameN = null
       return { ...stamp, kind: 'state', who: view.who, since, scene, ...(re ? { re } : {}) }
     })
+    // A new arrival needs to know what is forward, too; a new scene starts with nothing.
+    const { focus } = view
+    if (scene.kind === 'record' && focus !== null) send((stamp) => ({ ...stamp, kind: 'focus', id: focus }))
   }
   if (scene.kind === 'mirror') {
     startMirror()
@@ -499,10 +511,12 @@ async function armOne(opened: Kit, sealed: SealedKit): Promise<boolean> {
       /* no name */
     }
     const at = Number.isInteger(remembered.at) && remembered.at! >= 0 && remembered.at! < opened.slides.length ? remembered.at! : 0
+    // A search that was still out when the tab reloaded is not coming back.
+    const face = remembered.face?.kind === 'record' && remembered.face.scene.pending ? undefined : remembered.face
     set({
       armed: true,
       at,
-      face: remembered.face ?? { kind: 'slide' },
+      face: face ?? { kind: 'slide' },
       showApp: remembered.showApp ?? true,
       who,
       ...whereabouts(),
@@ -548,13 +562,46 @@ export function dismissYielded() {
 
 export function goTo(at: number) {
   if (!kit) return
-  set({ at: Math.max(0, Math.min(kit.slides.length - 1, at)), face: { kind: 'slide' } })
+  set({ at: Math.max(0, Math.min(kit.slides.length - 1, at)), face: { kind: 'slide' }, focus: null })
   tell()
 }
 
 export function showFace(face: Face) {
-  set({ face })
+  set({ face, focus: null })
   tell()
+}
+
+/**
+ * Bring a search on: the floor goes up at once, empty, with the question on the wall —
+ * the room watches the wait instead of a spinner — and the documents are flown in when
+ * the collection answers. A later search supersedes an earlier one still out.
+ */
+let asking = 0
+export function bringOn(corpus: string, query: string) {
+  const pending = pendingRecord(corpus, query.trim())
+  if (!pending || !pending.query) return
+  const mine = ++asking
+  set({ face: { kind: 'record', scene: pending }, focus: null, trouble: null })
+  tell()
+  gatherRecord(pending).then(
+    (scene) => {
+      if (mine !== asking || view.face.kind !== 'record') return
+      set({ face: { kind: 'record', scene } })
+      tell()
+    },
+    (error: unknown) => {
+      if (mine !== asking) return
+      set({ face: { kind: 'slide' }, trouble: error instanceof Error ? error.message : String(error) })
+      tell()
+    },
+  )
+}
+
+/** Bring one object forward for the room, or put it back. */
+export function bringForward(id: string | null) {
+  if (view.face.kind !== 'record' || id === view.focus) return
+  set({ focus: id })
+  if (view.live) send((stamp) => ({ ...stamp, kind: 'focus', id }))
 }
 
 export function setShowApp(showApp: boolean) {
