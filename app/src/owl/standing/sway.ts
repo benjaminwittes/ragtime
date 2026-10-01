@@ -6,7 +6,7 @@ import { cycle, n } from './core/frames'
  * and takes the head, the wings and the lantern with it. The motion is a slow sine with a
  * second, smaller one on it so that the lean is not quite the same each way.
  *
- * At amount 1 the lean is 0.7 degrees and 0.35 of a unit sideways: the top of the head
+ * At amount 1 the lean is 0.65 degrees and 0.3 of a unit sideways: the top of the head
  * moves about three-quarters of a unit.
  */
 export default {
@@ -18,7 +18,10 @@ export default {
     ctx.loop('figure', ({ amount: a }) =>
       cycle((t) => {
         const w = Math.sin(t * Math.PI * 2) + 0.3 * Math.sin(t * Math.PI * 4 + 1)
-        return { transform: `translateX(${n(0.3 * a * w)}px) rotate(${n(0.65 * a * w)}deg)` }
+        // A shear and not a rotation: about the base a rotation lifts one side of the flat
+        // foot off the book it stands on (a wedge of paper shows under it), where a shear
+        // moves everything above the base and leaves the base line exactly where it is.
+        return { transform: `translateX(${n(0.3 * a * w)}px) skewX(${n(-0.65 * a * w)}deg)` }
       }, 24),
     )
   },
