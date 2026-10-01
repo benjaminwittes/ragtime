@@ -101,7 +101,7 @@ export type OwlDesign = {
    * Which standing (idle) behaviours are on, by id (`standing/`). Empty for the owl as
    * sent. Switching one on is `{ standing: { breathe: true } }` in a variant, and what a
    * temperament (`temperament`) switches on is laid into it when the design is resolved
-   * (`standing/resolve.ts`), so everything downstream reads this one record.
+   * (`standing/core/resolve.ts`), so everything downstream reads this one record.
    */
   standing: Record<string, boolean>
   /**

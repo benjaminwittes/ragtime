@@ -3,7 +3,7 @@ import type { OwlDesign, OwlStanding, OwlTemperament, StandingConfig, StepMode }
 
 /**
  * How the owl's standing behaviours are worked out, as a plain function of plain data, so
- * the rules can be tested in node (`resolve.test.ts`).
+ * the rules can be tested in node (`../standing.test.ts`).
  *
  * Three layers say which behaviours run and how strongly, lowest to highest, the same
  * order the rest of the design uses:

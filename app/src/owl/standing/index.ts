@@ -73,8 +73,14 @@ function configsFor(design: OwlDesign, svg: SVGSVGElement): Record<string, Stand
 
 let instances = 0
 
-/** The running host for an owl, found from its element, so the second effect below can reach what the first started. */
-const hostOf = new WeakMap<SVGSVGElement, () => Host | undefined>()
+/**
+ * The running host for an owl, found from its element, so the second effect below can reach
+ * what the first started: to tell it a new amount, or to start it again for a new seed.
+ */
+const hostOf = new WeakMap<SVGSVGElement, { host(): Host | undefined; restart(): void }>()
+
+/** The seed an owl's host was last started with. A seed is mixed into every draw at the start, so a new one means a start again. */
+const seededWith = new WeakMap<SVGSVGElement, number>()
 
 /** The design an owl was last rendered with, for a restart that must not use the one it mounted with. */
 const latest = new WeakMap<SVGSVGElement, OwlDesign>()
@@ -101,13 +107,15 @@ export function useStanding(svg: RefObject<SVGSVGElement | null>, design: OwlDes
       host?.stop()
       host = undefined
       if (query.matches) return
+      const current = latest.get(el) ?? design
+      seededWith.set(el, standingSeed(current))
       host = startHost({
         svg: el,
-        design: latest.get(el) ?? design,
+        design: current,
         behaviours: STANDING,
         ids: key.split(' '),
-        configs: configsFor(latest.get(el) ?? design, el),
-        seed: seed ^ standingSeed(latest.get(el) ?? design),
+        configs: configsFor(current, el),
+        seed: seed ^ standingSeed(current),
       })
     }
     run()
@@ -125,13 +133,14 @@ export function useStanding(svg: RefObject<SVGSVGElement | null>, design: OwlDes
       again = window.setTimeout(run, 150)
     })
     watching.observe(el, { childList: true, subtree: true })
-    hostOf.set(el, () => host)
+    hostOf.set(el, { host: () => host, restart: run })
     return () => {
       window.clearTimeout(again)
       watching.disconnect()
       query.removeEventListener('change', run)
       host?.stop()
       hostOf.delete(el)
+      seededWith.delete(el)
     }
     // `design` is deliberately not a dependency: the behaviours are told about a new
     // amount or period (the effect below) and move to it from where they are, and
@@ -146,6 +155,12 @@ export function useStanding(svg: RefObject<SVGSVGElement | null>, design: OwlDes
     const el = svg.current
     if (!el) return
     latest.set(el, design)
-    hostOf.get(el)?.()?.update(configsFor(design, el))
+    const running = hostOf.get(el)
+    if (!running) return
+    // The seed is not a setting a behaviour can be told: it is what every draw and every
+    // starting phase was made from. A new one starts the behaviours again (once, on the
+    // change), so the Seed knob does something when it is moved and not only on the next mount.
+    if (seededWith.has(el) && seededWith.get(el) !== standingSeed(design)) running.restart()
+    else running.host()?.update(configsFor(design, el))
   }, [svg, design])
 }
