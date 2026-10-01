@@ -125,12 +125,14 @@ export const SPEECH_SITES: Record<OwlSiteId, SpeechSite> = {
     occasions: ['stage-quiet', 'night', 'idle', 'poke'],
     keepsHours: SITES.stage.keepsHours,
   },
-  // The header is a grid with the heading to the owl's right and a status line under it, so
-  // there is no bare paper beside it; above is the only side that has any.
+  // The header is a grid with the heading to the owl's right and a status line under it,
+  // and the owl is the first thing on the page, so there is no bare paper on any side: a
+  // note above has no room and flips below, onto the status line (seen on the live
+  // stage). The owl is silent here until the header has somewhere to put a line.
   record: {
     place: 'above',
     arrival: null,
-    occasions: ['searching', 'idle', 'poke'],
+    occasions: [],
     keepsHours: SITES.record.keepsHours,
   },
 }

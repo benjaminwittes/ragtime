@@ -1,6 +1,6 @@
 /**
  * The vocabulary of the owl's voice, in one file so the voices (`voices/`), the pure rules
- * (`select.ts`, `policy.ts`, `fit.ts`) and the components can all import it without
+ * (`select.ts`, `config.ts`, `fit.ts`) and the components can all import it without
  * importing each other.
  *
  * A voice is data: who is speaking, how it is set on the page, and what it says on each
@@ -66,7 +66,7 @@ export const OCCASIONS = [
   {
     id: 'searching',
     label: 'A search is out',
-    when: 'The hub’s search, or a record header’s collection, is waiting on the worker (the lantern’s own searching state).',
+    when: 'The hub’s search is waiting on the worker (the lantern’s own searching state).',
     announce: false,
   },
   {

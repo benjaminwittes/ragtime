@@ -150,6 +150,10 @@ describe('the speech table', () => {
     expect(where('search-empty')).toEqual(['hub'])
     expect(where('search-results')).toEqual(['hub'])
     expect(where('wrong-code')).toEqual(['gate'])
-    expect(where('searching').sort()).toEqual(['hub', 'record'])
+    expect(where('searching')).toEqual(['hub'])
+  })
+
+  it('keeps the owl silent where its header has no bare paper for a note', () => {
+    expect(SPEECH_SITES.record.occasions).toEqual([])
   })
 })
