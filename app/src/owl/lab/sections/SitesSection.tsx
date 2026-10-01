@@ -1,9 +1,14 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { SITES } from '../../embeds'
 import { OwlSpot } from '../../OwlSpot'
 import type { OwlSiteId } from '../../types'
 import { useOwlFigure } from '../../useOwlFigure'
+import { voiceList } from '../../voice'
+import { VoiceHold } from '../../voice/hold'
+import { OCCASIONS, type OccasionId, type TreatmentId } from '../../voice/types'
+import { treatmentList } from '../../voice/treatments'
+import { Field, SELECT_CLASS } from '../Field'
 
 /**
  * Each embed-registry site, drawn with its real classes and its real wrapper, the way
@@ -96,17 +101,74 @@ const DEMOS: Record<OwlSiteId, () => ReactNode> = {
 }
 
 export function SitesSection() {
+  const [voice, setVoice] = useState('')
+  const [treatment, setTreatment] = useState<TreatmentId | 'voice'>('voice')
+  const [occasion, setOccasion] = useState<OccasionId | 'arrival'>('arrival')
+  const hold = useMemo(
+    () => (voice ? { voice, treatment: treatment === 'voice' ? null : treatment, occasion } : null),
+    [voice, treatment, occasion],
+  )
   return (
-    <div className="mt-6 grid gap-6 md:grid-cols-2">
-      {(Object.keys(SITES) as OwlSiteId[]).map((id) => (
-        <div key={id} className="rounded-md border bg-background p-4" data-owl-lab-site={id}>
-          <div className="mb-3 text-xs text-muted-foreground">
-            <code>{id}</code> · {SITES[id].label} · {SITES[id].pose}, {SITES[id].lantern}
-            {SITES[id].keepsHours ? ', keeps hours' : ''}
+    <VoiceHold.Provider value={hold}>
+      <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+        The six sites exactly as the pages mount them. Choose a voice to hold one line in every site at once, so their
+        placements can be compared; a site that cannot truthfully report the chosen occasion holds nothing. Placement
+        is each site’s entry in <code>SPEECH_SITES</code>; at a narrow window the note narrows, moves to the other
+        side, or drops below the owl rather than leave the screen, so resize the window to see that.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+        <Field label="Hold a line in">
+          <select className={SELECT_CLASS} value={voice} onChange={(e) => setVoice(e.target.value)}>
+            <option value="">none: as the pages behave</option>
+            {voiceList().map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Treatment">
+          <select
+            className={SELECT_CLASS}
+            value={treatment}
+            disabled={!voice}
+            onChange={(e) => setTreatment(e.target.value as TreatmentId | 'voice')}
+          >
+            <option value="voice">follow the voice</option>
+            {treatmentList().map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Occasion">
+          <select
+            className={SELECT_CLASS}
+            value={occasion}
+            disabled={!voice}
+            onChange={(e) => setOccasion(e.target.value as OccasionId | 'arrival')}
+          >
+            <option value="arrival">each site’s arrival</option>
+            {OCCASIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="mt-6 grid gap-6 md:grid-cols-2">
+        {(Object.keys(SITES) as OwlSiteId[]).map((id) => (
+          <div key={id} className="rounded-md border bg-background p-4" data-owl-lab-site={id}>
+            <div className="mb-3 text-xs text-muted-foreground">
+              <code>{id}</code> · {SITES[id].label} · {SITES[id].pose}, {SITES[id].lantern}
+              {SITES[id].keepsHours ? ', keeps hours' : ''}
+            </div>
+            {DEMOS[id]()}
           </div>
-          {DEMOS[id]()}
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </VoiceHold.Provider>
   )
 }

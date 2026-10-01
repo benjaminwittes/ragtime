@@ -1,3 +1,4 @@
+import './lab.css'
 import { OWL_LAB } from './path'
 import type { OwlLabSection } from './types'
 

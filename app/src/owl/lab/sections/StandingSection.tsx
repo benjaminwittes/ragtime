@@ -6,9 +6,9 @@ import type { OwlPin } from '../../types'
 
 /**
  * What the owl does when it stands there: each behaviour once, each temperament once, a
- * short row at real embed sizes (which is also three owls that are not in step), and one
- * owl under the scan finish. The stacks pose and the site's own paper only, and about
- * twenty-five owls in all, because every one of them is moving.
+ * short row at real embed sizes (which is also three owls that are not in step). The print
+ * temperament is shown once, on the scan finish, in the temperaments row. The stacks pose and the
+ * site's own paper only, and about twenty-five owls in all, because every one of them is moving.
  *
  * Every owl here is pinned (`Owl`'s `pin`), so the Tune panel's standing knobs move the
  * rest of the page and leave these as labelled. The behaviours that belong to the print
@@ -53,7 +53,6 @@ export function StandingSection() {
     [],
   )
   const watchful = useMemo(() => ({ design: { temperament: 'watchful', standing: {} } }) satisfies OwlPin, [])
-  const scanned = useMemo(() => ({ design: { temperament: 'print', standing: {} } }) satisfies OwlPin, [])
 
   return (
     <div className="mt-4 space-y-10">
@@ -103,13 +102,6 @@ export function StandingSection() {
           {[48, 96, 112].map((size) => (
             <Specimen key={size} pin={watchful} variant="base" size={size} caption={`Watchful, ${size}px`} />
           ))}
-        </div>
-      </div>
-
-      <div>
-        <h3 className="font-serif text-xl font-medium">Under the scan finish</h3>
-        <div className="mt-3 flex flex-wrap items-end gap-8 rounded-md border bg-background p-4 text-foreground">
-          <Specimen pin={scanned} variant="engraved-copy" size={160} caption="Print, with the scan finish on" />
         </div>
       </div>
     </div>

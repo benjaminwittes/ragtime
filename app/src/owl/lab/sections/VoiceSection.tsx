@@ -1,33 +1,21 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { Owl } from '../../Owl'
 import { OwlSpeech } from '../../speech'
-import { VoiceHold } from '../../voice/hold'
 import { voiceList } from '../../voice'
 import { TREATMENTS, treatmentList } from '../../voice/treatments'
 import { OCCASIONS, OCCASION_IDS, type OccasionId, type OwlVoice, type SpeechPlace, type TreatmentId } from '../../voice/types'
 import { useOwlVoice } from '../../voice/useVoice'
-import { SitesSection } from './SitesSection'
+import { Field, SELECT_CLASS as select } from '../Field'
 
 /**
- * The owl's voices, looked at: every line of every voice by occasion and treatment, a live
- * owl that can be made to say each occasion, and the six embed sites with a line held in
- * place so their placements can be compared. None of this depends on the Tune panel's Voice
- * knob: the controls here are the section's own, so the lab shows the voices whether or not
- * the panel has switched one on.
+ * The owl's voices, looked at: every line of every voice by occasion and treatment, and a
+ * live owl that can be made to say each occasion. The six embed sites with a line held in
+ * place are on the Embed sites section, which has the controls for it. None of this depends
+ * on the Tune panel's Voice knob: the controls are the section's own, so the lab shows the
+ * voices whether or not the panel has switched one on.
  */
 
 type Treated = TreatmentId | 'voice' | 'all'
-
-const select = 'rounded border bg-background px-2 py-1 text-sm'
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      {children}
-    </label>
-  )
-}
 
 /* -------------------------------------------------------------------------- */
 /* Every line                                                                  */
@@ -226,67 +214,17 @@ function Live() {
   )
 }
 
-/* -------------------------------------------------------------------------- */
-/* The six sites                                                               */
-/* -------------------------------------------------------------------------- */
-
-function Placements() {
-  const [voice, setVoice] = useState(voiceList()[0]?.id ?? 'none')
-  const [treatment, setTreatment] = useState<TreatmentId | 'voice'>('voice')
-  const [occasion, setOccasion] = useState<OccasionId | 'arrival'>('arrival')
-  return (
-    <div>
-      <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
-        The six sites exactly as the pages mount them, each holding one line. A site that cannot truthfully report the
-        chosen occasion holds nothing. Placement is each site’s entry in <code>SPEECH_SITES</code>; at a narrow window
-        the note narrows, moves to the other side, or drops below the owl rather than leave the screen, so resize the
-        window to see that.
-      </p>
-      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-        <Field label="Voice">
-          <select className={select} value={voice} onChange={(e) => setVoice(e.target.value)}>
-            {voiceList().map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Treatment">
-          <select className={select} value={treatment} onChange={(e) => setTreatment(e.target.value as TreatmentId | 'voice')}>
-            <option value="voice">follow the voice</option>
-            {treatmentList().map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Occasion">
-          <select className={select} value={occasion} onChange={(e) => setOccasion(e.target.value as OccasionId | 'arrival')}>
-            <option value="arrival">each site’s arrival</option>
-            {OCCASIONS.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-      <VoiceHold.Provider value={{ voice, treatment: treatment === 'voice' ? null : treatment, occasion }}>
-        <SitesSection />
-      </VoiceHold.Provider>
-    </div>
-  )
-}
-
 export function VoiceSection() {
   return (
     <div>
       <h3 className="mt-6 font-serif text-xl font-semibold">A live owl</h3>
       <Live />
       <h3 className="mt-10 font-serif text-xl font-semibold">The six sites</h3>
-      <Placements />
+      <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+        The six sites, each holding a line, are the ones in <a href="#sites" className="text-primary hover:underline">Embed sites</a>:
+        choose the voice, the treatment and the occasion in the controls above them, and the placements can be
+        compared there without a second copy of the sites on this page.
+      </p>
       <h3 className="mt-10 font-serif text-xl font-semibold">Every line</h3>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
         All copy is draft for editorial review. Each voice is one file in <code>owl/voice/voices/</code>; its lines are

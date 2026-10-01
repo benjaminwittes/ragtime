@@ -1,0 +1,9 @@
+/* The lab's own rules (`owl/lab/`). A specimen that is held still on purpose is marked
+ * `lab-still`, and nothing inside it animates through CSS (the blink, a searching
+ * lantern's breathing). Its standing behaviours are switched off through the owl's `pin`,
+ * which is where those live, so a still specimen costs the page what a drawing costs.
+ */
+.lab-still,
+.lab-still * {
+  animation: none !important;
+}
