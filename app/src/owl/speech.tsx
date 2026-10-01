@@ -15,8 +15,10 @@ import type { SiteVoice } from './voice/useVoice'
  *
  *   - **The note is `aria-hidden`; the live region is separate and mostly empty.** The owl
  *     is decoration until it has something to say. Only a line that answers something the
- *     reader just did (`OCCASIONS`, `announce`) is put in the polite `role="status"` region,
- *     once, whole, and not typed out. An arrival, a musing after a long idle and a click are
+ *     reader just did (`OCCASIONS`, `announce`) is put in the polite live region, once,
+ *     whole, and not typed out. It is `aria-live` and not `role="status"`, so the page's own
+ *     status lines stay the only `status` in their container (the stage driver and
+ *     `getByRole('status')` find one). An arrival, a musing after a long idle and a click are
  *     colour, and a screen reader is spared them.
  *   - **The note never takes a click.** It is `pointer-events: none`, so it cannot cover a
  *     control however it lands. It comes down by itself after its dwell, on Escape, or on a
@@ -63,7 +65,7 @@ export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObj
 
   return (
     <>
-      <div ref={region} className="owl-voice-sr" role="status">
+      <div ref={region} className="owl-voice-sr" aria-live="polite" aria-atomic="true">
         {voice.announced}
       </div>
       {spoken && <Note key={spoken.key} spoken={spoken} voice={voice} />}

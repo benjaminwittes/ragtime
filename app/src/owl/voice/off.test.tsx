@@ -21,7 +21,7 @@ describe('with no voice', () => {
     expect(html).not.toContain('owl-spot')
     expect(html).not.toContain('owl-voice-sr')
     expect(html).not.toContain('owl-note')
-    expect(html).not.toContain('role="status"')
+    expect(html).not.toContain('aria-live')
   })
 
   it('renders the same owl whatever occasion the page reports', () => {
@@ -36,7 +36,7 @@ describe('with a voice', () => {
     applyTuneOverrides({ 'owl.voice.id': 'archivist' }, false)
     const html = renderToStaticMarkup(<OwlSpot site={id} />)
     expect(html).toContain('owl-spot')
-    expect(html).toContain('class="owl-voice-sr" role="status"></div>')
+    expect(html).toContain('class="owl-voice-sr" aria-live="polite" aria-atomic="true"></div>')
     expect(html).not.toContain('owl-note')
   })
 })
