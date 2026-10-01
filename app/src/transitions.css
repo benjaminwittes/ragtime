@@ -75,6 +75,8 @@
    *   site-bar, nav-explorer, bar-slot   — components/SiteBar.tsx
    *   ask-box                            — components/AskBox.tsx (both skins, one place)
    *   surface-intro                      — components/SurfaceIntro.tsx (likewise)
+   *   owl                                — components/SurfaceIntro.tsx, on the figure: the
+   *                                        hub's owl and the Explorer's are one owl
    *   hub-card-1 … hub-card-N            — hub/Hub.tsx: the group headings and the
    *                                        corpus entries alike, numbered together in
    *                                        the order they appear on the page
