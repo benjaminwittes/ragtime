@@ -4,12 +4,16 @@ import { links } from '@lawfare/ragtime-client'
 
 import { AppLink } from '@/components/AppLink'
 import { toHref, toLogicalHref } from '@/lib/routing'
+import { rehypeSignature } from '../mark/tail.ts'
+import { MarkSig } from './Mark.tsx'
 
 type Props = {
   text: string
   className?: string
   /** Document path (origin-relative) → title; a link whose text is the citation itself shows the title instead. */
   titles?: Map<string, string>
+  /** End with the mark, held to the last word so it never wraps alone. Set it on the last block of an answer. */
+  signature?: boolean
 }
 
 /** The text of a link's children when it is plain text; null when it is richer than that. */
@@ -35,7 +39,7 @@ function plainText(children: React.ReactNode): string | null {
  * not saved and navigating away lost it. It is saved now (`model/persist.ts`),
  * so leaving the page and coming back costs nothing.
  */
-export function Markdown({ text, className, titles }: Props) {
+export function Markdown({ text, className, titles, signature }: Props) {
   const urlTransform = (url: string): string => {
     if (url.startsWith('rt://')) {
       try {
@@ -57,8 +61,12 @@ export function Markdown({ text, className, titles }: Props) {
     <div className={className ? 'md ' + className : 'md'}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={signature ? [rehypeSignature] : []}
         urlTransform={urlTransform}
         components={{
+          // `rehypeSignature` marks the end of the answer; everything else that is a span stays one.
+          span: ({ className: c, children }) =>
+            c === 'mark-sig' ? <MarkSig /> : <span className={c}>{children}</span>,
           a: ({ href, children }) => {
             if (!href) return <span>{children}</span>
             const label = titleFor(href, children) ?? children

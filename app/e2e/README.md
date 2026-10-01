@@ -33,6 +33,7 @@ node e2e/scenarios.mjs quota,baddetail   # just the two that used to white-scree
 node e2e/conversations.mjs               # keeping, adopting and forgetting conversations
 node e2e/links.mjs                       # where every link in an answer goes
 node e2e/cross.mjs                       # the seam: a citation followed out, and Back
+node e2e/mark.mjs                        # the mark: a live answer painted in, a restored one just shown
 E2E_W=1440 node e2e/cross.mjs            # the same at desktop width
 node e2e/band.mjs                        # whether the band keeps to one row
 node e2e/band.mjs --candidates           # measure wordings before choosing one

@@ -10,7 +10,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "preview": "vite preview",
-    "e2e": "node e2e/scenarios.mjs && node e2e/conversations.mjs && node e2e/links.mjs && node e2e/cross.mjs && node e2e/band.mjs && node e2e/spokes.mjs && node e2e/books.mjs && node e2e/connected.mjs"
+    "e2e": "node e2e/scenarios.mjs && node e2e/conversations.mjs && node e2e/links.mjs && node e2e/cross.mjs && node e2e/band.mjs && node e2e/spokes.mjs && node e2e/books.mjs && node e2e/connected.mjs && node e2e/mark.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

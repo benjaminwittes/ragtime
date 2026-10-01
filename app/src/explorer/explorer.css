@@ -38,6 +38,8 @@
   --card: var(--card, #ffffff);
   --accent: var(--primary, #006a72);
   --accent-soft: var(--color-lawfare-teal-bg, #e6f0f1);
+  /* The RAGtime mark's colour: sampled by eye from the Lawfare banner. Not the brand value; swap it here when that is supplied. */
+  --x-mark: #2b6872;
   --warn: #9a5b12;
   --warn-soft: #fff4e5;
   --ok: #1f7a3a;
@@ -191,8 +193,18 @@
 .explorer .question-head { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
 .explorer .question p { margin: 0; font: 400 17px/1.45 var(--sans); }
 .explorer .working { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 13px; margin: 8px 0; }
-.explorer .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+/* The mark. It breathes here while research runs; the answer is then painted in behind it (Brush),
+ * and it stays at the end of the answer as the signature. The glyph's own canvas and svg are the
+ * same fixed height, so no state of it moves the text around it. */
+.explorer .mark { flex: none; }
+.explorer .brush { position: relative; z-index: 0; }
+.explorer .brush-glyph { position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; will-change: transform; }
+.explorer .mark-tail { white-space: nowrap; }
+.explorer .mark-sig { display: inline-block; color: var(--x-mark); }
+.explorer .brush[data-painting] .mark-sig { visibility: hidden; }
+/* What a link draws around its text (its underline, the `↗` after it) is not a letter and is not wrapped, so the brush cannot reveal it; it waits for the end. */
+.explorer .brush[data-painting] a { text-decoration-color: transparent; }
+.explorer .brush[data-painting] a::after { visibility: hidden; }
 .explorer .error { border-left: 2px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; margin: 8px 0; font-size: 14px; }
 
 /* Brief card.
