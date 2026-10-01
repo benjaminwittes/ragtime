@@ -200,14 +200,19 @@
  * and it stays at the end of the answer as the signature. The glyph's own canvas and svg are the
  * same fixed height, so no state of it moves the text around it. */
 .explorer .mark { flex: none; }
+/* While it writes, the brush has the page's own ground painted under it. The wash that
+ * colours fresh words blends with what is beneath it, and `z-index: 0` makes the brush a
+ * layer of its own — so without a ground of its own the wash would have nothing but
+ * letters to blend with, and would show as a band of colour wherever there was no letter. */
 .explorer .brush { position: relative; z-index: 0; }
+.explorer .brush[data-painting] { background: var(--bg); }
 .explorer .brush-glyph { position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; will-change: transform; }
+/* The colour fresh words wear: laid over the line behind the brush. `lighten` keeps the
+ * lighter of the two at every point, so paper stays paper and ink takes the wash. */
+.explorer .brush-wash { position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none; mix-blend-mode: lighten; will-change: transform; }
 .explorer .mark-tail { white-space: nowrap; }
 .explorer .mark-sig { display: inline-block; color: var(--x-mark); }
 .explorer .brush[data-painting] .mark-sig { visibility: hidden; }
-/* What a link draws around its text (its underline, the `↗` after it) is not a letter and is not wrapped, so the brush cannot reveal it; it waits for the end. */
-.explorer .brush[data-painting] a { text-decoration-color: transparent; }
-.explorer .brush[data-painting] a::after { visibility: hidden; }
 .explorer .error { border-left: 2px solid var(--bad); background: var(--bad-soft); padding: 8px 12px; margin: 8px 0; font-size: 14px; }
 
 /* Brief card.

@@ -159,6 +159,18 @@ export function applyEvent(turn: Turn, ev: ExplorerEvent, now: number): Turn {
   }
 }
 
+/**
+ * What there is of a turn's answer right now. Once the turn is over, its answer. While it
+ * runs, what the model has said since its last tool call — which is the answer being
+ * written, unless another tool call follows, in which case it was the model saying what it
+ * was about to do and it goes with the turn's steps. Nobody can tell which until the next
+ * event arrives, and a reader should not be made to wait to find out: either way it is what
+ * the model is saying now.
+ */
+export function answerText(turn: Turn): string {
+  return turn.answer || (turn.running ? turn.buffer.trim() : '')
+}
+
 /** The last `cost` event, which carries the turn's total and the conversation's. */
 export function lastCost(turn: Turn): ExplorerCostEvent | null {
   return turn.costs.length ? turn.costs[turn.costs.length - 1]! : null

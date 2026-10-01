@@ -18,8 +18,19 @@ export const MARK = {
   drawTime: 0.8,
   breatheAmp: 0.7,
   finishAmp: 1.3,
-  /** Brush speed, px/s, constant: no pause between words or sentences. */
-  speed: 530,
+  /**
+   * The slowest the brush ever moves, px/s. It is a floor, not the speed: the brush writes
+   * what has arrived, and what has arrived sets its pace (`catchUp`). The floor is what
+   * carries it over the last few letters, where "a share of what is left" is nearly nothing.
+   */
+  speed: 1800,
+  /**
+   * How long the brush takes to close on the end of what has arrived, in seconds: each
+   * moment it covers the share of the distance that closes all of it in about this long.
+   * So it writes at the pace the answer streams, and when a paragraph lands at once it is
+   * across it in a blink instead of walking it at one speed for half a minute.
+   */
+  catchUp: 0.12,
   /** A letter fades in over this many px behind the front. */
   edge: 44,
   /** …and then settles from the mark's colour to the page's ink over this many px. */

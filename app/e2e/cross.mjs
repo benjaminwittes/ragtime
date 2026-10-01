@@ -44,7 +44,7 @@ async function snap(page) {
 async function settled(page, ms = 30000) {
   const t0 = Date.now()
   for (;;) {
-    const working = await page.evaluate(() => !!document.querySelector('.working'))
+    const working = await page.evaluate(() => !!document.querySelector('.turn[data-running]'))
     const s = await snap(page)
     if (!working && s.turns > 0) return s
     if (Date.now() - t0 > ms) return { timedOut: true, ...s }
