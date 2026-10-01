@@ -17,7 +17,7 @@
  * make it.
  *
  *   node app/scripts/seal-kit.mjs --from <dir> --key-file <path>
- *   node app/scripts/seal-kit.mjs --from <dir> --key-file <path> --out app/public/demo/kit.sealed.json
+ *   node app/scripts/seal-kit.mjs --from <dir> --key-file <path> --out app/public/kits/demo.sealed.json
  *
  * `--from` is a directory holding:
  *
@@ -27,6 +27,10 @@
  *               `# heading` is the slide's title; an optional first line
  *               `part: <label>` names its section; everything after a line
  *               that is exactly `???` is the presenter's notes
+ *
+ * `--out` defaults to `app/public/kits/demo.sealed.json`, which is where `/demo`
+ * looks. Not under `public/demo/`: a directory of that name would contend with
+ * the route for one path on a static host.
  *
  * `--key-file` holds the passphrase, and is the only place it is ever
  * written. If the file exists its contents are used, so re-sealing after an
@@ -116,7 +120,7 @@ async function main() {
     process.exit(2)
   }
   const from = path.resolve(a.from)
-  const out = path.resolve(a.out || path.join(HERE, '..', 'public', 'demo', 'kit.sealed.json'))
+  const out = path.resolve(a.out || path.join(HERE, '..', 'public', 'kits', 'demo.sealed.json'))
   const keyFile = path.resolve(a['key-file'])
 
   const meta = JSON.parse(fs.readFileSync(path.join(from, 'kit.json'), 'utf8'))
