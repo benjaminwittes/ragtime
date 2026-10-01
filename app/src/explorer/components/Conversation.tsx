@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CorpusRegistry, ExplorerBrief } from '@lawfare/ragtime-client'
 
 import { ChatOwl } from '@/owl/voice/ChatOwl'
+import { landed } from '@/owl/voice/landed'
 import { useChatOwl } from '@/owl/voice/useVoice'
 
 import { normalizeBrief, sameBrief } from '../model/brief.ts'
@@ -141,9 +142,10 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
               </div>
             )}
 
-            {/* The same owl, once the last answer has landed: it settles at the foot of it. A turn
+            {/* The same owl, once the last answer has landed (a turn that stopped on a question,
+                a brief, a cap or an error has not answered): it settles at the foot of it. A turn
                 restored from storage gets the figure without a line, since nobody watched it land. */}
-            {chatOwl && isLast && !turn.running && !turn.error && answerText(turn) && (
+            {chatOwl && isLast && landed(turn) && (
               <div className="owl-chat-end">
                 <ChatOwl occasion="answered" speaks={watched.has(turn.startedAt)} />
               </div>
