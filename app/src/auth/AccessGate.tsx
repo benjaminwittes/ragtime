@@ -1,7 +1,8 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Owl } from '@/components/Owl'
 import { Input } from '@/components/ui/input'
+import { toLogical } from '@/lib/routing'
 
 /**
  * Soft outer-gate for the closed beta. Sits in front of everything (the whole
@@ -13,6 +14,14 @@ import { Input } from '@/components/ui/input'
  * boundaries (Supabase JWT, the Worker's beta allowlist for the paid tier)
  * are server-side. Its only job is to keep randos out of the beta surface.
  * Ports the v7-era `ACCESS_CODE` overlay from the legacy single-file app.
+ *
+ * One path is let through without the code: `/stage`. It is a seat in an
+ * audience — it shows only what a presenter chooses to put in front of a room,
+ * and nothing at all when nobody is presenting — and an audience handed a link
+ * and then asked for a code it was not given is a presentation that starts
+ * late. Every way out of the stage into the app opens a new tab, which meets
+ * this gate like any other arrival; and the path is re-read on every route
+ * change, so nothing that moves this tab elsewhere carries the exemption along.
  */
 
 const ACCESS_CODE = 'lawfare2026'
@@ -34,12 +43,23 @@ function persistUnlocked() {
   }
 }
 
+function onStage(): boolean {
+  return toLogical(window.location.pathname).replace(/\/+$/, '') === '/stage'
+}
+
 export function AccessGate({ children }: { children: ReactNode }) {
   const [unlocked, setUnlocked] = useState(isUnlocked)
+  const [staged, setStaged] = useState(onStage)
   const [value, setValue] = useState('')
   const [error, setError] = useState(false)
 
-  if (unlocked) return <>{children}</>
+  useEffect(() => {
+    const onRoute = () => setStaged(onStage())
+    window.addEventListener('popstate', onRoute)
+    return () => window.removeEventListener('popstate', onRoute)
+  }, [])
+
+  if (unlocked || staged) return <>{children}</>
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()

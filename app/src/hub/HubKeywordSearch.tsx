@@ -480,11 +480,17 @@ export function HubKeywordSearch({
                 `aria-hidden`, because it is a picture of a suggestion: the box
                 is named by its `aria-label`, and a screen reader being read a
                 sample one character at a time would be the worst seat in the
-                house. */}
+                house.
+
+                `data-stage-skip` for the same kind of reason: when a presenter
+                is showing this page (`stage/mirror.ts`), a sample typing itself
+                would be a new picture of the page for every character, sent to
+                every reader, for as long as the presenter stood still. */}
             {rotating && (
               <div
                 ref={skin}
                 aria-hidden="true"
+                data-stage-skip=""
                 className="pointer-events-none absolute inset-y-0 left-0 right-14 flex items-center overflow-hidden border-[length:var(--ask-border-width)] border-transparent pl-[var(--ask-pad-x)] font-serif text-[length:var(--ask-font-size)] leading-7 text-lawfare-muted"
               >
                 <span ref={reel} className="inline-flex shrink-0 items-center whitespace-pre">

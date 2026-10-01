@@ -10,6 +10,9 @@
  * the same share of its lens at 28px as at 112px.
  */
 
+/** How far a pupil may leave the middle of its lens, as a share of the lens's radius. */
+export const OWL_TRAVEL = 0.33
+
 export type GazeBox = { left: number; top: number; width: number; height: number }
 
 export type Gaze = { x: number; y: number }
