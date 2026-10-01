@@ -32,9 +32,20 @@
   opacity: 0;
   transition: opacity var(--owl-glow-fade) ease;
 }
-.owl[data-lantern='lit'] .owl-glow,
-.owl[data-lantern='searching'] .owl-glow {
+.owl[data-lantern='lit'] .owl-glow {
   opacity: var(--owl-glow-lit);
+}
+
+/* Searching is a query in flight, and it has to read as one without any motion at all, for
+ * a reader who has asked for stillness: the light at full strength where a lit lantern's is
+ * at its steady level, and the lantern held up a little, as one is to look. `translate` is
+ * its own property, so it adds to whatever else moves the lantern. */
+.owl[data-lantern='searching'] .owl-glow {
+  opacity: var(--owl-search-high);
+}
+.owl[data-lantern='searching'] [data-part='lantern'] {
+  translate: 0 calc(var(--owl-search-lift) * -1px);
+  transition: translate var(--owl-glow-fade) ease;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -61,8 +72,17 @@
     }
   }
 
+  /* While a search is out the owl looks like it is looking: the light breathes in and out
+   * (opacity and size together, never larger than a lit lantern's, so it stays in the
+   * box), the lantern swings from its handle in time with it, and the pupils sweep slowly
+   * from side to side. All of it is the figure's own box. The pulse is `owl-search`; the
+   * rays of the engraved style share it (`styles/engraved/engraved.css`). */
   .owl[data-lantern='searching'] .owl-glow {
-    animation: owl-search var(--owl-search-period) ease-in-out infinite alternate;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation:
+      owl-search var(--owl-search-period) ease-in-out infinite alternate,
+      owl-search-grow var(--owl-search-period) ease-in-out infinite alternate;
   }
   @keyframes owl-search {
     from {
@@ -70,6 +90,38 @@
     }
     to {
       opacity: var(--owl-search-high);
+    }
+  }
+  @keyframes owl-search-grow {
+    from {
+      transform: scale(0.72);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+
+  .owl[data-lantern='searching'] [data-part='lantern'] {
+    animation: owl-search-swing var(--owl-search-period) ease-in-out infinite alternate;
+  }
+  @keyframes owl-search-swing {
+    from {
+      rotate: calc(var(--owl-search-swing) * -1);
+    }
+    to {
+      rotate: var(--owl-search-swing);
+    }
+  }
+
+  .owl[data-lantern='searching'] .owl-pupils {
+    animation: owl-search-scan calc(var(--owl-search-period) * 1.7) ease-in-out infinite alternate;
+  }
+  @keyframes owl-search-scan {
+    from {
+      translate: calc(var(--owl-search-scan) * -1px) 0;
+    }
+    to {
+      translate: calc(var(--owl-search-scan) * 1px) 0;
     }
   }
 

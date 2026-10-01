@@ -1,5 +1,5 @@
-import { createElement, useId, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
-import type { LayerProps } from '../../types'
+import { createContext, createElement, useContext, useId, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
+import type { LayerProps, WingSide } from '../../types'
 import './engraved.css'
 import { buildPlate, type Plate, type PlateGroup } from './plate'
 import { resolveEngraved, type EngravedSettings } from './resolve'
@@ -10,12 +10,23 @@ import { useFigurePx } from './size'
  * The engraved style's layers. The drawing itself is `plate.ts`, which returns path data;
  * this file turns it into elements and decides nothing about how it looks.
  *
- * Everything the plate prints goes into `behind`, in one group per region with a stable
- * class (`eng-body`, `eng-head`, `eng-face`, `eng-belly`, `eng-wing-l`, `eng-wing-r`,
- * `eng-beak`, `eng-books`, `eng-ground`), because none of it overlaps the eyes. Only the
- * lantern is in its own layer, since it has to sit over the glow. `frame` wraps the whole
- * figure so the scan filter acts on the eyes and the glow too.
+ * The plate is built once, by `Frame`, which wraps the whole figure so that the scan filter
+ * acts on the eyes and the glow too, and handed down by context. Each layer the style
+ * supplies prints the regions of the plate that belong to its part of the figure, in one
+ * group per region with a stable class (`eng-body`, `eng-head`, `eng-face`, `eng-belly`,
+ * `eng-wing-l`, `eng-wing-r`, `eng-beak`, `eng-books`, `eng-ground`), which is how the
+ * scaffold's part groups (`../../parts.ts`) can move the head as one thing: the head
+ * layer prints `eng-head` and `eng-face`, the scaffold puts the eyes and the beak in with
+ * them. The lantern's regions are its own layer, since it has to sit over the glow.
  */
+
+type Print = { plate: Plate; ink: string; paper: string }
+
+const PlateContext = createContext<Print | null>(null)
+
+function usePrint(): Print | null {
+  return useContext(PlateContext)
+}
 
 function useSettings(design: LayerProps['design']): EngravedSettings {
   return useMemo(() => resolveEngraved(design), [design])
@@ -54,13 +65,16 @@ function paperOf(settings: EngravedSettings): string {
   return settings.scan.on ? settings.scan.paperTone : settings.params.paper
 }
 
-export function Frame({ design, children }: LayerProps & { children: ReactNode }) {
+export function Frame(props: LayerProps & { children: ReactNode }) {
+  const { design, children } = props
   const settings = useSettings(design)
   const { params, scan } = settings
   const id = 'eng-scan-' + useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const anchor = useRef<SVGGElement>(null)
   const px = useFigurePx(anchor)
   const filter = useMemo(() => (scan.on ? scanFilter(scan, params, px || 320) : null), [scan, params, px])
+  const plate = usePlate(props, settings, px)
+  const print = useMemo(() => ({ plate, ink: params.ink, paper: paperOf(settings) }), [plate, params.ink, settings])
   return (
     <>
       {filter ? (
@@ -82,12 +96,11 @@ export function Frame({ design, children }: LayerProps & { children: ReactNode }
       ) : null}
       <g
         ref={anchor}
-        className="eng-frame"
-        style={{ '--eng-ink': params.ink, '--eng-paper': paperOf(settings) } as CSSProperties}
+        className="eng-frame"        style={{ '--eng-ink': params.ink, '--eng-paper': paperOf(settings) } as CSSProperties}
         filter={filter ? `url(#${id})` : undefined}
         transform={scan.on && scan.skew !== 0 ? `rotate(${scan.skew} 50 50)` : undefined}
       >
-        {children}
+        <PlateContext.Provider value={print}>{children}</PlateContext.Provider>
       </g>
     </>
   )
@@ -97,30 +110,54 @@ function render(prim: Prim, index: number): ReactNode {
   return createElement(prim.tag, { key: index, ...prim.attrs }, ...(prim.children ?? []).map(render))
 }
 
-export function Behind(props: LayerProps) {
-  const { design } = props
-  const settings = useSettings(design)
-  const anchor = useRef<SVGGElement>(null)
-  const px = useFigurePx(anchor)
-  const plate = usePlate(props, settings, px)
-  const { ink } = settings.params
+/** The plate's regions with these ids, in plate order. */
+function Regions({ ids }: { ids: readonly string[] }) {
+  const print = usePrint()
+  if (!print) return null
   return (
-    <g className="eng-plate" ref={anchor}>
-      {plate.ground !== 'none' ? (
-        <circle className="eng-paper" cx="50" cy="50" r={design.shape.disc} fill={paperOf(settings)} />
-      ) : null}
-      {plate.groups
-        .filter((g) => !g.lantern)
+    <>
+      {print.plate.groups
+        .filter((g) => !g.lantern && ids.includes(g.id))
         .map((g) => (
-          <Region key={g.id} group={g} ink={ink} />
+          <Region key={g.id} group={g} ink={print.ink} />
         ))}
-    </g>
+    </>
   )
 }
 
-/** The engraved owl keeps everything in `behind`; the beak, belly and wings are there. */
-export function Front() {
-  return null
+/** The paper, the ground tint and the books. */
+export function Ground({ design }: LayerProps) {
+  const print = usePrint()
+  return (
+    <>
+      {print && print.plate.ground !== 'none' ? (
+        <circle className="eng-paper" cx="50" cy="50" r={design.shape.disc} fill={print.paper} />
+      ) : null}
+      <Regions ids={['ground', 'books']} />
+    </>
+  )
+}
+
+export function Body() {
+  return <Regions ids={['body']} />
+}
+
+export function Head() {
+  return <Regions ids={['head', 'face']} />
+}
+
+export function Beak() {
+  return <Regions ids={['beak']} />
+}
+
+export function Belly() {
+  return <Regions ids={['belly']} />
+}
+
+const WING_IDS = { l: ['wing-l'], r: ['wing-r'] } as const
+
+export function Wing({ side }: LayerProps & { side: WingSide }) {
+  return <Regions ids={WING_IDS[side]} />
 }
 
 /** A lid of short lines across the top of each lens: the one place the eyes are engraved. */
@@ -173,20 +210,16 @@ function Rays({ cx, cy, ink, paper }: { cx: number; cy: number; ink: string; pap
   )
 }
 
-export function Lantern(props: LayerProps) {
-  const { design, pose } = props
-  const settings = useSettings(design)
-  const anchor = useRef<SVGGElement>(null)
-  const px = useFigurePx(anchor)
-  const plate = usePlate(props, settings, px)
-  const { ink } = settings.params
-  const paper = paperOf(settings)
+export function Lantern({ design, pose }: LayerProps) {
+  const print = usePrint()
+  if (!print) return null
+  const { plate, ink, paper } = print
   const { handle, frame, flame } = pose.lantern
   const fx = flame.x + flame.width / 2
   const fy = flame.y + flame.height / 2
   const hw = Math.max(design.stroke.handle * 0.7, 1.2)
   return (
-    <g className="eng-lantern-layer" ref={anchor}>
+    <g className="eng-lantern-layer">
       <Rays cx={fx} cy={fy} ink={ink} paper={paper} />
       <line x1={handle.x} y1={handle.y1} x2={handle.x} y2={handle.y2} stroke={paper} strokeWidth={hw + 1.4} />
       <line x1={handle.x} y1={handle.y1} x2={handle.x} y2={handle.y2} stroke={ink} strokeWidth={hw} />
@@ -204,7 +237,7 @@ export function Lantern(props: LayerProps) {
           <Region key={g.id} group={g} ink={ink} />
         ))}
       <path
-        className="eng-flame"
+        className="eng-flame owl-flame"
         d={`M${fx} ${flame.y + flame.height * 0.08}C${fx + flame.width * 0.55} ${flame.y + flame.height * 0.5} ${fx + flame.width * 0.38} ${flame.y + flame.height * 0.95} ${fx} ${flame.y + flame.height * 0.95}C${fx - flame.width * 0.38} ${flame.y + flame.height * 0.95} ${fx - flame.width * 0.55} ${flame.y + flame.height * 0.5} ${fx} ${flame.y + flame.height * 0.08}Z`}
         fill={ink}
       />

@@ -74,6 +74,7 @@ const POSES: Record<OwlPose, PoseGeometry> = {
 
 const STRUCTURE: Partial<OwlDesign> = {
   standing: {},
+  temperament: null,
   voice: null,
   params: {},
   poses: POSES,

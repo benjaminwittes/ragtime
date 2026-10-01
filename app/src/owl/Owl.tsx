@@ -3,7 +3,7 @@ import { isNight } from './resolve'
 import { OwlDrawing } from './scaffold'
 import { useStanding } from './standing'
 import { getStyle } from './styles'
-import type { OwlLantern, OwlPose } from './types'
+import type { OwlLantern, OwlPin, OwlPose } from './types'
 import { useGaze } from './useGaze'
 import { useOwlDesign } from './useOwlDesign'
 
@@ -39,6 +39,7 @@ export function Owl({
   style,
   title,
   variant,
+  pin,
 }: {
   pose?: OwlPose
   lantern?: OwlLantern
@@ -55,8 +56,14 @@ export function Owl({
   title?: string
   /** A variant id. Without one the owl wears the active variant (the Tune panel's, or the base). */
   variant?: string
+  /**
+   * A design laid over everything, the panel's values included, with standing knobs of its
+   * own, for a specimen that has to stay what it is while the panel moves the other owls:
+   * the lab's. Keep it stable (a constant or a memo); a new object is a new design.
+   */
+  pin?: OwlPin
 }) {
-  const design = useOwlDesign(variant)
+  const design = useOwlDesign(variant, pin)
   const svg = useRef<SVGSVGElement>(null)
   // Read once, when the owl arrives, rather than kept by a clock: a lantern that came on
   // at the stroke of eight under someone mid-sentence would be the page changing under

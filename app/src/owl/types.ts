@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { TuneValue } from '@/tune/types'
+import type { OWL_PARTS } from './parts'
 
 /**
  * The owl module's vocabulary, in one file so that the registries (styles, variants,
@@ -97,10 +98,17 @@ export type OwlDesign = {
   /** The hours an owl that keeps them lights its lantern unasked: from this hour to that one. */
   night: { from: number; until: number }
   /**
-   * Which standing (idle) behaviours are on, by id (`standing/`). Empty today.
-   * Switching one on is `{ standing: { breathe: true } }` in a variant.
+   * Which standing (idle) behaviours are on, by id (`standing/`). Empty for the owl as
+   * sent. Switching one on is `{ standing: { breathe: true } }` in a variant, and what a
+   * temperament (`temperament`) switches on is laid into it when the design is resolved
+   * (`standing/resolve.ts`), so everything downstream reads this one record.
    */
   standing: Record<string, boolean>
+  /**
+   * The id of a temperament (`temperaments/`): a named set of standing behaviours and how
+   * strongly each runs. Null is none. A variant names one; the panel's knob wins over it.
+   */
+  temperament: string | null
   /** The id of the voice an owl speaks in, when speech exists (`speech.ts`). */
   voice: string | null
   /**
@@ -121,6 +129,16 @@ export type DeepPartial<T> = {
 }
 
 export type OwlDesignPatch = DeepPartial<OwlDesign>
+
+/**
+ * A specimen: a design patch laid over everything, with its own standing knobs
+ * (`owl.standing.<id>.amount` and the like), and the panel's standing knobs ignored. For a
+ * lab row that has to stay what it says while the panel moves every other owl.
+ */
+export type OwlPin = {
+  design?: OwlDesignPatch
+  knobs?: Readonly<Record<string, TuneValue>>
+}
 
 /* -------------------------------------------------------------------------- */
 /* Variants                                                                    */
@@ -152,19 +170,38 @@ export type LayerProps = {
 /**
  * A render style draws the owl's *body*; the scaffold (`scaffold.tsx`) owns everything
  * the rest of the site depends on — the root element and its attributes, the eyes and
- * pupils the gaze moves, the glow the lantern state fades, the gradient it paints with.
- * So a style cannot forget the DOM contract, because it is not given the chance to write
- * it. The scaffold paints in this order:
+ * pupils the gaze moves, the glow the lantern state fades, the gradient it paints with,
+ * and the part groups (`parts.ts`) every layer sits in. So a style cannot forget the DOM
+ * contract, because it is not given the chance to write it. The scaffold paints in this
+ * order, each layer inside the part named beside it:
  *
- *   `defs`  →  `behind`  →  eyes, pupils, rims  →  `eyeDetail`  →  `front`  →  glow  →  `lantern`
+ *   `defs`
+ *   ground                                     (`ground`)
+ *   body                                       (`body`)
+ *   head, eyes, pupils, rims, `eyeDetail`, beak  (`head`, and `features` for what is on the face)
+ *   belly                                      (`belly`)
+ *   `wing` left, `wing` right                  (`wing-l`, `wing-r`)
+ *   glow, `lantern`                            (`lantern`)
  *
- * The split follows the drawing: the eyes sit on the face but under the beak, so a style
- * that wants a different beak puts it in `front`, and one that wants hatching over the
- * eyes puts it in `eyeDetail`.
+ * (`headLast` moves the head group to after the wings.)
+ *
+ * The split follows the drawing and is what lets a behaviour move the head as a head: a
+ * style draws the head's parts in its own layers, the scaffold groups them. A style that
+ * wants hatching over the eyes puts it in `eyeDetail`; one that wants a different beak
+ * draws it in `beak`.
  */
 export type OwlStyle = {
   id: string
   label: string
+  /**
+   * Paint the head group after the belly and the wings instead of before them. Nothing
+   * overlaps at rest, so the choice does not change what the owl looks like; it exists
+   * because a renderer can rasterise the same shapes a shade differently when they come in
+   * a different order, and a style should be able to keep the order it was tuned in. The
+   * flat style keeps the concept sheet's (head first); the engraved style's thousands of
+   * thin ribbons are tuned the other way.
+   */
+  headLast?: boolean
   /** Extra `<defs>` content — patterns, filters. The glow gradient is the scaffold's. */
   defs?: ComponentType<LayerProps>
   /**
@@ -174,32 +211,109 @@ export type OwlStyle = {
    * needs.
    */
   frame?: ComponentType<LayerProps & { children: ReactNode }>
-  /** Ground, books, body, head, face: everything behind the eyes. */
-  behind: ComponentType<LayerProps>
+  /** What the figure stands on and in front of: the disc and the books. It never moves with the owl. */
+  ground: ComponentType<LayerProps>
+  /** The torso. */
+  body: ComponentType<LayerProps>
+  /** The head and the face: the shapes the eyes sit on. */
+  head: ComponentType<LayerProps>
   /** Over the eyes and their rims, under the beak. Optional. */
   eyeDetail?: ComponentType<LayerProps>
-  /** Beak, belly, wings: in front of the face. */
-  front: ComponentType<LayerProps>
+  beak: ComponentType<LayerProps>
+  belly: ComponentType<LayerProps>
+  /** One wing; drawn once for each side. */
+  wing: ComponentType<LayerProps & { side: WingSide }>
   /** Lantern hardware — handle, frame, flame — over the glow. */
   lantern: ComponentType<LayerProps>
 }
+
+/** `l` is the owl's own left, the left of the picture: the first wing in a pose's table. */
+export type WingSide = 'l' | 'r'
 
 /* -------------------------------------------------------------------------- */
 /* Standing behaviours                                                         */
 /* -------------------------------------------------------------------------- */
 
+/** What a behaviour runs on, after its temperament and the panel have had their say. */
+export type StandingConfig = {
+  /** 1 is the behaviour's own default strength; a behaviour scales its distances by it. */
+  amount: number
+  /** Seconds for one cycle, or the mean gap between occasional gestures. */
+  period: number
+  /** Frames a second for looped motion that should be stepped; 0 is smooth. */
+  fps: number
+}
+
+/** The part names behaviours address; see `parts.ts`. */
+export type OwlPart = (typeof OWL_PARTS)[number]
+
+/** A CSS property map for `Element.animate`, with the one thing that is not optional. */
+export type Frames = Keyframe[]
+
 export type StandingContext = {
   svg: SVGSVGElement
   design: OwlDesign
+  /** This behaviour's settings now. Use `watch` to follow them. */
+  readonly config: StandingConfig
+  /** Another behaviour's settings, or undefined when it is not running on this owl. */
+  configOf(id: string): StandingConfig | undefined
+  /** Calls `fn` now, and again whenever the settings change (the panel, the scan finish). */
+  watch(fn: (config: StandingConfig) => void): void
+  /** A random number in [0, 1) from this owl's own stream for this behaviour: seeded, so a run can be replayed. */
+  rng(): number
+  /** Where in its cycle this owl begins one behaviour, so owls and behaviours do not move in unison. */
+  phase(id?: string): number
+  /** The group for a part, or null when the style has none. */
+  part(name: OwlPart): SVGGElement | null
+  /** Elements inside the figure by selector. */
+  all(selector: string): SVGElement[]
+  /**
+   * A looped motion on `target`, added on top of whatever else acts on it. `frames` is
+   * called with the current settings whenever they change, and returns one cycle of
+   * keyframes (offsets and all). The cycle runs for `config.period`, starting part-way
+   * through at this owl's phase. Stepped when `config.fps` is set.
+   */
+  loop(
+    target: OwlPart | SVGElement | readonly (OwlPart | SVGElement)[],
+    frames: (config: StandingConfig) => Frames,
+    options?: {
+      /** Where in the cycle to start, 0 to 1. Default: this behaviour's phase for this owl. */
+      phase?: number
+      /**
+       * Keep another running behaviour's pace, so that two effects of one breath stay one
+       * breath, unless this behaviour's own period has been moved off its default. Both
+       * need the same default period.
+       */
+      paceOf?: string
+      /** The keyframes carry their own stepping: do not step them again when stepping is on. */
+      own?: boolean
+    },
+  ): void
+  /**
+   * One motion, played once, on top of whatever else acts on the targets, and gone after.
+   * Several targets share one clock. Resolves when it ends.
+   */
+  gesture(targets: (OwlPart | SVGElement)[], frames: Frames, timing: { duration: number; easing?: string }): Promise<void>
+  /**
+   * Calls `fn` at irregular intervals averaging `config.period` seconds, each gap drawn from
+   * `[1 - spread, 1 + spread] × mean`. Waits while the owl is hidden or off screen.
+   */
+  every(fn: () => void, options?: { spread?: number }): void
+  /** A listener removed with the behaviour. */
+  on(target: EventTarget, type: string, handler: (event: Event) => void): void
+  /** An element the behaviour adds to the figure, removed with it. */
+  add(parent: Element, child: Element): void
+  /** True while the owl is hidden or off screen. */
+  readonly paused: boolean
 }
 
 /**
  * An idle behaviour: something the owl does when nobody is asking anything of it. It is
- * data plus, optionally, code. The root carries `data-standing="<ids>"` for every one
- * that is on, so a purely CSS behaviour is a stylesheet keyed on that attribute and
- * needs no `start`. One that needs a timer or a listener implements `start`, which is
- * only called for a reader who has not asked for reduced motion, and returns its own
- * cleanup.
+ * data plus code. The root carries `data-standing="<ids>"` for every one that is on, and
+ * `start` — only called for a reader who has not asked for reduced motion — builds the
+ * motion with the context's `loop` and `gesture`, which add to one another instead of
+ * replacing (`standing/kit.ts` says how), so behaviours never need to know about each
+ * other. Cleanup is the context's: what a behaviour made through it is undone with it.
  *
  * The house rule applies: nothing a standing behaviour does may move a pixel outside the
  * figure's own box.
@@ -207,8 +321,31 @@ export type StandingContext = {
 export type OwlStanding = {
   id: string
   label: string
-  start?: (context: StandingContext) => void | (() => void)
+  /** For people: what it does, in a line, for the panel and the lab. */
+  note: string
+  /** The cycle, or mean gap, in seconds at amount and period 1. */
+  period: number
+  start(context: StandingContext): void | (() => void)
 }
+
+/**
+ * A temperament: a named set of behaviours and how strongly each runs. Variance as data.
+ * A behaviour that is listed is on; `amount` and `period` multiply its own defaults.
+ */
+export type OwlTemperament = {
+  id: string
+  label: string
+  /** One line, shown beside the temperament in the panel and the lab. */
+  note: string
+  behaviours: Readonly<Record<string, { amount?: number; period?: number }>>
+  /**
+   * Whether looped motion is stepped: always, never, or only when the scan finish is on
+   * (the default), where every frame costs a filter pass.
+   */
+  step?: StepMode
+}
+
+export type StepMode = 'auto' | 'always' | 'never'
 
 /* -------------------------------------------------------------------------- */
 /* Embedding                                                                   */

@@ -13,7 +13,7 @@
 .eng-frame .owl-pupils circle {
   fill: var(--eng-ink);
 }
-.eng-frame > circle[fill='none'] {
+.eng-frame .owl-rim {
   stroke: var(--eng-ink);
 }
 
@@ -31,6 +31,10 @@
 @media (prefers-reduced-motion: no-preference) {
   /* `owl-search` is the glow's own breathing (`owl.css`), so the rays and the halo pulse as one. */
   .owl[data-lantern='searching'] .eng-rays {
-    animation: owl-search var(--owl-search-period) ease-in-out infinite alternate;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation:
+      owl-search var(--owl-search-period) ease-in-out infinite alternate,
+      owl-search-grow var(--owl-search-period) ease-in-out infinite alternate;
   }
 }

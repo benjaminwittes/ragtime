@@ -43,6 +43,16 @@ export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObj
     return () => owl.removeEventListener('click', onClick)
   }, [target, prod])
 
+  // Tell the figure, which is inside the box this one sits in, that it has started to speak,
+  // so a behaviour (`standing/nod.ts`) can answer with a gesture. An event on the box and
+  // not a prop on the owl: the two are siblings and know each other only by that box.
+  const line = spoken?.key
+  useEffect(() => {
+    if (line === undefined) return
+    const owl = target?.current ?? region.current?.parentElement
+    owl?.dispatchEvent(new CustomEvent('owl-speak'))
+  }, [target, line])
+
   // The pointer says the owl can be clicked, only while that does something.
   useEffect(() => {
     const owl = target?.current ?? region.current?.parentElement

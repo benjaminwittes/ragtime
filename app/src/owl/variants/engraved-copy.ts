@@ -5,9 +5,10 @@ import type { OwlVariant } from '../types'
 export default {
   id: 'engraved-copy',
   label: 'Engraved: photocopy',
-  note: 'The line engraving after it has been photocopied: ink spread, edge wobble, a 1-bit clip, toner specks, a page fed in a little crooked.',
+  note: 'The line engraving after it has been photocopied: ink spread, edge wobble, a 1-bit clip, toner specks, a page fed in a little crooked. Standing in the print temperament: the page re-seats on the glass, the hatching breathes, a light bar passes.',
   design: {
     style: 'engraved',
+    temperament: 'print',
     palette: ENGRAVED_PALETTE,
     stroke: { rim: 1.3 },
     params: {
