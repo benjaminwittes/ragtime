@@ -17,6 +17,7 @@ import {
   subscribeAmaPreflightSkip,
 } from '@/lib/ama-preflight-skip'
 import { TopupDialog } from '@/auth/TopupDialog'
+import { googleOffered } from '@/auth/sign-in'
 import { usePaid } from '@/auth/use-paid'
 import { getDemoPassword, setDemoPassword } from '@/lib/demo-access'
 import { setUsageLogEnabled, useUsageLogEnabled, usageLoggingBuildEnabled } from '@/lib/usage-log'
@@ -30,7 +31,8 @@ type AccessTab = 'paid' | 'byok' | 'demo'
  * "AI access" header affordance — opens a sheet with two ways to authorize
  * AI mode calls:
  *
- *   1. Lawfare-billed (paid tier) — magic-link sign-in via Supabase Auth.
+ *   1. Lawfare-billed (paid tier) — sign-in via Supabase Auth, by magic
+ *      link or, when the auth project offers it, with Google.
  *      Signed-in users see their email, balance, and per-query cap, plus
  *      a sign-out button. Top-up (Stripe Checkout) is a follow-up PR.
  *
@@ -47,11 +49,17 @@ type AccessTab = 'paid' | 'byok' | 'demo'
  */
 export function AccessSettings() {
   const auth = useAuth()
-  const [open, setOpen] = useState(false)
+  const { returnError } = usePaid()
+  // Someone who followed a sign-in link, or came back from Google, and got no
+  // session lands on a page that looks exactly as it did before they tried.
+  // The sheet opens on the sign-in form, which says what happened.
+  const [open, setOpen] = useState(returnError !== null)
   // Default the active tab to whatever the user has configured (or paid
   // when neither, since paid is the recommended path). Persisted only for
   // the lifetime of the sheet open — re-opens restart from the default.
-  const [tab, setTab] = useState<AccessTab>(() => defaultTab(auth))
+  const [tab, setTab] = useState<AccessTab>(() =>
+    returnError !== null ? 'paid' : defaultTab(auth),
+  )
 
   const pipColor = auth.isPaid
     ? 'bg-primary'
@@ -260,12 +268,45 @@ function PaidPanel({ onClose }: { onClose: () => void }) {
   return <SignInForm />
 }
 
+/** Whether to offer Google: false until the auth project says it is on. */
+function useGoogleOffered(): boolean {
+  const [offered, setOffered] = useState(false)
+  useEffect(() => {
+    let live = true
+    void googleOffered().then((yes) => {
+      if (live) setOffered(yes)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+  return offered
+}
+
 function SignInForm() {
   const paid = usePaid()
+  const google = useGoogleOffered()
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const [sentTo, setSentTo] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // A failed return is this form's first error, and is said once: taken
+  // from the context here, and forgotten there.
+  const [error, setError] = useState<string | null>(paid.returnError)
+  const { clearReturnError } = paid
+  useEffect(() => clearReturnError(), [clearReturnError])
+
+  async function handleGoogle() {
+    setError(null)
+    setLeaving(true)
+    const errMsg = await paid.signInWithGoogle()
+    // No error means the browser is already on its way to Google, and the
+    // button stays as it is until the page goes.
+    if (errMsg) {
+      setError(errMsg)
+      setLeaving(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -315,13 +356,35 @@ function SignInForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <p className="text-sm text-foreground/90">
-          Sign in to use Lawfare-billed Anthropic credit. We send a one-time
-          sign-in link to your email — no password.
+          Sign in to use Lawfare-billed Anthropic credit.
+          {!google &&
+            ' We send a one-time sign-in link to your email — no password.'}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           First-time users start with a $0 balance; top up after sign-in.
         </p>
       </div>
+      {google && (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleGoogle()}
+            disabled={leaving || submitting}
+            className="flex w-full items-center justify-center gap-2"
+            data-sign-in="google"
+          >
+            <GoogleMark />
+            {leaving ? 'Opening Google…' : 'Continue with Google'}
+          </Button>
+          <p
+            role="separator"
+            className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border"
+          >
+            or by email
+          </p>
+        </>
+      )}
       <label className="block space-y-1.5">
         <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Email
@@ -332,11 +395,20 @@ function SignInForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          disabled={submitting}
+          disabled={submitting || leaving}
         />
+        {google && (
+          <span className="block text-xs text-muted-foreground">
+            We send a one-time sign-in link — no password.
+          </span>
+        )}
       </label>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      <Button type="submit" disabled={submitting || !email.trim()}>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      <Button type="submit" disabled={submitting || leaving || !email.trim()}>
         {submitting ? 'Sending…' : 'Send sign-in link'}
       </Button>
       <p className="text-xs text-muted-foreground">
@@ -357,6 +429,30 @@ function SignInForm() {
         .
       </p>
     </form>
+  )
+}
+
+/** Google's "G", in its own four colours, as its sign-in branding asks. */
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 18 18" aria-hidden="true" className="size-4 shrink-0">
+      <path
+        fill="#4285F4"
+        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"
+      />
+      <path
+        fill="#34A853"
+        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M3.96 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3-2.33Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58Z"
+      />
+    </svg>
   )
 }
 

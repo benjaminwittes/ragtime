@@ -8,11 +8,12 @@ import {
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { getSupabase } from './supabase'
+import { googleOffered, refusalInWords, returnErrorIn, withoutReturnError } from './sign-in'
 
 /**
  * Paid-tier auth context.
  *
- * Tracks: Supabase session (= magic-link JWT) + the Worker-side account
+ * Tracks: Supabase session (a JWT, from a magic link or from Google) + the Worker-side account
  * snapshot (balance, per-query cap, ledger). The session is owned by the
  * Supabase client and replayed here through onAuthStateChange so React
  * stays in sync. Balance is refreshed on sign-in, on visibility-regain,
@@ -62,6 +63,15 @@ export type PaidContextValue = {
   /** Send a magic-link email. Returns an error message on failure, null
    *  on success (UI then shows "check your email"). */
   signInWithEmail: (email: string) => Promise<string | null>
+  /** Leave for Google's sign-in page. Returns an error message when the
+   *  browser could not be sent there; on success the page is on its way out
+   *  and comes back signed in. Offer it only when `googleOffered()` says so. */
+  signInWithGoogle: () => Promise<string | null>
+  /** Why this page was opened from a sign-in link, or from Google, without
+   *  getting a session: an expired or used link, a refusal. `null` otherwise. */
+  returnError: string | null
+  /** Forget `returnError` once it has been shown. */
+  clearReturnError: () => void
   /** Sign out + clear local state. */
   signOut: () => Promise<void>
   /** Fetch /api/balance from the Worker using the current JWT. No-op when
@@ -83,10 +93,16 @@ export function PaidProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<PaidAccount | null>(null)
   const [balanceLoading, setBalanceLoading] = useState(false)
   const [balanceError, setBalanceError] = useState<string | null>(null)
+  // Read before the SDK starts, which is the effect below: a failed return
+  // is in the address the page was opened on and nowhere else.
+  const [returnError, setReturnError] = useState<string | null>(() =>
+    returnErrorIn(window.location.search, window.location.hash),
+  )
+  const clearReturnError = useCallback(() => setReturnError(null), [])
 
   // On mount: ask the Supabase SDK for the current session, and subscribe
-  // to changes. Magic-link returns surface here as a new SIGNED_IN event
-  // after the SDK consumes the URL fragment.
+  // to changes. Magic-link and Google returns surface here as a new
+  // SIGNED_IN event after the SDK consumes the URL fragment.
   useEffect(() => {
     const sb = getSupabase()
     let cancelled = false
@@ -98,6 +114,17 @@ export function PaidProvider({ children }: { children: ReactNode }) {
         setSession(r.data.session ?? null)
       } finally {
         if (!cancelled) setReady(true)
+        // The SDK has read the address by now. It leaves a failed return's
+        // keys in place, where a reload would report the failure again.
+        const { search, hash } = window.location
+        const clean = withoutReturnError(search, hash)
+        if (clean.search !== search || clean.hash !== hash) {
+          window.history.replaceState(
+            window.history.state,
+            '',
+            window.location.pathname + clean.search + clean.hash,
+          )
+        }
       }
     })()
 
@@ -198,7 +225,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
           email,
           options: { emailRedirectTo: redirectTo },
         })
-        if (r.error) return r.error.message
+        if (r.error) return refusalInWords(r.error, await googleOffered())
         return null
       } catch (e) {
         return e instanceof Error ? e.message : String(e)
@@ -206,6 +233,21 @@ export function PaidProvider({ children }: { children: ReactNode }) {
     },
     [],
   )
+
+  const signInWithGoogle = useCallback(async (): Promise<string | null> => {
+    const sb = getSupabase()
+    // Back to the page they left from, as the email link does.
+    const redirectTo = window.location.origin + window.location.pathname
+    try {
+      const r = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo },
+      })
+      return r.error ? r.error.message : null
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e)
+    }
+  }, [])
 
   const signOut = useCallback(async () => {
     const sb = getSupabase()
@@ -235,6 +277,9 @@ export function PaidProvider({ children }: { children: ReactNode }) {
       balanceLoading,
       balanceError,
       signInWithEmail,
+      signInWithGoogle,
+      returnError,
+      clearReturnError,
       signOut,
       refreshBalance,
       applyBalanceFromWorker,
@@ -246,6 +291,9 @@ export function PaidProvider({ children }: { children: ReactNode }) {
       balanceLoading,
       balanceError,
       signInWithEmail,
+      signInWithGoogle,
+      returnError,
+      clearReturnError,
       signOut,
       refreshBalance,
       applyBalanceFromWorker,
