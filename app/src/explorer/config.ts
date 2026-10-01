@@ -11,10 +11,3 @@
  * repeating the environment read and hoping (`@/lib/worker-url`).
  */
 export { WORKER_URL } from '@/lib/worker-url'
-
-/**
- * Where a note about this page goes (`model/point.ts`), named at build time. Empty — the
- * default — draws no widget at all: a page with nowhere honest to file a note is better
- * off without a button that fails.
- */
-export const POINT_URL = ((import.meta.env.VITE_POINT_URL as string | undefined) || '').trim()
