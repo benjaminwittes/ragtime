@@ -2,7 +2,7 @@ import { useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { AskBox } from '@/components/AskBox'
-import { Owl } from '@/components/Owl'
+import { useOwlFigure } from '@/owl/useOwlFigure'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { useDocs } from '@/docs/DocsContext'
 import { cn } from '@/lib/utils'
@@ -220,6 +220,7 @@ export function HubKeywordSearch({
   // Anything below the box — results or a failure — ends the hero's claim on the
   // viewport. A tall hero with the answer under it is an answer nobody scrolls to.
   const answered = response !== null || error !== null
+  const owl = useOwlFigure('hub', { lantern: loading ? 'searching' : 'dark' })
 
   return (
     // The first screen, measured against the bar above it: `--site-bar-h` is
@@ -248,10 +249,8 @@ export function HubKeywordSearch({
           // where it was at 540 and 537, and the foot line is still on the first screen.
           //
           // Its lantern comes up while a search is out, and is lit after dark regardless.
-          figure={
-            <Owl pose="stacks" lantern={loading ? 'searching' : 'dark'} keepsHours className="w-full" />
-          }
-          figureClassName="mx-auto mb-5 w-[5.5rem] sm:mb-6 sm:w-28"
+          // Its pose, size and classes are the hub's entry in `owl/embeds.ts`.
+          {...owl}
           // One whole sentence per corpus, and the h1 holds nothing but the
           // sentence: no span, no live region, no second heading, no button.
           // What crosses between two corpora is the whole line's opacity, which

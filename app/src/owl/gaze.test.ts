@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { owlGaze } from './owl-gaze'
+import { owlGaze } from './gaze'
 
 // A 100px owl with its top-left corner at (200, 100): the eyes are at (250, 138).
 const box = { left: 200, top: 100, width: 100, height: 100 }

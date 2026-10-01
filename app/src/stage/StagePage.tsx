@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type MouseEvent } from 'react'
 
-import { Owl } from '@/components/Owl'
+import { OwlSpot } from '@/owl/OwlSpot'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { toHref } from '@/lib/routing'
 import { cn } from '@/lib/utils'
@@ -67,7 +67,7 @@ export function StagePage() {
       <main className="stage-house flex min-h-dvh items-center justify-center px-6" data-stage="quiet">
         <div className="max-w-md text-center">
           {/* The owl keeps the house while it is empty, as it keeps the door. */}
-          <Owl lantern="dark" keepsHours className="mx-auto w-24" title="RAGtime" />
+          <OwlSpot site="stage" />
           <h1 className="mt-6 font-serif text-3xl font-medium tracking-tight">{now.phase === 'closed' ? SAID.closed : SAID.quiet}</h1>
           {now.phase !== 'closed' && <p className="mt-3 text-sm text-[color:var(--house-ink-soft)]">{SAID.quietMore}</p>}
           <p className="mt-8 text-sm">

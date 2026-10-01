@@ -71,6 +71,14 @@ hook. The declaration is the default that ships:
 const rows = useTunable<number>('hub.previewRows')   // 25 in production
 ```
 
+**A surface with structure behind it** — one whose tunables are a typed config
+(the owl: `src/owl/`) keeps the config's scalar defaults *as the knob declarations*,
+and builds the config from them at first use, so there is one copy of each number and
+"Write to source" patches the copy production reads. A knob id is a path into the
+config (`owl.design.palette.navy`); structure a knob cannot express stays plain data
+beside it. Several knob files can feed one surface, loaded by a glob, so a sub-area adds
+a file instead of editing a list (`src/owl/knobs/index.ts`).
+
 **A new surface** — one `defineSurface` with a selector that is in the DOM when
 the page is (the hub marks itself `data-tune="hub"`), and one line in
 `knobs.ts`. The panel finds it by asking the document, so nothing else needs to

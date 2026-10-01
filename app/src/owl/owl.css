@@ -1,0 +1,117 @@
+/* The owl's own behaviour (`owl/Owl.tsx`): the gaze, the lantern, the blink.
+ *
+ * Everything here acts inside the figure's box. `overflow: visible` is for the lantern,
+ * which the concept draws hanging a little past the edge of the cream disc, and for its
+ * glow, which is allowed to fall on the paper beside it.
+ *
+ * Every duration, distance and brightness is read from a custom property the owl writes
+ * on its own root from its design (`vars.ts`): there is no second copy of a timing in
+ * this sheet, and so no fallback written after the comma. The numbers live in
+ * `knobs/motion.ts`, and a variant can change them for one owl.
+ *
+ * Unlayered, like `explorer.css`, so these rules hold inside `.explorer` as well as
+ * outside it without either sheet having to know about the other.
+ *
+ * Imported from `src/index.css`, before `./transitions.css`.
+ */
+
+.owl {
+  display: block;
+  overflow: visible;
+}
+
+/* A CSS length in an SVG transform is a length in the drawing's own units, so the two
+ * numbers the gaze writes — figure units, not pixels — go in as they are. The short
+ * transition is what turns a pointer's sixty updates a second into a look. */
+.owl .owl-pupils {
+  transform: translate(calc(var(--owl-gaze-x, 0) * 1px), calc(var(--owl-gaze-y, 0) * 1px));
+  transition: transform var(--owl-gaze-ease) ease-out;
+}
+
+.owl .owl-glow {
+  opacity: 0;
+  transition: opacity var(--owl-glow-fade) ease;
+}
+.owl[data-lantern='lit'] .owl-glow,
+.owl[data-lantern='searching'] .owl-glow {
+  opacity: var(--owl-glow-lit);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Closed for about a seventh of a second, every six and a half. `fill-box` puts the
+   * hinge on the eyes' own middle rather than on the middle of the figure. The closed
+   * stretch is a fixed share of the period (96% to 100%), so a longer period is a
+   * longer wait and not a slower blink. */
+  .owl .owl-eyes {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: owl-blink var(--owl-blink-period) infinite;
+  }
+  .owl[data-blink='off'] .owl-eyes {
+    animation: none;
+  }
+  @keyframes owl-blink {
+    0%,
+    96%,
+    100% {
+      transform: scaleY(1);
+    }
+    98% {
+      transform: scaleY(var(--owl-blink-closed));
+    }
+  }
+
+  .owl[data-lantern='searching'] .owl-glow {
+    animation: owl-search var(--owl-search-period) ease-in-out infinite alternate;
+  }
+  @keyframes owl-search {
+    from {
+      opacity: var(--owl-search-low);
+    }
+    to {
+      opacity: var(--owl-search-high);
+    }
+  }
+
+  /* The owl saying no: at the door, to a code that is not the code. The reach is the
+   * widest swing; the three after it are the same shake dying down. */
+  .owl.owl-no {
+    animation: owl-no var(--owl-shake-time) ease-in-out;
+  }
+  @keyframes owl-no {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(calc(var(--owl-shake-reach) * -1));
+    }
+    40% {
+      transform: translateX(var(--owl-shake-reach));
+    }
+    60% {
+      transform: translateX(calc(var(--owl-shake-reach) * -0.75));
+    }
+    80% {
+      transform: translateX(calc(var(--owl-shake-reach) * 0.5));
+    }
+  }
+}
+
+/* The placement wrapper, when something is said (`owl/speech.tsx`). Without speech the
+ * owl is mounted bare and none of this applies. The slot sits beside the figure, outside
+ * its box, so it costs the page around it nothing until it has something in it. */
+.owl-spot {
+  position: relative;
+}
+.owl-speech {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 0.5rem;
+  width: max-content;
+  max-width: 16rem;
+}
+.owl-speech:empty {
+  display: none;
+}

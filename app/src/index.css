@@ -26,7 +26,7 @@
 @import 'shadcn/tailwind.css';
 @import './explorer/explorer.css';
 @import './hub/hub.css';
-@import './components/owl.css';
+@import './owl/owl.css';
 /* Last of the imports, and it has to be: it names pieces of both sheets above and sets
  * `--vt-*` against them, so it reads them rather than the other way round. What happens
  * between two routes — which pieces travel, which leave, in what order. */

@@ -1,6 +1,6 @@
 import { useMemo, useState, type MouseEvent } from 'react'
 
-import { Owl } from '@/components/Owl'
+import { useOwlFigure } from '@/owl/useOwlFigure'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { toHref } from '@/lib/routing'
 
@@ -74,6 +74,7 @@ export function RecordStage({
   onOpen?: (id: string) => void
 }) {
   const laid = useMemo(() => ground(scene.docs), [scene.docs])
+  const owl = useOwlFigure('record', { lantern: scene.pending ? 'searching' : 'dark' })
   // What this reader last pointed at. It stays until they point at something else, so the
   // label is still there when the pointer travels to it — and so a touch, which stops
   // pointing the moment the finger lifts, can read a label at all. The presenter bringing
@@ -119,8 +120,7 @@ export function RecordStage({
           <SurfaceIntro
             level={1}
             className="grid grid-cols-[auto_1fr] items-center gap-x-[clamp(0.6rem,1.4cqi,1.4rem)] gap-y-[0.3cqi]"
-            figure={<Owl lantern={scene.pending ? 'searching' : 'dark'} className="w-full" />}
-            figureClassName="col-start-1 row-span-2 row-start-1 w-[clamp(3rem,5.2cqi,4.75rem)]"
+            {...owl}
             heading={<>&ldquo;{scene.query}&rdquo;</>}
             lede={scene.label}
             headingClassName="col-start-2 row-start-2 font-serif text-[clamp(1.4rem,3.2cqi,3rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"

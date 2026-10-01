@@ -3,15 +3,15 @@
  *
  * A pure function of three things — the box the owl is drawn in, where its eyes are
  * inside that box, and where the pointer is — so the arithmetic can be tested without a
- * browser (`owl-gaze.test.ts`) and `components/Owl.tsx` is left with only the listener.
+ * browser (`gaze.test.ts`) and `useGaze.ts` is left with only the listener.
  *
  * The answer is in the drawing's own units, not in pixels: the owl is a 100×100 figure
  * drawn at whatever size its caller asks for, and a pupil that travels two units travels
  * the same share of its lens at 28px as at 112px.
+ *
+ * How far a pupil may travel is the design's `motion.gazeTravel`, a share of the lens's
+ * radius; callers turn it into figure units and pass it as `travel`.
  */
-
-/** How far a pupil may leave the middle of its lens, as a share of the lens's radius. */
-export const OWL_TRAVEL = 0.33
 
 export type GazeBox = { left: number; top: number; width: number; height: number }
 

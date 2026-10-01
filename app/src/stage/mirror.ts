@@ -27,7 +27,7 @@
  *   selection and every scroll position; changing only what changed keeps all three.
  */
 
-import { OWL_TRAVEL, owlGaze } from '@/lib/owl-gaze'
+import { GAZE_X, GAZE_Y, OWL_ATTR, lookOwlAt } from '@/owl/contract'
 
 /**
  * Never in a frame, and removed again on arrival. One list for both ends on purpose: a
@@ -46,11 +46,6 @@ export const PRIVATE_SAID = 'The presenter has a private panel open.'
 
 /** How far down an element is scrolled, as a fraction, written where the stage can read it. */
 const Y = 'data-stage-y'
-
-/** The site's owl (`components/Owl.tsx`), and the two properties its eyes are turned by. */
-const OWL = 'data-owl'
-const GAZE_X = '--owl-gaze-x'
-const GAZE_Y = '--owl-gaze-y'
 
 export type Captured = { html: string; cls: string; vars: Record<string, string> }
 
@@ -93,7 +88,7 @@ export function capture(doc: Document): Captured {
     // not a new picture of the page: the stage is told where the pointer is anyway, and
     // turns its own owl's eyes to it (`lookAt`). Left in, every move of the mouse over a
     // page with the owl on it would send the page again.
-    if (live.hasAttribute(OWL)) {
+    if (live.hasAttribute(OWL_ATTR)) {
       const style = (made as Element & ElementCSSInlineStyle).style
       style.removeProperty(GAZE_X)
       style.removeProperty(GAZE_Y)
@@ -243,18 +238,9 @@ export function scrollToFraction(el: Element, y: number): void {
  * the same pointer, so the room's owl is looking at what the presenter is showing them.
  */
 export function lookAt(root: Element, at: { x: number; y: number } | null): void {
-  for (const owl of root.querySelectorAll<SVGSVGElement>(`svg[${OWL}]`)) {
-    const lens = owl.querySelector('.owl-eyes circle')
-    let x = 0
-    let y = 0
-    if (at && lens) {
-      const eyeY = Number(lens.getAttribute('cy'))
-      const travel = Number(lens.getAttribute('r')) * OWL_TRAVEL
-      ;({ x, y } = owlGaze(owl.getBoundingClientRect(), eyeY, travel, at.x, at.y))
-    }
-    owl.style.setProperty(GAZE_X, x.toFixed(2))
-    owl.style.setProperty(GAZE_Y, y.toFixed(2))
-  }
+  // The owl is read for how far its pupils may travel as well as where its eyes are: that
+  // arrives in the frame, in the owl's own style attribute (`@/owl/contract`).
+  for (const owl of root.querySelectorAll<SVGSVGElement>(`svg[${OWL_ATTR}]`)) lookOwlAt(owl, at)
 }
 
 /** How far down the window is, as the same fraction a frame uses for an element. */

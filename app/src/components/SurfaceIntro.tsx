@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 /**
  * A surface saying what it is, and what it will cost you to use it.
@@ -29,7 +29,7 @@ type Props = {
   lede: ReactNode
   /**
    * Who is speaking, above what they say: the owl, in the pose each surface gives it
-   * (`Owl.tsx`). Optional, so a surface with no figure renders exactly what it did.
+   * (`owl/embeds.ts`). Optional, so a surface with no figure renders exactly what it did.
    */
   figure?: ReactNode
   /** On the `<section>`. */
@@ -38,6 +38,8 @@ type Props = {
   ledeClassName?: string
   /** On the figure's wrapper, which should be no wider than the figure — see below. */
   figureClassName?: string
+  /** Also on the figure's wrapper: custom properties its classes read, such as the owl's size. */
+  figureStyle?: CSSProperties
 }
 
 export function SurfaceIntro({
@@ -49,6 +51,7 @@ export function SurfaceIntro({
   headingClassName,
   ledeClassName,
   figureClassName,
+  figureStyle,
 }: Props) {
   const Heading = level === 1 ? 'h1' : 'h2'
   return (
@@ -69,7 +72,7 @@ export function SurfaceIntro({
           and lets the books go, instead of dissolving two pictures of it. The wrapper has
           to hug the figure for that — its box is the rectangle that travels. */}
       {figure ? (
-        <div className={figureClassName} style={{ viewTransitionName: 'owl' }}>
+        <div className={figureClassName} style={{ ...figureStyle, viewTransitionName: 'owl' }}>
           {figure}
         </div>
       ) : null}

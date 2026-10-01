@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { CheckoutReturnGate } from '@/auth/CheckoutReturnGate'
-import { Owl } from '@/components/Owl'
 import { SiteBar, SiteBarSlotProvider } from '@/components/SiteBar'
 import { Hub } from '@/hub/Hub'
 import { PrivacyPolicy } from '@/legal/PrivacyPolicy'
@@ -25,6 +24,8 @@ import { demoView, type DemoView } from '@/demo/kit'
 import { spokeSlugFor } from '@/lib/deep-link'
 import { navigateTo, toHref, toLogical } from '@/lib/routing'
 import { withViewTransition } from '@/lib/transition'
+import { OWL_LAB } from '@/owl/lab/path'
+import { OwlSpot } from '@/owl/OwlSpot'
 import { PresentPage } from '@/stage/PresentPage'
 import { StageDock } from '@/stage/StageDock'
 import { StagePage } from '@/stage/StagePage'
@@ -49,6 +50,8 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *                                  is showing, live, as real text (`src/stage/`)
  *   `/present`                   → the presenter's console, opened by the kit's
  *                                  passphrase; it drives `/stage`
+ *   `/owl-lab`                   → the owl contact sheet (`src/owl/lab/`); only in a
+ *                                  build with the tuning layer
  *   `/terrain`                   → one collection's answer to one phrase, drawn
  *                                  as ground (`?c=<collection>&q=<phrase>`)
  *   `/corpus/<slug>`             → full `SpokeShell`
@@ -73,6 +76,14 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  * `transitions.css`).
  */
 
+/**
+ * The owl lab: a contact sheet of every owl variant, pose and lantern state, for looking
+ * at the owl while tuning it (`owl/lab/`). Only in a build with the tuning layer —
+ * `__RT_TUNE__` is a literal `false` otherwise, so this folds to `null` and the import
+ * under it is never followed: the lab leaves no chunk in a production build.
+ */
+const OwlLab = __RT_TUNE__ ? lazy(() => import('@/owl/lab/OwlLab')) : null
+
 type Route =
   | { kind: 'hub' }
   | { kind: 'explorer' }
@@ -82,6 +93,7 @@ type Route =
   | { kind: 'stage' }
   | { kind: 'present' }
   | { kind: 'terrain' }
+  | { kind: 'owl-lab' }
   | { kind: 'privacy' }
   | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
@@ -104,6 +116,7 @@ function parseRoute(pathname: string): Route {
   if (pathname === '/stage' || pathname === '/stage/') return { kind: 'stage' }
   if (pathname === '/present' || pathname === '/present/') return { kind: 'present' }
   if (pathname === '/terrain' || pathname === '/terrain/') return { kind: 'terrain' }
+  if (__RT_TUNE__ && (pathname === OWL_LAB || pathname === OWL_LAB + '/')) return { kind: 'owl-lab' }
   const link = links.parse(pathname)
   if (link) {
     // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
@@ -168,6 +181,8 @@ function App() {
       ? <PresentPage />
       : route.kind === 'terrain'
       ? <TerrainPage />
+      : route.kind === 'owl-lab' && OwlLab
+      ? <Suspense fallback={null}><OwlLab /></Suspense>
       : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
@@ -259,7 +274,7 @@ function NotFound({
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-2xl px-6 py-16">
         {/* Out with the lantern, looking for the page that is not here. */}
-        <Owl lantern="searching" className="mb-5 w-20" />
+        <OwlSpot site="not-found" />
         <h1 className="font-serif text-3xl font-bold">Not found</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           No surface matches <code className="font-mono">{pathname}</code>.

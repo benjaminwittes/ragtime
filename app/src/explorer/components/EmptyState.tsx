@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { CorpusRegistry } from '@lawfare/ragtime-client'
 
-import { Owl } from '@/components/Owl'
+import { useOwlFigure } from '@/owl/useOwlFigure'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 
 import { pinnedSummary } from '../model/brief.ts'
@@ -36,6 +36,7 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
   // of the first screen is worked example and how much is the reader's own
   // question — so it is a knob rather than a literal (`../tune.ts`).
   const exampleCount = useExampleCount()
+  const owl = useOwlFigure('explorer')
   const examples = EXAMPLE_QUESTIONS.slice(0, exampleCount)
   // Opened by the reader, and it stays open — this is their own toggle, like the trail's.
   // It starts open when something is already pinned, because a restored choice the page
@@ -57,8 +58,7 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
         // The Explorer's face: the owl standing, which is the pose its concept sheet
         // recommends for an avatar. It opens the conversation and does not follow it down
         // the page — beside an answer, the mark is already the thing that speaks.
-        figure={<Owl keepsHours />}
-        figureClassName="owl-figure"
+        {...owl}
         heading="Ask the federal record a question."
         ledeClassName="lede"
         lede={
