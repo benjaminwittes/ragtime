@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import {
   Sheet,
@@ -8,9 +8,11 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { navigateTo, toHref } from '@/lib/routing'
 import { cn } from '@/lib/utils'
 import { selectDocsForContext, getDocsEntry } from './registry'
 import { useDocs } from './DocsContext'
+import { docsLink } from './request'
 import {
   corpusCountFigures,
   loadSpokeFigures,
@@ -47,7 +49,64 @@ function EntryBody({ entry }: { entry: DocsEntry }) {
     () => resolveFigures(entry.content, { ...corpusCountFigures(), ...current.figures }, current.state),
     [entry.content, current.figures, current.state],
   )
-  return <ReactMarkdown>{content}</ReactMarkdown>
+  return <ReactMarkdown components={{ a: DocsAnchor }}>{content}</ReactMarkdown>
+}
+
+/**
+ * A link inside a docs page (`request.ts` says which of four things it is).
+ *
+ * Pages write logical paths, so the mount prefix is added here, once — a page
+ * that spelled `/ragtime/…` would be right on one deploy and wrong on the
+ * other. Every branch keeps a real `href`, so a modified click, a middle
+ * click and "copy link address" all still do what a link does; only the
+ * plain click is taken, as `AppLink` takes it.
+ */
+function DocsAnchor({ href, children }: { href?: string; children?: ReactNode }) {
+  const { open, close } = useDocs()
+  const link = docsLink(href ?? '')
+  if (link.kind === 'outside') {
+    return (
+      <a href={link.href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    )
+  }
+  if (link.kind === 'file') {
+    return (
+      <a href={toHref(link.to)} target="_blank" rel="noopener">
+        {children}
+      </a>
+    )
+  }
+  const plain = (e: MouseEvent<HTMLAnchorElement>) =>
+    e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey
+  if (link.kind === 'entry') {
+    return (
+      <a
+        href={toHref(`/?docs=${encodeURIComponent(link.slug)}`)}
+        onClick={(e) => {
+          if (!plain(e)) return
+          e.preventDefault()
+          open(link.slug)
+        }}
+      >
+        {children}
+      </a>
+    )
+  }
+  return (
+    <a
+      href={toHref(link.to)}
+      onClick={(e) => {
+        if (!plain(e)) return
+        e.preventDefault()
+        close()
+        navigateTo(link.to)
+      }}
+    >
+      {children}
+    </a>
+  )
 }
 
 /**

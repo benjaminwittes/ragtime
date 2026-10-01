@@ -5,6 +5,7 @@ import { hubKeywordSearchEntry } from './content/hub-keyword-search'
 import { accessAndCostEntry } from './content/access-and-cost'
 import { auditabilityEntry } from './content/auditability'
 import { givingFeedbackEntry } from './content/giving-feedback'
+import { connectingClaudeEntry } from './content/connecting-claude'
 // Litigation spoke.
 import { aboutLitigationEntry } from './content/about-litigation'
 import { litigationModesEntry } from './content/litigation-modes'
@@ -51,11 +52,11 @@ import { aboutSanctionsEntry } from './content/about-sanctions'
 import { aboutBooksEntry } from './content/about-books'
 
 /**
- * Central docs registry. 35 entries: 5 global and 30 spoke-scoped.
+ * Central docs registry. 36 entries: 6 global and 30 spoke-scoped.
  *
  * Entries live in `./content/<slug>.ts` and are aggregated here.
  *
- * - The five global entries carry `order` 1 through 5, in the sequence they
+ * - The six global entries carry `order` 1 through 6, in the sequence they
  *   are imported above, and render on every surface.
  *   There were eight until 2026-09-18, when Mary Ford's note collapsed them
  *   by three: `semantic-search` was deleted with the keyword/semantic
@@ -83,6 +84,7 @@ export const docsEntries: readonly DocsEntry[] = [
   accessAndCostEntry,
   auditabilityEntry,
   givingFeedbackEntry,
+  connectingClaudeEntry,
   // Litigation
   aboutLitigationEntry,
   litigationModesEntry,

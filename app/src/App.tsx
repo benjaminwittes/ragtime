@@ -20,9 +20,12 @@ import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import { ExplorerPage } from '@/explorer/ExplorerPage'
 import { CollectionPage, CollectionsIndex } from '@/collections/CollectionsPage'
+import { DemoPage } from '@/demo/DemoPage'
+import { demoView, type DemoView } from '@/demo/kit'
 import { spokeSlugFor } from '@/lib/deep-link'
 import { navigateTo, toHref, toLogical } from '@/lib/routing'
 import { withViewTransition } from '@/lib/transition'
+import { Tour } from '@/tour/Tour'
 import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-client'
 
 /**
@@ -35,6 +38,9 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *                                  into the spokes (`src/explorer/`)
  *   `/collections`               → curated litigation collections
  *   `/collections/<slug>`        → one collection's cases (`src/collections/`)
+ *   `/demo`, `/demo/deck`        → a presenter's guide and deck, served sealed
+ *                                  and opened in the browser by the link that
+ *                                  carries its passphrase (`src/demo/`)
  *   `/corpus/<slug>`             → full `SpokeShell`
  *   `/corpus/<slug>/<id>`        → the same shell, which opens that
  *                                  document's detail sheet on mount (the
@@ -62,6 +68,7 @@ type Route =
   | { kind: 'explorer' }
   | { kind: 'collections' }
   | { kind: 'collection'; slug: string }
+  | { kind: 'demo'; view: DemoView }
   | { kind: 'privacy' }
   | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
@@ -79,6 +86,8 @@ function parseRoute(pathname: string): Route {
   if (pathname === '/collections' || pathname === '/collections/') return { kind: 'collections' }
   const coll = pathname.match(/^\/collections\/([a-z0-9][a-z0-9-]{0,63})\/?$/)
   if (coll) return { kind: 'collection', slug: coll[1] }
+  const demo = demoView(pathname)
+  if (demo) return { kind: 'demo', view: demo }
   const link = links.parse(pathname)
   if (link) {
     // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
@@ -135,6 +144,8 @@ function App() {
       ? <CollectionsIndex />
       : route.kind === 'collection'
       ? <CollectionPage key={route.slug} slug={route.slug} />
+      : route.kind === 'demo'
+      ? <DemoPage view={route.view} />
       : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
@@ -164,6 +175,9 @@ function App() {
         {surface}
       </div>
       <CheckoutReturnGate />
+      {/* Beside the route for the same reason the bar is above it: the tour crosses
+          routes, and one mounted inside a route would end at the first step that left it. */}
+      <Tour />
     </SiteBarSlotProvider>
   )
 }
