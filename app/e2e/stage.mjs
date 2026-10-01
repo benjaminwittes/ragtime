@@ -61,6 +61,12 @@ const KIT = {
 const SEALED = JSON.stringify({ ...(await seal(JSON.stringify(KIT), PASS)), stage: { pub: KEYS.pub } })
 const OLD_KIT = JSON.stringify(await seal(JSON.stringify({ ...KIT, stage: undefined }), PASS))
 
+// A title that takes several lines at any width, as an opinion's can: the label under the
+// ground has to hold it without growing.
+const LONG_TITLE =
+  'One with no length, and a title that runs on: ' +
+  'Whether the Department May Decline to Produce to a Committee of the Congress the Memoranda of Its Own Attorneys Concerning the Detention, Transfer and Trial of Persons Held Outside the United States, and Related Questions of Privilege, Procedure and Practice'
+
 // What the OLC filter answers with, for the search the driver brings on: four opinions
 // whose fields differ in exactly the ways the stage is supposed to show.
 const OLC = {
@@ -72,7 +78,7 @@ const OLC = {
     { id: 1, title: 'A short one', author: 'Theodore B. Olson', date_issued: '1984-10-01', source: 'doj-published', source_url_doj: null, source_url_knight: null, page_count: 4, text_length: 9000, ocr_quality: 'clean' },
     { id: 2, title: 'The longer one', author: 'Jay S. Bybee', date_issued: '2002-08-01', source: 'doj-published', source_url_doj: null, source_url_knight: null, page_count: 50, text_length: 160000, ocr_quality: 'clean' },
     { id: 3, title: 'A released one', author: null, date_issued: '1962-03-12', source: 'knight-foia', source_url_doj: null, source_url_knight: null, page_count: 12, text_length: 30000, ocr_quality: 'degraded' },
-    { id: 4, title: 'One with no length', author: null, date_issued: '1975-06-30', source: 'doj-published', source_url_doj: null, source_url_knight: null, page_count: null, text_length: null, ocr_quality: null },
+    { id: 4, title: LONG_TITLE, author: null, date_issued: '1975-06-30', source: 'doj-published', source_url_doj: null, source_url_knight: null, page_count: null, text_length: null, ocr_quality: null },
   ],
 }
 
@@ -298,6 +304,30 @@ const browser = await launch()
     const label = await stage.locator('[data-record="label"]').innerText()
     return label.includes('The longer one') && label.includes('2002-08-01') && label.includes('Jay S. Bybee') && label.includes('50 pages')
   }, 3000), await stage.locator('[data-record="label"]').innerText())
+  // The ground takes the height the words under it leave. A label that grew with its title
+  // moved the ground from under the pointer, and the pointer was then on another column.
+  const groundAt = () =>
+    stage.locator('svg.terrain-ground').evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      return [Math.round(box.top), Math.round(box.height)]
+    })
+  const groundWas = await groundAt()
+  await stage.locator('.terrain-cell[data-terrain-doc="4"]').hover({ force: true })
+  const longRead = await until(stage, 'long label', async () => (await stage.locator('[data-record="label"]').innerText()).includes('One with no length'), 3000)
+  const groundIs = await groundAt()
+  board.check('a title that runs to several lines does not move the ground', longRead && groundWas[0] === groundIs[0] && groundWas[1] === groundIs[1], { longRead, groundWas, groundIs })
+  // The console's own small stage is the same drawing in a box of a fixed shape, and it
+  // is where the presenter points while the room watches.
+  const previewAt = () =>
+    present.locator('[data-present="preview"] svg.terrain-ground').evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      return [Math.round(box.top + window.scrollY), Math.round(box.height)]
+    })
+  const previewWas = await previewAt()
+  await present.locator('[data-present="preview"] .terrain-cell[data-terrain-doc="4"]').hover({ force: true })
+  const previewRead = await until(present, 'preview label', async () => (await present.locator('[data-present="preview"] [data-record="label"]').innerText()).includes('One with no length'), 3000)
+  const previewIs = await previewAt()
+  board.check('nor in the presenter’s own preview of it', previewRead && previewWas[0] === previewIs[0] && previewWas[1] === previewIs[1], { previewRead, previewWas, previewIs })
   board.check('the legend names only the forms that are on stage', await stage.locator('[data-record="legend"]').innerText().then((legend) => legend.includes('FOIA') && legend.includes('poor scan') && legend.includes('not recorded')))
   await stage.screenshot({ path: `${SHOTS}/stage-record.png` })
   // The presenter brings one forward, for the room.
