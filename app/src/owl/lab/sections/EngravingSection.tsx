@@ -12,7 +12,9 @@ import { variantList } from '../../variants'
  * Tune panel's Owl tab moves every owl here at once.
  *
  * The owls here are drawn with the scaffold directly rather than `Owl`, because the
- * screen and the scan rows lay a patch over a variant that no variant file carries.
+ * screen and the scan rows lay a patch over a variant that no variant file carries. They
+ * are plates to be looked at, so they do not move (`lab-still`): a scan filter is re-run by
+ * every change inside it.
  */
 
 const PAPER = 'bg-background text-foreground'
@@ -35,7 +37,7 @@ function Plate({ variant, patch, size }: { variant: string; patch?: OwlDesignPat
         lantern="lit"
         renderStyle={getStyle(design.style)}
         svgRef={ref}
-        className="w-full"
+        className="w-full lab-still"
       />
     </div>
   )
@@ -72,8 +74,8 @@ function Screens({ variant }: { variant: string }) {
 const SCANS: { id: string; label: string; engraved: Record<string, string | number | boolean> }[] = [
   { id: 'off', label: 'Clean print', engraved: { scan: false } },
   { id: 'copy', label: 'One copy: 1-bit, speckled', engraved: { scan: true } },
-  { id: 'worn', label: 'Worn: harder, more noise, skewed', engraved: { scan: true, scanSpread: 0.3, scanWobble: 0.7, scanHardness: 1, scanSpeckle: 0.5, scanDropout: 0.4, scanSkew: -1.2 } },
-  { id: 'gen4', label: 'Copied four times', engraved: { scan: true, scanGenerations: 4, scanSpread: 0.14, scanThreshold: 0.55, scanSkew: -1.5 } },
+  { id: 'worn', label: 'Worn: harder, more noise, skewed', engraved: { scan: true, scanSpread: 0.2, scanWobble: 0.7, scanHardness: 1, scanSpeckle: 0.5, scanDropout: 0.5, scanThreshold: 0.56, scanSkew: -1.2 } },
+  { id: 'gen4', label: 'Copied four times', engraved: { scan: true, scanGenerations: 4, scanSpread: 0.1, scanWobble: 0.5, scanHardness: 1, scanSpeckle: 0.25, scanDropout: 0.25, scanThreshold: 0.58, scanSkew: -1.5 } },
 ]
 
 function Scans({ variant }: { variant: string }) {

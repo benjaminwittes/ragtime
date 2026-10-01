@@ -20,7 +20,7 @@ import { useFigurePx } from './size'
  * them. The lantern's regions are its own layer, since it has to sit over the glow.
  */
 
-type Print = { plate: Plate; ink: string; paper: string }
+type Print = { plate: Plate; ink: string; paper: string; scanned: boolean }
 
 const PlateContext = createContext<Print | null>(null)
 
@@ -74,7 +74,10 @@ export function Frame(props: LayerProps & { children: ReactNode }) {
   const px = useFigurePx(anchor)
   const filter = useMemo(() => (scan.on ? scanFilter(scan, params, px || 320) : null), [scan, params, px])
   const plate = usePlate(props, settings, px)
-  const print = useMemo(() => ({ plate, ink: params.ink, paper: paperOf(settings) }), [plate, params.ink, settings])
+  const print = useMemo(
+    () => ({ plate, ink: params.ink, paper: paperOf(settings), scanned: settings.scan.on }),
+    [plate, params.ink, settings],
+  )
   return (
     <>
       {filter ? (
@@ -185,28 +188,53 @@ export function EyeDetail({ design, pose }: LayerProps) {
   )
 }
 
-/** Rays round the flame, drawn as paper wedges with an ink edge so they read on dark and light alike. */
-function Rays({ cx, cy, ink, paper }: { cx: number; cy: number; ink: string; paper: string }) {
-  const wedges = useMemo(() => {
-    const out: string[] = []
-    const n = 14
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + 0.2
-      const long = i % 2 === 0
-      const r0 = 9.6
-      const r1 = long ? 18 : 14
-      const half = long ? 0.07 : 0.055
-      const p = (r: number, da: number) => `${(cx + Math.cos(a + da) * r).toFixed(2)} ${(cy + Math.sin(a + da) * r).toFixed(2)}`
-      out.push(`M${p(r0, -half)}L${p(r1, 0)}L${p(r0, half)}Z`)
-    }
-    return out
-  }, [cx, cy])
+/** Wedges round (cx, cy): `n` of them from r0 out to r1 (every other one to r1 and the rest shorter by `short`). */
+function wedgePaths(cx: number, cy: number, n: number, r0: number, r1: number, short: number, half: number, turn: number): string[] {
+  const out: string[] = []
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + turn
+    const long = i % 2 === 0
+    const end = long ? r1 : r1 - short
+    const w = long ? half : half * 0.8
+    const p = (r: number, da: number) => `${(cx + Math.cos(a + da) * r).toFixed(2)} ${(cy + Math.sin(a + da) * r).toFixed(2)}`
+    out.push(`M${p(r0, -w)}L${p(end, 0)}L${p(r0, w)}Z`)
+  }
+  return out
+}
+
+/**
+ * The light round the flame, in three parts that the stylesheet shows by lantern state:
+ * the rays (lit and searching), a ring of outer rays and a wider cleared halo (searching
+ * only), so a search differs from a lit lantern in the drawing and not only in motion.
+ *
+ * The rays are paper wedges with an ink edge so they read on dark and light alike. Under the
+ * scan finish the edge is the thin part, and a 1-bit clip drops anything thinner than a pixel
+ * of the copier, so `bold` draws heavier edges and fatter wedges there, and a disc of paper
+ * is cut into the plate behind them (`eng-halo`): the light is then a clear patch in the
+ * hatching, which the clip keeps whole.
+ */
+function Rays({ cx, cy, ink, paper, bold }: { cx: number; cy: number; ink: string; paper: string; bold: boolean }) {
+  const half = bold ? 0.1 : 0.07
+  const inner = useMemo(() => wedgePaths(cx, cy, 14, 9.6, 18, 4, half, 0.2), [cx, cy, half])
+  const outer = useMemo(() => wedgePaths(cx, cy, 14, 19.6, 25, 2.2, half * 0.8, 0.2 + Math.PI / 14), [cx, cy, half])
+  const stroke = bold ? 0.62 : 0.3
   return (
-    <g className="eng-rays" fill={paper} stroke={ink} strokeWidth="0.3" strokeLinejoin="round">
-      {wedges.map((d) => (
-        <path key={d} d={d} />
-      ))}
-    </g>
+    <>
+      <g className="eng-halo" fill={paper}>
+        <circle className="eng-halo-lit" cx={cx} cy={cy} r={bold ? 11.5 : 0} />
+        <circle className="eng-halo-search" cx={cx} cy={cy} r={bold ? 14.5 : 0} />
+      </g>
+      <g className="eng-rays" fill={paper} stroke={ink} strokeWidth={stroke} strokeLinejoin="round">
+        {inner.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
+      <g className="eng-rays-outer" fill={paper} stroke={ink} strokeWidth={Math.max(stroke, 0.45)} strokeLinejoin="round">
+        {outer.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
+    </>
   )
 }
 
@@ -220,7 +248,7 @@ export function Lantern({ design, pose }: LayerProps) {
   const hw = Math.max(design.stroke.handle * 0.7, 1.2)
   return (
     <g className="eng-lantern-layer">
-      <Rays cx={fx} cy={fy} ink={ink} paper={paper} />
+      <Rays cx={fx} cy={fy} ink={ink} paper={paper} bold={print.scanned} />
       <line x1={handle.x} y1={handle.y1} x2={handle.x} y2={handle.y2} stroke={paper} strokeWidth={hw + 1.4} />
       <line x1={handle.x} y1={handle.y1} x2={handle.x} y2={handle.y2} stroke={ink} strokeWidth={hw} />
       <rect

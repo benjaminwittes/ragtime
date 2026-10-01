@@ -89,7 +89,10 @@ const plates = new Map<string, Plate>()
 export function buildPlate(input: PlateInput): Plate {
   const px = input.px > 0 ? input.px : 320
   const adapted = adaptParams(input.params, px)
-  const key = JSON.stringify([input.pose, input.shape, input.palette, adapted.params])
+  // The size is in the key itself: `adapted.params` only carries it when `adapt` is on, but
+  // the sampling step and tolerance in `draw` follow it either way. Callers pass a bucketed
+  // size (`size.ts`), so the key space is a short ladder, and the cache is capped besides.
+  const key = JSON.stringify([input.pose, input.shape, input.palette, adapted.params, Math.round(px)])
   const hit = plates.get(key)
   if (hit) return hit
   const t0 = typeof performance === 'undefined' ? Date.now() : performance.now()

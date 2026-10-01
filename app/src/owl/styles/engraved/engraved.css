@@ -19,12 +19,23 @@
 
 /* The rays round a lit lantern. Always in the figure and clear while it is dark, as the glow
  * is, so lighting it adds nothing to the drawing. The fade is the glow's. */
-.eng-rays {
+.eng-rays,
+.eng-rays-outer,
+.eng-halo-lit,
+.eng-halo-search {
   opacity: 0;
   transition: opacity var(--owl-glow-fade) ease;
 }
 .owl[data-lantern='lit'] .eng-rays,
-.owl[data-lantern='searching'] .eng-rays {
+.owl[data-lantern='lit'] .eng-halo-lit,
+.owl[data-lantern='searching'] .eng-rays,
+.owl[data-lantern='searching'] .eng-halo-lit {
+  opacity: 1;
+}
+/* A search adds a second ring of rays and a wider cleared halo to what a lit lantern has,
+ * so the two differ in the drawing and not only in the lantern's lift and in motion. */
+.owl[data-lantern='searching'] .eng-rays-outer,
+.owl[data-lantern='searching'] .eng-halo-search {
   opacity: 1;
 }
 

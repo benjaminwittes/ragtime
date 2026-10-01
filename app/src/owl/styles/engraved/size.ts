@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 
 /**
  * How many device pixels the owl is drawn across, which is what decides how fine a screen
@@ -30,15 +31,19 @@ function read(svg: Element, cssWidth?: number): number {
 
 function observe(): ResizeObserver {
   observer ??= new ResizeObserver((records) => {
-    for (const record of records) {
-      const entry = entries.get(record.target)
-      if (!entry) continue
-      const px = read(record.target, record.contentRect.width)
-      if (px !== entry.px) {
-        entry.px = px
-        for (const fn of entry.listeners) fn(px)
+    // Flushed in this callback, which runs after layout and before paint: a state update left
+    // to the scheduler is drawn a frame later, and that frame shows the old plate at the new size.
+    flushSync(() => {
+      for (const record of records) {
+        const entry = entries.get(record.target)
+        if (!entry) continue
+        const px = read(record.target, record.contentRect.width)
+        if (px !== entry.px) {
+          entry.px = px
+          for (const fn of entry.listeners) fn(px)
+        }
       }
-    }
+    })
   })
   return observer
 }

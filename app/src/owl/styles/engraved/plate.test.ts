@@ -74,6 +74,28 @@ describe('plate', () => {
     // coarsening there hides some knobs on purpose.
   }, 30_000)
 
+  it('keys the cache on the size even when the screen is not adapted to it', () => {
+    // With `adapt` off the parameters do not change with the size, but the sampling step does.
+    const a = plate({ adapt: false, seed: 41 }, 60)
+    const b = plate({ adapt: false, seed: 41 }, 320)
+    expect(b).not.toBe(a)
+    expect(plate({ adapt: false, seed: 41 }, 60)).toBe(a)
+  })
+
+  it('keys the cache on the palette and on the pose', () => {
+    const base = plate({ seed: 42 })
+    const tone = buildPlate({
+      pose: design.poses.archivist,
+      shape: design.shape,
+      palette: { ...design.palette, navy: '#7a8fb0' },
+      params: resolveEngraved({ params: { engraved: { seed: 42 } } }, {}).params,
+      px: 320,
+    })
+    expect(tone).not.toBe(base)
+    expect(tone.groups.map((g) => g.screen).join()).not.toBe(base.groups.map((g) => g.screen).join())
+    expect(plate({ seed: 42 }, 320, 'stacks')).not.toBe(base)
+  })
+
   it('coarsens a small figure: fewer, heavier lines, no cross-hatch', () => {
     const big = plate({}, 320)
     const small = plate({}, 56)
@@ -84,12 +106,25 @@ describe('plate', () => {
     expect(off.coarsening).toBe(1)
   })
 
-  it('keeps its path data and time inside a budget at the sizes the owl is drawn', () => {
+  it('keeps its path data and work inside a budget at the sizes the owl is drawn', () => {
     const cold = plate({ seed: 31 }, 320)
     expect(cold.stats.bytes).toBeLessThan(120_000)
-    expect(cold.stats.ms).toBeLessThan(1500)
-    for (const px of [56, 112, 224]) {
-      expect(plate({ seed: 32 }, px).stats.bytes).toBeLessThan(120_000)
+    // The cost of a plate is the work it asks of the browser (ribbons, points) and the path
+    // data it ships, all of which are deterministic; the build time is not asserted, because
+    // it moves with the load on the machine running the tests. Measured at the default
+    // settings: 623 ribbons and 5.8k points at 320px, 84 ribbons and 0.5k points at 56px.
+    expect(cold.stats.ribbons).toBeLessThan(1000)
+    expect(cold.stats.points).toBeLessThan(9000)
+    const sizes: [number, number, number][] = [
+      [56, 150, 1000],
+      [112, 300, 2200],
+      [224, 1000, 9000],
+    ]
+    for (const [px, ribbons, points] of sizes) {
+      const stats = plate({ seed: 32 }, px).stats
+      expect(stats.bytes, `${px}px bytes`).toBeLessThan(120_000)
+      expect(stats.ribbons, `${px}px ribbons`).toBeLessThan(ribbons)
+      expect(stats.points, `${px}px points`).toBeLessThan(points)
     }
   })
 

@@ -63,6 +63,19 @@ function dots(result: string, source: string, density: number): Prim[] {
 
 const round = (v: number) => Math.round(v * 1000) / 1000
 
+/**
+ * The blur's `stdDeviation`, in figure units. A blur narrower than about half a device pixel
+ * does nothing a reader could see in Chrome, and in WebKit it is widened to a minimum kernel,
+ * which smears the hatching into the solid mass the threshold then keeps. So below that width
+ * the blur is left out (a deviation of 0 passes its input through) and the ink spread comes
+ * from the warp and the threshold alone.
+ */
+export const MIN_BLUR_PX = 1
+
+export function sigma(spread: number, px: number): number {
+  return spread * (Math.max(px, 24) / 100) < MIN_BLUR_PX ? 0 : round(spread)
+}
+
 /** A clip about `threshold`: a straight line in alpha, steep when `hardness` is high. */
 function clip(source: string, result: string, threshold: number, hardness: number): Prim {
   const slope = 1 + 39 * Math.pow(hardness, 1.6)
@@ -109,7 +122,7 @@ export function scanFilter(scan: ScanParams, engraved: Pick<EngravedParams, 'ink
           yChannelSelector: 'G',
           result: `${mask}-${g}-warped`,
         }),
-        P('feGaussianBlur', { in: `${mask}-${g}-warped`, stdDeviation: round(spread), result: `${mask}-${g}-soft` }),
+        P('feGaussianBlur', { in: `${mask}-${g}-warped`, stdDeviation: sigma(spread, px), result: `${mask}-${g}-soft` }),
       )
     }
     // Roughen the ink: a little grain everywhere, then toner specks and missing specks.
