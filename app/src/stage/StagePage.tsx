@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 
-import { Mark } from '@/components/Mark'
+import { Owl } from '@/components/Owl'
 import { SlideFace } from '@/demo/parts'
 import { toHref } from '@/lib/routing'
 
 import { FigureByName } from './FigureByName.tsx'
 import { figureNamed } from './figures.ts'
-import { applyScrolls, clean, morph, resolve, scrollToFraction } from './mirror.ts'
+import { applyScrolls, clean, lookAt, morph, resolve, scrollToFraction } from './mirror.ts'
 import { unpack, type FrameMsg, type PointMsg, type ScrollMsg } from './protocol.ts'
 import { useStage } from './useStage.ts'
 
@@ -63,7 +63,8 @@ export function StagePage() {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-lawfare-paper px-6 text-foreground" data-stage="quiet">
         <div className="max-w-md text-center">
-          <Mark size={48} className="mx-auto text-lawfare-muted" title="RAGtime" />
+          {/* The owl keeps the house while it is empty, as it keeps the door. */}
+          <Owl lantern="dark" keepsHours className="mx-auto w-24" title="RAGtime" />
           <h1 className="mt-6 font-serif text-3xl font-medium tracking-tight">
             {now.phase === 'closed' ? SAID.closed : SAID.quiet}
           </h1>
@@ -209,6 +210,7 @@ function Mirror({ frame, scroll, point }: { frame: FrameMsg | null; scroll: Scro
     if (!el) return
     if (!point?.at) {
       el.style.opacity = '0'
+      if (root.current) lookAt(root.current, null)
       return
     }
     let raf = 0
@@ -220,8 +222,12 @@ function Mirror({ frame, scroll, point }: { frame: FrameMsg | null; scroll: Scro
         el.style.opacity = '0'
         return
       }
+      const x = box.left + box.width * point.x
+      const y = box.top + box.height * point.y
       el.style.opacity = '1'
-      el.style.transform = `translate(${box.left + box.width * point.x}px, ${box.top + box.height * point.y}px)`
+      el.style.transform = `translate(${x}px, ${y}px)`
+      // And the owl, if the page has one, looks where the presenter is pointing.
+      if (root.current) lookAt(root.current, { x, y })
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)

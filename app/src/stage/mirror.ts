@@ -27,6 +27,8 @@
  *   selection and every scroll position; changing only what changed keeps all three.
  */
 
+import { OWL_TRAVEL, owlGaze } from '@/lib/owl-gaze'
+
 /**
  * Never in a frame, and removed again on arrival. One list for both ends on purpose: a
  * path (`pathOf`) counts the children a frame keeps, so the two ends must agree on which
@@ -44,6 +46,11 @@ export const PRIVATE_SAID = 'The presenter has a private panel open.'
 
 /** How far down an element is scrolled, as a fraction, written where the stage can read it. */
 const Y = 'data-stage-y'
+
+/** The site's owl (`components/Owl.tsx`), and the two properties its eyes are turned by. */
+const OWL = 'data-owl'
+const GAZE_X = '--owl-gaze-x'
+const GAZE_Y = '--owl-gaze-y'
 
 export type Captured = { html: string; cls: string; vars: Record<string, string> }
 
@@ -81,6 +88,16 @@ export function capture(doc: Document): Captured {
       made.textContent = live.value
     } else if (live instanceof HTMLOptionElement) {
       made.toggleAttribute('selected', live.selected)
+    }
+    // Where the owl is looking is the presenter's pointer, sixty times a second. That is
+    // not a new picture of the page: the stage is told where the pointer is anyway, and
+    // turns its own owl's eyes to it (`lookAt`). Left in, every move of the mouse over a
+    // page with the owl on it would send the page again.
+    if (live.hasAttribute(OWL)) {
+      const style = (made as Element & ElementCSSInlineStyle).style
+      style.removeProperty(GAZE_X)
+      style.removeProperty(GAZE_Y)
+      if (made.getAttribute('style') === '') made.removeAttribute('style')
     }
     if (live.scrollTop > 0) made.setAttribute(Y, String(fraction(live.scrollTop, live.scrollHeight, live.clientHeight)))
     // An id is unique in a document, and the stage is a document with ids of its own.
@@ -217,6 +234,27 @@ export function applyScrolls(root: Element): void {
 export function scrollToFraction(el: Element, y: number): void {
   if (!Number.isFinite(y)) return
   el.scrollTop = y * (el.scrollHeight - el.clientHeight)
+}
+
+/**
+ * Turn every owl on the mirrored page to look at a point in the window — where the
+ * presenter is pointing — or straight ahead when they are pointing nowhere. On the
+ * presenter's own page the owl follows the presenter's pointer; on the stage it follows
+ * the same pointer, so the room's owl is looking at what the presenter is showing them.
+ */
+export function lookAt(root: Element, at: { x: number; y: number } | null): void {
+  for (const owl of root.querySelectorAll<SVGSVGElement>(`svg[${OWL}]`)) {
+    const lens = owl.querySelector('.owl-eyes circle')
+    let x = 0
+    let y = 0
+    if (at && lens) {
+      const eyeY = Number(lens.getAttribute('cy'))
+      const travel = Number(lens.getAttribute('r')) * OWL_TRAVEL
+      ;({ x, y } = owlGaze(owl.getBoundingClientRect(), eyeY, travel, at.x, at.y))
+    }
+    owl.style.setProperty(GAZE_X, x.toFixed(2))
+    owl.style.setProperty(GAZE_Y, y.toFixed(2))
+  }
 }
 
 /** How far down the window is, as the same fraction a frame uses for an element. */

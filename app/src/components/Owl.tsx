@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { owlGaze } from '@/lib/owl-gaze'
+import { OWL_TRAVEL, owlGaze } from '@/lib/owl-gaze'
 
 /**
  * The RAGtime owl: an archivist in spectacles, carrying a lantern.
@@ -90,8 +90,6 @@ const POSES = {
   },
 } as const
 
-/** How far a pupil may leave the middle of its lens, as a share of the lens's radius. */
-const TRAVEL = 0.33
 
 export function Owl({
   pose = 'archivist',
@@ -129,7 +127,7 @@ export function Owl({
     cx: p.lantern.flame.x + p.lantern.flame.width / 2,
     cy: p.lantern.flame.y + p.lantern.flame.height / 2,
   }
-  const travel = p.eyes.r * TRAVEL
+  const travel = p.eyes.r * OWL_TRAVEL
   const eyeY = p.eyes.cy
 
   useEffect(() => {
