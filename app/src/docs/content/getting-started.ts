@@ -26,13 +26,13 @@ export const gettingStartedEntry: DocsEntry = {
   scope: { kind: 'global' },
   order: 1,
   content: `
-RAGtime is a research tool over public records. Ten of its eleven corpora are
+RAGtime is a research tool over public records. {{corpora.primary|cap}} of its {{corpora.held}} corpora are
 primary sources: federal litigation, the U.S. Code, the Code of Federal
 Regulations, Justice Department legal opinions (OLC), presidential documents
 with their amendment and revocation graph, the Federal Register,
 congressional material from public laws to hearing transcripts, the
 documentary history of U.S. foreign relations (FRUS), the FBI's released
-Vault files, and OFAC's sanctions lists and guidance. The eleventh is
+Vault files, and OFAC's sanctions lists and guidance. The other is
 commentary — Lawfare and Executive Functions — where you are searching what
 named authors argued rather than the law itself.
 
@@ -45,7 +45,7 @@ explainers written as corpus content. A statute or an opinion here is the
 official text, full stop, and an AI synthesis across documents is an AI
 answer with citations, not an editorial gloss presented as authority.
 
-**The eleventh corpus is commentary, by design.** That analysis is *somebody
+**The other corpus is commentary, by design.** That analysis is *somebody
 else's*, searched as a corpus like any other. So a Commentary query surfaces
 and attributes what those authors argued, and never adjudicates who was
 right.
@@ -59,7 +59,7 @@ every claim.
 ## Getting Around
 
 **The hub** is the cross-corpus entry point. **Search** fans a keyword query
-across ten of the eleven corpora at once, free and without AI; use it when
+across {{corpora.fan}} of the {{corpora.held}} corpora at once, free and without AI; use it when
 you don't yet know which corpus holds your answer. (Sanctions is the one the
 fan leaves out; search it from its own workspace.) **Explorer** takes a
 question in your own words, plans the research, runs it, and hands you into
@@ -72,7 +72,7 @@ canonical document view, and the AI modes that fit that corpus.
 
 **Three things you can do on any corpus.** *Find* documents by keyword, and
 *filter* to a working set by date, court, agency or classification: both are
-local database searches and free, as is semantic search on the eight corpora
+local database searches and free, as is semantic search on the {{corpora.semantic}} corpora
 that have it. *Ask or analyze* puts an AI on the set — synthesize an answer,
 read each document against a question, produce an analytical write-up — and
 every output cites its sources. That runs on your own API key or a

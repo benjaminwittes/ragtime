@@ -8,8 +8,8 @@ export const aboutCongressEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'congress' },
   order: 9,
   content: `
-**What's in it.** The legislative branch across five collections, about 1.2
-million documents. Each has its own coverage floor, and a count question
+**What's in it.** The legislative branch across five collections, {{congress.documents}}
+documents. Each has its own coverage floor, and a count question
 reflects that floor rather than all of congressional history:
 
 - **Public laws** — every law enacted since 1789.
@@ -21,12 +21,11 @@ reflects that floor rather than all of congressional history:
 - **Witness testimony** — written statements to House committees, 118th–119th
   Congresses only.
 
-**The "who said what" surface.** Hearing transcripts are split into roughly
-seven million speaker turns, member questions paired with witness answers.
+**The "who said what" surface.** Hearing transcripts are split into
+{{congress.turns}} speaker turns, member questions paired with witness answers.
 That is what answers "what has the FBI Director said about this across his
-last five appearances". Attribution covers 86% of turns, about 94% in the
-modern era, and an ambiguous speaker is flagged as ambiguous rather than
-guessed.
+last five appearances". Not every turn has an attributed speaker, and an
+ambiguous speaker is flagged as ambiguous rather than guessed.
 
 **Searching tip.** Congressional speech is a different register: witnesses
 "decline to answer" rather than refuse, and programs go by nickname before

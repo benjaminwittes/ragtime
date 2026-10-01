@@ -17,9 +17,9 @@ export const aboutFbiEntry: DocsEntry = {
   order: 9,
   content: `
 **What's in it.** The FBI's own FOIA reading room — the Vault — as this
-project preserved it: 10,746 released documents across 1,755 subject
+project preserved it: {{fbi.documents}} released documents across {{fbi.collections}} subject
 collections, from COINTELPRO and the Rosenberg case to Amerithrax and D.B.
-Cooper, released with the Bureau's redactions intact. 1,627 have since been
+Cooper, released with the Bureau's redactions intact. {{fbi.removed}} have since been
 taken down from the Vault; our copies come from Wayback Machine captures,
 badged with a capture date and isolated by the Provenance filter.
 
@@ -30,7 +30,7 @@ spoke where that is true. "Documents *about* 1965" works as a content search;
 modes say so rather than fake a chronology.
 
 **Collections are the browse spine**, and the Collection box is a typeahead
-over all 1,755. Pick from the list rather than typing a name through: the
+over all {{fbi.collections}}. Pick from the list rather than typing a name through: the
 stored names are the Bureau's rather than English — some slugs
 ("rosenberg-case", "cointel-pro"), some titles ("Kansas City Massacre") — and
 the box matches your text as a substring of the stored value, with hyphens

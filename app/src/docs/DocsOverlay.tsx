@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import {
   Sheet,
@@ -11,6 +11,44 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { selectDocsForContext, getDocsEntry } from './registry'
 import { useDocs } from './DocsContext'
+import {
+  corpusCountFigures,
+  loadSpokeFigures,
+  resolveFigures,
+  type Figures,
+  type FigureState,
+} from './figures'
+import type { DocsEntry } from './types'
+
+/**
+ * One entry's markdown, with its `{{figure}}` tokens filled from the live
+ * facets of the spoke it belongs to (see figures.ts). The corpus-count words
+ * come from the registry and are there at once; the rest arrive after the
+ * fetch and read '…' until they do.
+ */
+function EntryBody({ entry }: { entry: DocsEntry }) {
+  const slug = entry.scope.kind === 'spoke' ? entry.scope.spokeSlug : undefined
+  const [live, setLive] = useState<{ slug: string | undefined; figures: Figures; state: FigureState }>(
+    { slug, figures: {}, state: 'loading' },
+  )
+  useEffect(() => {
+    let cancelled = false
+    loadSpokeFigures(slug).then(
+      (figures) => !cancelled && setLive({ slug, figures, state: 'ready' }),
+      () => !cancelled && setLive({ slug, figures: {}, state: 'failed' }),
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
+  // A figure set belongs to the spoke that fetched it; never show another's.
+  const current = live.slug === slug ? live : { figures: {}, state: 'loading' as FigureState }
+  const content = useMemo(
+    () => resolveFigures(entry.content, { ...corpusCountFigures(), ...current.figures }, current.state),
+    [entry.content, current.figures, current.state],
+  )
+  return <ReactMarkdown>{content}</ReactMarkdown>
+}
 
 /**
  * The floating-documentation overlay.
@@ -79,7 +117,7 @@ export function DocsOverlay() {
                   ← All topics
                 </button>
                 <h2 className="mb-3 font-serif text-2xl">{activeEntry.title}</h2>
-                <ReactMarkdown>{activeEntry.content}</ReactMarkdown>
+                <EntryBody entry={activeEntry} />
               </article>
             ) : (
               <nav className="py-4">

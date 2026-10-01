@@ -8,8 +8,8 @@ export const aboutUscEntry: DocsEntry = {
   scope: { kind: 'spoke', spokeSlug: 'usc' },
   order: 9,
   content: `
-**What's in it.** The entire United States Code — all 53 titles, more than
-60,400 sections — the codification of general and permanent federal statutory
+**What's in it.** The entire United States Code — all {{usc.titles}} titles,
+{{usc.sections}} sections — the codification of general and permanent federal statutory
 law. It reflects one release date, shown in the header; statutes enacted
 after it are not here yet.
 

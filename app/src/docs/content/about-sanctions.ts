@@ -14,10 +14,10 @@ export const aboutSanctionsEntry: DocsEntry = {
   content: `
 **What's in it.** Three connected collections. OFAC's sanctions lists as we
 mirror them nightly — every current entry on the SDN and consolidated
-(non-SDN) lists, about 19,600 entities, individuals, vessels and aircraft,
+(non-SDN) lists, {{sanctions.entities}} entities, individuals, vessels and aircraft,
 with aliases, addresses, programs, executive orders and relationships. OFAC's
-published guidance — 1,475 FAQs, enforcement actions and general licenses.
-And about 4,200 Federal Register sanctions actions: OFAC's notices, State
+published guidance — {{sanctions.guidance}} documents: FAQs, enforcement actions and general licenses.
+And {{sanctions.fr_actions}} Federal Register sanctions actions: OFAC's notices, State
 Department terrorist designations, and anything citing a sanctions executive
 order.
 
@@ -38,7 +38,7 @@ knows to look there.
 **Guidance is not regulations.** The guidance tab holds what OFAC
 *publishes*: FAQs including the 50 percent rule, enforcement actions, general
 licenses. The regulations themselves (31 CFR chapter V) live in the CFR
-corpus, and 31 guidance documents carry no issue date.
+corpus, and {{sanctions.undated_guidance}} guidance documents carry no issue date.
 
 **Demo queries:** "Is the Wagner Group sanctioned — and under which
 programs and executive orders?"; "What does OFAC's 50 percent rule mean
