@@ -377,10 +377,9 @@ function SignInForm() {
             <GoogleMark />
             {leaving ? 'Opening Google…' : 'Continue with Google'}
           </Button>
-          <p
-            role="separator"
-            className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border"
-          >
+          {/* A paragraph and not a separator: a separator's words are not read out,
+              and these are the ones that say a second way in follows. */}
+          <p className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
             or by email
           </p>
         </>
