@@ -30,6 +30,7 @@ import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
 import { ModeRow } from '../components/ModeRow'
+import { ResultsTerrain, ResultsViewSwitch, type ResultsView } from '../components/ResultsView'
 import {
   ResultsPaneHeader,
   SemanticResultsList,
@@ -39,6 +40,7 @@ import { downloadCsv } from '@/lib/export-csv'
 import { downloadNarrativePdf } from '@/lib/export-pdf'
 import { OLC_COLUMNS } from '@/lib/export-columns'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { olcDoc } from '@/stage/record'
 import { useMoreLikeThis, type MltSeed } from '../more-like-this/useMoreLikeThis'
 import { MoreLikeThisPrompt } from '../more-like-this/MoreLikeThisPrompt'
 import { MoreLikeThisView } from '../more-like-this/MoreLikeThisView'
@@ -119,6 +121,8 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  // How the filter's rows are shown: the table, which the page opens on, or the terrain.
+  const [resultsView, setResultsView] = useState<ResultsView>('table')
 
   // Semantic pane state (brief #9). The keyword pane is the filter state
   // above, unchanged; the semantic pane runs /corpus/semantic-search in
@@ -543,7 +547,12 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       {activeMode === 'manual_filter' && (
         <>
           {rows && rows.length > 0 && !queryLoading && (
-            <ExportBar onCsv={downloadFilterCsv} />
+            // The switch stands with the keyword results' own controls: it changes how
+            // those rows are shown, and the pane beside them (by meaning) is not its to change.
+            <div className="flex flex-wrap items-center gap-2">
+              <ExportBar onCsv={downloadFilterCsv} />
+              <ResultsViewSwitch view={resultsView} onChange={setResultsView} className="mt-2" />
+            </div>
           )}
           <div
             className={
@@ -554,16 +563,20 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           >
             <div className="min-w-0">
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
-              <OlcResultsList
-                rows={rows}
-                count={count}
-                loading={queryLoading}
-                error={queryError}
-                hasRun={hasRun}
-                executedSql={executedSql}
-                onOpenOpinion={handleOpenOpinion}
-                semanticMatchIds={semHasRun ? semanticIdSet : undefined}
-              />
+              {resultsView === 'terrain' && rows && rows.length > 0 && !queryLoading && !queryError ? (
+                <ResultsTerrain corpus="olc" rows={rows} total={count ?? rows.length} toDoc={olcDoc} onOpen={handleOpenOpinion} />
+              ) : (
+                <OlcResultsList
+                  rows={rows}
+                  count={count}
+                  loading={queryLoading}
+                  error={queryError}
+                  hasRun={hasRun}
+                  executedSql={executedSql}
+                  onOpenOpinion={handleOpenOpinion}
+                  semanticMatchIds={semHasRun ? semanticIdSet : undefined}
+                />
+              )}
             </div>
             {showSemanticPane && (
               <div className="min-w-0">

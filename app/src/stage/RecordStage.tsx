@@ -52,16 +52,26 @@ const KEY = draw(outline({ id: 'key', x: 0, y: 0, r: 1.5, h: 0 }, []), 3)
  * reader points at a column to read its label and clicks it to open the document itself,
  * in a tab of their own. On the console a click brings it forward for the whole room
  * (`onPick`), which is the one thing here a presenter does that a reader cannot.
+ *
+ * It is also a view of a collection page's own results (`plain`): that page has already
+ * said what was asked, so the heading and the owl are left off, and a document is opened
+ * the way that page opens one (`onOpen`) instead of in another tab.
  */
 export function RecordStage({
   scene,
   focus,
   onPick,
+  plain = false,
+  onOpen,
 }: {
   scene: RecordScene
   /** The one the presenter has brought forward. */
   focus: string | null
   onPick?: (id: string | null) => void
+  /** Only the count, the ground, the label and the legend: the page it is on has the heading. */
+  plain?: boolean
+  /** Open this document here, in the page's own way. Without it a document opens in a new tab. */
+  onOpen?: (id: string) => void
 }) {
   const laid = useMemo(() => ground(scene.docs), [scene.docs])
   // What this reader last pointed at. It stays until they point at something else, so the
@@ -89,6 +99,11 @@ export function RecordStage({
     if (active !== id) {
       event.preventDefault()
       setPointed(id)
+      return
+    }
+    if (onOpen) {
+      event.preventDefault()
+      onOpen(id)
     }
   }
 
@@ -100,16 +115,18 @@ export function RecordStage({
             has not answered. It is the app's own owl, so its eyes follow the reader's
             pointer across the ground. The name of the collection is set above the phrase,
             though `SurfaceIntro` writes the heading first. */}
-        <SurfaceIntro
-          level={1}
-          className="grid grid-cols-[auto_1fr] items-center gap-x-[clamp(0.6rem,1.4cqi,1.4rem)] gap-y-[0.3cqi]"
-          figure={<Owl lantern={scene.pending ? 'searching' : 'dark'} className="w-full" />}
-          figureClassName="col-start-1 row-span-2 row-start-1 w-[clamp(3rem,5.2cqi,4.75rem)]"
-          heading={<>&ldquo;{scene.query}&rdquo;</>}
-          lede={scene.label}
-          headingClassName="col-start-2 row-start-2 font-serif text-[clamp(1.4rem,3.2cqi,3rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
-          ledeClassName="col-start-2 row-start-1 self-end font-sans text-[clamp(0.68rem,1.1cqi,0.95rem)] font-semibold uppercase tracking-[0.18em] text-[color:var(--house-accent)]"
-        />
+        {!plain && (
+          <SurfaceIntro
+            level={1}
+            className="grid grid-cols-[auto_1fr] items-center gap-x-[clamp(0.6rem,1.4cqi,1.4rem)] gap-y-[0.3cqi]"
+            figure={<Owl lantern={scene.pending ? 'searching' : 'dark'} className="w-full" />}
+            figureClassName="col-start-1 row-span-2 row-start-1 w-[clamp(3rem,5.2cqi,4.75rem)]"
+            heading={<>&ldquo;{scene.query}&rdquo;</>}
+            lede={scene.label}
+            headingClassName="col-start-2 row-start-2 font-serif text-[clamp(1.4rem,3.2cqi,3rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--house-ink)]"
+            ledeClassName="col-start-2 row-start-1 self-end font-sans text-[clamp(0.68rem,1.1cqi,0.95rem)] font-semibold uppercase tracking-[0.18em] text-[color:var(--house-accent)]"
+          />
+        )}
         <p className="mt-[0.4cqi] font-mono text-[clamp(0.68rem,1.05cqi,0.9rem)] text-[color:var(--house-ink-faint)]" role="status">
           {scene.pending
             ? SAID.asking(scene.label)
@@ -142,7 +159,7 @@ export function RecordStage({
         <div className="relative" data-record="label" aria-live="polite">
           <LabelRoom />
           {chosen ? (
-            <Label doc={chosen} scene={scene} />
+            <Label doc={chosen} scene={scene} onOpen={onOpen} />
           ) : (
             !scene.pending &&
             scene.docs.length > 0 && (
@@ -217,7 +234,7 @@ function LabelRoom() {
  * It never takes more than its room (`LabelRoom`): a title that runs past its lines is cut
  * there, and the link's own title has the rest.
  */
-function Label({ doc, scene }: { doc: StageDoc; scene: RecordScene }) {
+function Label({ doc, scene, onOpen }: { doc: StageDoc; scene: RecordScene; onOpen?: (id: string) => void }) {
   const own = doc.href.startsWith('/')
   const facts = [doc.line, lengthSaid(doc, scene.unit), doc.lane].filter(Boolean)
   const forms = FORMS.filter(({ key }) => scene.legend[key] && has(doc, key)).map(({ key }) => scene.legend[key] as string)
@@ -230,6 +247,16 @@ function Label({ doc, scene }: { doc: StageDoc; scene: RecordScene }) {
           target="_blank"
           rel="noopener noreferrer"
           title={doc.title}
+          // A plain click opens it the page's own way where there is one; a click meant
+          // for another tab still gets the link.
+          onClick={
+            onOpen &&
+            ((event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+              event.preventDefault()
+              onOpen(doc.id)
+            })
+          }
           className="underline decoration-[color:var(--house-rule)] underline-offset-[0.18em] hover:decoration-[color:var(--house-accent)]"
         >
           {doc.title}
