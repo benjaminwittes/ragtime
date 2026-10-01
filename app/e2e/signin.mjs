@@ -183,5 +183,58 @@ for (const google of [true, false]) {
   await ctx.close()
 }
 
+// ── Signed in: a balance, or "covered", according to who the Worker says pays ─────────
+//
+// A session is put on the device as a previous visit would have left it, and the Worker's
+// `/api/balance` is answered here. Nothing is asked of the auth project to do it.
+const b64u = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url')
+const session = {
+  access_token: `${b64u({ alg: 'ES256', typ: 'JWT' })}.${b64u({ sub: 'u-1', email: 'reader@lawfaremedia.org', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`,
+  token_type: 'bearer',
+  expires_in: 3600,
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  refresh_token: 'stub-refresh',
+  user: { id: 'u-1', aud: 'authenticated', role: 'authenticated', email: 'reader@lawfaremedia.org', app_metadata: {}, user_metadata: {}, created_at: '2026-10-01T00:00:00Z' },
+}
+const SEED_SESSION = `window.localStorage.setItem('sb-aikdbjprndgksibbvcfs-auth-token', ${JSON.stringify(JSON.stringify(session))})`
+
+async function ctxSignedIn(browser, balance) {
+  const { ctx, seen } = await ctxAuth(browser, { google: true })
+  await ctx.addInitScript(SEED_SESSION)
+  await ctx.route('**/api/balance', (route) =>
+    route.request().method() === 'OPTIONS' ? route.fulfill({ status: 204, headers: CORS }) : route.fulfill(asJson(200, balance)),
+  )
+  return { ctx, seen }
+}
+
+for (const [name, balance, covered] of [
+  ['the organisation pays', { balance_cents: 0, per_query_cap_cents: 500, ledger: [], billing: 'org', allowance: { calls_today: 17, daily_quota: 5000 } }, true],
+  ['the account pays', { balance_cents: 900, per_query_cap_cents: 500, ledger: [], billing: 'self' }, false],
+  ['a Worker that does not say who pays', { balance_cents: 900, per_query_cap_cents: 500, ledger: [] }, false],
+]) {
+  log(`— signed in, ${name} —`)
+  const { ctx, seen } = await ctxSignedIn(browser, balance)
+  const page = await ctx.newPage()
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' })
+  await page.click('button[aria-label="Configure AI access"]')
+  await page.waitForSelector(`${SHEET} :text("Signed in as")`)
+  await page.waitForTimeout(400)
+  const said = await page.locator(SHEET).innerText()
+  board.check('the sheet opens on the account, by its address', said.includes('reader@lawfaremedia.org'), said.slice(0, 200))
+  if (covered) {
+    board.check('it says Lawfare pays', (await page.locator(`${SHEET} [data-billing="org"]`).innerText()).includes('paid for by Lawfare'))
+    board.check('with the day’s shared count', said.includes('17 of 5,000'), said)
+    board.check('and offers nothing to top up', (await page.locator(`${SHEET} button:has-text("Top up")`).count()) === 0)
+    board.check('and shows no balance', !/\$0\.00|0¢/.test(said), said)
+    await page.screenshot({ path: `${SHOTS}/signin-covered.png` })
+  } else {
+    board.check('it shows the balance', said.includes('$9.00'), said)
+    board.check('and the way to add to it', await page.locator(`${SHEET} button:has-text("Top up")`).isVisible())
+    board.check('and says nothing about an allowance', (await page.locator(`${SHEET} [data-billing="org"]`).count()) === 0)
+  }
+  board.check('nothing unexpected was asked of the auth project', seen.other.length === 0, seen.other)
+  await ctx.close()
+}
+
 await browser.close()
 process.exit(board.report() === 0 ? 0 : 1)

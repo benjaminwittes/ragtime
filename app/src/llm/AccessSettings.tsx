@@ -482,52 +482,56 @@ function SignedInView({ onClose }: { onClose: () => void }) {
         </p>
       </section>
 
-      <section className="rounded-md border border-border bg-card p-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Balance
-          </h3>
-          <button
-            type="button"
-            onClick={() => void paid.refreshBalance()}
-            className="text-[11px] text-primary hover:underline"
-            disabled={paid.balanceLoading}
+      {paid.account?.billing === 'org' ? (
+        <OrgCovered />
+      ) : (
+        <section className="rounded-md border border-border bg-card p-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Balance
+            </h3>
+            <button
+              type="button"
+              onClick={() => void paid.refreshBalance()}
+              className="text-[11px] text-primary hover:underline"
+              disabled={paid.balanceLoading}
+            >
+              {paid.balanceLoading ? 'refreshing…' : 'refresh'}
+            </button>
+          </div>
+          <p
+            className={cn(
+              'mt-1 font-mono text-3xl font-semibold tabular-nums',
+              paid.account && paid.account.balance_cents <= 50
+                ? 'text-destructive'
+                : paid.account && paid.account.balance_cents <= 500
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-foreground',
+            )}
           >
-            {paid.balanceLoading ? 'refreshing…' : 'refresh'}
-          </button>
-        </div>
-        <p
-          className={cn(
-            'mt-1 font-mono text-3xl font-semibold tabular-nums',
-            paid.account && paid.account.balance_cents <= 50
-              ? 'text-destructive'
-              : paid.account && paid.account.balance_cents <= 500
-                ? 'text-amber-600 dark:text-amber-400'
-                : 'text-foreground',
-          )}
-        >
-          {paid.account ? fmtCents(paid.account.balance_cents) : '—'}
-        </p>
-        {paid.account && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Per-query cap:{' '}
-            <span className="font-mono">
-              {fmtCents(paid.account.per_query_cap_cents)}
-            </span>
+            {paid.account ? fmtCents(paid.account.balance_cents) : '—'}
           </p>
-        )}
-        {paid.balanceError && (
-          <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
-        )}
-        <div className="mt-4 flex items-center gap-2">
-          <Button type="button" onClick={() => setTopupOpen(true)}>
-            Top up
-          </Button>
-          <span className="text-[11px] text-muted-foreground">
-            Prepaid blocks via Stripe Checkout.
-          </span>
-        </div>
-      </section>
+          {paid.account && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Per-query cap:{' '}
+              <span className="font-mono">
+                {fmtCents(paid.account.per_query_cap_cents)}
+              </span>
+            </p>
+          )}
+          {paid.balanceError && (
+            <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
+          )}
+          <div className="mt-4 flex items-center gap-2">
+            <Button type="button" onClick={() => setTopupOpen(true)}>
+              Top up
+            </Button>
+            <span className="text-[11px] text-muted-foreground">
+              Prepaid blocks via Stripe Checkout.
+            </span>
+          </div>
+        </section>
+      )}
 
       <section>
         <Button
@@ -544,6 +548,55 @@ function SignedInView({ onClose }: { onClose: () => void }) {
 
       <TopupDialog open={topupOpen} onOpenChange={setTopupOpen} />
     </div>
+  )
+}
+
+/**
+ * What an account on the organisation's allowance sees where a balance would be. Its AI
+ * use is paid for, so there is no balance to show and nothing to top up; the one limit
+ * it can meet is the day's shared count, which is shown when the Worker sent it.
+ */
+function OrgCovered() {
+  const paid = usePaid()
+  const allowance = paid.account?.allowance
+  return (
+    <section
+      className="rounded-md border border-border bg-card p-4"
+      data-billing="org"
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Covered by Lawfare
+        </h3>
+        <button
+          type="button"
+          onClick={() => void paid.refreshBalance()}
+          className="text-[11px] text-primary hover:underline"
+          disabled={paid.balanceLoading}
+        >
+          {paid.balanceLoading ? 'refreshing…' : 'refresh'}
+        </button>
+      </div>
+      <p className="mt-1 text-sm text-foreground/90">
+        AI use on this account is paid for by Lawfare. There is nothing to top
+        up.
+      </p>
+      {allowance && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Shared allowance today:{' '}
+          <span className="font-mono">
+            {allowance.calls_today === null
+              ? '—'
+              : allowance.calls_today.toLocaleString()}{' '}
+            of {allowance.daily_quota.toLocaleString()}
+          </span>{' '}
+          model calls, counted across everyone on it.
+        </p>
+      )}
+      {paid.balanceError && (
+        <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
+      )}
+    </section>
   )
 }
 

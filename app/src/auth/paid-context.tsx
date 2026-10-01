@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { accountFrom, type PaidAccount } from './account'
 import { getSupabase } from './supabase'
 import { googleOffered, refusalInWords, returnErrorIn, withoutReturnError } from './sign-in'
 
@@ -31,18 +32,7 @@ const WORKER_URL =
   (import.meta.env.VITE_WORKER_URL as string | undefined) ||
   'https://ragtimeproxy.benjamin-wittes.workers.dev'
 
-export type PaidLedgerEntry = {
-  at: string
-  cost_cents: number
-  /** Free-form label; what kind of call charged this. */
-  kind?: string
-}
-
-export type PaidAccount = {
-  balance_cents: number
-  per_query_cap_cents: number
-  ledger?: readonly PaidLedgerEntry[]
-}
+export type { PaidAccount, PaidLedgerEntry } from './account'
 
 export type PaidContextValue = {
   /** Active Supabase session. `null` when signed out. */
@@ -177,19 +167,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
           body.error?.message ?? `Balance fetch failed (${resp.status})`,
         )
       }
-      const data = (await resp.json()) as {
-        balance_cents?: number
-        per_query_cap_cents?: number
-        ledger?: PaidLedgerEntry[]
-      }
-      const next: PaidAccount = {
-        balance_cents: typeof data.balance_cents === 'number' ? data.balance_cents : 0,
-        per_query_cap_cents:
-          typeof data.per_query_cap_cents === 'number'
-            ? data.per_query_cap_cents
-            : 500,
-        ledger: data.ledger ?? [],
-      }
+      const next = accountFrom(await resp.json())
       setAccount(next)
       return next
     } catch (e) {
