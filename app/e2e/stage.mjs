@@ -236,6 +236,16 @@ const browser = await launch()
   // One figure fades into the next; the picture is of the one that has arrived.
   await stage.waitForTimeout(700)
   await stage.screenshot({ path: `${SHOTS}/stage-figure-coming.png` })
+  // A third: what arrived in each month, under a column for the collections held by then.
+  await present.click('button:has-text("How RAGtime has grown")')
+  board.check('the growth figure takes its place', await until(stage, 'growth', async () => (await stage.locator('[data-figure="growth"]').count()) === 1 && (await stage.locator('[data-figure="coming"]').count()) === 0))
+  const heldBy = await stage.locator('[data-figure="growth"] [data-figure-node]').evaluateAll((cells) => cells.map((cell) => Number(cell.querySelector('span').textContent)))
+  const named = await stage.locator('[data-figure="growth"] tbody tr').first().locator('li').count()
+  board.check('its columns never fall, and the last one counts the collections it names', heldBy.length >= 6 && heldBy.every((n, at) => at === 0 || n >= heldBy[at - 1]) && heldBy.at(-1) === named, { heldBy, named })
+  const grown = await stage.evaluate(() => [document.documentElement.scrollHeight, window.innerHeight])
+  board.check('and it too is on one window at a desk', grown[0] <= grown[1], grown)
+  await stage.waitForTimeout(700)
+  await stage.screenshot({ path: `${SHOTS}/stage-figure-growth.png` })
   await present.click('button:has-text("Back to the slide")')
   await until(stage, 'slide again', async () => (await sceneOf(stage)) === 'slide')
 
