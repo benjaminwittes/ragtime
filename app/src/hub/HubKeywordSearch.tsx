@@ -221,10 +221,15 @@ export function HubKeywordSearch({
   // viewport. A tall hero with the answer under it is an answer nobody scrolls to.
   const answered = response !== null || error !== null
   // What the owl may say about the search, from what the worker reported and nothing else.
+  // A search that failed, or that came back with a corpus that failed, did not come back
+  // empty: `response` outlives a later failed search, and a failed corpus reports a count of
+  // zero, so neither is read as "nothing found".
   const found = response === null ? null : Object.values(response.per_corpus).reduce((sum, block) => sum + (block?.count ?? 0), 0)
+  const someFailed = response !== null && Object.values(response.per_corpus).some((block) => block?.error)
+  const reported = response !== null && error === null
   const owl = useOwlFigure('hub', {
     lantern: loading ? 'searching' : 'dark',
-    occasion: loading ? 'searching' : found === null ? null : found > 0 ? 'search-results' : 'search-empty',
+    occasion: loading ? 'searching' : !reported || found === null ? null : found > 0 ? 'search-results' : someFailed ? null : 'search-empty',
   })
 
   return (
