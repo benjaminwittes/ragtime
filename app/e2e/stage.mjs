@@ -225,6 +225,17 @@ const browser = await launch()
   board.check('pointing at one, on the stage, says what it is', await until(stage, 'figure detail', async () => (await stage.locator(`[data-figure-detail="${second}"]`).count()) === 1))
   board.check('and that was the reader’s own doing: the console’s figure did not move', (await present.locator(`[data-figure-detail="${second}"]`).count()) === 0)
   await stage.screenshot({ path: `${SHOTS}/stage-figure.png` })
+  // A second figure: what has been asked for and is not here yet, to be read and not operated.
+  await present.click('button:has-text("Corpora coming soon")')
+  board.check('another figure takes its place', await until(stage, 'coming', async () => (await stage.locator('[data-figure="coming"]').count()) === 1 && (await stage.locator('[data-figure="holdings"]').count()) === 0))
+  const coming = await stage.locator('[data-figure="coming"] [data-figure-node]').count()
+  board.check('it names what is being built and what has been asked for, and says they are tracked', coming >= 20 && (await stage.locator('[data-figure="coming"]').innerText()).includes('tracked'), coming)
+  board.check('and sends nobody to the tracker: there is no link in it', (await stage.locator('[data-figure="coming"] a').count()) === 0)
+  const fits = await stage.evaluate(() => [document.documentElement.scrollHeight, window.innerHeight])
+  board.check('all of it is on one window at a desk', fits[0] <= fits[1], fits)
+  // One figure fades into the next; the picture is of the one that has arrived.
+  await stage.waitForTimeout(700)
+  await stage.screenshot({ path: `${SHOTS}/stage-figure-coming.png` })
   await present.click('button:has-text("Back to the slide")')
   await until(stage, 'slide again', async () => (await sceneOf(stage)) === 'slide')
 
