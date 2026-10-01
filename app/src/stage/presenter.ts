@@ -331,7 +331,10 @@ function onPoint(event: PointerEvent) {
     let at: number[] | null = null
     let x = 0
     let y = 0
-    const under = pointAt ? document.elementFromPoint(pointAt.x, pointAt.y) : null
+    let under = pointAt ? document.elementFromPoint(pointAt.x, pointAt.y) : null
+    // While the router's view transition is running the browser answers "what is under
+    // the pointer" with the document itself. That is the page, not nowhere.
+    if (under === document.documentElement) under = document.body
     if (pointAt && under) {
       at = pathOf(under, document.body)
       const box = under.getBoundingClientRect()

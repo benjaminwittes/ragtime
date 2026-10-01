@@ -27,19 +27,28 @@ type Props = {
   level: 1 | 2
   heading: ReactNode
   lede: ReactNode
+  /**
+   * Who is speaking, above what they say: the owl, in the pose each surface gives it
+   * (`Owl.tsx`). Optional, so a surface with no figure renders exactly what it did.
+   */
+  figure?: ReactNode
   /** On the `<section>`. */
   className?: string
   headingClassName?: string
   ledeClassName?: string
+  /** On the figure's wrapper, which should be no wider than the figure — see below. */
+  figureClassName?: string
 }
 
 export function SurfaceIntro({
   level,
   heading,
   lede,
+  figure,
   className,
   headingClassName,
   ledeClassName,
+  figureClassName,
 }: Props) {
   const Heading = level === 1 ? 'h1' : 'h2'
   return (
@@ -54,6 +63,16 @@ export function SurfaceIntro({
     // none on the way in. A group with only an old side simply leaves. Nothing downstream
     // may assume both halves exist.
     <section className={className} style={{ viewTransitionName: 'surface-intro' }}>
+      {/* Named apart from the section it sits in, for the same reason the section is named
+          at all: the hub's owl on its books and the Explorer's owl standing are one owl,
+          and with a name of its own the browser moves it from the one place to the other
+          and lets the books go, instead of dissolving two pictures of it. The wrapper has
+          to hug the figure for that — its box is the rectangle that travels. */}
+      {figure ? (
+        <div className={figureClassName} style={{ viewTransitionName: 'owl' }}>
+          {figure}
+        </div>
+      ) : null}
       <Heading className={headingClassName}>{heading}</Heading>
       <p className={ledeClassName}>{lede}</p>
     </section>

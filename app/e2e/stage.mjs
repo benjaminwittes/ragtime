@@ -123,6 +123,7 @@ const browser = await launch()
   board.check('with nobody presenting the stage says it is quiet', (await stageText(page)).includes('Nothing is on stage'))
   board.check('and it did not ask for the access code', (await page.locator('input[aria-label="Access code"]').count()) === 0)
   board.check('the stage has no site bar of its own', (await page.locator('header').count()) === 0)
+  board.check('the owl keeps the house while it is empty', (await page.locator('main svg[data-owl]').count()) === 1)
   await page.screenshot({ path: `${SHOTS}/stage-quiet.png` })
   await page.goto(BASE + '/', { waitUntil: 'networkidle' })
   board.check('the rest of the site still asks for it', (await page.locator('input[aria-label="Access code"]').count()) === 1)
@@ -302,6 +303,34 @@ const browser = await launch()
   const targets = await stage.locator('[data-stage="mirror"] a[href]').evaluateAll((as) => as.map((a) => a.target))
   board.check('every link in it opens beside the stage', targets.length > 3 && targets.every((t) => t === '_blank'), targets.length)
   board.check('nothing in it can run', (await stage.locator('[data-stage="mirror"] script, [data-stage="mirror"] iframe').count()) === 0)
+
+  // The owl: on the stage with the page, looking where the presenter points, and not a
+  // reason to send the page again.
+  board.check('the owl is on the stage with the hub', (await stage.locator('[data-stage="mirror"] svg[data-owl]').count()) === 1)
+  await stage.evaluate((name) => {
+    window.__frames = 0
+    const ch = new BroadcastChannel(name)
+    ch.onmessage = (e) => {
+      try {
+        if (e.data.c || JSON.parse(e.data.m.p).kind === 'frame') window.__frames += 1
+      } catch {
+        /* not a frame */
+      }
+    }
+  }, CHANNEL)
+  const gaze = () => stage.locator('[data-stage="mirror"] svg[data-owl]').evaluate((owl) => Number(owl.style.getPropertyValue('--owl-gaze-x')))
+  await present.mouse.move(1380, 400, { steps: 12 })
+  const right = await until(stage, 'gaze right', async () => (await gaze()) > 0.5, 3000)
+  board.check('the room’s owl looks where the presenter points: to the right', right, right ? undefined : {
+    gaze: await gaze(),
+    under: await present.evaluate(() => { const el = document.elementFromPoint(1380, 400); return el ? el.tagName + ' ' + (el.closest('[data-stage-skip]') ? 'SKIPPED' : '') + String(el.className).slice(0, 50) : null }),
+    dot: await stage.locator('[data-stage="pointer"]').evaluate((d) => d.style.opacity + ' ' + d.style.transform),
+  })
+  await present.mouse.move(40, 400, { steps: 12 })
+  board.check('and to the left', await until(stage, 'gaze left', async () => (await gaze()) < -0.5, 3000), await gaze())
+  await present.waitForTimeout(700)
+  const sent = await stage.evaluate(() => window.__frames)
+  board.check('a look is not a new picture of the page: the pointer crossed it and the page was not sent again', sent <= 1, sent)
 
   // The presenter types; the room reads it.
   const field = present.locator('main input[type="text"], main input[type="search"], main input:not([type])').first()
