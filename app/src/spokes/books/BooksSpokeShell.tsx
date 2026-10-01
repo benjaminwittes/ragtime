@@ -23,7 +23,7 @@ import { SpokeIdentity } from '../components/SpokeIdentity'
 import { BooksFilterForm } from './BooksFilterForm'
 import { BooksRecordDetailSheet } from './BooksRecordDetailSheet'
 import { BooksResultsList } from './BooksResultsList'
-import { describeFields, fieldsFromDeepLink } from './books-format'
+import { booksDisclosure, describeFields, fieldsFromDeepLink } from './books-format'
 
 /**
  * Book catalogue spoke shell (ragtime-worker#145; design in ragtime-dev
@@ -31,9 +31,9 @@ import { describeFields, fieldsFromDeepLink } from './books-format'
  *
  * One query mode, manual_filter. There is no AI mode, semantic pane or
  * more-like-this, because every one of them presumes text and this corpus
- * has none: it is 10.5M catalogue records. What the shell adds instead is
+ * has none: it is catalogue records. What the shell adds instead is
  * the design's candor, structurally:
- * - the header carries the Worker's own `limits` prose (the 2016 snapshot,
+ * - the header carries the Worker's own `limits` prose (the snapshot's edition,
  *   the incompleteness inside it, the missing quality signal), so no
  *   sentence about what the catalogue can't do is remembered here;
  * - counts past the Worker's cap render as floors;
@@ -191,7 +191,7 @@ export function BooksSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   function downloadFilterCsv() {
     if (!rows || rows.length === 0) return
     downloadCsv('ragtime-book-catalogue-results.csv', {
-      title: 'RAGtime — Book catalogue export (Library of Congress records, 2016 snapshot)',
+      title: `RAGtime — Book catalogue export (Library of Congress records${facets?.source_vintage != null ? `, ${facets.source_vintage} snapshot` : ''})`,
       meta: [
         { key: 'count', value: countIsFloor ? `${count}+ (floor — more matched than the catalogue will count)` : count },
         { key: 'rows_exported', value: rows.length },
@@ -226,6 +226,7 @@ export function BooksSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         executedSql={executedSql}
         onOpenRecord={handleOpenRecord}
         emptyHint={emptyHint}
+        snapshotYear={facets?.source_vintage}
       />
       <BooksRecordDetailSheet
         recordId={openId}
@@ -263,7 +264,7 @@ function BooksHeader({
     <section className="border-b border-border bg-card px-6 py-5">
       <SpokeIdentity spoke={spoke} />
       <BackToHubLink className="mb-3" />
-      <p className="max-w-3xl text-sm text-muted-foreground">{spoke.plainEnglishDisclosure}</p>
+      <p className="max-w-3xl text-sm text-muted-foreground">{booksDisclosure(facets)}</p>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <HoldingTile label="Records" value={facets?.record_count} loading={loading} />
         <HoldingTile label="Published" stringValue={range} loading={loading} />

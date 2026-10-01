@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import type { BooksFacets } from '@lawfare/ragtime-client'
 import {
+  booksDisclosure,
+  booksEmptyHint,
+  formatMillions,
+  snapshotPhrase,
   coverageHint,
   coveragePercent,
   describeFields,
@@ -156,5 +161,23 @@ describe('describeFields', () => {
       'author: Goldsmith, Jack · illustrated',
     )
     expect(describeFields({})).toBe('(no filter)')
+  })
+})
+
+describe('derived prose', () => {
+  it('formats a record count in millions', () => {
+    expect(formatMillions(10_543_015)).toBe('10.5 million')
+    expect(formatMillions(84_000)).toBe('84,000')
+  })
+  it('reads the snapshot year from facets, and names none it does not know', () => {
+    expect(snapshotPhrase(2016)).toBe('a 2016 snapshot')
+    expect(snapshotPhrase(undefined)).toBe('a snapshot')
+    expect(booksEmptyHint(undefined)).not.toMatch(/\d{4}/)
+  })
+  it('carries no figure in the disclosure until facets arrive', () => {
+    expect(booksDisclosure(undefined)).not.toMatch(/\d/)
+    const f = { record_count: 10_543_015, source_vintage: 2016 } as BooksFacets
+    expect(booksDisclosure(f)).toContain('10.5 million books')
+    expect(booksDisclosure(f)).toContain('snapshot of 2016')
   })
 })
