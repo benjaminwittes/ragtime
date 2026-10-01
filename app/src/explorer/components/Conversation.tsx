@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CorpusRegistry, ExplorerBrief } from '@lawfare/ragtime-client'
 
+import { ChatOwl } from '@/owl/voice/ChatOwl'
+import { useChatOwl } from '@/owl/voice/useVoice'
+
 import { normalizeBrief, sameBrief } from '../model/brief.ts'
 import { phasePill, plural, workingLabel } from '../model/format.ts'
 import { acceptMarker, type Turn, answerText } from '../model/turn.ts'
@@ -21,6 +24,8 @@ type Props = {
 
 export function Conversation({ turns, brief, proposed, registry, now, busy, onAccept }: Props) {
   const end = useRef<HTMLDivElement>(null)
+  // Whether the owl is called into the conversation: a switch in the Tune panel, off by default.
+  const chatOwl = useChatOwl()
   // While the brush paints an answer in it follows its own glyph down the page, so the page must not jump to the end under it.
   const [painting, setPainting] = useState(false)
   useEffect(() => {
@@ -123,8 +128,24 @@ export function Conversation({ turns, brief, proposed, registry, now, busy, onAc
                 them, writing. */}
             {turn.running && !answerText(turn) && (
               <div className="working" aria-live="polite">
-                <Mark />
-                {label || (turn.phase === 'orient' ? 'planning…' : 'researching…')}
+                {/* The experimental owl (`owl.voice.chat`, off) stands where the mark does and
+                    says its own line after the real status, which is passed through untouched. */}
+                {chatOwl ? (
+                  <ChatOwl occasion="working">{label || (turn.phase === 'orient' ? 'planning…' : 'researching…')}</ChatOwl>
+                ) : (
+                  <>
+                    <Mark />
+                    {label || (turn.phase === 'orient' ? 'planning…' : 'researching…')}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* The same owl, once the last answer has landed: it settles at the foot of it. A turn
+                restored from storage gets the figure without a line, since nobody watched it land. */}
+            {chatOwl && isLast && !turn.running && !turn.error && answerText(turn) && (
+              <div className="owl-chat-end">
+                <ChatOwl occasion="answered" speaks={watched.has(turn.startedAt)} />
               </div>
             )}
           </article>

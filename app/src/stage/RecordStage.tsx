@@ -74,7 +74,7 @@ export function RecordStage({
   onOpen?: (id: string) => void
 }) {
   const laid = useMemo(() => ground(scene.docs), [scene.docs])
-  const owl = useOwlFigure('record', { lantern: scene.pending ? 'searching' : 'dark' })
+  const owl = useOwlFigure('record', { lantern: scene.pending ? 'searching' : 'dark', occasion: scene.pending ? 'searching' : null })
   // What this reader last pointed at. It stays until they point at something else, so the
   // label is still there when the pointer travels to it — and so a touch, which stops
   // pointing the moment the finger lifts, can read a label at all. The presenter bringing

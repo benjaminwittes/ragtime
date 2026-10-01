@@ -1,5 +1,6 @@
 import type { TuneValue } from '@/tune/types'
 import type { OwlSite, OwlSiteId } from './types'
+import type { SpeechSite } from './voice/types'
 
 /**
  * How the owl is embedded on each page: one table, one file.
@@ -79,6 +80,58 @@ export const SITES: Record<OwlSiteId, OwlSite> = {
     keepsHours: false,
     className: 'w-full',
     figureClassName: 'col-start-1 row-span-2 row-start-1 w-[var(--owl-size)]',
+  },
+}
+
+/**
+ * What each site says about its owl's *speech*, beside what it says about the owl
+ * (`SITES`): where the speech sits, the occasion the owl opens with, and every occasion
+ * the site can truthfully report. An occasion not listed here is one this site's page
+ * never passes in, so the owl cannot speak it there however a voice is written.
+ *
+ * `place` is where the speech sits when there is room (`voice/fit.ts` moves it when there
+ * is not). Each is chosen so the speech lands on bare paper and not on the thing the reader
+ * is about to use: beside the hub's owl, which has the title and then the search box
+ * beneath it; beside the gate's, which has the code field beneath it.
+ */
+export const SPEECH_SITES: Record<OwlSiteId, SpeechSite> = {
+  hub: {
+    place: 'beside',
+    arrival: 'arrive-hub',
+    occasions: ['arrive-hub', 'searching', 'search-empty', 'search-results', 'night', 'idle', 'poke'],
+    keepsHours: SITES.hub.keepsHours,
+  },
+  explorer: {
+    place: 'beside',
+    arrival: 'explorer-empty',
+    occasions: ['explorer-empty', 'night', 'idle', 'poke'],
+    keepsHours: SITES.explorer.keepsHours,
+  },
+  gate: {
+    place: 'beside',
+    arrival: 'arrive-gate',
+    occasions: ['arrive-gate', 'wrong-code', 'idle', 'poke'],
+    keepsHours: SITES.gate.keepsHours,
+  },
+  'not-found': {
+    place: 'beside',
+    arrival: 'not-found',
+    occasions: ['not-found', 'idle', 'poke'],
+    keepsHours: SITES['not-found'].keepsHours,
+  },
+  stage: {
+    place: 'beside',
+    arrival: 'stage-quiet',
+    occasions: ['stage-quiet', 'night', 'idle', 'poke'],
+    keepsHours: SITES.stage.keepsHours,
+  },
+  // The header is a grid with the heading to the owl's right and a status line under it, so
+  // there is no bare paper beside it; above is the only side that has any.
+  record: {
+    place: 'above',
+    arrival: null,
+    occasions: ['searching', 'idle', 'poke'],
+    keepsHours: SITES.record.keepsHours,
   },
 }
 

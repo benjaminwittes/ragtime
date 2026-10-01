@@ -1,6 +1,8 @@
+import { SPEECH_SITES } from './embeds'
 import { join, siteOwl, useSite, type SpotOptions } from './site'
 import { OwlSpeech } from './speech'
 import type { OwlSiteId } from './types'
+import { useOwlVoice } from './voice/useVoice'
 
 /**
  * Where the owl is placed: the component every page mounts it through.
@@ -10,18 +12,22 @@ import type { OwlSiteId } from './types'
  * size and variant from the Tune panel's knobs for that site, so "how the owl is embedded
  * on this page" is one entry in one file and not a handful of literals in the page.
  *
- *     <OwlSpot site="gate" shake={wrongCode} />
+ *     <OwlSpot site="gate" shake={wrongCode} occasion={wrongCode ? 'wrong-code' : null} />
  *
  * A site that carries its own width is an `<svg>` and nothing else. One whose entry names
  * a `figureClassName` is wrapped in that figure here. A page that already has a wrapper —
  * `SurfaceIntro`, which names it for the hub-to-Explorer view transition — takes
  * `useOwlFigure` instead (`useOwlFigure.tsx`).
+ *
+ * With a voice (`voice/`), the owl is also wrapped in a positioned box that holds what it
+ * says. The voice is none unless the Tune panel, or a variant, picks one — so by default
+ * there is no wrapper and no node, and the owl is mounted exactly as it was.
  */
 export function OwlSpot({ site: id, ...options }: SpotOptions & { site: OwlSiteId }) {
   const { site, vars, variant: sited } = useSite(id)
-  const { speech } = options
-  const speaking = speech !== undefined
-  const speaker = speaking ? <OwlSpeech>{speech}</OwlSpeech> : null
+  const voice = useOwlVoice(SPEECH_SITES[id], { variant: options.variant ?? sited, occasion: options.occasion })
+  const speaking = voice !== null
+  const speaker = voice ? <OwlSpeech voice={voice} /> : null
 
   if (site.figureClassName !== undefined) {
     // The page has no figure of its own here, so this makes the one the table describes.

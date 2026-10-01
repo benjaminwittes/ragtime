@@ -83,7 +83,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       <div className="w-full max-w-sm">
         {/* The owl keeps the door. A wrong code gets a shake of the head, which runs again
             on each refusal because typing clears `error` and takes the class off with it. */}
-        <OwlSpot site="gate" shake={error} />
+        <OwlSpot site="gate" shake={error} occasion={error ? 'wrong-code' : null} />
         <h1 className="font-serif text-3xl font-bold tracking-tight">RAGtime</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           A Lawfare research surface. This beta is access-restricted — enter the

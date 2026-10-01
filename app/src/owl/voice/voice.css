@@ -1,0 +1,168 @@
+/* The owl's speech (`owl/speech.tsx`): the box it is anchored to, the note, and three ways of
+ * setting it.
+ *
+ * Nothing here applies to an owl with no voice. The wrapper, the live region and the note
+ * exist only when a voice does (`OwlSpot`, `useOwlFigure`), so with the Voice knob at its
+ * default this sheet matches no element.
+ *
+ * The note is absolutely placed against the owl's own box, so it moves nothing around it
+ * when it comes and goes, and `pointer-events: none`, so it cannot cover a control. The
+ * placement (`data-place`) is the site's entry in `owl/embeds.ts`, and `voice/fit.ts` moves
+ * it from there when the screen has no room: the numbers it writes are `--note-max` and
+ * `--note-shift`. The look (`data-treatment`) is the voice's, or the panel's.
+ *
+ * Colour is `currentColor` throughout, so the same note reads on the paper of the hub and
+ * the dark of the stage without either knowing about it. The faces are the self-hosted
+ * Lato and EB Garamond and two system stacks; nothing is fetched.
+ *
+ * Unlayered, like `owl.css`. Imported from `owl/speech.tsx`.
+ */
+
+/* The positioned wrapper, when there is speech. */
+.owl-spot {
+  position: relative;
+}
+[data-voice-click] {
+  cursor: pointer;
+}
+
+/* The line a screen reader is told, when it is told one. Out of sight and out of flow. */
+.owl-voice-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.owl-note {
+  --note-gap: 0.5rem;
+  --note-x: 0px;
+  --note-tilt: 0deg;
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(var(--note-max, 16rem), 16rem);
+  pointer-events: none;
+  text-align: left;
+  color: color-mix(in srgb, currentColor 88%, transparent);
+  transform: translateX(var(--note-x)) rotate(var(--note-tilt));
+  text-wrap: pretty;
+}
+.owl-note-rest {
+  visibility: hidden;
+}
+
+/* Where. A line begins level with the top of the owl's box. */
+.owl-note[data-place='beside'] {
+  left: 100%;
+  top: 0.25rem;
+  margin-left: var(--note-gap);
+}
+.owl-note[data-place='beside-start'] {
+  right: 100%;
+  top: 0.25rem;
+  margin-right: var(--note-gap);
+  text-align: right;
+}
+.owl-note[data-place='below'],
+.owl-note[data-place='above'] {
+  left: 50%;
+  --note-x: calc(-50% + var(--note-shift, 0px));
+  text-align: center;
+}
+.owl-note[data-place='below'] {
+  top: 100%;
+  margin-top: var(--note-gap);
+}
+.owl-note[data-place='above'] {
+  bottom: 100%;
+  margin-bottom: var(--note-gap);
+}
+/* In the flow, for a row that is already a line of text: the Explorer's working row. */
+.owl-note[data-place='inline'] {
+  position: static;
+  display: inline-block;
+  max-width: none;
+  margin-left: 0.25rem;
+}
+
+/* Plate caption: capitals between two hairlines, as under an engraved plate. */
+.owl-note[data-treatment='plate'] {
+  padding: 0.3rem 0.15rem;
+  border-block: 1px solid color-mix(in srgb, currentColor 50%, transparent);
+  font: 500 0.72rem/1.4 var(--font-serif, 'EB Garamond', Garamond, Georgia, serif);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* Typed note: a typewriter's face and a rule down the left edge, a marginal note. */
+.owl-note[data-treatment='typed'] {
+  padding-left: 0.6rem;
+  border-left: 2px solid color-mix(in srgb, currentColor 45%, transparent);
+  font: 400 0.8rem/1.4 'Courier New', Courier, ui-monospace, monospace;
+  letter-spacing: -0.01em;
+}
+.owl-note[data-treatment='typed'][data-place='beside-start'] {
+  padding-left: 0;
+  padding-right: 0.6rem;
+  border-left: 0;
+  border-right: 2px solid color-mix(in srgb, currentColor 45%, transparent);
+}
+
+/* Rubber stamp: bold capitals in a ruled box, a degree off true. */
+.owl-note[data-treatment='stamp'] {
+  --note-tilt: -1.5deg;
+  padding: 0.25rem 0.55rem;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  color: color-mix(in srgb, currentColor 82%, transparent);
+  font: 800 0.66rem/1.25 var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.owl-note[data-treatment='stamp'][data-place='inline'] {
+  margin-inline: 0.5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .owl-note {
+    animation: owl-note-in 160ms ease-out;
+  }
+  @keyframes owl-note-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* The Explorer's conversation, when the owl is put in it (`voice/ChatOwl.tsx`): the owl is
+ * a small figure in a row that is already a line of text, and the line is said after it. */
+.owl-chat-fig {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  width: 1.6rem;
+  height: 1.6rem;
+}
+.owl-chat-fig .owl {
+  width: 100%;
+  height: 100%;
+}
+.owl-chat-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+  font-size: 13px;
+  color: var(--dim, inherit);
+}

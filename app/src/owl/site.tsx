@@ -1,10 +1,11 @@
-import { useMemo, type CSSProperties, type ReactNode } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import { tuneValue } from '@/tune/store'
 import { SITES, siteVars, variantKnob } from './embeds'
 import { Owl } from './Owl'
 import { firstChoice } from './resolve'
 import type { OwlLantern, OwlSite, OwlSiteId } from './types'
 import { useTuneVersion } from './useOwlDesign'
+import type { OccasionId } from './voice/types'
 
 /**
  * What `OwlSpot` and `useOwlFigure` share: reading a site's entry and knobs, and drawing
@@ -17,11 +18,13 @@ export type SpotOptions = {
   /** The owl saying no. Runs again each time it turns true, so a page clears it between refusals. */
   shake?: boolean
   /**
-   * What the owl says, when something does (`speech.tsx`). Given, the owl is wrapped in
-   * a positioned box with the speech anchored beside it; absent, the placement adds no
-   * wrapper and no node.
+   * The occasion the page reports as true *now* (`voice/types.ts`), or none: a search in
+   * flight, a refused code. The owl may speak it, in its voice, when it has one. With no
+   * voice — the default — the placement adds no wrapper and no node, whatever is passed.
+   * A page passes only what it knows: the occasions a site can report are its entry in
+   * `SPEECH_SITES` (`embeds.ts`).
    */
-  speech?: ReactNode
+  occasion?: OccasionId | null
   /** A variant id, ahead of the site's own choice. The lab uses it; pages do not. */
   variant?: string
 }

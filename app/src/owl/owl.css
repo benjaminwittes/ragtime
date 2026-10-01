@@ -97,21 +97,3 @@
     }
   }
 }
-
-/* The placement wrapper, when something is said (`owl/speech.tsx`). Without speech the
- * owl is mounted bare and none of this applies. The slot sits beside the figure, outside
- * its box, so it costs the page around it nothing until it has something in it. */
-.owl-spot {
-  position: relative;
-}
-.owl-speech {
-  position: absolute;
-  top: 0;
-  left: 100%;
-  margin-left: 0.5rem;
-  width: max-content;
-  max-width: 16rem;
-}
-.owl-speech:empty {
-  display: none;
-}

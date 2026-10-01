@@ -220,7 +220,12 @@ export function HubKeywordSearch({
   // Anything below the box — results or a failure — ends the hero's claim on the
   // viewport. A tall hero with the answer under it is an answer nobody scrolls to.
   const answered = response !== null || error !== null
-  const owl = useOwlFigure('hub', { lantern: loading ? 'searching' : 'dark' })
+  // What the owl may say about the search, from what the worker reported and nothing else.
+  const found = response === null ? null : Object.values(response.per_corpus).reduce((sum, block) => sum + (block?.count ?? 0), 0)
+  const owl = useOwlFigure('hub', {
+    lantern: loading ? 'searching' : 'dark',
+    occasion: loading ? 'searching' : found === null ? null : found > 0 ? 'search-results' : 'search-empty',
+  })
 
   return (
     // The first screen, measured against the bar above it: `--site-bar-h` is
