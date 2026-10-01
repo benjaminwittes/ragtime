@@ -24,6 +24,9 @@ import { demoView, type DemoView } from '@/demo/kit'
 import { spokeSlugFor } from '@/lib/deep-link'
 import { navigateTo, toHref, toLogical } from '@/lib/routing'
 import { withViewTransition } from '@/lib/transition'
+import { PresentPage } from '@/stage/PresentPage'
+import { StageDock } from '@/stage/StageDock'
+import { StagePage } from '@/stage/StagePage'
 import { Tour } from '@/tour/Tour'
 import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-client'
 
@@ -40,6 +43,10 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *   `/demo`, `/demo/deck`        → a presenter's guide and deck, served sealed
  *                                  and opened in the browser by the link that
  *                                  carries its passphrase (`src/demo/`)
+ *   `/stage`                     → where an audience sits: whatever a presenter
+ *                                  is showing, live, as real text (`src/stage/`)
+ *   `/present`                   → the presenter's console, opened by the kit's
+ *                                  passphrase; it drives `/stage`
  *   `/corpus/<slug>`             → full `SpokeShell`
  *   `/corpus/<slug>/<id>`        → the same shell, which opens that
  *                                  document's detail sheet on mount (the
@@ -68,6 +75,8 @@ type Route =
   | { kind: 'collections' }
   | { kind: 'collection'; slug: string }
   | { kind: 'demo'; view: DemoView }
+  | { kind: 'stage' }
+  | { kind: 'present' }
   | { kind: 'privacy' }
   | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
@@ -87,6 +96,8 @@ function parseRoute(pathname: string): Route {
   if (coll) return { kind: 'collection', slug: coll[1] }
   const demo = demoView(pathname)
   if (demo) return { kind: 'demo', view: demo }
+  if (pathname === '/stage' || pathname === '/stage/') return { kind: 'stage' }
+  if (pathname === '/present' || pathname === '/present/') return { kind: 'present' }
   const link = links.parse(pathname)
   if (link) {
     // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
@@ -145,6 +156,10 @@ function App() {
       ? <CollectionPage key={route.slug} slug={route.slug} />
       : route.kind === 'demo'
       ? <DemoPage view={route.view} />
+      : route.kind === 'stage'
+      ? <StagePage />
+      : route.kind === 'present'
+      ? <PresentPage />
       : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)
@@ -170,13 +185,18 @@ function App() {
           `.scroll` scrolls inside itself and the composer stays put (explorer.css,
           "Under the masthead"). Every other surface is ordinary flow under the bar. */}
       <div className={onExplorer ? 'flex h-dvh flex-col' : undefined}>
-        <SiteBar onExplorer={onExplorer} />
+        {/* The stage has no bar of its own. It is a seat in an audience, not a page of
+            the site: a slide fills it edge to edge, and when the presenter shows the app
+            the bar a reader sees is the presenter's, arriving with the rest of the page. */}
+        {route.kind !== 'stage' && <SiteBar onExplorer={onExplorer} />}
         {surface}
       </div>
       <CheckoutReturnGate />
       {/* Beside the route for the same reason the bar is above it: the tour crosses
           routes, and one mounted inside a route would end at the first step that left it. */}
       <Tour />
+      {/* And for the same reason again: a presenter is presenting on every route. */}
+      <StageDock />
     </SiteBarSlotProvider>
   )
 }

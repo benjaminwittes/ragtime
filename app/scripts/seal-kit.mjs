@@ -16,6 +16,13 @@
  * script writes one of 24 characters from a 62-letter alphabet when asked to
  * make it.
  *
+ * One more thing is public, deliberately: the public half of a signing key.
+ * A kit can drive `/stage`, where an audience follows a presenter live, and
+ * the audience's browsers have to be able to tell the presenter from anyone
+ * else on an open channel. The private half is inside the seal, so the
+ * passphrase that opens the kit is also what lets someone present; the
+ * public half sits beside the ciphertext as `stage.pub`, and can only check.
+ *
  *   node app/scripts/seal-kit.mjs --from <dir> --key-file <path>
  *   node app/scripts/seal-kit.mjs --from <dir> --key-file <path> --out app/public/kits/demo.sealed.json
  *
@@ -105,6 +112,55 @@ export function parseDeck(source) {
     })
 }
 
+/** Open what `seal` made. Returns the plain text, or null for a wrong passphrase. */
+export async function unseal(sealed, passphrase) {
+  try {
+    const bytes = (b) => new Uint8Array(Buffer.from(b, 'base64'))
+    const material = await webcrypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey'])
+    const key = await webcrypto.subtle.deriveKey(
+      { name: 'PBKDF2', hash: 'SHA-256', salt: bytes(sealed.salt), iterations: sealed.iterations },
+      material,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt'],
+    )
+    const plain = await webcrypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(sealed.iv) }, key, bytes(sealed.data))
+    return new TextDecoder().decode(plain)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The pair a presenter signs with to drive `/stage`, and the audience checks against
+ * (`src/stage/protocol.ts` says why the stage needs one). The private half goes inside
+ * the seal; the public half is served beside it in the clear.
+ */
+export async function newStageKeys() {
+  const pair = await webcrypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
+  return {
+    key: await webcrypto.subtle.exportKey('jwk', pair.privateKey),
+    pub: await webcrypto.subtle.exportKey('jwk', pair.publicKey),
+  }
+}
+
+/**
+ * The signing pair already in a sealed file, if this passphrase opens it. Re-sealing
+ * after an edit then keeps the same stage, so a presenter mid-rehearsal is not cut off
+ * from their audience by a typo fix. A new passphrase gets a new pair, which is what
+ * revoking a kit should mean for the stage too.
+ */
+export async function stageKeysIn(file, passphrase) {
+  try {
+    const sealed = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const plain = await unseal(sealed, passphrase)
+    const key = plain === null ? null : JSON.parse(plain).stage?.key
+    return key && sealed.stage?.pub ? { key, pub: sealed.stage.pub } : null
+  } catch {
+    return null
+  }
+}
+
 function args(argv) {
   const out = {}
   for (let i = 0; i < argv.length; i += 1) {
@@ -140,13 +196,18 @@ async function main() {
     process.exit(1)
   }
 
+  const kept = await stageKeysIn(out, passphrase)
+  const stage = kept ?? (await newStageKeys())
+
   fs.mkdirSync(path.dirname(out), { recursive: true })
-  fs.writeFileSync(out, JSON.stringify(await seal(JSON.stringify(kit), passphrase)) + '\n')
+  const sealed = await seal(JSON.stringify({ ...kit, stage: { key: stage.key } }), passphrase)
+  fs.writeFileSync(out, JSON.stringify({ ...sealed, stage: { pub: stage.pub } }) + '\n')
 
   console.log(`sealed "${kit.title}": guide ${guide.length} chars, ${slides.length} slides`)
   console.log(`  -> ${path.relative(process.cwd(), out)}`)
   console.log(`  passphrase ${made ? 'generated and written to' : 'read from'} ${keyFile} (not shown)`)
-  console.log('  link: <site>/demo#k=<the passphrase>')
+  console.log(`  stage key ${kept ? 'kept from the file already there' : 'made new'}`)
+  console.log('  link: <site>/demo#k=<the passphrase>   present: <site>/present#k=<the passphrase>')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

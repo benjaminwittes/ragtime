@@ -23,6 +23,12 @@ export type Kit = {
   /** The presenter's guide, markdown. */
   guide: string
   slides: Slide[]
+  /**
+   * The key a presenter signs with when they drive `/stage` (`src/stage/protocol.ts`).
+   * Inside the seal, so the passphrase that opens the kit is what lets someone present.
+   * Absent from a kit sealed before the stage existed.
+   */
+  stage?: { key: JsonWebKey }
 }
 
 /** The file as served. The numbers are the script's; this only reads them. */
@@ -34,6 +40,11 @@ export type SealedKit = {
   salt: string
   iv: string
   data: string
+  /**
+   * The public half of the kit's signing key, in the clear: it is what the audience's
+   * browsers check a presenter against, and they have no passphrase.
+   */
+  stage?: { pub: JsonWebKey }
 }
 
 /**

@@ -99,7 +99,10 @@ export function AccessSettings() {
         <div className="border-b border-border bg-muted/30">
           <TabRow tab={tab} setTab={setTab} />
         </div>
-        <div className="flex-1 overflow-y-auto p-5">
+        {/* `data-stage-private`: a presenter may open this sheet while the stage is showing
+            their page, and it holds an account, a balance and keys. The room is told a
+            private panel is open and is sent none of it (`stage/mirror.ts`). */}
+        <div className="flex-1 overflow-y-auto p-5" data-stage-private="">
           {tab === 'paid' && <PaidPanel onClose={() => setOpen(false)} />}
           {tab === 'byok' && <ByokPanel onClose={() => setOpen(false)} />}
           {tab === 'demo' && <DemoPanel onClose={() => setOpen(false)} />}
