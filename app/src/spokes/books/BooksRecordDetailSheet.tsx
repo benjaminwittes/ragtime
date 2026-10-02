@@ -6,6 +6,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type BookContributor,
   type BookDisplayRow,
@@ -123,6 +124,7 @@ function RecordBody({
       <SheetHeader className="space-y-2 border-b border-lawfare-line bg-card p-5 pr-12">
         <div className="flex flex-wrap items-baseline gap-2">
           <SheetTitle className="font-serif text-base font-semibold leading-snug">{title}</SheetTitle>
+          <SaveToCollection corpus="books" docId={recordId} title={title} />
           <span
             className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
             title="A Library of Congress catalogue record. RAGtime holds the record, not the book’s text."

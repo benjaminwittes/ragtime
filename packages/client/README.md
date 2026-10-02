@@ -47,6 +47,7 @@ client.links.parse('/corpus/olc?q=removal')         // the only reader
 | `corpus-types.ts` | `CorpusSlug` and the spoke descriptor types — what the frontend used to call `spokes/types.ts`. |
 | `explorer.ts` | `POST /explorer/turn` as `AsyncIterable<ExplorerEvent>` — one variant per event name in the contract — plus `runExplorerTurn` (the same turn, collected) and `continueFrom`. |
 | `registry.ts` | `GET /corpus/registry`, typed. |
+| `my-collections.ts` | A signed-in person's own collections (`/me/collections`): list, create, open, rename, share with an organization or make private, delete, add and remove items, export as `rt://` lines. Each call takes a session token. `probeMyCollections` returns `null` when the worker has not switched the routes on. |
 | `links.ts` | The deep-link grammar: `workspace`, `document`, `fromCitation`, `parseCitation`, and `parse`, the one reader. Byte-for-byte what the worker emits in `handoff` events for the same inputs. |
 | `config.ts` | Where the worker is. |
 

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type CongressAnyDisplayRow,
   type CongressBillDetail,
@@ -168,6 +169,13 @@ function CongressDetailBody({
             {header.citation}
           </SheetTitle>
           {header.badges}
+          {/* The corpus as a citation names it: `congress:<collection>`, with the row's own id. */}
+          <SaveToCollection
+            corpus={`congress:${collection}`}
+            docId={row.id}
+            title={header.title ?? header.citation}
+            naturalKey={header.citation}
+          />
         </div>
         {header.title && (
           <p className="text-sm leading-snug text-foreground/90">

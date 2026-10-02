@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type FrCfrReference,
   type FrDocumentDetail,
@@ -139,6 +140,7 @@ function FrDocumentDetailBody({
             {citation}
           </SheetTitle>
           <DocTypeBadge value={detail?.doc_type ?? row.doc_type} />
+          <SaveToCollection corpus="fr" docId={row.id} title={title ?? citation} naturalKey={citation} />
           {(detail?.significant ?? row.significant) === true && (
             <span
               className="rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-300"

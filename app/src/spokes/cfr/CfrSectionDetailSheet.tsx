@@ -14,6 +14,7 @@ import { usePaid } from '@/auth/use-paid'
 import { buildCfrSourceUrl } from '@/lib/external-source-urls'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type CfrSectionDetail,
   type CfrSectionDisplayRow,
@@ -130,6 +131,7 @@ function CfrSectionDetailBody({ row }: { row: CfrSectionDisplayRow }) {
             {citation}
           </SheetTitle>
           {isReserved && <ReservedBadge />}
+          <SaveToCollection corpus="cfr" docId={row.id} title={citation} sourceUrl={sourceUrl} naturalKey={citation} />
           {sourceUrl && (
             <a
               href={sourceUrl}

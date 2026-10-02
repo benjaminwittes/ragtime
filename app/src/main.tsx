@@ -10,6 +10,7 @@ import { AccessGate } from '@/auth/AccessGate'
 import { PaidProvider } from '@/auth/paid-context'
 import { DocsProvider } from '@/docs/DocsContext'
 import { ByokProvider } from '@/llm/byok-context'
+import { MyCollectionsProvider } from '@/my-collections/context'
 
 // The design-tuning layer: a panel that moves the tokens and parameters the
 // pages declare, live, and writes the ones you keep back to source
@@ -28,7 +29,10 @@ createRoot(document.getElementById('root')!).render(
       <PaidProvider>
         <ByokProvider>
           <DocsProvider>
-            <App />
+            {/* Inside PaidProvider: a collection belongs to the signed-in account. */}
+            <MyCollectionsProvider>
+              <App />
+            </MyCollectionsProvider>
           </DocsProvider>
         </ByokProvider>
       </PaidProvider>

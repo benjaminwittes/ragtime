@@ -32,6 +32,7 @@ export * from './corpora.ts'
 export * from './worker-client.ts'
 export * from './explorer.ts'
 export * from './registry.ts'
+export * from './my-collections.ts'
 export { DEFAULT_WORKER_URL, configureWorkerClient, workerUrl } from './config.ts'
 export {
   links,
