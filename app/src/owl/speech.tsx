@@ -8,8 +8,9 @@ import type { SiteVoice } from './voice/useVoice'
  * What the owl says, drawn: a note set in the owl's own world of documents, and the live
  * region that tells a screen reader the few lines that are replies.
  *
- * `OwlSpot` and `useOwlFigure` render this inside the owl's positioned box when there is a
- * voice (`useOwlVoice`), and render nothing at all when there is not.
+ * `voice/SpeechLayer.tsx` renders this, for `OwlSpot` and `useOwlFigure`, inside the owl's
+ * positioned box when there is a voice (`useOwlVoice`), once the speech code has arrived.
+ * With no voice nothing is rendered and none of this code is fetched.
  *
  * Three things are decided here, and why:
  *

@@ -11,10 +11,10 @@ import { defineSurface } from '@/tune/registry'
  *   `embeds.ts`    the placement: the variant, and each site's size and variant
  *   `voice.ts`     whether the owl speaks, and in which voice
  *
- * To add a group — engraving, standing behaviours, voice — add a file here that calls
- * `defineTunables` with `scope: 'owl'`. Knob ids that begin `owl.design.` are paths into
- * the design (`design.ts` at the owl root says how); anything else is read with
- * `useTunable`. Nothing else needs to know the file exists.
+ * To add a group, add a file here that calls `defineTunables` with `scope: 'owl'`. Knob ids
+ * that begin `owl.design.` are paths into the design (`design.ts` at the owl root says how);
+ * anything else is read with `useTunable`. Nothing else needs to know the file exists. A
+ * group that only an off-by-default feature reads is not added here but in `deferred/`, below.
  *
  * The groups are loaded for their side effect, in a block, because the declarations
  * carry the defaults production runs on: `../design.ts` imports this module, so they
@@ -32,7 +32,8 @@ import { defineSurface } from '@/tune/registry'
  *                            speech code. `voice.ts` here keeps the two knobs a page without
  *                            a voice reads
  *
- * `all.ts` loads every group, which is what the panel imports (`src/tune/knobs.ts`).
+ * `all.ts` loads every group, which is what the panel imports (`src/tune/knobs.ts`), and puts
+ * the knobs in the order the panel lists them in: file-name order, as when they were one glob.
  * A deferred group a feature reads for its defaults imports its own file, as the engraved
  * style does.
  */

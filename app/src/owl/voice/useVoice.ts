@@ -15,8 +15,10 @@ import type { OccasionId, SpeechPlace, SpeechSite, TreatmentId, VoiceConfig } fr
  * (or the owl's variant) names. Everything it does is in effects and timers, and it adds
  * no node of its own — `OwlSpeech` draws what it returns.
  *
- * It returns `null` when there is no voice, which is the default. A caller that gets `null`
- * adds no wrapper and no element, so an owl with no voice is the owl as it was.
+ * It returns `null` when there is no voice, which is the default. It is called from the speech
+ * code (`SpeechLayer.tsx`), which a placement mounts only for an owl that has chosen a voice
+ * (`useChosenVoice`, `choice.ts`), and that choice, not this return, is what gives the
+ * placement its wrapper: an owl with no voice is the owl as it was, and fetches none of this.
  */
 
 export type SiteVoice = {
