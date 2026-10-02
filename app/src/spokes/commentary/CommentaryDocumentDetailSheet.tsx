@@ -13,6 +13,7 @@ import { DocsHint } from '@/docs/DocsHint'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type CommentaryDisplayRow,
   type CommentaryDocumentDetail,
@@ -164,6 +165,8 @@ function CommentaryDocumentDetailBody({
             {title}
           </SheetTitle>
           {postType && <PostTypeBadge value={postType} />}
+          {/* The id as a citation writes it for this corpus: `<publication>:<id>`. */}
+          <SaveToCollection corpus="commentary" docId={`${publication}:${row.id}`} title={title} sourceUrl={sourceUrl} />
           {sourceUrl && (
             <a
               href={sourceUrl}

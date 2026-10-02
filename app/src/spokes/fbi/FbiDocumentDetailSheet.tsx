@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type FbiDocumentDetail,
   type FbiDocumentDisplayRow,
@@ -146,6 +147,7 @@ function FbiDocumentDetailBody({
             {title}
           </SheetTitle>
           <OcrQualityBadge value={detail?.ocr_quality ?? row.ocr_quality} />
+          <SaveToCollection corpus="fbi" docId={row.id} title={title} sourceUrl={sourceUrl} />
           {isWaybackRecovered(provRow.provenance) && (
             <span
               className="rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-300"

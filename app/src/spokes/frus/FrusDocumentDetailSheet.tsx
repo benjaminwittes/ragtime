@@ -13,6 +13,7 @@ import { DocsHint } from '@/docs/DocsHint'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type FrusDocumentDetail,
   type FrusDocumentDisplayRow,
@@ -144,6 +145,7 @@ function FrusDocumentDetailBody({
             {title}
           </SheetTitle>
           {classification && <ClassificationBadge value={classification} />}
+          <SaveToCollection corpus="frus" docId={row.id} title={title} sourceUrl={sourceUrl} />
           {sourceUrl && (
             <a
               href={sourceUrl}

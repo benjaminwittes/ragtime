@@ -14,6 +14,7 @@ import { usePaid } from '@/auth/use-paid'
 import { buildUscSourceUrl } from '@/lib/external-source-urls'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type UscSectionDetail,
   type UscSectionDisplayRow,
@@ -152,6 +153,7 @@ function UscSectionDetailBody({ row }: { row: UscSectionDisplayRow }) {
             {citation}
           </SheetTitle>
           {isPositiveLaw && <PositiveLawBadge />}
+          <SaveToCollection corpus="usc" docId={row.id} title={citation} sourceUrl={sourceUrl} naturalKey={citation} />
           {sourceUrl && (
             <a
               href={sourceUrl}

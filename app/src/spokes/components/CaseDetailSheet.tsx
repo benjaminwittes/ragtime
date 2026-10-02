@@ -9,6 +9,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/use-auth'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type CaseDisplayRow,
   type DocketEntryRow,
@@ -124,6 +125,14 @@ function CaseDetailBody({
         <SheetDescription className="mt-2 text-xs">
           <CaseMetaGrid theCase={theCase} />
         </SheetDescription>
+        {/* Nothing unless the reader is signed in and has collections. */}
+        <SaveToCollection
+          corpus="litigation"
+          docId={theCase.cl_id}
+          title={theCase.case_name ?? `Docket ${theCase.cl_id}`}
+          sourceUrl={theCase.cl_url}
+          className="mt-2"
+        />
       </SheetHeader>
 
       <ScrollArea className="flex-1">
