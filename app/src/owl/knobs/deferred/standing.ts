@@ -1,5 +1,5 @@
 import { defineTunables } from '@/tune/registry'
-import { temperamentOptions } from '../temperaments'
+import { temperamentOptions } from '../../temperaments'
 
 /**
  * What the owl does when it is simply standing there: the temperament, the master switch,
@@ -15,9 +15,13 @@ import { temperamentOptions } from '../temperaments'
  * A behaviour's amount is how far or how strongly it acts, as a multiple of its own
  * default; its period is how long a cycle takes, or the mean gap between gestures, as a
  * multiple of its own default. The defaults are the numbers in each behaviour's file.
+ *
+ * Deferred (`./index.ts` says what that is) because nothing reads these *declared* values:
+ * standing is resolved from what is tuned, so in a build without the panel the declarations
+ * would be 14 kB that decide nothing.
  */
 
-const SELF = 'src/owl/knobs/standing.ts'
+const SELF = 'src/owl/knobs/deferred/standing.ts'
 
 const TOP = { scope: 'owl', group: 'Standing', source: { file: SELF } } as const
 

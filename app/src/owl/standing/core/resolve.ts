@@ -1,5 +1,6 @@
 import type { TuneValue } from '@/tune/types'
-import type { OwlDesign, OwlStanding, OwlTemperament, StandingConfig, StepMode } from '../../types'
+import type { OwlDesign, OwlTemperament, StandingConfig, StepMode } from '../../types'
+import { STANDING_PREFIX } from './prefix'
 
 /**
  * How the owl's standing behaviours are worked out, as a plain function of plain data, so
@@ -16,17 +17,20 @@ import type { OwlDesign, OwlStanding, OwlTemperament, StandingConfig, StepMode }
  *      switch (`inherit`, `on`, `off`), amount and period.
  *
  * The result is written back into the design — `standing` is the behaviours that are on,
- * and `params.standing` carries each one's amount and period in seconds — so everything
+ * and `params.standing` carries each one's amount and period — so everything
  * that reads a design, the scaffold's `data-standing` included, reads one place. A design
  * with nothing on comes back as the same object, which is how the owl as sent stays
  * exactly what it was.
  */
 
-/** Knob ids in this scope are `owl.standing.<id>.<field>`; these three are not a behaviour's. */
-export const STANDING_PREFIX = 'owl.standing.'
-
+/**
+ * What resolving needs to know of the behaviours is which exist, and that is all: the ids are
+ * the file names, known without loading a behaviour. A period is therefore kept as a multiple
+ * of the behaviour's own (`1` is its default) and turned into seconds where the behaviour is
+ * in hand (`standingConfigs`), so choosing what runs never waits on code that runs it.
+ */
 export type StandingRegistry = {
-  behaviours: ReadonlyMap<string, Pick<OwlStanding, 'period'>>
+  ids: ReadonlySet<string>
   temperaments: ReadonlyMap<string, OwlTemperament>
 }
 
@@ -58,7 +62,7 @@ export function applyStanding(
     if (!state) on.delete(id)
     else if (!on.has(id)) on.set(id, { amount: 1, period: 1 })
   }
-  for (const id of registry.behaviours.keys()) {
+  for (const id of registry.ids) {
     const switchTo = tuned[`${STANDING_PREFIX}${id}.on`]
     if (switchTo === 'off') on.delete(id)
     else if (switchTo === 'on' && !on.has(id)) on.set(id, { amount: 1, period: 1 })
@@ -67,11 +71,10 @@ export function applyStanding(
   const standing: Record<string, boolean> = {}
   const params: Record<string, TuneValue> = {}
   for (const [id, scale] of [...on].sort(([a], [b]) => a.localeCompare(b))) {
-    const behaviour = registry.behaviours.get(id)
-    if (!behaviour) continue
+    if (!registry.ids.has(id)) continue
     standing[id] = true
     params[`${id}.amount`] = scale.amount * number(tuned[`${STANDING_PREFIX}${id}.amount`], 1)
-    params[`${id}.period`] = behaviour.period * scale.period * number(tuned[`${STANDING_PREFIX}${id}.period`], 1)
+    params[`${id}.period`] = scale.period * number(tuned[`${STANDING_PREFIX}${id}.period`], 1)
   }
   if (Object.keys(standing).length === 0) return quiet()
 
@@ -84,13 +87,14 @@ export function applyStanding(
 
 /**
  * The settings each running behaviour is handed, from what `applyStanding` wrote.
- * `scanning` is whether the owl is under the scan finish, which is the one case where
+ * `ownPeriod` is a behaviour's period at its defaults, in seconds, which the multiple
+ * `applyStanding` wrote scales. `scanning` is whether the owl is under the scan finish, which is the one case where
  * `step: auto` steps.
  */
 export function standingConfigs(
   design: OwlDesign,
   scanning: boolean,
-  fallbackPeriod: (id: string) => number,
+  ownPeriod: (id: string) => number,
 ): Record<string, StandingConfig> {
   const raw = design.params.standing ?? {}
   const mode = (raw.step as StepMode | undefined) ?? 'auto'
@@ -100,7 +104,7 @@ export function standingConfigs(
     if (!design.standing[id]) continue
     out[id] = {
       amount: number(raw[`${id}.amount`], 1),
-      period: number(raw[`${id}.period`], fallbackPeriod(id)),
+      period: ownPeriod(id) * number(raw[`${id}.period`], 1),
       fps,
     }
   }

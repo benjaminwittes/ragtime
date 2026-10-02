@@ -3,7 +3,8 @@ import { baseDesign } from '../design'
 import { resolveDesign } from '../resolve'
 import { searchVars } from '../vars'
 import { getVariant } from '../variants'
-import { getStanding, resolveStanding, standingList } from './index'
+import { resolveStanding } from './index'
+import { getStanding, standingList } from './core/all'
 import { cycle, stepify, track } from './core/frames'
 import { gap, hashSeed, seeded } from './core/rng'
 import { standingConfigs } from './core/resolve'
@@ -21,7 +22,11 @@ describe('resolveStanding', () => {
     const out = resolveStanding(base, { 'owl.standing.temperament': 'still' })
     expect(out.standing).toEqual({ breathe: true })
     expect(out.params.standing['breathe.amount']).toBe(0.5)
-    expect(out.params.standing['breathe.period']).toBeCloseTo(getStanding('breathe')!.period * 1.4)
+    // A multiple of the behaviour's own period, turned into seconds where it is in hand.
+    expect(out.params.standing['breathe.period']).toBeCloseTo(1.4)
+    expect(standingConfigs(out, false, (id) => getStanding(id)!.period).breathe.period).toBeCloseTo(
+      getStanding('breathe')!.period * 1.4,
+    )
   })
 
   it('lets a switch and a multiplier win over the temperament', () => {

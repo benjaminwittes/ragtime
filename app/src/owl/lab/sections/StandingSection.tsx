@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Owl } from '../../Owl'
-import { standingList } from '../../standing'
+import { standingList } from '../../standing/core/all'
 import { temperamentList } from '../../temperaments'
 import type { OwlPin } from '../../types'
 

@@ -24,6 +24,8 @@ import { defineSurface } from '@/tune/registry'
  * panel, or only the code of one off-by-default feature reads, goes in `deferred/` instead.
  * Those are not loaded here, so they are not in the page that carries the owl:
  *
+ *   `deferred/standing.ts`   the standing behaviours' switches, amounts and periods: resolved
+ *                            from tuned values only, so the declared defaults decide nothing
  *   `deferred/engraved.ts`   the engraved style's halftone: imported by the style, so it
  *                            arrives with the code that reads it
  *

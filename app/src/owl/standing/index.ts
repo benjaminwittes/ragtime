@@ -1,9 +1,7 @@
 import { useEffect, type RefObject } from 'react'
-import { temperamentMap } from '../temperaments'
-import type { OwlDesign, OwlStanding, StandingConfig } from '../types'
-import { applyStanding, standingConfigs, standingSeed } from './core/resolve'
-import { startHost, type Host } from './core/host'
-import { hashSeed } from './core/rng'
+import { lazy, useLazy } from '../lazy'
+import type { OwlDesign } from '../types'
+import { STANDING_PREFIX } from './core/prefix'
 import type { TuneValue } from '@/tune/types'
 
 /**
@@ -13,12 +11,13 @@ import type { TuneValue } from '@/tune/types'
  *
  * To add one:
  *
- *   1. Add `standing/<id>.ts` whose default export is an `OwlStanding` (`../types.ts`).
- *      The glob below registers it; nothing else is edited. `start` builds the motion
- *      from the context's `loop` (a cycle) and `gesture` (one movement) and `every` (an
- *      irregular schedule): see `core/host.ts` for why those stack instead of fighting.
- *   2. Give it knobs in `../knobs/standing.ts` (a switch, an amount and a period), which
- *      is what the Tune panel shows, and list it in a temperament (`../temperaments/`)
+ *   1. Add `standing/<id>.ts` whose default export is an `OwlStanding` (`../types.ts`) and
+ *      whose `id` is the file's name. The glob in `core/kit.ts` registers it; nothing else is edited.
+ *      `start` builds the motion from the context's `loop` (a cycle) and `gesture` (one
+ *      movement) and `every` (an irregular schedule): see `core/host.ts` for why those
+ *      stack instead of fighting.
+ *   2. Give it knobs in `../knobs/deferred/standing.ts` (a switch, an amount and a period),
+ *      which is what the Tune panel shows, and list it in a temperament (`../temperaments/`)
  *      to make it part of a character.
  *   3. If it needs a static rule — a transform box for an element it scales — add a
  *      stylesheet keyed on `.owl[data-standing~='<id>']` and import it from the behaviour.
@@ -29,26 +28,15 @@ import type { TuneValue } from '@/tune/types'
  *
  * Renderers do not know any of this exists, which is the point: a behaviour moves the
  * parts the scaffold groups (`../parts.ts`), so it works in every style.
+ *
+ * **What is loaded when.** The owl as sent has nothing standing, so none of the code that
+ * stands is in the page that carries it. This file is the part that is: it says whether a
+ * design asks for any standing, and runs the hook. The rest — the behaviours, the host that
+ * runs them, the temperaments and the rules that resolve them (`core/kit.ts`) — is one chunk,
+ * fetched the first time a design asks. An owl that is asked to stand does so a moment after
+ * it arrives, which a reader cannot tell from a behaviour that starts at a random point in
+ * its cycle.
  */
-
-const modules = import.meta.glob<OwlStanding>(['./*.ts', '!./index.ts', '!./*.test.ts'], {
-  eager: true,
-  import: 'default',
-})
-
-const STANDING = new Map<string, OwlStanding>(
-  Object.values(modules)
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map((behaviour) => [behaviour.id, behaviour]),
-)
-
-export function standingList(): OwlStanding[] {
-  return [...STANDING.values()]
-}
-
-export function getStanding(id: string): OwlStanding | undefined {
-  return STANDING.get(id)
-}
 
 /** The ids a design has switched on, in a stable order. */
 export function enabledStanding(standing: OwlDesign['standing']): string[] {
@@ -57,33 +45,46 @@ export function enabledStanding(standing: OwlDesign['standing']): string[] {
     .sort()
 }
 
-/** `design` with its temperament, its `standing` record and the panel's knobs worked into one record. */
-export function resolveStanding(design: OwlDesign, tuned: Readonly<Record<string, TuneValue>>): OwlDesign {
-  return applyStanding(design, tuned, { behaviours: STANDING, temperaments: temperamentMap() })
-}
-
-/** Is the scan finish on this owl? It is the one case where every animated frame costs a filter pass. */
-function scanning(svg: SVGSVGElement): boolean {
-  return svg.querySelector('.eng-frame[filter]') !== null
-}
-
-function configsFor(design: OwlDesign, svg: SVGSVGElement): Record<string, StandingConfig> {
-  return standingConfigs(design, scanning(svg), (id) => STANDING.get(id)?.period ?? 1)
-}
-
-let instances = 0
+const kit = lazy(() => import('./core/kit'))
 
 /**
- * The running host for an owl, found from its element, so the second effect below can reach
- * what the first started: to tell it a new amount, or to start it again for a new seed.
+ * Does anything ask for standing at all: a temperament, a `standing` record, or a tuned
+ * value in this scope? The owl as sent asks for none, and `resolveStanding` hands it back
+ * as it is, which is also what working it through the rules comes to.
  */
-const hostOf = new WeakMap<SVGSVGElement, { host(): Host | undefined; restart(): void }>()
+export function wantsStanding(design: OwlDesign, tuned: Readonly<Record<string, TuneValue>>): boolean {
+  return (
+    design.temperament !== null ||
+    Object.keys(design.standing).length > 0 ||
+    Object.keys(tuned).some((id) => id.startsWith(STANDING_PREFIX))
+  )
+}
 
-/** The seed an owl's host was last started with. A seed is mixed into every draw at the start, so a new one means a start again. */
-const seededWith = new WeakMap<SVGSVGElement, number>()
+/**
+ * `design` with its temperament, its `standing` record and the panel's knobs worked into one
+ * record. For a design that asks for standing this needs the rules, which are fetched with
+ * the first such design (`useStandingKit`); until they arrive it is the design as it
+ * stands, with nothing on.
+ */
+export function resolveStanding(design: OwlDesign, tuned: Readonly<Record<string, TuneValue>>): OwlDesign {
+  if (!wantsStanding(design, tuned)) return design
+  return kit.get()?.resolve(design, tuned) ?? design
+}
 
-/** The design an owl was last rendered with, for a restart that must not use the one it mounted with. */
-const latest = new WeakMap<SVGSVGElement, OwlDesign>()
+/** The standing code, once it has arrived, for a design that `wantsStanding`; asks for nothing otherwise. */
+export function useStandingKit(wanted: boolean) {
+  return useLazy(wanted ? kit : null)
+}
+
+/** Fetch the standing code: for what has to have it before it renders, which is the tests. */
+export function loadStandingKit() {
+  return kit.load()
+}
+
+/** For the code that has the standing code in hand (`core/all.ts`). */
+export function provideStandingKit(module: typeof import('./core/kit')): void {
+  kit.provide(module)
+}
 
 /**
  * Run every standing behaviour the design has on, for as long as the owl is mounted and
@@ -92,75 +93,28 @@ const latest = new WeakMap<SVGSVGElement, OwlDesign>()
  *
  * Changing a value in the panel does not restart anything: the behaviours are told, and
  * move to the new amount and period from where they are.
+ *
+ * With nothing on, which is the owl as sent, this fetches nothing and runs nothing.
  */
 export function useStanding(svg: RefObject<SVGSVGElement | null>, design: OwlDesign): void {
   const key = enabledStanding(design.standing).join(' ')
+  const host = useStandingKit(key !== '')
 
   useEffect(() => {
     const el = svg.current
-    if (!el || key === '') return
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
-    let host: Host | undefined
-    // One seed for as long as this owl stands here, so a restart replays the same fidgets.
-    const seed = hashSeed('owl', instances++)
-    const run = () => {
-      host?.stop()
-      host = undefined
-      if (query.matches) return
-      const current = latest.get(el) ?? design
-      seededWith.set(el, standingSeed(current))
-      host = startHost({
-        svg: el,
-        design: current,
-        behaviours: STANDING,
-        ids: key.split(' '),
-        configs: configsFor(current, el),
-        seed: seed ^ standingSeed(current),
-      })
-    }
-    run()
-    query.addEventListener('change', run)
-    // Behaviours hold the elements they were started on. If the drawing under them is
-    // rebuilt — another render style, a screen with or without cross-hatching — those are
-    // gone, so the behaviours start again on what replaced them. Only elements coming and
-    // going count; a plate redrawn in place changes attributes, which is not observed.
-    let again = 0
-    const own = (node: Node) => node instanceof Element && node.classList.contains('owl-lightbar')
-    const watching = new MutationObserver((records) => {
-      // The light bar adds and removes itself, which is not the drawing changing.
-      if (records.every((r) => [...r.addedNodes, ...r.removedNodes].every(own))) return
-      window.clearTimeout(again)
-      again = window.setTimeout(run, 150)
-    })
-    watching.observe(el, { childList: true, subtree: true })
-    hostOf.set(el, { host: () => host, restart: run })
-    return () => {
-      window.clearTimeout(again)
-      watching.disconnect()
-      query.removeEventListener('change', run)
-      host?.stop()
-      hostOf.delete(el)
-      seededWith.delete(el)
-    }
+    if (!el || !host || key === '') return
+    return host.start(el, key.split(' '), design)
     // `design` is deliberately not a dependency: the behaviours are told about a new
     // amount or period (the effect below) and move to it from where they are, and
     // restarting every cycle on each knob drag would be the owl jumping under the hand
     // that is moving the knob.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [svg, key])
+  }, [svg, key, host])
 
   // A new amount or period, or the scan finish going on or off (which changes whether
   // looped motion is stepped), arrives as a new design.
   useEffect(() => {
     const el = svg.current
-    if (!el) return
-    latest.set(el, design)
-    const running = hostOf.get(el)
-    if (!running) return
-    // The seed is not a setting a behaviour can be told: it is what every draw and every
-    // starting phase was made from. A new one starts the behaviours again (once, on the
-    // change), so the Seed knob does something when it is moved and not only on the next mount.
-    if (seededWith.has(el) && seededWith.get(el) !== standingSeed(design)) running.restart()
-    else running.host()?.update(configsFor(design, el))
-  }, [svg, design])
+    if (el && host) host.update(el, design)
+  }, [svg, design, host])
 }
