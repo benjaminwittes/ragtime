@@ -1,0 +1,23 @@
+/* The Explorer's conversation, when the owl is put in it (`ChatOwl.tsx`, which imports this
+ * sheet): the owl is a small figure in a row that is already a line of text, and the line is
+ * said after it. The figure is drawn before the speech code is, and with no voice that code
+ * is never fetched, so these rules are not in the speech sheet. */
+.owl-chat-fig {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  width: 1.6rem;
+  height: 1.6rem;
+}
+.owl-chat-fig .owl {
+  width: 100%;
+  height: 100%;
+}
+.owl-chat-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+  font-size: 13px;
+  color: var(--dim, inherit);
+}

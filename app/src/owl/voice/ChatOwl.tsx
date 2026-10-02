@@ -1,5 +1,6 @@
 import { useRef, type ReactNode } from 'react'
 import { Owl } from '../Owl'
+import './chat.css'
 import { useChosenVoice } from './choice'
 import { SpeechSlot } from './slot'
 import type { SpeechSite } from './types'

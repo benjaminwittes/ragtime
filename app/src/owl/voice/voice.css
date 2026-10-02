@@ -1,9 +1,11 @@
 /* The owl's speech (`owl/speech.tsx`): the box it is anchored to, the note, and three ways of
  * setting it.
  *
- * Nothing here applies to an owl with no voice. The wrapper, the live region and the note
- * exist only when a voice does (`OwlSpot`, `useOwlFigure`), so with the Voice knob at its
- * default this sheet matches no element.
+ * Nothing here applies to an owl with no voice. The live region and the note exist only when
+ * a voice does, so with the Voice knob at its default this sheet matches no element, and it
+ * is a chunk of its own, fetched with the speech code (`voice/SpeechLayer.tsx`). What the
+ * placement renders before that code arrives is styled elsewhere: `.owl-spot` in `owl.css`,
+ * the conversation's owl in `chat.css`.
  *
  * The note is absolutely placed against the owl's own box, so it moves nothing around it
  * when it comes and goes, and `pointer-events: none`, so it cannot cover a control. The
@@ -18,10 +20,8 @@
  * Unlayered, like `owl.css`. Imported from `owl/speech.tsx`.
  */
 
-/* The positioned wrapper, when there is speech. */
-.owl-spot {
-  position: relative;
-}
+/* The positioned wrapper (`.owl-spot`) is in `owl.css`: the placement renders it, and it is
+ * there before this sheet is. */
 [data-voice-click] {
   cursor: pointer;
 }
@@ -143,26 +143,4 @@
       opacity: 1;
     }
   }
-}
-
-/* The Explorer's conversation, when the owl is put in it (`voice/ChatOwl.tsx`): the owl is
- * a small figure in a row that is already a line of text, and the line is said after it. */
-.owl-chat-fig {
-  position: relative;
-  flex: none;
-  display: inline-block;
-  width: 1.6rem;
-  height: 1.6rem;
-}
-.owl-chat-fig .owl {
-  width: 100%;
-  height: 100%;
-}
-.owl-chat-end {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.6rem 0;
-  font-size: 13px;
-  color: var(--dim, inherit);
 }

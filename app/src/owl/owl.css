@@ -149,3 +149,10 @@
     }
   }
 }
+
+/* The box a placement puts round the owl when it has chosen a voice (`OwlSpot`,
+ * `useOwlFigure`), so the speech can be placed against it. It is drawn from the first
+ * render, before the speech code and its sheet (`voice/voice.css`) arrive. */
+.owl-spot {
+  position: relative;
+}
