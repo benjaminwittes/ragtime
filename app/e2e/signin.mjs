@@ -61,6 +61,7 @@ async function ctxAuth(browser, { google, settings = 200, otp = 200, viewport = 
 const SHEET = '[role="dialog"]'
 const GOOGLE = `${SHEET} [data-sign-in="google"]`
 const ALERT = `${SHEET} [role="alert"]`
+const NOTICE = `${SHEET} [data-google-required]`
 
 /** Open the access sheet on the sign-in form. The harness's stub password opens it on Demo. */
 async function openSignIn(page) {
@@ -155,6 +156,47 @@ for (const google of [true, false]) {
   await ctx.close()
 }
 
+// ── A Lawfare address signs in with Google: no link when there is a button to point at ─
+{
+  log('— a Lawfare address, Google on —')
+  const { ctx, seen } = await ctxAuth(browser, { google: true })
+  const page = await ctx.newPage()
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' })
+  await openSignIn(page)
+  await page.waitForSelector(GOOGLE)
+  await page.fill(`${SHEET} input[type="email"]`, 'Reader@LawfareMedia.org')
+  await page.waitForSelector(NOTICE)
+  const notice = (await page.locator(NOTICE).innerText()).trim()
+  board.check('the form says the sentence', notice.startsWith('Lawfare addresses sign in with Google.'), notice)
+  board.check('and points at the button', notice.includes('button above') && (await page.locator(`${GOOGLE}[data-pointed-at]`).count()) === 1, notice)
+  board.check('the link cannot be asked for', await page.locator(`${SHEET} button:has-text("Send sign-in link")`).isDisabled())
+  await page.press(`${SHEET} input[type="email"]`, 'Enter')
+  await page.waitForTimeout(300)
+  board.check('and Enter does not ask for one either', seen.otp.length === 0, seen.otp)
+  await page.screenshot({ path: `${SHOTS}/signin-lawfare-address.png` })
+
+  await page.fill(`${SHEET} input[type="email"]`, 'reader@lawfaremedia.org.example.com')
+  board.check('a look-alike domain is not told this', (await page.locator(NOTICE).count()) === 0)
+  await page.click(`${SHEET} button:has-text("Send sign-in link")`)
+  await page.waitForSelector(`${SHEET} :text("Check your email.")`)
+  board.check('and is sent its link', seen.otp.length === 1 && seen.otp[0].body.email === 'reader@lawfaremedia.org.example.com', seen.otp)
+  await ctx.close()
+}
+{
+  log('— a Lawfare address, Google off —')
+  const { ctx, seen } = await ctxAuth(browser, { google: false })
+  const page = await ctx.newPage()
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' })
+  await openSignIn(page)
+  await page.waitForTimeout(400)
+  await page.fill(`${SHEET} input[type="email"]`, 'reader@lawfaremedia.org')
+  board.check('with no Google to send it to, the address is not turned away', (await page.locator(NOTICE).count()) === 0)
+  await page.click(`${SHEET} button:has-text("Send sign-in link")`)
+  await page.waitForSelector(`${SHEET} :text("Check your email.")`)
+  board.check('and is sent its link, as before', seen.otp.length === 1 && seen.otp[0].body.email === 'reader@lawfaremedia.org', seen.otp)
+  await ctx.close()
+}
+
 // ── A link that was already used: the page says so, once ──────────────────────────────
 {
   log('— a dead link —')
@@ -198,11 +240,11 @@ const session = {
 }
 const SEED_SESSION = `window.localStorage.setItem('sb-aikdbjprndgksibbvcfs-auth-token', ${JSON.stringify(JSON.stringify(session))})`
 
-async function ctxSignedIn(browser, balance) {
+async function ctxSignedIn(browser, balance, status = 200) {
   const { ctx, seen } = await ctxAuth(browser, { google: true })
   await ctx.addInitScript(SEED_SESSION)
   await ctx.route('**/api/balance', (route) =>
-    route.request().method() === 'OPTIONS' ? route.fulfill({ status: 204, headers: CORS }) : route.fulfill(asJson(200, balance)),
+    route.request().method() === 'OPTIONS' ? route.fulfill({ status: 204, headers: CORS }) : route.fulfill(asJson(status, balance)),
   )
   return { ctx, seen }
 }
@@ -233,6 +275,28 @@ for (const [name, balance, covered] of [
     board.check('and says nothing about an allowance', (await page.locator(`${SHEET} [data-billing="org"]`).count()) === 0)
   }
   board.check('nothing unexpected was asked of the auth project', seen.other.length === 0, seen.other)
+  await ctx.close()
+}
+
+// ── Signed in, but the Worker says this address signs in with Google ──────────────────
+{
+  log('— signed in, the Worker says google_required —')
+  const refusal = { error: { message: 'Lawfare addresses sign in with Google.', code: 'google_required' } }
+  const { ctx, seen } = await ctxSignedIn(browser, refusal, 403)
+  const page = await ctx.newPage()
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' })
+  await page.click('button[aria-label="Configure AI access"]')
+  await page.waitForSelector(`${SHEET} section[data-google-required]`)
+  const said = await page.locator(SHEET).innerText()
+  board.check('the sheet says the sentence', said.includes('Lawfare addresses sign in with Google.'), said)
+  board.check('with the Google button', await page.locator(GOOGLE).isVisible())
+  board.check('and no balance, and nothing to top up', (await page.locator(`${SHEET} button:has-text("Top up")`).count()) === 0 && !said.includes('Balance'), said)
+  board.check('and no raw error', (await page.locator(ALERT).count()) === 0 && !/403|google_required|Balance fetch failed/.test(said), said)
+  board.check('the way out is still there', await page.locator(`${SHEET} button:has-text("Sign out")`).isVisible())
+  await page.screenshot({ path: `${SHOTS}/signin-google-required.png` })
+
+  await Promise.all([page.waitForURL('**/auth/v1/authorize**'), page.click(GOOGLE)])
+  board.check('the button leaves for Google', seen.authorize[0]?.searchParams.get('provider') === 'google', seen.authorize[0]?.href)
   await ctx.close()
 }
 

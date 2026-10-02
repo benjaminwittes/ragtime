@@ -39,6 +39,8 @@ node e2e/tour.mjs                        # the guided tour, every step, at a des
 node e2e/demo.mjs                        # the presenter's kit at /demo, sealed by the driver itself; and ?docs=
 node e2e/signin.mjs                      # the Google button, the hourly email cap, a dead sign-in
                                          #   link; the auth project is stubbed, so nothing is sent
+node e2e/consent.mjs                     # the connector's consent page: signing in on it, Approve
+                                         #   and Deny; the auth project and the balance are stubbed
 E2E_W=1440 node e2e/cross.mjs            # the same at desktop width
 node e2e/band.mjs                        # whether the band keeps to one row
 node e2e/band.mjs --candidates           # measure wordings before choosing one
