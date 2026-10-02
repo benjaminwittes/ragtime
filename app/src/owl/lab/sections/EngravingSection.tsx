@@ -2,6 +2,8 @@ import { useMemo, useRef } from 'react'
 import { mergeDesign } from '../../resolve'
 import { OwlDrawing } from '../../scaffold'
 import { getStyle } from '../../styles'
+// The lab shows every drawing, so it has them all before the first plate is laid (and none swaps in).
+import '../../styles/all'
 import type { OwlDesignPatch } from '../../types'
 import { designFor, useTuneVersion } from '../../useOwlDesign'
 import { variantList } from '../../variants'

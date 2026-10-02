@@ -14,4 +14,4 @@
 import './knobs.global'
 import '@/explorer/tune'
 import '@/hub/tune'
-import '@/owl/knobs'
+import '@/owl/knobs/all'

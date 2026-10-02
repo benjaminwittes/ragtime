@@ -1,6 +1,7 @@
 import { allTunables } from '@/tune/registry'
 import { tuneOverrides } from '@/tune/store'
 import type { TuneValue } from '@/tune/types'
+import '../../knobs/deferred/engraved'
 import type { OwlDesign } from '../../types'
 import { engravedParams, scanParams, type EngravedParams, type ScanParams } from './params'
 
@@ -9,9 +10,9 @@ import { engravedParams, scanParams, type EngravedParams, type ScanParams } from
  * the owl uses: the knobs' declared defaults, the variant's `params.engraved`, and
  * whatever is being tuned right now.
  *
- * The defaults are read from the registry on first use and not at import. The knob file
- * imports the style list for its "Render style" options, so importing it from here would
- * be a cycle; by the time an owl renders, every knob has registered.
+ * The defaults are read from the registry on first use and not at import, so a knob file
+ * added to the group is there by the time an owl renders. The group's own file is imported
+ * here, which is what puts the defaults in the chunk that draws with them.
  */
 
 const PREFIX = 'owl.engraved.'

@@ -227,6 +227,12 @@ export type OwlStyle = {
   lantern: ComponentType<LayerProps>
 }
 
+/**
+ * What a style is called, kept apart from how it draws (`styles/<name>/meta.ts`), so the list
+ * of styles — the "Render style" knob's options — is known without loading any drawing code.
+ */
+export type OwlStyleMeta = Pick<OwlStyle, 'id' | 'label'>
+
 /** `l` is the owl's own left, the left of the picture: the first wing in a pose's table. */
 export type WingSide = 'l' | 'r'
 

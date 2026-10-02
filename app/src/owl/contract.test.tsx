@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { baseDesign } from './design'
 import { OwlDrawing } from './scaffold'
-import { styleList } from './styles'
+import { styleList } from './styles/all'
 import type { OwlLantern, OwlPose } from './types'
 
 /**

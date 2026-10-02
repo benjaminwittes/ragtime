@@ -11,9 +11,12 @@ import { defineTunables } from '@/tune/registry'
  *
  * Grouped as the work goes: choose a screen, set its lines, set the tone it prints, set
  * how it holds up small, then the print and the scan finish.
+ *
+ * Deferred (`./index.ts` says what that is): the style imports this file with the rest of
+ * its code, so a page that never draws the engraved owl does not carry its defaults.
  */
 
-const SELF = 'src/owl/knobs/engraved.ts'
+const SELF = 'src/owl/knobs/deferred/engraved.ts'
 
 const base = { scope: 'owl', source: { file: SELF } } as const
 const SCREEN = { ...base, group: 'Engraving · screen' } as const

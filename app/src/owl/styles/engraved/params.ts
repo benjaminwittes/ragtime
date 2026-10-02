@@ -4,7 +4,7 @@ import type { TuneValue } from '@/tune/types'
  * The engraved style's parameters as the drawing code wants them: numbers clamped to
  * something that cannot loop forever, selects narrowed to their options.
  *
- * Their defaults are not here. A knob's `value:` is the one copy (`knobs/engraved.ts`),
+ * Their defaults are not here. A knob's `value:` is the one copy (`knobs/deferred/engraved.ts`),
  * and `resolve.ts` lays a variant's `params.engraved` and whatever is tuned over it, so
  * this file only coerces what arrives.
  */

@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties } from 'react'
 import { isNight } from './resolve'
 import { OwlDrawing } from './scaffold'
 import { useStanding } from './standing'
-import { getStyle } from './styles'
+import { useStyle } from './styles'
 import type { OwlLantern, OwlPin, OwlPose } from './types'
 import { useGaze } from './useGaze'
 import { useOwlDesign } from './useOwlDesign'
@@ -72,6 +72,10 @@ export function Owl({
   const [hour] = useState(() => new Date().getHours())
   const shown: OwlLantern = lantern === 'dark' && keepsHours && isNight(hour, design.night) ? 'lit' : lantern
 
+  // The style the design names, once its drawing has arrived; flat until then, in the same
+  // box, so a style that is fetched late is a swap inside the figure and no more.
+  const renderStyle = useStyle(design.style)
+
   useGaze(svg, design.motion.gazeFollow)
   useStanding(svg, design)
 
@@ -80,7 +84,7 @@ export function Owl({
       design={design}
       poseId={pose}
       lantern={shown}
-      renderStyle={getStyle(design.style)}
+      renderStyle={renderStyle}
       svgRef={svg}
       className={className}
       style={style}
