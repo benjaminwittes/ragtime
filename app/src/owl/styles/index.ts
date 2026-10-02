@@ -42,6 +42,16 @@ const STYLES = new Map<string, { meta: OwlStyleMeta; slot: Lazy<OwlStyle> }>(
   }),
 )
 
+// A directory with a drawing and no `meta.ts` is never registered, so say so where the
+// person who added it is looking. (The other way round, a meta with no drawing, rejects
+// when the style is asked for.) Dev only: a build has no such directory.
+if (import.meta.env.DEV) {
+  const described = new Set(Object.keys(metas).map(directory))
+  for (const dir of loaders.keys()) {
+    if (!described.has(dir)) console.warn(`[owl] styles/${dir}/ has a drawing but no meta.ts, so it is not registered`)
+  }
+}
+
 /** Every registered style's id and label. Loads no drawing code. */
 export function styleMetas(): OwlStyleMeta[] {
   return [...STYLES.values()].map((entry) => entry.meta)
