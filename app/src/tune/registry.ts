@@ -42,6 +42,20 @@ export function defineTunables<T extends readonly Tunable[]>(list: T): T {
   return list
 }
 
+/**
+ * Put the registered knobs in the order `order` returns them. The panel lists knobs, and the
+ * groups they fall in, in registration order, which is the order their files happened to
+ * load in; a surface whose groups load at different times (the owl's deferred ones) says
+ * here the order it means them to read in. `order` must return the same knobs it was given.
+ */
+export function reorderTunables(order: (all: readonly Tunable[]) => readonly Tunable[]): void {
+  const next = order([...tunables.values()])
+  if (next.length !== tunables.size) throw new Error('[tune] reorderTunables must return every knob and no other')
+  const reordered = new Map(next.map((knob) => [knob.id, knob]))
+  tunables.clear()
+  for (const [id, knob] of reordered) tunables.set(id, knob)
+}
+
 export function getTunable(id: string): Tunable | undefined {
   return tunables.get(id)
 }
