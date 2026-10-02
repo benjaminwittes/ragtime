@@ -109,6 +109,14 @@ every declaration file leave no chunk behind — verified by building and greppi
 `dist/` for `rt-tune`. What does ship is `useTunable` returning declared
 defaults, which is what the literals did before.
 
+The owl's off-by-default code is a different case, because a design can name it with no panel
+anywhere: a variant's `style`, or a knob default changed in source and kept. So it is lazy
+rather than absent. The engraved style, the standing behaviours and the voices are chunks of
+their own, fetched the first time a design asks for one, and the knob groups only they read
+(`src/owl/knobs/deferred/`) arrive with them or with the panel. A build without the panel
+asks for none of it, so a plain page load fetches none of it; the owl draws the flat style
+until a requested one arrives, in the same box (`src/owl/lazy.ts`).
+
 `VITE_TUNER=1 npm run build` is the exception, and the reason it exists: a
 branch deploy someone can tune in front of you. Write-to-source is off there —
 there is no dev server to take it — so a tuning leaves that machine as a URL.

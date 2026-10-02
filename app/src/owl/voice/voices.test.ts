@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { getVoice, voiceList, voiceOptions } from './index'
+import { voiceList } from './all'
+import { getVoice, voiceIds, voiceOptions } from './index'
 import { treatmentList, TREATMENTS } from './treatments'
 import { OCCASION_IDS, TREATMENT_IDS } from './types'
 
@@ -83,6 +84,10 @@ describe('the registry', () => {
     expect(getVoice('archivist')?.id).toBe('archivist')
     expect(getVoice('nobody')).toBeUndefined()
     expect(getVoice(null)).toBeUndefined()
+  })
+
+  it('names every voice by its file, which is how the registry knows it without loading it', () => {
+    expect([...voiceIds()].sort()).toEqual(voiceList().map((v) => v.id).sort())
   })
 
   it('offers none first, and then every voice, to the knob', () => {

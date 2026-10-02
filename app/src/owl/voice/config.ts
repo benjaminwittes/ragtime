@@ -1,4 +1,6 @@
 import type { TuneValue } from '@/tune/types'
+import '../knobs/deferred/voice'
+import { CHAT_KNOB, VOICE_KNOB } from './choice'
 import { getVoice } from './index'
 import { isTreatment } from './treatments'
 import { OCCASION_IDS, type ChatMode, type OccasionId, type OwlVoice, type SpeechSite, type VoiceConfig } from './types'
@@ -9,11 +11,12 @@ import { OCCASION_IDS, type ChatMode, type OccasionId, type OwlVoice, type Speec
  * plain data, so they are tested in node (`config.test.ts`); `useVoice.ts` is the one place
  * that feeds them the live store.
  *
- * The defaults are not here. They are the `value:` of each knob in `knobs/voice.ts`, and
+ * The defaults are not here. They are the `value:` of each knob in `knobs/voice.ts` and
+ * `knobs/deferred/voice.ts` (imported above, which is how they arrive with this code), and
  * `read` finds them there.
  */
 
-export const VOICE_KNOB = 'owl.voice.id'
+export { CHAT_KNOB, VOICE_KNOB }
 export const TREATMENT_KNOB = 'owl.voice.treatment'
 export const DELAY_KNOB = 'owl.voice.delay'
 export const DWELL_KNOB = 'owl.voice.dwell'
@@ -21,7 +24,6 @@ export const ONCE_KNOB = 'owl.voice.once'
 export const POKE_KNOB = 'owl.voice.poke'
 export const IDLE_KNOB = 'owl.voice.idleSeconds'
 export const TYPE_KNOB = 'owl.voice.typeMs'
-export const CHAT_KNOB = 'owl.voice.chat'
 
 /** The knob that switches one occasion on. `poke` is the one occasion that has none of its own: `POKE_KNOB` is its switch. */
 export const occasionKnob = (id: OccasionId) => `owl.voice.on.${id}`

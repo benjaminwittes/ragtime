@@ -1,8 +1,8 @@
 import { useRef, type ReactNode } from 'react'
 import { Owl } from '../Owl'
-import { OwlSpeech } from '../speech'
+import { useChosenVoice } from './choice'
+import { SpeechSlot } from './slot'
 import type { SpeechSite } from './types'
-import { useOwlVoice } from './useVoice'
 
 /**
  * A small owl in the Explorer's conversation, as the speaker (experimental; the
@@ -36,14 +36,14 @@ export function ChatOwl({
     occasions: [occasion, 'poke'],
     keepsHours: false,
   }
-  const voice = useOwlVoice(site)
+  const speaking = useChosenVoice() !== null
   return (
     <>
       <span ref={figure} className="owl-chat-fig">
         <Owl pose="archivist" lantern={occasion === 'working' ? 'searching' : 'dark'} />
       </span>
       {children}
-      {voice ? <OwlSpeech voice={voice} target={figure} /> : null}
+      {speaking ? <SpeechSlot site={site} target={figure} /> : null}
     </>
   )
 }

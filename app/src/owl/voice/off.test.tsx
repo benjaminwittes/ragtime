@@ -1,9 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { applyTuneOverrides } from '@/tune/store'
 import { OwlSpot } from '../OwlSpot'
 import { SITES } from '../embeds'
 import type { OwlSiteId } from '../types'
+import { loadVoice } from './index'
+import { loadSpeechLayer } from './layer'
 
 /**
  * The claim the experiment makes: with no voice picked, the owl is mounted exactly as it
@@ -32,6 +34,11 @@ describe('with no voice', () => {
 })
 
 describe('with a voice', () => {
+  // The speech is a chunk of its own; once it is in, a site renders it on the first pass.
+  beforeAll(async () => {
+    await Promise.all([loadSpeechLayer(), loadVoice('archivist')])
+  })
+
   it.each(ids)('%s gains the positioned box and an empty live region, and no note until something is said', (id) => {
     applyTuneOverrides({ 'owl.voice.id': 'archivist' }, false)
     const html = renderToStaticMarkup(<OwlSpot site={id} />)

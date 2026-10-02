@@ -3,7 +3,7 @@ import type { CorpusRegistry, ExplorerBrief } from '@lawfare/ragtime-client'
 
 import { ChatOwl } from '@/owl/voice/ChatOwl'
 import { landed } from '@/owl/voice/landed'
-import { useChatOwl } from '@/owl/voice/useVoice'
+import { useChatOwl } from '@/owl/voice/choice'
 
 import { normalizeBrief, sameBrief } from '../model/brief.ts'
 import { phasePill, plural, workingLabel } from '../model/format.ts'

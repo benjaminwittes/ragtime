@@ -1,8 +1,8 @@
 import { SPEECH_SITES } from './embeds'
 import { join, siteOwl, useSite, type SpotOptions } from './site'
-import { OwlSpeech } from './speech'
 import type { OwlSiteId } from './types'
-import { useOwlVoice } from './voice/useVoice'
+import { useChosenVoice } from './voice/choice'
+import { SpeechSlot } from './voice/slot'
 
 /**
  * Where the owl is placed: the component every page mounts it through.
@@ -25,9 +25,11 @@ import { useOwlVoice } from './voice/useVoice'
  */
 export function OwlSpot({ site: id, ...options }: SpotOptions & { site: OwlSiteId }) {
   const { site, vars, variant: sited } = useSite(id)
-  const voice = useOwlVoice(SPEECH_SITES[id], { variant: options.variant ?? sited, occasion: options.occasion })
-  const speaking = voice !== null
-  const speaker = voice ? <OwlSpeech voice={voice} /> : null
+  const variant = options.variant ?? sited
+  // Whether there is a voice is known from the knob and the variant alone, so the box that
+  // holds the speech is there from the first render; the speech itself arrives when its code does.
+  const speaking = useChosenVoice(variant) !== null
+  const speaker = speaking ? <SpeechSlot site={SPEECH_SITES[id]} variant={variant} occasion={options.occasion} /> : null
 
   if (site.figureClassName !== undefined) {
     // The page has no figure of its own here, so this makes the one the table describes.

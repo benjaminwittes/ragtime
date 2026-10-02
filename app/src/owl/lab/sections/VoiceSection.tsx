@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Owl } from '../../Owl'
 import { OwlSpeech } from '../../speech'
-import { voiceList } from '../../voice'
+import { voiceList } from '../../voice/all'
 import { TREATMENTS, treatmentList } from '../../voice/treatments'
 import { OCCASIONS, OCCASION_IDS, type OccasionId, type OwlVoice, type SpeechPlace, type TreatmentId } from '../../voice/types'
 import { useOwlVoice } from '../../voice/useVoice'

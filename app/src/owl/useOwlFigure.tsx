@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { SPEECH_SITES } from './embeds'
 import { join, siteOwl, useSite, type SpotOptions } from './site'
-import { OwlSpeech } from './speech'
 import type { OwlSiteId } from './types'
-import { useOwlVoice } from './voice/useVoice'
+import { useChosenVoice } from './voice/choice'
+import { SpeechSlot } from './voice/slot'
 
 /**
  * `OwlSpot` for a page that wraps the owl in a figure of its own. Returns the props
@@ -22,15 +22,16 @@ export function useOwlFigure(
   options: SpotOptions = {},
 ): { figure: ReactNode; figureClassName: string | undefined; figureStyle: CSSProperties } {
   const { site, vars, variant: sited } = useSite(id)
-  const voice = useOwlVoice(SPEECH_SITES[id], { variant: options.variant ?? sited, occasion: options.occasion })
+  const variant = options.variant ?? sited
+  const speaking = useChosenVoice(variant) !== null
   return {
     figure: (
       <>
         {siteOwl(site, { ...options, sited, className: site.className })}
-        {voice ? <OwlSpeech voice={voice} /> : null}
+        {speaking ? <SpeechSlot site={SPEECH_SITES[id]} variant={variant} occasion={options.occasion} /> : null}
       </>
     ),
-    figureClassName: join(site.figureClassName, voice !== null && 'owl-spot'),
+    figureClassName: join(site.figureClassName, speaking && 'owl-spot'),
     figureStyle: vars,
   }
 }

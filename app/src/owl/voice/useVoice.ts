@@ -37,12 +37,6 @@ export type SiteVoice = {
 
 const memory = sessionMemory()
 
-/** Is the owl called into the Explorer's conversation? The `owl.voice.chat` knob; off unless the panel says so. */
-export function useChatOwl(): boolean {
-  useTuneVersion()
-  return readVoiceConfig(tuneValue).chat === 'row'
-}
-
 export function useOwlVoice(
   site: SpeechSite,
   options: {

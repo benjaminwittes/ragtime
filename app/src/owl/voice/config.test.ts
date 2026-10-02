@@ -4,6 +4,7 @@ import '../knobs'
 import { SPEECH_SITES } from '../embeds'
 import { baseDesign } from '../design'
 import { arrivalOccasion, chooseVoice, heardKey, occasionKnob, readVoiceConfig, shouldSpeak } from './config'
+import './all'
 import { getVoice } from './index'
 import { OCCASION_IDS, type OwlVoice, type SpeechSite, type VoiceConfig } from './types'
 
