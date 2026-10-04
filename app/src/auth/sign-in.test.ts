@@ -1,6 +1,74 @@
 import { describe, expect, it } from 'vitest'
 
-import { offersGoogle, refusalInWords, returnErrorIn, withoutReturnError } from './sign-in.ts'
+import {
+  GOOGLE_ONLY_DOMAINS,
+  GOOGLE_REQUIRED,
+  isGoogleRequired,
+  mustUseGoogle,
+  offersGoogle,
+  refusalInWords,
+  returnErrorIn,
+  withoutReturnError,
+} from './sign-in.ts'
+
+describe('mustUseGoogle', () => {
+  it('names one domain, and one sentence', () => {
+    expect(GOOGLE_ONLY_DOMAINS).toEqual(['lawfaremedia.org'])
+    expect(GOOGLE_REQUIRED).toBe('Lawfare addresses sign in with Google.')
+  })
+
+  it('is yes for an address on the domain when Google is on, however it is typed', () => {
+    expect(mustUseGoogle('reader@lawfaremedia.org', true)).toBe(true)
+    expect(mustUseGoogle('Reader@LawfareMedia.ORG', true)).toBe(true)
+    expect(mustUseGoogle('  reader@lawfaremedia.org  ', true)).toBe(true)
+    expect(mustUseGoogle('a@b@lawfaremedia.org', true)).toBe(true)
+  })
+
+  it('is no for every address when Google is off, so nobody is locked out', () => {
+    expect(mustUseGoogle('reader@lawfaremedia.org', false)).toBe(false)
+    expect(mustUseGoogle('Reader@LawfareMedia.ORG', false)).toBe(false)
+  })
+
+  it('is no for any other domain, look-alikes and subdomains included', () => {
+    for (const other of [
+      'reader@example.org',
+      'reader@lawfaremedia.org.example.com',
+      'reader@mail.lawfaremedia.org',
+      'reader@notlawfaremedia.org',
+      'reader@lawfaremedia.com',
+      'lawfaremedia.org@example.org',
+    ]) {
+      expect(mustUseGoogle(other, true)).toBe(false)
+    }
+  })
+
+  it('is no for something that is not yet an address', () => {
+    for (const partial of ['', 'reader', 'reader@', '@lawfaremedia.org', 'lawfaremedia.org', 'reader@lawfaremedia']) {
+      expect(mustUseGoogle(partial, true)).toBe(false)
+    }
+  })
+})
+
+describe('isGoogleRequired', () => {
+  const refusal = { error: { message: 'Lawfare addresses sign in with Google.', code: 'google_required' } }
+
+  it('is yes for a 403 that carries the code', () => {
+    expect(isGoogleRequired(403, refusal)).toBe(true)
+  })
+
+  it('goes by the code and not the words, and needs the 403', () => {
+    expect(isGoogleRequired(403, { error: { message: 'Lawfare addresses sign in with Google.' } })).toBe(false)
+    expect(isGoogleRequired(403, { error: { message: 'x', code: 'something_else' } })).toBe(false)
+    expect(isGoogleRequired(402, refusal)).toBe(false)
+    expect(isGoogleRequired(200, refusal)).toBe(false)
+  })
+
+  it('is no for a body that is not the shape', () => {
+    for (const odd of [null, undefined, 'google_required', {}, { error: null }, { error: 'google_required' }, { code: 'google_required' }]) {
+      expect(isGoogleRequired(403, odd)).toBe(false)
+    }
+  })
+})
 
 describe('offersGoogle', () => {
   it('is yes only when the project says Google is on', () => {

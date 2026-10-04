@@ -1,7 +1,7 @@
 /**
- * What signing in needs that is not React: whether the project offers Google, what to say
- * when a sign-in is refused, and what to say when someone comes back from a link or from
- * Google without a session.
+ * What signing in needs that is not React: whether the project offers Google, which
+ * addresses must use it, what to say when a sign-in is refused, and what to say when
+ * someone comes back from a link or from Google without a session.
  *
  * ── Why the Google button asks the server ────────────────────────────────────────────────
  * Whether Google sign-in works is a setting on the auth project, not a fact about this
@@ -47,6 +47,43 @@ export function googleOffered(): Promise<boolean> {
       return false
     })
   return asked
+}
+
+/**
+ * Domains whose addresses sign in with Google and are not sent an email link.
+ *
+ * The service bills an address on one of these to the organisation only when the session
+ * was made by Google, and refuses its AI calls otherwise (HTTP 403, code
+ * `google_required`). An email link to such an address would sign the person in to an
+ * account that then cannot ask anything, so the form does not send one.
+ */
+export const GOOGLE_ONLY_DOMAINS: readonly string[] = ['lawfaremedia.org']
+
+/** The one sentence for it, the same words the service answers with. */
+export const GOOGLE_REQUIRED = 'Lawfare addresses sign in with Google.'
+
+/**
+ * Whether this address must sign in with Google and so gets no email link.
+ *
+ * Only when the auth project offers Google. With Google off there is no button to point
+ * at, and refusing the email would lock those people out altogether. The domain is what
+ * follows the last `@`, compared whole: `lawfaremedia.org.example.com` and
+ * `mail.lawfaremedia.org` are other domains.
+ */
+export function mustUseGoogle(email: string, google: boolean): boolean {
+  if (!google) return false
+  const at = email.lastIndexOf('@')
+  if (at < 1) return false
+  const domain = email.slice(at + 1).trim().toLowerCase()
+  return GOOGLE_ONLY_DOMAINS.includes(domain)
+}
+
+/** Whether the service refused a call because this address must sign in with Google. */
+export function isGoogleRequired(status: number, body: unknown): boolean {
+  if (status !== 403 || typeof body !== 'object' || body === null) return false
+  const error = (body as { error?: unknown }).error
+  if (typeof error !== 'object' || error === null) return false
+  return (error as { code?: unknown }).code === 'google_required'
 }
 
 /** What the auth client hands back when it refuses: its words, and sometimes a code. */

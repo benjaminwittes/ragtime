@@ -9,7 +9,15 @@ import {
 import type { Session } from '@supabase/supabase-js'
 import { accountFrom, type PaidAccount } from './account'
 import { getSupabase } from './supabase'
-import { googleOffered, refusalInWords, returnErrorIn, withoutReturnError } from './sign-in'
+import {
+  GOOGLE_REQUIRED,
+  googleOffered,
+  isGoogleRequired,
+  mustUseGoogle,
+  refusalInWords,
+  returnErrorIn,
+  withoutReturnError,
+} from './sign-in'
 
 /**
  * Paid-tier auth context.
@@ -49,14 +57,21 @@ export type PaidContextValue = {
   balanceLoading: boolean
   /** Last balance-fetch error message (if any). Cleared on success. */
   balanceError: string | null
+  /** The Worker refused this session because its address must sign in with
+   *  Google (HTTP 403, code `google_required`). The page then says so beside
+   *  the Google button, in place of a balance. False when signed out. */
+  googleRequired: boolean
 
   /** Send a magic-link email. Returns an error message on failure, null
-   *  on success (UI then shows "check your email"). */
-  signInWithEmail: (email: string) => Promise<string | null>
+   *  on success (UI then shows "check your email"). An address that must
+   *  sign in with Google is sent nothing and gets that sentence back.
+   *  `returnTo` is the address the link opens; this page when omitted. */
+  signInWithEmail: (email: string, returnTo?: string) => Promise<string | null>
   /** Leave for Google's sign-in page. Returns an error message when the
    *  browser could not be sent there; on success the page is on its way out
-   *  and comes back signed in. Offer it only when `googleOffered()` says so. */
-  signInWithGoogle: () => Promise<string | null>
+   *  and comes back signed in. Offer it only when `googleOffered()` says so.
+   *  `returnTo` is the address to come back to; this page when omitted. */
+  signInWithGoogle: (returnTo?: string) => Promise<string | null>
   /** Why this page was opened from a sign-in link, or from Google, without
    *  getting a session: an expired or used link, a refusal. `null` otherwise. */
   returnError: string | null
@@ -83,6 +98,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<PaidAccount | null>(null)
   const [balanceLoading, setBalanceLoading] = useState(false)
   const [balanceError, setBalanceError] = useState<string | null>(null)
+  const [googleRequired, setGoogleRequired] = useState(false)
   // Read before the SDK starts, which is the effect below: a failed return
   // is in the address the page was opened on and nowhere else.
   const [returnError, setReturnError] = useState<string | null>(() =>
@@ -126,6 +142,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
       if (!next) {
         setAccount(null)
         setBalanceError(null)
+        setGoogleRequired(false)
       }
     })
     return () => {
@@ -139,6 +156,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
     const current = (await sb.auth.getSession()).data.session
     if (!current?.access_token) {
       setAccount(null)
+      setGoogleRequired(false)
       return null
     }
     setBalanceLoading(true)
@@ -163,11 +181,20 @@ export function PaidProvider({ children }: { children: ReactNode }) {
         const body = (await resp.json().catch(() => ({}))) as {
           error?: { message?: string }
         }
+        // Not a failed fetch: the Worker is saying this address signs in
+        // with Google. The page says that beside the button, and there is no
+        // balance to show.
+        if (isGoogleRequired(resp.status, body)) {
+          setGoogleRequired(true)
+          setAccount(null)
+          return null
+        }
         throw new Error(
           body.error?.message ?? `Balance fetch failed (${resp.status})`,
         )
       }
       const next = accountFrom(await resp.json())
+      setGoogleRequired(false)
       setAccount(next)
       return next
     } catch (e) {
@@ -195,10 +222,13 @@ export function PaidProvider({ children }: { children: ReactNode }) {
   }, [session, refreshBalance])
 
   const signInWithEmail = useCallback(
-    async (email: string): Promise<string | null> => {
+    async (email: string, returnTo?: string): Promise<string | null> => {
       const sb = getSupabase()
-      const redirectTo = window.location.origin + window.location.pathname
+      const redirectTo = returnTo ?? window.location.origin + window.location.pathname
       try {
+        // No link for an address that must use Google: it would sign the
+        // person in to a session the Worker then refuses.
+        if (mustUseGoogle(email, await googleOffered())) return GOOGLE_REQUIRED
         const r = await sb.auth.signInWithOtp({
           email,
           options: { emailRedirectTo: redirectTo },
@@ -212,10 +242,10 @@ export function PaidProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  const signInWithGoogle = useCallback(async (): Promise<string | null> => {
+  const signInWithGoogle = useCallback(async (returnTo?: string): Promise<string | null> => {
     const sb = getSupabase()
     // Back to the page they left from, as the email link does.
-    const redirectTo = window.location.origin + window.location.pathname
+    const redirectTo = returnTo ?? window.location.origin + window.location.pathname
     try {
       const r = await sb.auth.signInWithOAuth({
         provider: 'google',
@@ -237,6 +267,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
     setSession(null)
     setAccount(null)
     setBalanceError(null)
+    setGoogleRequired(false)
   }, [])
 
   const applyBalanceFromWorker = useCallback((newBalanceCents: number) => {
@@ -254,6 +285,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
       account,
       balanceLoading,
       balanceError,
+      googleRequired,
       signInWithEmail,
       signInWithGoogle,
       returnError,
@@ -268,6 +300,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
       account,
       balanceLoading,
       balanceError,
+      googleRequired,
       signInWithEmail,
       signInWithGoogle,
       returnError,
