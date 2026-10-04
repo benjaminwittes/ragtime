@@ -5,11 +5,12 @@ import './index'
 /**
  * Every knob group the owl has, shipped and deferred (`./index.ts`), for the Tune panel.
  * The panel lists knobs for surfaces that are not on screen, so it needs the declarations
- * of the groups no page has loaded, and the options of the knobs that name a voice, which
+ * of the groups no page has loaded, the labels, ranges and notes of the shipped ones
+ * (`./panel/`, which no page loads), and the options of the knobs that name a voice, which
  * need each voice's label. Nothing the app's pages import reaches this file.
  */
 
-import.meta.glob('./deferred/*.ts', { eager: true })
+import.meta.glob(['./panel/*.ts', './deferred/*.ts'], { eager: true })
 
 /**
  * The panel lists groups in the order their knobs registered, and the deferred groups

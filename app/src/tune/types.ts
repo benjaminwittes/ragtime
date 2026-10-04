@@ -96,3 +96,9 @@ export type TuneSurface = {
   /** Default source file for this surface's token knobs. */
   file: string
 }
+
+/** What production needs of a knob: its id and its default. */
+export type TuneDeclaration = Pick<Tunable, 'id' | 'value'> & Partial<Tunable>
+
+/** What only the panel needs, added to a declaration of the same id. */
+export type TuneDescription = Omit<Tunable, 'value'>

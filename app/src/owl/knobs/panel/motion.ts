@@ -1,0 +1,188 @@
+import { describeTunables } from '@/tune/registry'
+import '../motion'
+
+/**
+ * What the panel draws for each knob in `../motion.ts`: its label, group, kind, range and note.
+ * Loaded only with the panel (`../all.ts`), so none of it is in a production page.
+ */
+
+const SELF = 'src/owl/knobs/motion.ts'
+
+const MOTION = { scope: 'owl', group: 'Motion', source: { file: SELF } } as const
+const GAZE = { scope: 'owl', group: 'Gaze', source: { file: SELF } } as const
+const LANTERN = { scope: 'owl', group: 'Lantern', source: { file: SELF } } as const
+
+describeTunables([
+  {
+    ...MOTION,
+    id: 'owl.design.motion.blink',
+    label: 'Blink',
+    kind: 'boolean',
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.blinkPeriod',
+    label: 'Blink period',
+    kind: 'number',
+    min: 1,
+    max: 20,
+    step: 0.5,
+    note: 'Seconds from one blink to the next. The blink itself is about a seventh of a second.',
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.blinkClosed',
+    label: 'Lid closure',
+    kind: 'number',
+    min: 0,
+    max: 1,
+    step: 0.02,
+    note: 'How much of the eyes’ height is left when they are shut. 1 is no blink at all.',
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.searchPeriod',
+    label: 'Search pulse',
+    kind: 'number',
+    min: 0.3,
+    max: 4,
+    step: 0.1,
+    note: 'Seconds for the lantern to breathe in, while something is being looked for.',
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.searchLow',
+    label: 'Pulse, dim',
+    kind: 'number',
+    min: 0,
+    max: 1,
+    step: 0.05,
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.searchHigh',
+    label: 'Pulse, bright',
+    kind: 'number',
+    min: 0,
+    max: 1,
+    step: 0.05,
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.glowLit',
+    label: 'Lit glow',
+    kind: 'number',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    note: 'How bright the glow stands while the lantern is lit and not pulsing.',
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.glowFade',
+    label: 'Glow fade',
+    kind: 'int',
+    min: 0,
+    max: 2000,
+    step: 50,
+    note: 'Milliseconds for the glow to come up or go down when the lantern state changes.',
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.shakeTime',
+    label: 'Head-shake time',
+    kind: 'int',
+    min: 100,
+    max: 1500,
+    step: 20,
+    note: 'Milliseconds for the owl saying no.',
+  },
+  {
+    ...MOTION,
+    id: 'owl.design.motion.shakeReach',
+    label: 'Head-shake reach',
+    kind: 'number',
+    min: 0,
+    max: 10,
+    step: 0.5,
+    note: 'Figure units at the widest. The shake moves the figure, so keep it small enough to stay inside the box a page gave it.',
+  },
+
+  {
+    ...GAZE,
+    id: 'owl.design.motion.gazeFollow',
+    label: 'Eyes follow the pointer',
+    kind: 'boolean',
+  },
+  {
+    ...GAZE,
+    id: 'owl.design.motion.gazeTravel',
+    label: 'Gaze travel',
+    kind: 'number',
+    min: 0,
+    max: 0.9,
+    step: 0.01,
+    note: 'How far a pupil may leave the middle of its lens, as a share of the lens’s radius.',
+  },
+  {
+    ...GAZE,
+    id: 'owl.design.motion.gazeEase',
+    label: 'Gaze easing',
+    kind: 'int',
+    min: 0,
+    max: 800,
+    step: 10,
+    note: 'Milliseconds the pupils take to catch up with the pointer. This is what turns sixty updates a second into a look.',
+  },
+
+  {
+    ...LANTERN,
+    id: 'owl.search.swing',
+    label: 'Searching: lantern swing',
+    kind: 'number',
+    min: 0,
+    max: 12,
+    step: 0.5,
+    note: 'Degrees the lantern swings each way from its handle while a search is out, in time with the glow’s pulse. 0 holds it still. Not part of the design, so the base owl’s pinned numbers do not move.',
+  },
+  {
+    ...LANTERN,
+    id: 'owl.search.scan',
+    label: 'Searching: eyes scan',
+    kind: 'number',
+    min: 0,
+    max: 2,
+    step: 0.1,
+    note: 'Figure units the pupils sweep each way while a search is out, over about two pulses. 0 holds them.',
+  },
+  {
+    ...LANTERN,
+    id: 'owl.search.lift',
+    label: 'Searching: lantern lift',
+    kind: 'number',
+    min: 0,
+    max: 3,
+    step: 0.1,
+    note: 'Figure units the lantern is held up while searching. Unlike the motion this stays for a reader who has asked for reduced motion, so a search reads differently from a lit lantern without movement; with the glow at full strength it is what tells them apart.',
+  },
+  {
+    ...LANTERN,
+    id: 'owl.design.night.from',
+    label: 'Night begins',
+    kind: 'int',
+    min: 0,
+    max: 23,
+    step: 1,
+    note: 'The hour, by the reader’s clock, after which an owl that keeps hours lights its lantern unasked.',
+  },
+  {
+    ...LANTERN,
+    id: 'owl.design.night.until',
+    label: 'Night ends',
+    kind: 'int',
+    min: 0,
+    max: 23,
+    step: 1,
+    note: 'And the hour it puts it out. A window that ends before it begins wraps midnight.',
+  },
+])

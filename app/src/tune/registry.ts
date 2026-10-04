@@ -14,9 +14,13 @@
  * on in production, so they must ship: `useTunable('hub.previewRows')` returns
  * 25 in a production build because that is what the declaration says, with no
  * panel, no store and no overlay anywhere near it.
+ *
+ * A declaration can be the id and the default alone, and the rest (label, group, range, note)
+ * added by `describeTunables` from a module only the panel loads, as the owl's are
+ * (`src/owl/knobs/panel/`). The panel reads whole knobs, so it loads the descriptions first.
  */
 
-import type { Tunable, TuneSurface } from './types'
+import type { Tunable, TuneDeclaration, TuneDescription, TuneSurface } from './types'
 
 const surfaces = new Map<string, TuneSurface>()
 const tunables = new Map<string, Tunable>()
@@ -32,14 +36,27 @@ export function defineSurface(surface: TuneSurface): TuneSurface {
  * one statement. A duplicate id is a programming error and throws loudly in
  * dev — two knobs sharing an id would silently overwrite each other in presets.
  */
-export function defineTunables<T extends readonly Tunable[]>(list: T): T {
+export function defineTunables<T extends readonly TuneDeclaration[]>(list: T): T {
   for (const knob of list) {
     if (import.meta.env.DEV && tunables.has(knob.id)) {
       throw new Error(`[tune] duplicate tunable id: ${knob.id}`)
     }
-    tunables.set(knob.id, knob)
+    tunables.set(knob.id, knob as Tunable)
   }
   return list
+}
+
+/**
+ * Give declared knobs the rest of what the panel draws. Each description joins the knob with
+ * its id, in the place that knob registered in. Properties are copied as defined, so a getter
+ * (options read when the panel draws, not now) stays one.
+ */
+export function describeTunables(list: readonly TuneDescription[]): void {
+  for (const description of list) {
+    const knob = tunables.get(description.id)
+    if (!knob) throw new Error(`[tune] description of an undeclared tunable: ${description.id}`)
+    Object.defineProperties(knob, Object.getOwnPropertyDescriptors(description))
+  }
 }
 
 /**

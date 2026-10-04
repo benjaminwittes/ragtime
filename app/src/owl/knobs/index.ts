@@ -11,14 +11,16 @@ import { defineSurface } from '@/tune/registry'
  *   `embeds.ts`    the placement: the variant, and each site's size and variant
  *   `voice.ts`     whether the owl speaks, and in which voice
  *
- * To add a group, add a file here that calls `defineTunables` with `scope: 'owl'`. Knob ids
+ * To add a group, add a file here that calls `defineTunables` (and one in `panel/` that calls
+ * `describeTunables` with `scope: 'owl'`, the group, the label and the kind). Knob ids
  * that begin `owl.design.` are paths into the design (`design.ts` at the owl root says how);
  * anything else is read with `useTunable`. Nothing else needs to know the file exists. A
  * group that only an off-by-default feature reads is not added here but in `deferred/`, below.
  *
  * The groups are loaded for their side effect, in a block, because the declarations
  * carry the defaults production runs on: `../design.ts` imports this module, so they
- * ship (see `src/tune/registry.ts`).
+ * ship (see `src/tune/registry.ts`). A shipped group is its ids and defaults alone; what
+ * the panel shows of each knob is in `panel/<group>.ts`, which only `all.ts` loads.
  *
  * **Deferred groups.** A group whose declarations nothing reads in a build without the
  * panel, or only the code of one off-by-default feature reads, goes in `deferred/` instead.
