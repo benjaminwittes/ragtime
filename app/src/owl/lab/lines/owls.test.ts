@@ -15,7 +15,7 @@ describe('line-tile owls', () => {
     }
   })
   it('shuts the eye ring to ink and tips the head only now and then', () => {
-    const spec = OWLS[2]
+    const spec = OWLS[0]
     const open = owlField(spec, 0, 'lit')(50 + spec.eyeX, spec.eyeY - spec.eyeR * 0.5)
     const shut = owlField(spec, 5.5 * 0.78, 'lit')(50 + spec.eyeX, spec.eyeY - spec.eyeR * 0.5)
     expect(shut).not.toBeCloseTo(open, 1)

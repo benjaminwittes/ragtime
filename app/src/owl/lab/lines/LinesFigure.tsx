@@ -6,8 +6,6 @@ import { lanternField, type LampState } from './fields'
 import { OWLS, owlField } from './owls'
 
 const BOUNDS: Record<LineSubject, LineParams['bounds']> = {
-  a: { x0: 6, y0: 6, x1: 94, y1: 94 },
-  b: { x0: 6, y0: 6, x1: 94, y1: 94 },
   c: { x0: 6, y0: 6, x1: 94, y1: 94 },
   lantern: { x0: 12, y0: 12, x1: 88, y1: 88 },
 }

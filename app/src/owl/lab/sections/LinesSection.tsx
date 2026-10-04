@@ -10,7 +10,7 @@ import { FRAMES, OWLS, type OwlSpec } from '../lines/owls'
  * An image drawn as a mosaic of tiles of five parallel lines that thicken and thin together,
  * smoothed like ink (`lines/engine.ts`).
  *
- *  - `lines-owl-a/b/c`: three owls drawn for the technique, as ink-density functions in code
+ *  - `lines-owl`: an owl drawn for the technique, as an ink-density function in code
  *    (`lines/owls.ts`): big concentric eyes, a plump body, tufts. They blink as the eye rings
  *    pinch shut, breathe, tip the head and flick an ear, all by thickness alone.
  *  - `lines-lantern`: no owl, a lantern as a swelling in a field of tiles, in the owl's
@@ -60,20 +60,28 @@ function Sizes({ subject, knobs, children }: { subject: LineSubject; knobs: Line
   )
 }
 
-function Candidate({ spec, knobs }: { spec: OwlSpec; knobs: LineKnobs }) {
+function Candidate({ spec, knobs, runAll }: { spec: OwlSpec; knobs: LineKnobs; runAll: boolean }) {
   const subject = spec.id as LineSubject
   return (
     <div className="mt-8">
       <h3 className="font-serif text-xl font-medium">
-        {spec.label} <code className="text-sm font-normal text-muted-foreground">lines-owl-{spec.id}</code>
+        {spec.label} <code className="text-sm font-normal text-muted-foreground">lines-owl</code>
       </h3>
       <p className="text-sm text-muted-foreground">{spec.note} The lit 112px one blinks, breathes, tips its head and flicks an ear.</p>
       <Sizes subject={subject} knobs={knobs} />
       <div className={PAPER}>
-        {FRAMES.filter((f) => spec.lantern || f.id !== 'search').map((f) => (
+        {FRAMES.filter((f) => spec.lantern || !f.id.startsWith('search')).map((f) => (
           <Lines key={f.id} subject={subject} size={112} state={f.state} moving={false} knobs={knobs} t={f.t} label={'frame: ' + f.label} />
         ))}
         {spec.lantern ? <Lines subject={subject} size={112} state="dark" moving={false} knobs={knobs} label="dark lantern" /> : null}
+      </div>
+      <div className={PAPER}>
+        {[56, 80].flatMap((size) => [
+          <Lines key={'s' + size} subject={subject} size={size} state="searching" moving={false} knobs={knobs} t={2.42} label="searching" />,
+          <Lines key={'d' + size} subject={subject} size={size} state="dark" moving={false} knobs={knobs} label="dark" />,
+          <Lines key={'b' + size} subject={subject} size={size} state="lit" moving={false} knobs={knobs} t={5.5 * 0.78} label="blink" />,
+        ])}
+        <Lines subject={subject} size={112} state="searching" moving={runAll} knobs={knobs} t={0.6} label="searching, can run" />
       </div>
     </div>
   )
@@ -126,10 +134,11 @@ export function LinesSection() {
         <Slider label="max width" value={knobs.maxW} min={0.5} max={1.3} step={0.02} onChange={set('maxW')} />
         <Slider label="tone gamma" value={knobs.gamma} min={0.5} max={2} step={0.05} onChange={set('gamma')} />
         <Slider label="bulge" value={knobs.bulge} min={0} max={1.5} step={0.05} onChange={set('bulge')} />
+        <Slider label="tail cut" value={knobs.cut} min={0} max={0.3} step={0.02} onChange={set('cut')} />
         <Slider label="snap px" value={knobs.snapPx} min={0} max={2} step={0.1} onChange={set('snapPx')} />
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" checked={runAll} onChange={(e) => setRunAll(e.target.checked)} />
-          Also run the lantern's searching specimen (heavier)
+          Also run the searching specimens (heavier)
         </label>
         <button type="button" className="w-fit text-xs underline" onClick={() => setKnobs(DEFAULT_KNOBS)}>
           Reset
@@ -142,7 +151,7 @@ export function LinesSection() {
         ))}
       </div>
       {OWLS.map((spec) => (
-        <Candidate key={spec.id} spec={spec} knobs={knobs} />
+        <Candidate key={spec.id} spec={spec} knobs={knobs} runAll={runAll} />
       ))}
       <Lantern knobs={knobs} runAll={runAll} />
     </div>

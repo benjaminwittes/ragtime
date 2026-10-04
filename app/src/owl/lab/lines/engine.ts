@@ -34,6 +34,8 @@ export type LineParams = {
   gamma: number
   /** How far a line leans toward a thicker neighbour, in pitches per unit of difference. */
   bulge: number
+  /** Ink thinner than this fraction of the pitch is cut away, so a silhouette ends in a crisp edge and not in hairs. */
+  cut: number
   /** Gaps narrower than this, on screen, close: the ink merges instead of leaving a sliver. */
   snapPx: number
   /** The region lines are drawn in, in units. */
@@ -138,7 +140,7 @@ export function computeLines(field: Field, p: LineParams): { d: string; stats: L
     let v = p.minW + (p.maxW - p.minW) * tone
     const around = p.minW + (p.maxW - p.minW) * Math.pow(clamp01(b[j]), p.gamma)
     v += p.bead * (v - around)
-    v = Math.min(p.maxW, Math.max(0, v))
+    v = Math.min(p.maxW, Math.max(0, v - p.cut) * (p.maxW / (p.maxW - p.cut)))
     // Ink thinner than a fraction of a pixel does not print; let it go out, not grey.
     w[j] = v * smoothstep(0.12, 0.6, v * pitchPx)
   }
@@ -203,6 +205,7 @@ export const DEFAULT_LINE_STYLE = {
   gamma: 1.6,
   bulge: 0.5,
   snapPx: 0.9,
+  cut: 0.1,
 }
 
 /* ---- time ---------------------------------------------------------------- */

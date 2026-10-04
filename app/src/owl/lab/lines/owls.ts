@@ -34,46 +34,12 @@ export type OwlSpec = {
 
 export const OWLS: OwlSpec[] = [
   {
-    id: 'a',
-    label: 'A: round and calm',
-    note: 'Plump egg body, wide head, soft tufts, a lantern held low on the right.',
-    body: { x: 50, y: 66, rx: 28, ry: 26 },
-    head: { x: 50, y: 38, rx: 26, ry: 22 },
-    ear: { x: 31, y: 19, rx: 5.5, ry: 9, a: -28 },
-    eyeX: 12.5,
-    eyeY: 39,
-    eyeR: 10.5,
-    disc: 1.38,
-    beak: { x: 50, y: 49, rx: 3, ry: 5 },
-    belly: { x: 50, y: 70, rx: 14, ry: 17 },
-    wing: { x: 25, y: 66, rx: 6.5, ry: 17, a: 8 },
-    brow: 0,
-    lantern: true,
-  },
-  {
-    id: 'b',
-    label: 'B: tall and alert',
-    note: 'Narrow body, big ears and a slanted brow over each eye.',
-    body: { x: 50, y: 67, rx: 22, ry: 28 },
-    head: { x: 50, y: 35, rx: 23, ry: 20 },
-    ear: { x: 31, y: 14, rx: 5.5, ry: 14, a: -14 },
-    eyeX: 11.5,
-    eyeY: 36,
-    eyeR: 9.5,
-    disc: 1.3,
-    beak: { x: 50, y: 46, rx: 3, ry: 5.5 },
-    belly: { x: 50, y: 70, rx: 11, ry: 19 },
-    wing: { x: 29, y: 66, rx: 6, ry: 19, a: 6 },
-    brow: 3.2,
-    lantern: false,
-  },
-  {
     id: 'c',
-    label: 'C: near-circle, huge eyes',
-    note: 'One big ball, two huge eyes, the smallest tufts.',
+    label: 'Near-circle, huge eyes',
+    note: 'One big ball, two huge eyes, small tufts, a lantern in front of the right wing.',
     body: { x: 50, y: 58, rx: 37, ry: 36 },
     head: { x: 50, y: 40, rx: 36, ry: 30 },
-    ear: { x: 28, y: 14, rx: 6, ry: 6, a: -30 },
+    ear: { x: 29, y: 13, rx: 4.6, ry: 6.4, a: -24 },
     eyeX: 15.5,
     eyeY: 44,
     eyeR: 14,
@@ -82,7 +48,7 @@ export const OWLS: OwlSpec[] = [
     belly: { x: 50, y: 78, rx: 16, ry: 12 },
     wing: { x: 20, y: 66, rx: 6, ry: 15, a: 12 },
     brow: 0,
-    lantern: false,
+    lantern: true,
   },
 ]
 
@@ -108,7 +74,8 @@ export const FRAMES = [
   { id: 'rest', label: 'rest', t: 0, state: 'lit' as LampState },
   { id: 'blink', label: 'blink', t: 5.5 * 0.78, state: 'lit' as LampState },
   { id: 'tilt', label: 'head tilt + ear flick', t: 13 * 0.475, state: 'lit' as LampState },
-  { id: 'search', label: 'searching', t: 0.45, state: 'searching' as LampState },
+  { id: 'search', label: 'searching: pulse', t: 0.6, state: 'searching' as LampState },
+  { id: 'search2', label: 'searching: swung out', t: 2.42, state: 'searching' as LampState },
 ]
 
 /** Coverage of a soft ellipse at (x, y): 1 inside, 0 outside, a soft edge between. */
@@ -129,6 +96,8 @@ export function owlField(spec: OwlSpec, t: number, state: LampState, size = 112)
   // Small, the iris gives ring to the eye: a thicker dark ring survives where a thin one is a grey.
   const iris = size <= 80 ? 0.56 : 0.68
   const open = eyeOpen(t)
+  // Shut, the eye is a slit; small, a thicker one, so it is a line and not a grey.
+  const floor = size <= 80 ? 0.3 : 0.2
   const tilt = tiltAt(t) * (state === 'searching' ? 1.8 : 1)
   const flick = earAt(t)
   const breath = breathAt(t)
@@ -136,13 +105,15 @@ export function owlField(spec: OwlSpec, t: number, state: LampState, size = 112)
   const belly: Ell = { ...spec.belly, ry: spec.belly.ry * (1 + 0.07 * breath), rx: spec.belly.rx * (1 + 0.05 * breath) }
   const neck = { x: 50, y: spec.head.y + spec.head.ry * 0.7 }
   const look = state === 'searching' ? spec.eyeR * 0.22 * Math.sin(t * 1.3 + 0.6) : 0
-  const lamp = { x: 76, y: 82, r: 8.5 }
+  const lamp = { x: 79, y: 70, r: 9 }
   const glow = spec.lantern ? glowAt(t, state) : 0
-  const gx = lamp.x - (state === 'searching' ? 8 * Math.max(0, Math.sin(t * 1.3)) : 0)
+  // Searching, the lantern swings out and in, and the pocket of light goes with it.
+  const lx = lamp.x - (state === 'searching' ? 7 * (0.5 - 0.5 * Math.cos(t * 1.3)) : 0)
   const wingL = spec.wing
   const wingR: Ell = { ...spec.wing, x: 100 - spec.wing.x, a: -(spec.wing.a ?? 0) }
   const earL: Ell = { ...spec.ear, a: (spec.ear.a ?? 0) + flick }
-  const earR: Ell = { ...spec.ear, x: 100 - spec.ear.x, a: -(spec.ear.a ?? 0) }
+  // The right tuft is a little smaller and a little more upright: symmetric, but alive.
+  const earR: Ell = { ...spec.ear, x: 100 - spec.ear.x + 0.6, ry: spec.ear.ry * 0.9, a: -(spec.ear.a ?? 0) + 5 }
   const discR = spec.eyeR * spec.disc
   return (x, y) => {
     let v = 0
@@ -158,8 +129,8 @@ export function owlField(spec: OwlSpec, t: number, state: LampState, size = 112)
     const s = Math.sin(tilt)
     const hx = neck.x + (x - neck.x) * c + (y - neck.y) * s
     const hy = neck.y - (x - neck.x) * s + (y - neck.y) * c
-    paint(cover(earL, hx, hy), INK.ear)
-    paint(cover(earR, hx, hy), INK.ear)
+    paint(cover(earL, hx, hy, 0.55), INK.ear)
+    paint(cover(earR, hx, hy, 0.55), INK.ear)
     paint(cover(spec.head, hx, hy), INK.head)
     for (const side of [-1, 1]) {
       const ex = 50 + side * spec.eyeX
@@ -170,7 +141,7 @@ export function owlField(spec: OwlSpec, t: number, state: LampState, size = 112)
       const ey = spec.eyeY
       const R = spec.eyeR
       // An eye: a dark ring, a light iris, a dark pupil. Shut, it is a dark slit.
-      const q = (v2: number) => ey + (v2 - ey) / Math.max(open, 0.2)
+      const q = (v2: number) => ey + (v2 - ey) / Math.max(open, floor)
       const lit = smoothstep(0.35, 0.8, open)
       paint(cover({ x: ex, y: ey, rx: R, ry: R }, hx, q(hy), 0.8), INK.dark)
       paint(cover({ x: ex, y: ey, rx: R * iris, ry: R * iris }, hx, q(hy), 0.7), INK.iris * lit + INK.dark * (1 - lit))
@@ -180,14 +151,16 @@ export function owlField(spec: OwlSpec, t: number, state: LampState, size = 112)
       }
     }
     paint(cover(spec.beak, hx, hy, 0.7), INK.dark)
-    // The lantern: a ring of ink round a bright core, and the light it throws.
+    // The lantern: a pocket of light in the ink, ringed by ink that has gathered at its edge.
     if (spec.lantern) {
       if (glow > 0) {
-        const g = 1 - smoothstep(0, 24, Math.hypot(x - gx, y - lamp.y))
-        v *= 1 - 0.9 * clamp01(glow) * g * g
+        const g = 1 - smoothstep(0, 30, Math.hypot(x - lx, y - lamp.y))
+        v *= 1 - 0.95 * clamp01(glow) * Math.pow(g, 1.3)
       }
-      paint(cover({ x: lamp.x, y: lamp.y, rx: lamp.r, ry: lamp.r }, x, y, 0.8), INK.lamp)
-      paint(cover({ x: lamp.x, y: lamp.y, rx: lamp.r * 0.5, ry: lamp.r * 0.5 }, x, y, 0.7), state === 'dark' ? 0.8 : 0.02)
+      const d = Math.hypot(x - lx, y - lamp.y)
+      const ring = smoothstep(lamp.r - 1.6, lamp.r, d) * (1 - smoothstep(lamp.r + 3, lamp.r + 4.8, d))
+      paint(ring, INK.lamp)
+      paint(1 - smoothstep(lamp.r - 3.4, lamp.r - 1.6, d), state === 'dark' ? 0.78 : 0.02)
     }
     return clamp01(v)
   }
