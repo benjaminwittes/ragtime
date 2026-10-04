@@ -37,6 +37,7 @@ export function TermsOfService({ onNavigate }: { onNavigate: (path: string) => v
             '[&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-primary',
             '[&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:font-serif [&_h2]:text-xl [&_h2]:text-foreground',
             '[&_h3]:mt-6 [&_h3]:mb-1.5 [&_h3]:font-semibold',
+            '[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-foreground [&_blockquote_p]:my-1',
           )}
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{TERMS_OF_SERVICE_MD}</ReactMarkdown>
