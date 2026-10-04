@@ -14,6 +14,24 @@ npm run dev
 
 Vite dev server defaults to http://localhost:5173/ with HMR.
 
+### Against the staging Worker
+
+The staging Worker (`ragtimeproxy-staging`, ragtime-worker `DEPLOY.md` → *Staging*)
+verifies sign-in tokens from the **accounts** Supabase project, not the one the
+app signs in to by default. Point both at staging together, or every signed-in
+call is refused for a token from the wrong issuer:
+
+```bash
+VITE_WORKER_URL=https://ragtimeproxy-staging.lawfare-media.workers.dev \
+VITE_SUPABASE_URL=https://<accounts-project-ref>.supabase.co \
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_... \
+npm run dev
+```
+
+`localhost:5173` is already on the Worker's origin allowlist. The publishable
+key is anon-role, not a secret; whoever runs the accounts project has it.
+Unset, all three fall back to production and the build is unchanged.
+
 ## Build
 
 ```bash
