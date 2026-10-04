@@ -16,7 +16,7 @@
  * anyone, so showing it would let a stranger put their sentence in our sign-in panel. The
  * code picks one of our sentences instead, and an unknown code gets a plain one.
  */
-import { APP_PROJECT_PUBLISHABLE_KEY, APP_PROJECT_URL } from './supabase.ts'
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './supabase.ts'
 
 /** The part of the auth project's public settings this app reads. */
 export function offersGoogle(settings: unknown): boolean {
@@ -34,8 +34,8 @@ let asked: Promise<boolean> | null = null
  * sign anyone in is not.
  */
 export function googleOffered(): Promise<boolean> {
-  asked ??= fetch(`${APP_PROJECT_URL}/auth/v1/settings`, {
-    headers: { apikey: APP_PROJECT_PUBLISHABLE_KEY },
+  asked ??= fetch(`${SUPABASE_URL}/auth/v1/settings`, {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY },
   })
     .then((r) => {
       if (!r.ok) throw new Error(`settings ${r.status}`)
