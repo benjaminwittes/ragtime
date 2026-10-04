@@ -123,7 +123,7 @@ export function computeLines(field: Field, p: LineParams): { d: string; stats: L
     }
   }
   // 3. Smooth along the line: this is what makes a swell a swell and not a step.
-  const sigma = Math.max(0.5, (p.tile * pitch * 0.32) / step)
+  const sigma = Math.max(0.5, (p.tile * pitch * 0.2) / step)
   const near = gaussKernel(sigma)
   const wide = gaussKernel(sigma * 2.4)
   const a = new Float32Array(n * nx)
@@ -189,7 +189,7 @@ export function computeLines(field: Field, p: LineParams): { d: string; stats: L
  * about two pixels a gap between two lines is a grey, not a gap.
  */
 export function presetFor(size: number): Pick<LineParams, 'lines' | 'pitchPx' | 'tile'> {
-  if (size <= 56) return { lines: 3, pitchPx: 2.6, tile: 3.4 }
+  if (size <= 56) return { lines: 3, pitchPx: 2.3, tile: 3.4 }
   if (size <= 80) return { lines: 4, pitchPx: 2.7, tile: 3.6 }
   if (size <= 112) return { lines: 5, pitchPx: 2.9, tile: 3.8 }
   return { lines: 5, pitchPx: 3.4, tile: 4.2 }

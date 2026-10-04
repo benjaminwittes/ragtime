@@ -1,22 +1,24 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Owl } from '../../Owl'
 import type { OwlPin } from '../../types'
 import { LinesFigure } from '../lines/LinesFigure'
 import { DEFAULT_KNOBS, type LineKnobs, type LineSubject } from '../lines/knobs'
 import type { LampState } from '../lines/fields'
+import { FRAMES, OWLS, type OwlSpec } from '../lines/owls'
 
 /**
- * Two spikes of one idea: an image drawn as a mosaic of tiles of five parallel lines that
- * thicken and thin together, smoothed like ink (`lines/engine.ts`).
+ * An image drawn as a mosaic of tiles of five parallel lines that thicken and thin together,
+ * smoothed like ink (`lines/engine.ts`).
  *
- *  - `lines-owl`: today's owl, rasterised to a 48 px field and drawn in line tiles. The
- *    eyes shut as swells pinch together; the lantern is a bright swell.
+ *  - `lines-owl-a/b/c`: three owls drawn for the technique, as ink-density functions in code
+ *    (`lines/owls.ts`): big concentric eyes, a plump body, tufts. They blink as the eye rings
+ *    pinch shut, breathe, tip the head and flick an ear, all by thickness alone.
  *  - `lines-lantern`: no owl, a lantern as a swelling in a field of tiles, in the owl's
  *    three lantern states.
  *
  * The lab's rules hold: stacks pose only, four sizes, one paper ground, one moving specimen
- * per variant (the lit one at 112), the rest drawn once and captioned still. The base owl
- * is the real one, pinned, at the same sizes.
+ * per candidate (the lit one at 112), the rest drawn once and captioned still. A frame row
+ * under each candidate holds the blink, the tilt and the searching lantern as still frames.
  */
 
 const SIZES = [56, 80, 112, 240]
@@ -38,39 +40,58 @@ function Base({ size, lantern }: { size: number; lantern: LampState }) {
   )
 }
 
-function Lines({ subject, size, state, moving, knobs }: { subject: LineSubject; size: number; state: LampState; moving: boolean; knobs: LineKnobs }) {
+function Lines({ subject, size, state, moving, knobs, t = 0, label }: { subject: LineSubject; size: number; state: LampState; moving: boolean; knobs: LineKnobs; t?: number; label?: string }) {
   return (
     <figure className="m-0">
-      <LinesFigure subject={subject} size={size} state={state} moving={moving} knobs={knobs} still={state === 'searching' ? 0.6 : 0} />
-      <Cap>{`${state} ${size}px, ${moving ? 'moving' : 'still'}`}</Cap>
+      <LinesFigure subject={subject} size={size} state={state} moving={moving} knobs={knobs} still={t} />
+      <Cap>{`${label ?? state} ${size}px, ${moving ? 'moving' : 'still'}`}</Cap>
     </figure>
   )
 }
 
-function Spike({ subject, title, note, knobs, runAll }: { subject: LineSubject; title: string; note: string; knobs: LineKnobs; runAll: boolean }) {
+function Sizes({ subject, knobs, children }: { subject: LineSubject; knobs: LineKnobs; children?: ReactNode }) {
+  return (
+    <div className={PAPER}>
+      {SIZES.map((s) => (
+        <Lines key={s} subject={subject} size={s} state="lit" moving={s === 112} knobs={knobs} />
+      ))}
+      {children}
+    </div>
+  )
+}
+
+function Candidate({ spec, knobs }: { spec: OwlSpec; knobs: LineKnobs }) {
+  const subject = spec.id as LineSubject
   return (
     <div className="mt-8">
       <h3 className="font-serif text-xl font-medium">
-        {title} <code className="text-sm font-normal text-muted-foreground">{subject === 'owl' ? 'lines-owl' : 'lines-lantern'}</code>
+        {spec.label} <code className="text-sm font-normal text-muted-foreground">lines-owl-{spec.id}</code>
       </h3>
-      <p className="text-sm text-muted-foreground">{note}</p>
-      {subject === 'owl' ? (
-        <div className={PAPER}>
-          {SIZES.map((s) => (
-            <Base key={s} size={s} lantern="lit" />
-          ))}
-          <Base size={112} lantern="searching" />
-        </div>
-      ) : null}
+      <p className="text-sm text-muted-foreground">{spec.note} The lit 112px one blinks, breathes, tips its head and flicks an ear.</p>
+      <Sizes subject={subject} knobs={knobs} />
       <div className={PAPER}>
-        {SIZES.map((s) => (
-          <Lines key={s} subject={subject} size={s} state="lit" moving={s === 112} knobs={knobs} />
+        {FRAMES.filter((f) => spec.lantern || f.id !== 'search').map((f) => (
+          <Lines key={f.id} subject={subject} size={112} state={f.state} moving={false} knobs={knobs} t={f.t} label={'frame: ' + f.label} />
         ))}
-        <div className="flex items-end gap-6 border-l pl-8">
-          <Lines subject={subject} size={112} state="searching" moving={runAll} knobs={knobs} />
-          <Lines subject={subject} size={112} state="dark" moving={false} knobs={knobs} />
-        </div>
+        {spec.lantern ? <Lines subject={subject} size={112} state="dark" moving={false} knobs={knobs} label="dark lantern" /> : null}
       </div>
+    </div>
+  )
+}
+
+function Lantern({ knobs, runAll }: { knobs: LineKnobs; runAll: boolean }) {
+  return (
+    <div className="mt-8">
+      <h3 className="font-serif text-xl font-medium">
+        A lantern in a field of ink <code className="text-sm font-normal text-muted-foreground">lines-lantern</code>
+      </h3>
+      <p className="text-sm text-muted-foreground">No body. Lit, a bright swell in the ink; searching, the swell pulses and sweeps; dark, only the lantern&rsquo;s own dark swell.</p>
+      <Sizes subject="lantern" knobs={knobs}>
+        <div className="flex items-end gap-6 border-l pl-8">
+          <Lines subject="lantern" size={112} state="searching" moving={runAll} knobs={knobs} t={0.6} />
+          <Lines subject="lantern" size={112} state="dark" moving={false} knobs={knobs} />
+        </div>
+      </Sizes>
     </div>
   )
 }
@@ -108,14 +129,22 @@ export function LinesSection() {
         <Slider label="snap px" value={knobs.snapPx} min={0} max={2} step={0.1} onChange={set('snapPx')} />
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" checked={runAll} onChange={(e) => setRunAll(e.target.checked)} />
-          Also run the searching specimens (heavier)
+          Also run the lantern's searching specimen (heavier)
         </label>
         <button type="button" className="w-fit text-xs underline" onClick={() => setKnobs(DEFAULT_KNOBS)}>
           Reset
         </button>
       </div>
-      <Spike subject="owl" title="The owl in line tiles" note="Top row: the base owl, still. Bottom row: lit at four sizes, then searching (a still frame) and dark at 112px. The 112px lit one blinks and breathes its lantern." knobs={knobs} runAll={runAll} />
-      <Spike subject="lantern" title="A lantern in a field of ink" note="No body. Lit, a bright swell in the ink; searching, the swell pulses and sweeps; dark, only the lantern's own dark swell." knobs={knobs} runAll={runAll} />
+      <h3 className="mt-8 font-serif text-xl font-medium">The base owl, for comparison</h3>
+      <div className={PAPER}>
+        {SIZES.map((s) => (
+          <Base key={s} size={s} lantern="lit" />
+        ))}
+      </div>
+      {OWLS.map((spec) => (
+        <Candidate key={spec.id} spec={spec} knobs={knobs} />
+      ))}
+      <Lantern knobs={knobs} runAll={runAll} />
     </div>
   )
 }

@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef } from 'react'
 import { baseDesign } from '../../design'
 import { computeLines, presetFor, type LineParams } from './engine'
 import type { LineKnobs, LineSubject } from './knobs'
-import { lanternField, owlField, type LampState } from './fields'
+import { lanternField, type LampState } from './fields'
+import { OWLS, owlField } from './owls'
 
 const BOUNDS: Record<LineSubject, LineParams['bounds']> = {
-  owl: { x0: 12, y0: 8, x1: 88, y1: 92 },
+  a: { x0: 6, y0: 6, x1: 94, y1: 94 },
+  b: { x0: 6, y0: 6, x1: 94, y1: 94 },
+  c: { x0: 6, y0: 6, x1: 94, y1: 94 },
   lantern: { x0: 12, y0: 12, x1: 88, y1: 88 },
 }
 
@@ -20,7 +23,8 @@ function draw(subject: LineSubject, size: number, knobs: LineKnobs, t: number, s
     snapPx: knobs.snapPx,
     bounds: BOUNDS[subject],
   }
-  const field = subject === 'owl' ? owlField(t, state) : lanternField(t, state)
+  const spec = OWLS.find((o) => o.id === subject)
+  const field = spec ? owlField(spec, t, state, size) : lanternField(t, state)
   return computeLines(field, params).d
 }
 

@@ -5,5 +5,5 @@ export type LineKnobs = typeof DEFAULT_LINE_STYLE & { lines: number; pitch: numb
 
 export const DEFAULT_KNOBS: LineKnobs = { ...DEFAULT_LINE_STYLE, lines: 0, pitch: 1, tile: 1 }
 
-export type LineSubject = 'owl' | 'lantern'
+export type LineSubject = 'a' | 'b' | 'c' | 'lantern'
 
