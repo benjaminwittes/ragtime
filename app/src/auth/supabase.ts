@@ -29,9 +29,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 export const APP_PROJECT_URL = 'https://aikdbjprndgksibbvcfs.supabase.co'
 export const APP_PROJECT_PUBLISHABLE_KEY = 'sb_publishable_I8b_IXrRGR-bu3wOMEox5g_X9NllzgB'
 
-const SUPABASE_URL =
+/**
+ * The project this build signs in against: the override pair, else the app
+ * project. Anything that asks the auth project a question — the client below,
+ * and the sign-in form's "is Google on?" read — asks this one, so that a build
+ * pointed at a second project is pointed there in full.
+ */
+export const SUPABASE_URL =
   (import.meta.env.VITE_SUPABASE_URL as string | undefined) || APP_PROJECT_URL
-const SUPABASE_PUBLISHABLE_KEY =
+export const SUPABASE_PUBLISHABLE_KEY =
   (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
   APP_PROJECT_PUBLISHABLE_KEY
 
