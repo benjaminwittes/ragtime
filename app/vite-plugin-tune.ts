@@ -147,8 +147,9 @@ function patchDeclaredValue(text: string, edit: ValueEdit): string | Failure {
   const limit = nextId === -1 ? text.length : from + nextId
   const region = text.slice(from, limit)
   // A quoted string is taken whole, commas and all (`'clamp(3rem,5.2cqi,4.75rem)'`);
-  // anything else runs to the next comma or the end of the line.
-  const valueRe = /(\n\s*value:\s*)('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|[^,\n]+)/
+  // anything else runs to the next comma, closing brace or the end of the line
+  // (a one-line declaration, `{ id: 'x', value: 0 }`, ends at its brace).
+  const valueRe = /(\bvalue:\s*)('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|[^,\n}]*[^,\s}])/
   const hit = valueRe.exec(region)
   if (!hit) return { error: `no value: field for ${edit.id}` }
 
