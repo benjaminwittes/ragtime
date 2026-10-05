@@ -26,7 +26,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
  * and refresh expired JWTs on the fly. Same posture as the legacy app.
  */
 
-export const APP_PROJECT_URL = 'https://ascraygtmnoaytbnteyw.supabase.co'
+export const APP_PROJECT_URL = 'https://auth.ragtime.lawfaremedia.org'
 export const APP_PROJECT_PUBLISHABLE_KEY = 'sb_publishable_jTVsDXdo6l1j9CG5ezp11g_rsrJdhVX'
 
 /**
