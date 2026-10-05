@@ -17,5 +17,5 @@ export type Print = {
   barEvery: number
 }
 
-export const PRINT_ON: Print = { boil: true, breath: true, flicker: true, bar: true, scan: true, amount: 1.6, fps: 8, barEvery: 9 }
+export const PRINT_ON: Print = { boil: true, breath: true, flicker: true, bar: true, scan: true, amount: 0.8, fps: 16, barEvery: 23 }
 export const PRINT_OFF: Print = { ...PRINT_ON, boil: false, breath: false, flicker: false, bar: false, scan: false }

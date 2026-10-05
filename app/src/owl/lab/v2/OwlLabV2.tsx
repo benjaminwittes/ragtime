@@ -108,8 +108,8 @@ function TypedNote({ text, speed, place }: { text: string; speed: number; place:
 /* ---- 1. The owl, as decided ---------------------------------------------- */
 
 function Hero({ print, setPrint }: { print: Print; setPrint: (p: Print) => void }) {
-  const [tone, setTone] = useState('plain')
-  const [speed, setSpeed] = useState(28)
+  const [tone, setTone] = useState('records')
+  const [speed, setSpeed] = useState(60)
   const [run, setRun] = useState(0)
   const [state, setState] = useState<LampState>('lit')
   const [size, setSize] = useState(240)
