@@ -15,7 +15,21 @@ describe('the order the panel lists the owl’s knobs in', () => {
     // described, so the panel and the gear's search do not list them; their defaults stand.
     const groups: string[] = []
     for (const knob of owl) if (!groups.includes(knob.group)) groups.push(knob.group)
-    expect(groups).toEqual(['Look', 'Palette', 'Variant', 'Sites', 'Lantern', 'The owl', 'Voice', 'Voice: occasions', 'Voice: chat'])
+    expect(groups).toEqual([
+      'Look',
+      'Palette',
+      'Variant',
+      'Sites',
+      'Build: tiles',
+      'Build: ink',
+      'Build: engraving',
+      'Build: motion',
+      'Lantern',
+      'The owl',
+      'Voice',
+      'Voice: occasions',
+      'Voice: chat',
+    ])
   })
 
   it('has the voice picker first and the chat switch last among the voice’s knobs', () => {

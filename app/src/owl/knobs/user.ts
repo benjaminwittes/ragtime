@@ -30,8 +30,4 @@ export const owlUserKnobs = defineTunables([
     id: 'owl.lines.scan',
     value: true,
   },
-  {
-    id: 'owl.lines.bar',
-    value: false,
-  },
 ])

@@ -52,12 +52,4 @@ describeTunables([
     kind: 'boolean',
     note: 'Rough, spread ink and a few specks of toner, as if the owl had been copied. Only on the larger sizes.',
   },
-  {
-    ...OWL,
-    id: 'owl.lines.bar',
-    parent: 'owl.show',
-    label: 'Light bar',
-    kind: 'boolean',
-    note: 'A band of light that crosses the owl now and then, as in a copier.',
-  },
 ])

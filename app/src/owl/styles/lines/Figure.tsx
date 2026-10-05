@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { DEFAULT_KNOBS } from './knobs'
 import type { OwlFigureProps } from '../../types'
 import { PrintLines } from './PrintLines'
 import { useTunable } from '@/tune/useTunable'
-import { ENGRAVE_DEFAULT } from './engrave'
-import { PRINT_APP, PRINT_ON } from './print'
+import { useBuild } from './useBuild'
 
 /**
  * The line-tile owl as the app draws it: one `PrintLines`, sized by the page's classes like
@@ -35,18 +33,17 @@ export function LinesFigure({ design, poseId, lantern, className, style, title }
   }, [])
   const motion = useTunable<string>('owl.lines.motion')
   const scan = useTunable<boolean>('owl.lines.scan')
-  const bar = useTunable<boolean>('owl.lines.bar')
   const engraved = useTunable<string>('owl.lines.engraved')
-  const print = { ...(motion === 'lively' ? PRINT_ON : PRINT_APP), scan: scan && size >= SCAN_FROM, bar }
+  const { knobs, engrave, print } = useBuild(motion, scan && size >= SCAN_FROM)
   return (
     <PrintLines
       subject="c"
       size={size}
       state={lantern}
-      knobs={DEFAULT_KNOBS}
+      knobs={knobs}
       print={print}
       moving={motion !== 'still'}
-      engrave={engraved === 'engraved' && size >= SCAN_FROM ? ENGRAVE_DEFAULT : null}
+      engrave={engraved === 'engraved' && size >= SCAN_FROM ? engrave : null}
       ink={design.palette.navy}
       fluid={{ ref: svgRef, className: className ? 'owl ' + className : 'owl', style, title, root: { 'data-owl': poseId, 'data-lantern': lantern } }}
     />
