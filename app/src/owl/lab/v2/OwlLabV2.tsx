@@ -113,7 +113,7 @@ function Hero({ print, setPrint }: { print: Print; setPrint: (p: Print) => void 
   const [run, setRun] = useState(0)
   const [state, setState] = useState<LampState>('lit')
   const [size, setSize] = useState(240)
-  const [place, setPlace] = useState<Place>('below')
+  const [place, setPlace] = useState<Place>('beside')
   const say = TONES.find((t) => t.id === tone)!.say
   const set = <K extends keyof Print>(k: K) => (v: Print[K]) => setPrint({ ...print, [k]: v })
   return (
