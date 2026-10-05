@@ -22,6 +22,11 @@ export const TREATMENTS: Record<TreatmentId, Treatment> = {
     label: 'Rubber stamp',
     note: 'Capitals in a ruled box, a degree off true, as a clerk’s stamp lands.',
   },
+  lines: {
+    id: 'lines',
+    label: 'Owl’s lines',
+    note: 'The words drawn as the owl is, in its ink, beside it and level with its middle.',
+  },
 }
 
 export const treatmentList = (): readonly Treatment[] => TREATMENT_IDS.map((id) => TREATMENTS[id])

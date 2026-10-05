@@ -3,6 +3,8 @@ import './voice/voice.css'
 import { fitNote } from './voice/fit'
 import type { Spoken } from './voice/speaker'
 import type { SiteVoice } from './voice/useVoice'
+import LinesText from '@/hub/LinesText'
+import { baseDesign } from './design'
 
 /**
  * What the owl says, drawn: a note set in the owl's own world of documents, and the live
@@ -81,7 +83,10 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
   const note = useRef<HTMLDivElement>(null)
   const { text } = spoken
   // The reveal starts from nothing unless it is off, or the reader asked for stillness.
-  const [shown, setShown] = useState(() => (voice.typeMs <= 0 || stillness() ? text.length : 0))
+  // The lines are drawn once for the whole sentence and wiped in (`voice.css`), not retyped:
+  // a redraw per letter would rebuild the raster sixty times a second.
+  const lined = voice.treatment === 'lines'
+  const [shown, setShown] = useState(() => (lined || voice.typeMs <= 0 || stillness() ? text.length : 0))
   const typeMs = voice.typeMs
 
   useEffect(() => {
@@ -90,7 +95,8 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
     return () => clearTimeout(next)
   }, [shown, text.length, typeMs])
 
-  const place = voice.place
+  // Drawn lines stand to the owl's right, level with its middle; `fitNote` still flips them when there is no room.
+  const place = lined && voice.place !== 'inline' ? 'beside' : voice.place
   useLayoutEffect(() => {
     const el = note.current
     const owl = el?.parentElement
@@ -110,9 +116,22 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
   }, [place])
 
   return (
-    <div ref={note} className="owl-note" data-place={place} data-treatment={voice.treatment} aria-hidden="true">
-      <span>{text.slice(0, shown)}</span>
-      <span className="owl-note-rest">{text.slice(shown)}</span>
+    <div
+      ref={note}
+      className="owl-note"
+      data-place={place}
+      data-treatment={voice.treatment}
+      aria-hidden="true"
+      style={lined ? ({ color: baseDesign().palette.navy, '--wipe-ms': stillness() ? 0 : '700ms' } as React.CSSProperties) : undefined}
+    >
+      {lined ? (
+        <LinesText text={text} pitch={3.6} photocopy={false} />
+      ) : (
+        <>
+          <span>{text.slice(0, shown)}</span>
+          <span className="owl-note-rest">{text.slice(shown)}</span>
+        </>
+      )}
     </div>
   )
 }

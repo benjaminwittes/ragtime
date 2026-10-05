@@ -130,7 +130,7 @@ export const REPEATING: readonly OccasionId[] = ['idle', 'poke']
 /* Treatments and places                                                       */
 /* -------------------------------------------------------------------------- */
 
-export const TREATMENT_IDS = ['plate', 'typed', 'stamp'] as const
+export const TREATMENT_IDS = ['plate', 'typed', 'stamp', 'lines'] as const
 export type TreatmentId = (typeof TREATMENT_IDS)[number]
 
 /** How a line is set on the page. The type and rules are `voice.css`, keyed on `data-treatment`. */

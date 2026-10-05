@@ -131,6 +131,38 @@
   margin-inline: 0.5rem;
 }
 
+/* The owl's lines: the words drawn as the owl is (`hub/LinesText.tsx`), in the owl's ink (set
+ * inline), to its right and level with its middle. The real text is kept for the raster and
+ * goes transparent once the lines stand in for it. */
+.owl-note[data-treatment='lines'] {
+  max-width: min(var(--note-max, 22rem), 22rem);
+  position: absolute;
+  font: 800 1.7rem/1.12 var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  letter-spacing: 0;
+  padding-block: 0.2em;
+}
+.owl-note[data-treatment='lines'][data-lined='on'] {
+  -webkit-text-fill-color: transparent;
+}
+.owl-note[data-treatment='lines'][data-place='beside'],
+.owl-note[data-treatment='lines'][data-place='beside-start'] {
+  top: 50%;
+  transform: translate(var(--note-x), -50%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .owl-note[data-treatment='lines'] {
+    animation: owl-note-wipe var(--wipe-ms, 0ms) steps(24, end) both;
+  }
+  @keyframes owl-note-wipe {
+    from {
+      clip-path: inset(-20% 100% -20% 0);
+    }
+    to {
+      clip-path: inset(-20% -10% -20% 0);
+    }
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .owl-note {
     animation: owl-note-in 160ms ease-out;
