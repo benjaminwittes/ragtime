@@ -18,14 +18,13 @@ const ragtime = getVoice('ragtime') as OwlVoice
 const silent: OwlVoice = { ...ragtime, id: 'silent', lines: {} }
 
 describe('the defaults', () => {
-  it('pick no voice in the panel, speak in the design\u2019s, and keep the chat off', () => {
+  it('speak in the ragtime voice, set as a typed note, with the owl in the conversation', () => {
     const c = readVoiceConfig(declared)
-    expect(c.voice).toBeNull()
-    expect(c.chat).toBe('off')
-    expect(c.treatment).toBeNull()
+    expect(c.voice).toBe('ragtime')
+    expect(c.chat).toBe('row')
+    expect(c.treatment).toBe('typed')
     expect(baseDesign().voice).toBe('ragtime')
-    expect(chooseVoice(c, baseDesign().voice)?.id).toBe('ragtime')
-    expect(chooseVoice(c, null)).toBeNull()
+    expect(chooseVoice(c, null)?.id).toBe('ragtime')
   })
 
   it('have a knob for every occasion but the click, which has its own', () => {

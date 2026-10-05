@@ -22,7 +22,7 @@ export const owlEmbedKnobs = defineTunables([
   },
   {
     id: 'owl.embed.hub.sizeSm',
-    value: '7rem',
+    value: '10.25rem',
   },
   {
     id: 'owl.embed.hub.variant',

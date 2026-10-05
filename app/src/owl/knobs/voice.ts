@@ -17,12 +17,12 @@ import { defineTunables } from '@/tune/registry'
 export const owlVoiceKnobs = defineTunables([
   {
     id: 'owl.voice.id',
-    value: 'none',
+    value: 'ragtime',
   },
 
   {
     id: 'owl.voice.chat',
-    value: 'off',
+    value: 'row',
   },
 
   {

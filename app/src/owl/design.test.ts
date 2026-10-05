@@ -12,9 +12,9 @@ import { getVariant, variantList, variantOptions } from './variants'
 describe('baseDesign', () => {
   const design = baseDesign()
 
-  it('draws with the line tiles, in navy, speaking', () => {
+  it('draws with the line tiles, in teal, speaking', () => {
     expect(design.style).toBe('lines')
-    expect(design.palette).toEqual({ navy: '#1F2A44' })
+    expect(design.palette).toEqual({ navy: '#007c85' })
     expect(design.voice).toBe('ragtime')
   })
 

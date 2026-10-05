@@ -21,7 +21,7 @@ export const owlVoiceDetailKnobs = defineTunables([
     id: 'owl.voice.treatment',
     label: 'Treatment',
     kind: 'select',
-    value: 'voice',
+    value: 'typed',
     options: treatmentOptions(),
     note: 'How a line is set on the page. “follow the voice” uses the treatment each voice names.',
   },

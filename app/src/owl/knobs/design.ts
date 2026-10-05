@@ -17,6 +17,6 @@ export const owlLookKnobs = defineTunables([
 
   {
     id: 'owl.design.palette.navy',
-    value: '#1F2A44',
+    value: '#007c85',
   },
 ])

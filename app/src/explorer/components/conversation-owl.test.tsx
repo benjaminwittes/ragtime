@@ -34,6 +34,7 @@ const html = (k: string) => renderToStaticMarkup(<Conversation turns={turns[k]!}
 
 describe('the owl in the conversation (owl.voice.chat)', () => {
   it('adds nothing while the switch is off, whatever the turns are', () => {
+    applyTuneOverrides({ 'owl.voice.chat': 'off' }, false)
     for (const name of Object.keys(turns)) expect(html(name), name).not.toContain('owl-chat')
   })
 
