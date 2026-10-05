@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { DEFAULT_KNOBS } from '../../lab/lines/knobs'
+import { DEFAULT_KNOBS } from './knobs'
 import type { OwlFigureProps } from '../../types'
 import { PrintLines } from './PrintLines'
 import { useTunable } from '@/tune/useTunable'

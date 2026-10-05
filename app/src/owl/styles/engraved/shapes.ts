@@ -37,7 +37,7 @@ type ShapeSpec = {
   rim?: number
 }
 
-/** The shapes of one pose, bottom to top — the order the flat style paints them in. */
+/** The shapes of one pose, bottom to top — the order the owl's concept sheet paints them in. */
 export function poseShapes(
   pose: PoseGeometry,
   shape: OwlDesign['shape'],

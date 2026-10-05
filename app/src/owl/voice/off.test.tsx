@@ -18,8 +18,8 @@ const ids = Object.keys(SITES) as OwlSiteId[]
 afterEach(() => applyTuneOverrides({}, false))
 
 describe('with no voice', () => {
-  // The line-tile variant is the default and speaks; the claim is about the owl that does not.
-  beforeEach(() => applyTuneOverrides({ 'owl.variant': 'base' }, false))
+  // The owl as sent speaks; the claim is about the owl whose reader has switched that off.
+  beforeEach(() => applyTuneOverrides({ 'owl.voice.speak': false }, false))
 
   it.each(ids)('%s adds no wrapper, no live region and no note', (id) => {
     const html = renderToStaticMarkup(<OwlSpot site={id} occasion="searching" />)
@@ -39,11 +39,11 @@ describe('with no voice', () => {
 describe('with a voice', () => {
   // The speech is a chunk of its own; once it is in, a site renders it on the first pass.
   beforeAll(async () => {
-    await Promise.all([loadSpeechLayer(), loadVoice('archivist')])
+    await Promise.all([loadSpeechLayer(), loadVoice('ragtime')])
   })
 
   it.each(ids)('%s gains the positioned box and an empty live region, and no note until something is said', (id) => {
-    applyTuneOverrides({ 'owl.voice.id': 'archivist' }, false)
+    applyTuneOverrides({ 'owl.voice.id': 'ragtime' }, false)
     const html = renderToStaticMarkup(<OwlSpot site={id} />)
     expect(html).toContain('owl-spot')
     expect(html).toContain('class="owl-voice-sr" aria-live="polite" aria-atomic="true"></div>')

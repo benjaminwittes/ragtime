@@ -61,10 +61,10 @@ describe('baseDesign', () => {
     expect(design.night).toEqual({ from: 20, until: 6 })
   })
 
-  it('draws with the flat style, with nothing standing and no voice', () => {
-    expect(design.style).toBe('flat')
+  it('draws with the line tiles, speaking, with nothing standing', () => {
+    expect(design.style).toBe('lines')
     expect(design.standing).toEqual({})
-    expect(design.voice).toBeNull()
+    expect(design.voice).toBe('ragtime')
     expect(design.params).toEqual({})
   })
 
@@ -96,11 +96,11 @@ describe('the knobs behind it', () => {
 })
 
 describe('variants', () => {
-  it('lists the base first, and ships a look variant and a behaviour variant', () => {
+  it('lists the base first, and ships the engraved looks after it', () => {
     const ids = variantList().map((v) => v.id)
     expect(ids[0]).toBe('base')
-    expect(ids).toContain('inverse')
-    expect(ids).toContain('calm')
+    expect(ids).toContain('engraved-line')
+    expect(ids).toContain('engraved-contour')
   })
 
   it('has an empty patch for the base, so it is the base design exactly', () => {
@@ -118,14 +118,12 @@ describe('variants', () => {
     }
   })
 
-  it('changes what each demonstration variant says it changes', () => {
+  it('changes what an engraved variant says it changes', () => {
     const base = baseDesign()
-    const inverse = resolveDesign(base, [getVariant('inverse')?.design], {})
-    expect(inverse.palette.cream).not.toBe(base.palette.cream)
-    expect(inverse.motion).toEqual(base.motion)
-    const calm = resolveDesign(base, [getVariant('calm')?.design], {})
-    expect(calm.motion.blinkPeriod).toBeGreaterThan(base.motion.blinkPeriod)
-    expect(calm.palette).toEqual(base.palette)
+    const engraved = resolveDesign(base, [getVariant('engraved-line')?.design], {})
+    expect(engraved.style).toBe('engraved')
+    expect(engraved.palette.cream).not.toBe(base.palette.cream)
+    expect(engraved.motion).toEqual(base.motion)
   })
 
   it('offers every variant to the knob that picks one', () => {
@@ -134,9 +132,9 @@ describe('variants', () => {
 })
 
 describe('render styles', () => {
-  it('registers flat, and falls back to it for a style that is not there', () => {
-    expect(styleList().map((s) => s.id)).toContain('flat')
-    expect(getStyle('flat').id).toBe('flat')
-    expect(getStyle('no-such-style').id).toBe('flat')
+  it('registers blank, and falls back to it for a style that is not there', () => {
+    expect(styleList().map((s) => s.id)).toContain('blank')
+    expect(getStyle('blank').id).toBe('blank')
+    expect(getStyle('no-such-style').id).toBe('blank')
   })
 })

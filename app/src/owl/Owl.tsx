@@ -11,14 +11,12 @@ import { useOwlDesign } from './useOwlDesign'
 /**
  * The RAGtime owl: an archivist in spectacles, carrying a lantern.
  *
- * Drawn from the avatar concepts Ben Wittes sent on 2026-09-30, and kept to them: every
- * shape and colour is the one in the concept sheet, in the sheet's own 100×100 units
- * (`design.ts`, `styles/flat/`). What this component adds is only what a still drawing
- * could not have: the owl blinks, its eyes follow a pointer, and its lantern can be lit.
- * None of the three moves a pixel outside the figure's own box, so an owl costs the page
- * around it nothing — the same rule the hub's tabs and Tab hint keep. All three stop for
- * a reader who has asked for reduced motion, and the eyes stay centred where there is no
- * pointer to follow.
+ * The owl the site ships is drawn in line tiles (`styles/lines/`): tiles of parallel lines that
+ * thicken and thin like ink, in 100×100 units. It blinks, breathes and carries a lantern that
+ * can be lit, and it moves nothing outside its own box, so an owl costs the page around it
+ * nothing. It stops moving for a reader who has asked for reduced motion. The engraving
+ * (`styles/engraved/`) is the other drawing it can wear, from the layered scaffold
+ * (`scaffold.tsx`), whose eyes also follow a pointer.
  *
  * It is not the mark. `Mark.tsx` is the fluting — the site bar, the favicon, the cursor
  * that paints an Explorer answer in — and stays what it was. The owl is a character and

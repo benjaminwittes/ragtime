@@ -12,7 +12,7 @@ import { defineTunables } from '@/tune/registry'
 export const owlLookKnobs = defineTunables([
   {
     id: 'owl.design.style',
-    value: 'flat',
+    value: 'lines',
   },
 
   {

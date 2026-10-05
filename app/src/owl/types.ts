@@ -198,7 +198,7 @@ export type OwlStyle = {
    * overlaps at rest, so the choice does not change what the owl looks like; it exists
    * because a renderer can rasterise the same shapes a shade differently when they come in
    * a different order, and a style should be able to keep the order it was tuned in. The
-   * flat style keeps the concept sheet's (head first); the engraved style's thousands of
+   * scaffold's default is head first; the engraved style's thousands of
    * thin ribbons are tuned the other way.
    */
   headLast?: boolean

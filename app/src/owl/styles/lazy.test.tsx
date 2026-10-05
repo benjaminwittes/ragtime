@@ -16,26 +16,27 @@ import { FALLBACK_STYLE, getStyle, loadStyle, styleMetas, styleOptions } from '.
 
 describe('before any style is fetched', () => {
   it('lists every style, with its label, without loading its drawing', () => {
-    expect(styleMetas().map((m) => m.id)).toEqual(['engraved', 'flat', 'lines'])
+    expect(styleMetas().map((m) => m.id)).toEqual(['blank', 'engraved', 'lines'])
     expect(styleOptions()).toContainEqual({ label: 'Engraved', value: 'engraved' })
     expect(getStyle('engraved').id).toBe(FALLBACK_STYLE)
   })
 
-  it('draws the default owl with the flat style on the first render, and fetches nothing for it', () => {
+  it('draws the default owl as an empty box on the first render, and fetches nothing for it', () => {
     const html = renderToStaticMarkup(<Owl />)
-    expect(html).toContain('data-part="body"')
+    expect(html).toContain('data-owl=')
+    expect(html).not.toContain('data-part=')
     expect(html).not.toContain('eng-')
-    expect(getStyle('flat').id).toBe('flat')
-    expect(getStyle('engraved').id).toBe(FALLBACK_STYLE)
+    expect(getStyle('blank').id).toBe('blank')
+    expect(getStyle('lines').id).toBe(FALLBACK_STYLE)
   })
 
-  it('draws flat for a design that names a style that has not arrived', () => {
+  it('draws the empty box for a design that names a style that has not arrived', () => {
     const html = renderToStaticMarkup(<Owl variant="engraved-line" />)
-    expect(html).toContain('data-part="body"')
+    expect(html).toContain('data-owl=')
     expect(html).not.toContain('eng-frame')
   })
 
-  it('falls back to flat for a style that is not registered', () => {
+  it('falls back to blank for a style that is not registered', () => {
     expect(getStyle('no-such-style').id).toBe(FALLBACK_STYLE)
   })
 })
@@ -52,7 +53,7 @@ describe('once a style has arrived', () => {
     expect(renderToStaticMarkup(<Owl />)).not.toContain('eng-')
   })
 
-  it('resolves to flat for an id that is not registered, rather than failing', async () => {
+  it('resolves to blank for an id that is not registered, rather than failing', async () => {
     expect((await loadStyle('no-such-style')).id).toBe(FALLBACK_STYLE)
   })
 })

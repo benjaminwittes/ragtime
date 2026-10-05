@@ -11,19 +11,20 @@ import { OCCASION_IDS, type OwlVoice, type SpeechSite, type VoiceConfig } from '
 const declared = (knob: string) => getTunable(knob)?.value
 
 function config(patch: Partial<VoiceConfig> = {}): VoiceConfig {
-  return { ...readVoiceConfig(declared), voice: 'archivist', ...patch }
+  return { ...readVoiceConfig(declared), voice: 'ragtime', ...patch }
 }
 
-const archivist = getVoice('archivist') as OwlVoice
-const silent: OwlVoice = { ...archivist, id: 'silent', lines: {} }
+const ragtime = getVoice('ragtime') as OwlVoice
+const silent: OwlVoice = { ...ragtime, id: 'silent', lines: {} }
 
 describe('the defaults', () => {
-  it('speak in no voice, and keep the chat off', () => {
+  it('pick no voice in the panel, speak in the design\u2019s, and keep the chat off', () => {
     const c = readVoiceConfig(declared)
     expect(c.voice).toBeNull()
     expect(c.chat).toBe('off')
     expect(c.treatment).toBeNull()
-    expect(baseDesign().voice).toBeNull()
+    expect(baseDesign().voice).toBe('ragtime')
+    expect(chooseVoice(c, baseDesign().voice)?.id).toBe('ragtime')
     expect(chooseVoice(c, null)).toBeNull()
   })
 
@@ -45,7 +46,7 @@ describe('the defaults', () => {
 
 describe('readVoiceConfig', () => {
   it('turns a picked voice into its id, and “none” into none', () => {
-    expect(readVoiceConfig((k) => (k === 'owl.voice.id' ? 'marginalia' : undefined)).voice).toBe('marginalia')
+    expect(readVoiceConfig((k) => (k === 'owl.voice.id' ? 'nobody' : undefined)).voice).toBe('nobody')
     expect(readVoiceConfig((k) => (k === 'owl.voice.id' ? 'none' : undefined)).voice).toBeNull()
   })
 
@@ -62,8 +63,9 @@ describe('readVoiceConfig', () => {
 
 describe('chooseVoice', () => {
   it('prefers the panel’s voice, then the design’s, and is silent for an id that is not registered', () => {
-    expect(chooseVoice(config({ voice: 'marginalia' }), 'night-watch')?.id).toBe('marginalia')
-    expect(chooseVoice(config({ voice: null }), 'night-watch')?.id).toBe('night-watch')
+    expect(chooseVoice(config({ voice: 'ragtime' }), null)?.id).toBe('ragtime')
+    expect(chooseVoice(config({ voice: null }), 'ragtime')?.id).toBe('ragtime')
+    expect(chooseVoice(config({ voice: 'nobody' }), 'ragtime')).toBeNull()
     expect(chooseVoice(config({ voice: null }), null)).toBeNull()
     expect(chooseVoice(config({ voice: 'gone' }), null)).toBeNull()
   })
@@ -72,7 +74,7 @@ describe('chooseVoice', () => {
 describe('shouldSpeak', () => {
   const site = SPEECH_SITES.hub
   const ask = (patch: Partial<Parameters<typeof shouldSpeak>[0]> = {}) =>
-    shouldSpeak({ voice: archivist, occasion: 'searching', config: config(), site, heard: new Set(), ...patch })
+    shouldSpeak({ voice: ragtime, occasion: 'searching', config: config(), site, heard: new Set(), ...patch })
 
   it('speaks when everything agrees', () => {
     expect(ask()).toBe(true)
@@ -84,7 +86,7 @@ describe('shouldSpeak', () => {
 
   it('does not speak an occasion the site cannot report', () => {
     expect(ask({ occasion: 'wrong-code' })).toBe(false)
-    expect(shouldSpeak({ voice: archivist, occasion: 'wrong-code', config: config(), site: SPEECH_SITES.gate, heard: new Set() })).toBe(true)
+    expect(shouldSpeak({ voice: ragtime, occasion: 'wrong-code', config: config(), site: SPEECH_SITES.gate, heard: new Set() })).toBe(true)
   })
 
   it('does not speak an occasion switched off', () => {
@@ -99,14 +101,14 @@ describe('shouldSpeak', () => {
 
   it('says each occasion once a session when asked to, per voice', () => {
     const once = config({ oncePerSession: true })
-    expect(ask({ config: once, heard: new Set([heardKey(archivist, 'searching')]) })).toBe(false)
+    expect(ask({ config: once, heard: new Set([heardKey(ragtime, 'searching')]) })).toBe(false)
     expect(ask({ config: once, heard: new Set([heardKey(silent, 'searching')]) })).toBe(true)
-    expect(ask({ config: once, heard: new Set([heardKey(archivist, 'search-empty')]) })).toBe(true)
+    expect(ask({ config: once, heard: new Set([heardKey(ragtime, 'search-empty')]) })).toBe(true)
   })
 
   it('never rations idle or clicked lines', () => {
     const once = config({ oncePerSession: true })
-    expect(ask({ occasion: 'idle', config: once, heard: new Set([heardKey(archivist, 'idle')]) })).toBe(true)
+    expect(ask({ occasion: 'idle', config: once, heard: new Set([heardKey(ragtime, 'idle')]) })).toBe(true)
   })
 })
 
@@ -115,20 +117,20 @@ describe('arrivalOccasion', () => {
   const door: Pick<SpeechSite, 'arrival' | 'keepsHours' | 'occasions'> = SPEECH_SITES.gate
 
   it('is the site’s own by day', () => {
-    expect(arrivalOccasion({ site: keeps, night: false, voice: archivist, config: config() })).toBe('arrive-hub')
+    expect(arrivalOccasion({ site: keeps, night: false, voice: ragtime, config: config() })).toBe('arrive-hub')
   })
 
   it('is the night line after dark, where the owl keeps hours and the voice has one', () => {
-    expect(arrivalOccasion({ site: keeps, night: true, voice: archivist, config: config() })).toBe('night')
+    expect(arrivalOccasion({ site: keeps, night: true, voice: ragtime, config: config() })).toBe('night')
   })
 
   it('stays the site’s own where the owl does not keep hours, or the voice has nothing for the night', () => {
-    expect(arrivalOccasion({ site: door, night: true, voice: archivist, config: config() })).toBe('arrive-gate')
+    expect(arrivalOccasion({ site: door, night: true, voice: ragtime, config: config() })).toBe('arrive-gate')
     expect(arrivalOccasion({ site: keeps, night: true, voice: silent, config: config() })).toBe('arrive-hub')
   })
 
   it('is none at a site with no arrival line', () => {
-    expect(arrivalOccasion({ site: SPEECH_SITES.record, night: false, voice: archivist, config: config() })).toBeNull()
+    expect(arrivalOccasion({ site: SPEECH_SITES.record, night: false, voice: ragtime, config: config() })).toBeNull()
   })
 })
 

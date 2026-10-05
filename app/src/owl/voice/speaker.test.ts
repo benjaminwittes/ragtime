@@ -9,14 +9,14 @@ import { Speaker, type Memory, type Spoken } from './speaker'
 import type { OwlVoice, SpeechSite, VoiceConfig } from './types'
 
 const declared = (knob: string) => getTunable(knob)?.value
-const archivist = getVoice('archivist') as OwlVoice
+const ragtime = getVoice('ragtime') as OwlVoice
 
 function setup(patch: Partial<VoiceConfig> = {}, site: SpeechSite = SPEECH_SITES.hub) {
   const seen = new Set<string>()
   const memory: Memory = { heard: seen, recent: new Map(), roll: () => 0 }
   const events: (Spoken | null)[] = []
-  const config: VoiceConfig = { ...readVoiceConfig(declared), voice: 'archivist', delayMs: 600, dwellMs: 6000, ...patch }
-  const input = { voice: archivist, config, site }
+  const config: VoiceConfig = { ...readVoiceConfig(declared), voice: 'ragtime', delayMs: 600, dwellMs: 6000, ...patch }
+  const input = { voice: ragtime, config, site }
   const speaker = new Speaker(input, (spoken) => events.push(spoken), memory)
   return { speaker, events, memory, seen, input }
 }
@@ -38,7 +38,7 @@ describe('Speaker', () => {
     expect(events).toHaveLength(0)
     vi.advanceTimersByTime(1)
     expect(last(events)?.occasion).toBe('searching')
-    expect(last(events)?.text).toBe('Looking.')
+    expect(last(events)?.text).toBe('Looking. The lantern is out.')
   })
 
   it('takes the line down after the dwell', () => {

@@ -1,6 +1,6 @@
 import { lazy, useLazy, type Lazy } from '../lazy'
 import type { OwlStyle, OwlStyleMeta } from '../types'
-import { style as flat } from './flat'
+import { style as blank } from './blank'
 
 /**
  * The render styles, by id.
@@ -14,19 +14,19 @@ import { style as flat } from './flat'
  * The two files are apart because they are needed at different times. The meta is loaded
  * with the page: the knob has to list every style, and a design has to be able to name one.
  * The drawing is a chunk of its own, fetched the first time a design asks for it, because
- * the owl as sent is flat and a visitor who never meets another should not pay for it.
- * Flat is the exception: it is the style an owl draws while another is on its way, and when
+ * the owl as sent is the line-tile one, which is its own chunk.
+ * Blank is the exception: it is the style an owl draws while another is on its way, and when
  * a design names one that is not registered, so it is always here and never fetched.
  *
  * What a style draws, and what it is not allowed to, is on `OwlStyle` in `../types.ts`.
  */
 
 /** The style an owl falls back on when its design names one that is not registered. */
-export const FALLBACK_STYLE = 'flat'
+export const FALLBACK_STYLE = 'blank'
 
 const metas = import.meta.glob<OwlStyleMeta>('./*/meta.ts', { eager: true, import: 'meta' })
 // A glob takes literals only, so the fallback's directory is named here as well as above.
-const drawings = import.meta.glob<{ style: OwlStyle }>(['./*/index.{ts,tsx}', '!./flat/*'])
+const drawings = import.meta.glob<{ style: OwlStyle }>(['./*/index.{ts,tsx}', '!./blank/*'])
 
 /** `./engraved/meta.ts` and `./engraved/index.tsx` are both `engraved`. */
 const directory = (path: string) => path.split('/')[1]!
@@ -37,7 +37,7 @@ const STYLES = new Map<string, { meta: OwlStyleMeta; slot: Lazy<OwlStyle> }>(
   Object.entries(metas).map(([path, meta]) => {
     const load = loaders.get(directory(path))
     const slot = lazy(() => (load ? load().then((module) => module.style) : Promise.reject(new Error(`[owl] style "${meta.id}" has no index`))))
-    if (meta.id === FALLBACK_STYLE) slot.provide(flat)
+    if (meta.id === FALLBACK_STYLE) slot.provide(blank)
     return [meta.id, { meta, slot }]
   }),
 )
@@ -59,7 +59,7 @@ export function styleMetas(): OwlStyleMeta[] {
 
 /** For the knob that picks one. */
 export function styleOptions(): { label: string; value: string }[] {
-  return styleMetas().map((meta) => ({ label: meta.label, value: meta.id }))
+  return styleMetas().filter((meta) => meta.id !== FALLBACK_STYLE).map((meta) => ({ label: meta.label, value: meta.id }))
 }
 
 function warnUnregistered(id: string): void {
@@ -73,7 +73,7 @@ function warnUnregistered(id: string): void {
 export function getStyle(id: string): OwlStyle {
   const entry = STYLES.get(id)
   if (!entry) warnUnregistered(id)
-  return entry?.slot.get() ?? flat
+  return entry?.slot.get() ?? blank
 }
 
 /** Fetch a style's drawing, or resolve to flat for an id that is not registered. */
@@ -81,7 +81,7 @@ export function loadStyle(id: string): Promise<OwlStyle> {
   const entry = STYLES.get(id)
   if (!entry) {
     warnUnregistered(id)
-    return Promise.resolve(flat)
+    return Promise.resolve(blank)
   }
   return entry.slot.load()
 }
@@ -94,7 +94,7 @@ export function useStyle(id: string): OwlStyle {
   const entry = STYLES.get(id)
   const loaded = useLazy(entry?.slot)
   if (!entry) warnUnregistered(id)
-  return loaded ?? flat
+  return loaded ?? blank
 }
 
 /** For the code that has every drawing in hand (`all.ts`): nothing is fetched for a style given here. */

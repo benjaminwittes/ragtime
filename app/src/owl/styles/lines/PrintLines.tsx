@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, type CSSProperties, type Ref } from 'react'
 import { baseDesign } from '../../design'
-import type { LampState } from '../../lab/lines/fields'
-import type { LineKnobs, LineSubject } from '../../lab/lines/knobs'
+import type { LampState } from './fields'
+import type { LineKnobs, LineSubject } from './knobs'
 import type { Print } from './print'
 import { drawLines, seeded, STILL_WOBBLE, type Wobble } from './render'
 

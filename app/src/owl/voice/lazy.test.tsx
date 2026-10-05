@@ -19,19 +19,19 @@ afterEach(() => applyTuneOverrides({}, false))
 
 describe('before any voice code is fetched', () => {
   it('knows which voices exist, and loads none of them to say so', () => {
-    expect(voiceIds().has('archivist')).toBe(true)
-    expect(getVoice('archivist')).toBeUndefined()
+    expect(voiceIds().has('ragtime')).toBe(true)
+    expect(getVoice('ragtime')).toBeUndefined()
   })
 
   it('draws a site that has chosen a voice with its box and no speech yet', () => {
-    applyTuneOverrides({ 'owl.voice.id': 'archivist' }, false)
+    applyTuneOverrides({ 'owl.voice.id': 'ragtime' }, false)
     const html = renderToStaticMarkup(<OwlSpot site="gate" />)
     expect(html).toContain('owl-spot')
     expect(html).not.toContain('owl-voice-sr')
   })
 
   it('draws the base owl with neither a box nor speech', () => {
-    applyTuneOverrides({ 'owl.variant': 'base' }, false)
+    applyTuneOverrides({ 'owl.voice.speak': false }, false)
     const html = renderToStaticMarkup(<OwlSpot site="gate" />)
     expect(html).not.toContain('owl-spot')
     expect(html).not.toContain('owl-voice-sr')
@@ -45,9 +45,9 @@ describe('before any voice code is fetched', () => {
 
 describe('once the voice and the speech code have arrived', () => {
   it('adds the speech inside the same box, and the owl is the same owl', async () => {
-    applyTuneOverrides({ 'owl.voice.id': 'archivist' }, false)
+    applyTuneOverrides({ 'owl.voice.id': 'ragtime' }, false)
     const before = renderToStaticMarkup(<OwlSpot site="gate" />)
-    await Promise.all([loadSpeechLayer(), loadVoice('archivist')])
+    await Promise.all([loadSpeechLayer(), loadVoice('ragtime')])
     const after = renderToStaticMarkup(<OwlSpot site="gate" />)
     expect(after).toContain('owl-voice-sr')
     expect(after.replace(/<div class="owl-voice-sr"[^>]*><\/div>/, '')).toBe(before)

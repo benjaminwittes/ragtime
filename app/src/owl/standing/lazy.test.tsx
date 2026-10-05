@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { Owl } from '../Owl'
+import { loadStyle } from '../styles'
 import { baseDesign } from '../design'
 import { enabledStanding, loadStandingKit, resolveStanding, wantsStanding } from './index'
 
@@ -56,7 +57,9 @@ describe('once the standing code has arrived', () => {
     expect(resolveStanding(baseDesign(), { 'owl.standing.ghost.on': 'on' }).standing).toEqual({})
   })
 
-  it('draws the owl that stands with its attribute on the first frame', () => {
+  it('draws the owl that stands with its attribute on the first frame', async () => {
+    // The engraved drawing is a chunk of its own; until it is here the box is blank.
+    await loadStyle('engraved')
     const html = renderToStaticMarkup(<Owl variant="engraved-copy" />)
     expect(html).toContain('data-standing="')
     expect(html).toContain('boil')

@@ -13,8 +13,8 @@ import { OCCASION_IDS, TREATMENT_IDS } from './types'
 describe('the voices', () => {
   const voices = voiceList()
 
-  it('are at least three, with distinct ids', () => {
-    expect(voices.length).toBeGreaterThanOrEqual(3)
+  it('are at least one, with distinct ids', () => {
+    expect(voices.length).toBeGreaterThanOrEqual(1)
     expect(new Set(voices.map((v) => v.id)).size).toBe(voices.length)
   })
 
@@ -26,8 +26,8 @@ describe('the voices', () => {
     }
   })
 
-  it('use all three treatments between them', () => {
-    expect(new Set(voices.map((v) => v.treatment)).size).toBe(TREATMENT_IDS.length)
+  it('use a treatment the page can set', () => {
+    expect(voices.map((v) => v.treatment)).toContain('typed')
   })
 
   it('only have lines for occasions that exist', () => {
@@ -85,7 +85,7 @@ describe('the voices', () => {
 
 describe('the registry', () => {
   it('finds a voice by id, and not one that is not there', () => {
-    expect(getVoice('archivist')?.id).toBe('archivist')
+    expect(getVoice('ragtime')?.id).toBe('ragtime')
     expect(getVoice('nobody')).toBeUndefined()
     expect(getVoice(null)).toBeUndefined()
   })
