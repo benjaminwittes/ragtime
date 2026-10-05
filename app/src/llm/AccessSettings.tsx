@@ -213,8 +213,8 @@ function TabRow({
       <TabButton
         active={tab === 'paid'}
         onClick={() => setTab('paid')}
-        label="Lawfare-billed"
-        sub="Prepaid blocks"
+        label="Account"
+        sub="Your balance, or Lawfare staff"
       />
       <TabButton
         active={tab === 'byok'}
@@ -225,8 +225,8 @@ function TabRow({
       <TabButton
         active={tab === 'demo'}
         onClick={() => setTab('demo')}
-        label="Demo"
-        sub="Lawfare key"
+        label="Demo code"
+        sub="Shared key, by invitation"
       />
     </div>
   )
@@ -348,7 +348,8 @@ function SignInForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <p className="text-sm text-foreground/90">
-          Sign in to use Lawfare-billed Anthropic credit.
+          Sign in to use RAGtime&apos;s AI credit. Your balance pays for AI
+          calls; Lawfare staff accounts are covered by Lawfare.
           {!google &&
             ' We send a one-time sign-in link to your email — no password.'}
         </p>
