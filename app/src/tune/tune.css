@@ -210,3 +210,153 @@
   color: #8c8c8c;
   padding: 18px 0;
 }
+
+.rt-tune-search {
+  padding: 8px 12px 0;
+}
+.rt-tune-search input {
+  width: 100%;
+  border: 1px solid #d5d5d5;
+  border-radius: 6px;
+  padding: 6px 9px;
+  font: 12px/1.4 ui-sans-serif, -apple-system, 'Segoe UI', system-ui, sans-serif;
+  background: #ffffff;
+  color: #1c1c1c;
+}
+.rt-tune-search input:focus {
+  outline: 2px solid #9db8c4;
+  outline-offset: 0;
+  border-color: #6f93a3;
+}
+
+/* A row, closed: its name and its state on one line, and the rest opens when it is focused. */
+.rt-compact {
+  padding: 0;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.rt-compact.open {
+  background: #f6f6f4;
+}
+.rt-tune-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+}
+.rt-tune-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: #333333;
+  cursor: pointer;
+}
+.rt-compact.changed .rt-tune-name {
+  color: #1c1c1c;
+  font-weight: 600;
+}
+.rt-tune-chip {
+  flex: none;
+  max-width: 11em;
+  border-radius: 999px;
+  background: #ececea;
+  padding: 1px 9px;
+  font-size: 11px;
+  color: #444444;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-compact.open .rt-tune-chip {
+  background: #e2e2de;
+}
+.rt-tune-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin: 0 -4px;
+  border-radius: 6px;
+  border: 1px solid #c9c9c9;
+  vertical-align: -2px;
+}
+.rt-tune-switch {
+  flex: none;
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border: 0;
+  border-radius: 9px;
+  background: #c7c7c2;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s;
+}
+.rt-tune-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 7px;
+  background: #ffffff;
+  transition: transform 0.15s;
+}
+.rt-tune-switch.on {
+  background: #2f6f7a;
+}
+.rt-tune-switch.on::after {
+  transform: translateX(13px);
+}
+.rt-tune-switch:focus-visible,
+.rt-tune-name:focus-visible {
+  outline: 2px solid #6f93a3;
+  outline-offset: 2px;
+}
+.rt-tune-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.18s ease;
+}
+.rt-compact.open .rt-tune-more {
+  grid-template-rows: 1fr;
+}
+.rt-tune-more > div {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 6px;
+}
+.rt-compact.open .rt-tune-more > div {
+  padding-bottom: 8px;
+}
+/* What depends on a row, nested under it behind a rule, arriving rather than appearing. */
+.rt-tune-kids {
+  margin: 0 0 4px 9px;
+  padding-left: 9px;
+  border-left: 2px solid #dedcd6;
+  animation: rt-reveal 0.2s ease;
+}
+@keyframes rt-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rt-tune-more,
+  .rt-tune-switch,
+  .rt-tune-switch::after,
+  .rt-compact {
+    transition: none;
+  }
+  .rt-tune-kids {
+    animation: none;
+  }
+}

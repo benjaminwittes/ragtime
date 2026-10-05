@@ -86,6 +86,12 @@ export type Tunable = {
    * `setUserValue`). Everything else is for the tuner and is listed only where tuning is on.
    */
   user?: boolean
+  /**
+   * The id of the knob this one belongs under: it is drawn nested beneath it, and only while
+   * that one is on. Moving a setting that does nothing while another is off is how a settings
+   * list lies, so what depends on a switch is revealed by the switch.
+   */
+  parent?: string
 }
 
 /**

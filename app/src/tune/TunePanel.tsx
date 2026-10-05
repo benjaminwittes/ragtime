@@ -1,10 +1,5 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 
-import {
-  allSurfaces,
-  allTunables,
-  surfaceIsMounted,
-} from './registry'
 import { overlayCssForSource } from './overlay'
 import { repoPresets } from './presets'
 import {
@@ -20,26 +15,23 @@ import {
   tuneVersion,
   urlPresetName,
 } from './store'
-import { KnobRow } from './controls'
+import { Panel } from './Panel'
+import { allTunables } from './registry'
+import { setPanelOpen, togglePanel, usePanelOpen } from './open'
 import { derivedInOverlay, writePresetToRepo, writeTunedToSource } from './write'
-import type { Tunable } from './types'
 
 /**
- * The tuning panel.
+ * The tuning panel: `Panel` with every knob in it, a footer that turns whatever has been moved
+ * into something durable (a file edit, a named preset, a URL), and the handle on the left edge.
  *
- * One column on the right: a tab per scope (Globals, then every surface, with
- * the one you are standing on first and any other greyed), the knobs grouped
- * the way the declarations group them, and a footer that turns whatever you
- * have moved into something durable — a file edit, a named preset, a URL.
- *
- * Alt+T opens and closes it. It starts closed, and when the page was opened on
- * a preset it hides its handle too, because that page is being photographed.
+ * Alt+T opens and closes it. It starts closed, and when the page was opened on a preset it
+ * hides its handle too, because that page is being photographed. The gear in the site bar
+ * opens this same panel in a tuning build, and a reader's panel (`ReaderPanel.tsx`) elsewhere.
  */
 export function TunePanel() {
   useSyncExternalStore(subscribeTune, tuneVersion, tuneVersion)
   const openedOnPreset = urlPresetName() !== null
-  const [open, setOpen] = useState(false)
-  const [scope, setScope] = useState<string | null>(null)
+  const open = usePanelOpen()
   const [status, setStatus] = useState<{ text: string; bad?: boolean }>({ text: '' })
 
   useEffect(() => {
@@ -48,104 +40,31 @@ export function TunePanel() {
       // written against `key` never fires on the machine this is used on.
       if (event.altKey && event.code === 'KeyT') {
         event.preventDefault()
-        setOpen((v) => !v)
+        togglePanel()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const surfaces = allSurfaces()
-  // "The surface you are looking at" is whichever registered selector is in the
-  // DOM — no page has to tell the panel it mounted. Recomputed on every render,
-  // which is often enough: the panel re-renders on open and on every change.
-  const onPage = surfaces.filter(surfaceIsMounted)
-  const scopes = [
-    { id: 'global', label: 'Globals', here: true },
-    ...onPage.map((s) => ({ id: s.id, label: s.label, here: true })),
-    ...surfaces
-      .filter((s) => !onPage.includes(s))
-      .map((s) => ({ id: s.id, label: s.label, here: false })),
-  ]
-  const activeScope = scope ?? (onPage[0]?.id ?? 'global')
-
-  const knobs = allTunables().filter((k) => k.scope === activeScope)
-  const groups = useMemo(() => {
-    const byGroup = new Map<string, Tunable[]>()
-    for (const knob of knobs) {
-      byGroup.set(knob.group, [...(byGroup.get(knob.group) ?? []), knob])
-    }
-    return [...byGroup.entries()]
-  }, [knobs])
-
   const changed = Object.keys(tuneOverrides()).length
 
   if (!open) {
     if (openedOnPreset) return null
     return (
-      <button
-        type="button"
-        className="rt-tune-handle"
-        title="Tune this page (Alt+T)"
-        onClick={() => setOpen(true)}
-      >
+      <button type="button" className="rt-tune-handle" title="Tune this page (Alt+T)" onClick={() => setPanelOpen(true)}>
         {changed > 0 ? changed : 'T'}
       </button>
     )
   }
 
   return (
-    <aside className="rt-tune" aria-label="Design tuning">
-      <div className="rt-tune-head">
-        <span className="rt-tune-title">Tune</span>
-        {changed > 0 && <span className="rt-tune-count">{changed} changed</span>}
-        <span className="rt-tune-grow" />
-        <button type="button" className="rt-tune-x" onClick={() => setOpen(false)} title="Alt+T">
-          ×
-        </button>
-      </div>
-
-      <div className="rt-tune-tabs">
-        {scopes.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className={
-              'rt-tune-tab' +
-              (s.id === activeScope ? ' on' : '') +
-              (s.here ? '' : ' off-page')
-            }
-            onClick={() => setScope(s.id)}
-            title={s.here ? undefined : 'Not on screen — tuning it changes nothing you can see'}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="rt-tune-body">
-        {groups.length === 0 && (
-          <p className="rt-tune-empty">
-            No knobs declared for this scope yet. Add them in the surface’s own
-            <code> tune.ts</code>.
-          </p>
-        )}
-        {groups.map(([group, list]) => (
-          <div key={group} className="rt-tune-group">
-            <div className="rt-tune-group-name">{group}</div>
-            {list.map((knob) => (
-              <KnobRow key={knob.id} knob={knob} />
-            ))}
-          </div>
-        ))}
-      </div>
-
-      <Footer
-        changed={changed}
-        status={status}
-        setStatus={setStatus}
-      />
-    </aside>
+    <Panel
+      title="Tune"
+      knobs={allTunables}
+      changed={changed}
+      footer={<Footer changed={changed} status={status} setStatus={setStatus} />}
+    />
   )
 }
 

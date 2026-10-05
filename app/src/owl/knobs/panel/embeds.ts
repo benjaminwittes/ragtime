@@ -24,6 +24,7 @@ describeTunables([
   {
     ...GLOBAL,
     id: 'owl.variant',
+    parent: 'owl.show',
     label: 'Owl look',
     kind: 'select',
     user: true,

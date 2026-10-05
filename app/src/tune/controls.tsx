@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 
 import './controls.css'
 import { getSurface } from './registry'
 import { isTuned, resetTuneValue, setTuneValue, tuneValue } from './store'
+import { summary } from './tree'
 import type { Tunable, TuneValue } from './types'
 
 /**
@@ -24,26 +25,25 @@ const TUNER: KnobWrite = { set: setTuneValue, reset: resetTuneValue, changed: is
 /* One knob                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export function KnobRow({ knob, write = TUNER }: { knob: Tunable; write?: KnobWrite }) {
+export function KnobRow({
+  knob,
+  write = TUNER,
+  open,
+  onOpen,
+}: {
+  knob: Tunable
+  write?: KnobWrite
+  /** With `onOpen`, the row is drawn closed (a line and its state) and opens when it is the one open. */
+  open?: boolean
+  onOpen?: (id: string | null) => void
+}) {
   const value = tuneValue(knob.id)
   const tuned = write.changed(knob.id)
-  return (
-    <div className="rt-tune-row">
-      <label className="rt-tune-label">
-        <span>{knob.label}</span>
-        {tuned && <span className="rt-tune-dot" title="changed from source" />}
-        {tuned && (
-          <button
-            type="button"
-            className="rt-tune-reset"
-            onClick={() => write.reset(knob.id)}
-            title={`Back to ${String(knob.value)}`}
-          >
-            reset
-          </button>
-        )}
-      </label>
-      <Control knob={knob} value={value} write={write} />
+  // A press focuses the row first, which opens it; the click that follows must not close it again.
+  const focusedAt = useRef(0)
+  const detail = (
+    <>
+      {knob.kind === 'boolean' ? null : <Control knob={knob} value={value} write={write} />}
       {knob.note && <div className="rt-tune-note">{knob.note}</div>}
       {knob.derived && (
         <div className="rt-tune-note rt-tune-derived">
@@ -51,6 +51,67 @@ export function KnobRow({ knob, write = TUNER }: { knob: Tunable; write?: KnobWr
           here would pin a literal.
         </div>
       )}
+    </>
+  )
+
+  if (!onOpen) {
+    return (
+      <div className="rt-tune-row">
+        <label className="rt-tune-label">
+          <span>{knob.label}</span>
+          {tuned && <span className="rt-tune-dot" title="changed from source" />}
+          {tuned && (
+            <button type="button" className="rt-tune-reset" onClick={() => write.reset(knob.id)} title={`Back to ${String(knob.value)}`}>
+              reset
+            </button>
+          )}
+        </label>
+        {knob.kind === 'boolean' ? <Control knob={knob} value={value} write={write} /> : null}
+        {detail}
+      </div>
+    )
+  }
+
+  // Closed, a row is its name and its state, and a switch is already the switch. It opens
+  // when it is focused or pressed, so what is being changed is the only thing drawn in full.
+  return (
+    <div className={'rt-tune-row rt-compact' + (open ? ' open' : '') + (tuned ? ' changed' : '')} onFocusCapture={() => {
+        focusedAt.current = Date.now()
+        if (!open) onOpen(knob.id)
+      }}
+    >
+      <div className="rt-tune-line">
+        <button type="button" className="rt-tune-name" aria-expanded={open} onClick={() => (open && Date.now() - focusedAt.current > 400 ? onOpen(null) : onOpen(knob.id))}>
+          <span>{knob.label}</span>
+          {tuned && <span className="rt-tune-dot" title="changed from source" />}
+        </button>
+        {knob.kind === 'boolean' ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={Boolean(value)}
+            aria-label={knob.label}
+            className={'rt-tune-switch' + (value ? ' on' : '')}
+            onClick={() => write.set(knob.id, !value)}
+          />
+        ) : knob.kind === 'color' ? (
+          <span className="rt-tune-chip">
+            <i className="rt-tune-swatch" style={{ background: String(value) }} />
+          </span>
+        ) : (
+          <span className="rt-tune-chip">{summary(knob, value)}</span>
+        )}
+      </div>
+      <div className="rt-tune-more" inert={!open}>
+        <div>
+          {detail}
+          {tuned && (
+            <button type="button" className="rt-tune-reset" onClick={() => write.reset(knob.id)} title={`Back to ${String(knob.value)}`}>
+              reset to default
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

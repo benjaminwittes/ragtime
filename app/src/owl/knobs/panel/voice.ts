@@ -16,6 +16,7 @@ describeTunables([
   {
     ...VOICE,
     id: 'owl.voice.speak',
+    parent: 'owl.show',
     label: 'The owl speaks',
     kind: 'boolean',
     user: true,
