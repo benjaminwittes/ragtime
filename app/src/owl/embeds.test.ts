@@ -46,13 +46,13 @@ describe('siteVars', () => {
       'owl.embed.hub.sizeSm': '7rem',
       'owl.embed.gate.size': '4rem',
     }
-    expect(siteVars('hub', (k) => values[k])).toEqual({ '--owl-size': '5.5rem', '--owl-size-sm': '10.25rem' })
+    expect(siteVars('hub', (k) => values[k])).toEqual({ '--owl-size': '5.5rem', '--owl-size-sm': '7rem' })
     expect(siteVars('gate', (k) => values[k])).toEqual({ '--owl-size': '4rem' })
   })
 
   it('writes the defaults the pages used to hard-code', () => {
     const read = (k: string) => getTunable(k)?.value
-    expect(siteVars('hub', read)).toEqual({ '--owl-size': '5.5rem', '--owl-size-sm': '7rem' })
+    expect(siteVars('hub', read)).toEqual({ '--owl-size': '5.5rem', '--owl-size-sm': '10.25rem' })
     expect(siteVars('explorer', read)).toEqual({ '--owl-size': '56px' })
     expect(siteVars('gate', read)).toEqual({ '--owl-size': '4rem' })
     expect(siteVars('not-found', read)).toEqual({ '--owl-size': '5rem' })
