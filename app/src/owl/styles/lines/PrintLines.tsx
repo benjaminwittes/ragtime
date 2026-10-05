@@ -79,6 +79,8 @@ export function PrintLines({
     const cycle = Array.from({ length: CYCLE }, () => [rng(), rng(), rng(), rng()] as const)
     const flick = Array.from({ length: 16 }, () => rng())
     const a = print.amount
+    // The page's own shifting, which is the horizontal and vertical jitter, has its own dial.
+    const j = a * print.jitter
     let raf = 0
     let visible = true
     let drawn = -1
@@ -100,8 +102,8 @@ export function PrintLines({
         const [bx, by] = cycle[sixth % CYCLE]
         const wobble: Wobble = anyPrint
           ? {
-              dx: print.boil ? (bx - 0.5) * 2 * 0.3 * a : 0,
-              dy: print.boil ? (by - 0.5) * 2 * 0.3 * a : 0,
+              dx: print.boil ? (bx - 0.5) * 2 * 0.3 * j : 0,
+              dy: print.boil ? (by - 0.5) * 2 * 0.3 * j : 0,
               breath: print.breath ? Math.sin(t * 1.1) * Math.min(1, a) : 0,
               gutter: print.flicker ? flick[Math.floor(e * 9) % 16] * Math.min(1, a) : 0,
             }
@@ -119,7 +121,7 @@ export function PrintLines({
         seat = sixth
         const [x, y, r] = cycle[sixth % CYCLE]
         pageRef.current.style.transform = print.boil
-          ? `translate(${(x - 0.5) * 2 * 0.22 * a}px, ${(y - 0.5) * 2 * 0.22 * a}px) rotate(${(r - 0.5) * 2 * 0.12 * a}deg)`
+          ? `translate(${(x - 0.5) * 2 * 0.22 * j}px, ${(y - 0.5) * 2 * 0.22 * j}px) rotate(${(r - 0.5) * 2 * 0.12 * j}deg)`
           : ''
       }
       if (toner.current && print.scan) {

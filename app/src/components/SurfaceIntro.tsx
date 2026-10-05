@@ -26,7 +26,8 @@ type Props = {
    */
   level: 1 | 2
   heading: ReactNode
-  lede: ReactNode
+  /** The line under the heading; a surface that has none (the hub, whose owl speaks) leaves it out. */
+  lede?: ReactNode
   /**
    * Who is speaking, above what they say: the owl, in the pose each surface gives it
    * (`owl/embeds.ts`). Optional, so a surface with no figure renders exactly what it did.
@@ -77,7 +78,7 @@ export function SurfaceIntro({
         </div>
       ) : null}
       <Heading className={headingClassName}>{heading}</Heading>
-      <p className={ledeClassName}>{lede}</p>
+      {lede ? <p className={ledeClassName}>{lede}</p> : null}
     </section>
   )
 }

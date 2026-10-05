@@ -6,6 +6,7 @@ import { useOwlFigure } from '@/owl/useOwlFigure'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { useDocs } from '@/docs/DocsContext'
 import { cn } from '@/lib/utils'
+import { useTunable } from '@/tune/useTunable'
 import { navigateTo, toHref } from '@/lib/routing'
 import {
   type HubCorpusSlug,
@@ -22,6 +23,7 @@ import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { startTour } from '@/tour/start'
 import { TOUR } from '@/tour/steps'
 import { TICKS, type SampleSet } from './samples'
+import { PrintFilter } from './PrintFilter'
 import { useTick } from './tune'
 
 gsap.registerPlugin(useGSAP)
@@ -140,6 +142,7 @@ export function HubKeywordSearch({
   const rotating = query === ''
   const [at, setAt] = useState(0)
   const tick = TICKS[at]!
+  const printTitle = useTunable<boolean>('hub.title.print')
   const sample = mode === 'search' ? tick.sample.query : tick.sample.question
   const hero = useRef<HTMLElement>(null)
   const skin = useRef<HTMLDivElement>(null)
@@ -247,12 +250,13 @@ export function HubKeywordSearch({
       )}
     >
       <div className={cn('flex flex-col justify-center py-8', !answered && 'flex-1')}>
+        <PrintFilter />
         <SurfaceIntro
           level={1}
           className="text-center"
-          // The paragraph below says "I am RAGtime", and this is who says it: the owl on
-          // the stacks, from the same hand as the words. It sits above the title rather
-          // than beside the paragraph because the title fades and re-wraps every third
+          // The owl on the stacks says "I am RAGtime" in a typed note beside it (the voice,
+          // `owl/voice/voices/ragtime.ts`). It sits above the title rather than beside
+          // it because the title fades and re-wraps every third
           // beat and the owl must not move when it does — above, it is outside all of that.
           // The block under the bar is centred, so the owl's height is split above and
           // below it: measured at 1440x900 and 390x844, the box's top is at 608 and 591,
@@ -280,27 +284,10 @@ export function HubKeywordSearch({
           // was written, twenty-four once each corpus got a second sentence for
           // Search mode, and the widest is still the same litigation "Ask" line,
           // so the cap did not move.
-          headingClassName="mx-auto max-w-5xl font-serif text-[2.2rem] font-medium leading-[1.12] tracking-tight text-balance text-foreground sm:text-[3.25rem]"
-          // The site speaking for itself, in Ben Wittes's words (2026-09-30), where one
-          // line used to name the four groups below. It is a paragraph rather than a
-          // line, so it takes a wider measure than that line had and a size down at
-          // phone width, where it runs to seven lines and the box still has to be on
-          // the first screen under it (measured at 390x844: the box's top is at 537).
-          //
-          // "Tens of millions" is the one figure on this page that is typed rather
-          // than read from the worker. It is an order of magnitude and not a count —
-          // the book catalogue alone is past ten million — but it is still a claim
-          // nothing re-checks, so it is worth a look whenever a large corpus leaves.
-          ledeClassName="mx-auto mt-4 max-w-2xl font-serif text-base italic leading-snug text-lawfare-text-secondary text-pretty sm:text-lg sm:leading-normal"
-          lede={
-            <>
-              I am RAGtime. I have tens of millions of records: litigation documents, court
-              opinions, pardons, administrative records, rule-makings, published analyses,
-              legislative hearings and bills, declassified records, giant catalogs of books,
-              and hundreds of years of diplomatic history. I can help you look broadly. I can
-              help you go deep. Ask me anything.
-            </>
-          }
+          headingClassName={cn(
+            'mx-auto max-w-5xl font-serif text-[2.2rem] font-medium leading-[1.12] tracking-tight text-balance text-foreground sm:text-[3.25rem]',
+            printTitle && 'hub-print-title',
+          )}
         />
 
         {/* Two words in the page's reading voice, at about half the height of

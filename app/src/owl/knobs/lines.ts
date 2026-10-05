@@ -30,5 +30,6 @@ export const owlLinesKnobs = defineTunables([
   { id: 'owl.lines.engrave.keyline', value: 0.45 },
   // The pace of Calm; Lively is the same shape, faster and further.
   { id: 'owl.lines.print.amount', value: 0.45 },
+  { id: 'owl.lines.print.jitter', value: 1 },
   { id: 'owl.lines.print.fps', value: 12 },
 ])

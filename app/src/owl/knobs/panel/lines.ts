@@ -163,6 +163,15 @@ describeTunables([
   },
   {
     ...MOTION,
+    id: 'owl.lines.print.jitter',
+    label: 'Jitter, side to side and up and down',
+    min: 0,
+    max: 3,
+    step: 0.1,
+    note: 'How far the page re-seats on the glass, about six times a second, and the lines drift out of register with it. A multiple of Calm’s amount; 0 holds the page still.',
+  },
+  {
+    ...MOTION,
     id: 'owl.lines.print.fps',
     label: 'Calm: steps a second',
     kind: 'int',

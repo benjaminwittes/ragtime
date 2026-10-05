@@ -35,14 +35,14 @@ export function useBuild(motion: string, scan: boolean): { knobs: LineKnobs; eng
     }
     const e = (name: string, fallback: number) => num('owl.lines.engrave.' + name, fallback)
     const engrave: Engrave = { hatch: e('hatch', 0.7), angle: e('angle', 52), pitch: e('pitch', 1.5), keyline: e('keyline', 0.45) }
-    return { knobs, engrave, amount: num('owl.lines.print.amount', 0.45), fps: num('owl.lines.print.fps', 12) }
+    return { knobs, engrave, amount: num('owl.lines.print.amount', 0.45), jitter: num('owl.lines.print.jitter', 1), fps: num('owl.lines.print.fps', 12) }
     // Read through the store; `version` is what says a value moved.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version])
   const lively = motion === 'lively'
   const print = useMemo<Print>(
-    () => ({ ...PRINT_ON, bar: false, scan, amount: built.amount * (lively ? 1.5 : 1), fps: Math.round(built.fps * (lively ? 1.35 : 1)) }),
-    [built.amount, built.fps, lively, scan],
+    () => ({ ...PRINT_ON, bar: false, scan, amount: built.amount * (lively ? 1.5 : 1), jitter: built.jitter, fps: Math.round(built.fps * (lively ? 1.35 : 1)) }),
+    [built.amount, built.jitter, built.fps, lively, scan],
   )
   return { knobs: built.knobs, engrave: built.engrave, print }
 }
