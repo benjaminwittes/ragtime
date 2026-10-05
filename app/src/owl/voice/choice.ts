@@ -42,6 +42,8 @@ export function useChatOwl(): boolean {
 export function useChosenVoice(variant?: string): string | null {
   const held = useContext(VoiceHold)
   const design = useOwlDesign(variant)
+  // The reader's switch (the gear in the site bar) is above the lab's hold and every voice.
+  if (tuneValue('owl.voice.speak') === false) return null
   const id = held ? held.voice : (pickedVoice(tuneValue) ?? design.voice)
   return id !== null && voiceIds().has(id) ? id : null
 }

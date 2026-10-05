@@ -52,6 +52,7 @@ export const owlVoiceDetailKnobs = defineTunables([
     id: 'owl.voice.typeMs',
     label: 'Type speed',
     kind: 'int',
+    user: true,
     value: 16,
     min: 0,
     max: 120,

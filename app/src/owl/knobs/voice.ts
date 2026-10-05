@@ -24,4 +24,10 @@ export const owlVoiceKnobs = defineTunables([
     id: 'owl.voice.chat',
     value: 'off',
   },
+
+  {
+    // The reader's switch: off, no owl speaks, whatever voice a variant or the panel names.
+    id: 'owl.voice.speak',
+    value: true,
+  },
 ])

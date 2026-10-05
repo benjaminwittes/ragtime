@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_KNOBS } from '../../lab/lines/knobs'
 import type { OwlFigureProps } from '../../types'
 import { PrintLines } from './PrintLines'
-import { PRINT_APP } from './print'
+import { useTunable } from '@/tune/useTunable'
+import { PRINT_APP, PRINT_ON } from './print'
 
 /**
  * The line-tile owl as the app draws it: one `PrintLines`, sized by the page's classes like
@@ -31,7 +32,10 @@ export function LinesFigure({ design, poseId, lantern, className, style, title }
     ro.observe(svg)
     return () => ro.disconnect()
   }, [])
-  const print = size >= SCAN_FROM ? PRINT_APP : { ...PRINT_APP, scan: false }
+  const motion = useTunable<string>('owl.lines.motion')
+  const scan = useTunable<boolean>('owl.lines.scan')
+  const bar = useTunable<boolean>('owl.lines.bar')
+  const print = { ...(motion === 'lively' ? PRINT_ON : PRINT_APP), scan: scan && size >= SCAN_FROM, bar }
   return (
     <PrintLines
       subject="c"
@@ -39,6 +43,7 @@ export function LinesFigure({ design, poseId, lantern, className, style, title }
       state={lantern}
       knobs={DEFAULT_KNOBS}
       print={print}
+      moving={motion !== 'still'}
       ink={design.palette.navy}
       fluid={{ ref: svgRef, className: className ? 'owl ' + className : 'owl', style, title, root: { 'data-owl': poseId, 'data-lantern': lantern } }}
     />

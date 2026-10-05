@@ -13,6 +13,7 @@ import { Mark } from '@/components/Mark'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { Feedback } from '@/feedback/Feedback'
 import { AccessSettings } from '@/llm/AccessSettings'
+import { SettingsGear } from '@/settings/SettingsGear'
 import { cn } from '@/lib/utils'
 
 /**
@@ -175,6 +176,9 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
           a project of{' '}
           <span className="font-bold text-lawfare-text-secondary">Lawfare</span>
         </span>
+        {/* The far right: settings, for everyone. A palette that finds a setting as you type
+            (`settings/`), reading the tuning registry, so a setting is a knob and not a form. */}
+        <SettingsGear />
       </div>
     </header>
   )

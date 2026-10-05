@@ -4,6 +4,7 @@ import { OwlDrawing } from './scaffold'
 import { useStanding } from './standing'
 import { useStyle } from './styles'
 import type { OwlLantern, OwlPin, OwlPose } from './types'
+import { useTunable } from '@/tune/useTunable'
 import { useGaze } from './useGaze'
 import { useOwlDesign } from './useOwlDesign'
 
@@ -64,6 +65,7 @@ export function Owl({
   pin?: OwlPin
 }) {
   const design = useOwlDesign(variant, pin)
+  const show = useTunable<boolean>('owl.show')
   const svg = useRef<SVGSVGElement>(null)
   // Read once, when the owl arrives, rather than kept by a clock: a lantern that came on
   // at the stroke of eight under someone mid-sentence would be the page changing under
@@ -78,6 +80,9 @@ export function Owl({
 
   useGaze(svg, design.motion.gazeFollow)
   useStanding(svg, design)
+
+  // The reader's switch (the gear in the site bar): no owl, and the box it sat in is left as it was.
+  if (!show) return null
 
   // A style that is one drawing (the line tiles) draws the whole figure, scaffold and all.
   const Figure = renderStyle.figure

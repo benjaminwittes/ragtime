@@ -37,6 +37,7 @@ export const TUNE_CAN_WRITE = import.meta.env.DEV
 
 const SESSION_KEY = 'ragtime.tune.session'
 const PRESETS_KEY = 'ragtime.tune.presets'
+const USER_KEY = 'ragtime.settings.v1'
 
 export type TuneOverrides = Record<string, TuneValue>
 export type TunePresets = Record<string, TuneOverrides>
@@ -78,7 +79,69 @@ export function subscribeTune(fn: () => void): () => void {
  */
 export function tuneValue(id: string): TuneValue | undefined {
   if (Object.prototype.hasOwnProperty.call(overrides, id)) return overrides[id]
+  if (Object.prototype.hasOwnProperty.call(userValues, id)) {
+    // Only a value of the kind the knob declares, so a stale or hand-edited setting reads as the default.
+    const knob = getTunable(id)
+    if (knob && typeof userValues[id] === typeof knob.value) return userValues[id]
+  }
   return getTunable(id)?.value
+}
+
+/* -------------------------------------------------------------------------- */
+/* What a reader chose                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The settings a reader moved themselves (the gear in the site bar), kept in their browser and
+ * read in every build. They sit under the tuner's overrides, so tuning still wins, and they are
+ * not part of `tuneOverrides()`, which is what a preset or a write to source is made of: a
+ * reader's taste is not a design decision.
+ */
+let userValues: TuneOverrides = readUserValues()
+
+function readUserValues(): TuneOverrides {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as TuneOverrides) : {}
+  } catch {
+    return {}
+  }
+}
+
+function persistUser() {
+  try {
+    if (Object.keys(userValues).length === 0) localStorage.removeItem(USER_KEY)
+    else localStorage.setItem(USER_KEY, JSON.stringify(userValues))
+  } catch {
+    // Private mode or quota: the choice holds for this page view.
+  }
+}
+
+export function isUserSet(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(userValues, id)
+}
+
+export function setUserValue(id: string, value: TuneValue) {
+  userValues = { ...userValues, [id]: value }
+  persistUser()
+  notify()
+}
+
+export function resetUserValue(id: string) {
+  if (!isUserSet(id)) return
+  const next = { ...userValues }
+  delete next[id]
+  userValues = next
+  persistUser()
+  notify()
+}
+
+export function resetAllUserValues() {
+  if (Object.keys(userValues).length === 0) return
+  userValues = {}
+  persistUser()
+  notify()
 }
 
 /** The overrides only — what a preset is, and what gets written to source. */

@@ -15,6 +15,14 @@ const CHAT = { scope: 'owl', group: 'Voice: chat', source: { file: SELF } } as c
 describeTunables([
   {
     ...VOICE,
+    id: 'owl.voice.speak',
+    label: 'The owl speaks',
+    kind: 'boolean',
+    user: true,
+    note: 'Off, the owl says nothing, in any voice. On, it says what its voice has for the page you are on.',
+  },
+  {
+    ...VOICE,
     id: 'owl.voice.id',
     label: 'Voice',
     kind: 'select',

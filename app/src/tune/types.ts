@@ -80,6 +80,12 @@ export type Tunable = {
    * severs the seam that made it follow the theme, so the panel warns first.
    */
   derived?: boolean
+  /**
+   * A reader may move this one: it is listed by the settings gear in the site bar, in a
+   * production build too, and what they pick is kept in their browser (`store.ts`,
+   * `setUserValue`). Everything else is for the tuner and is listed only where tuning is on.
+   */
+  user?: boolean
 }
 
 /**
