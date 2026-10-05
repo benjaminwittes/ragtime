@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { lazy, Suspense, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { AskBox } from '@/components/AskBox'
@@ -24,6 +24,9 @@ import { startTour } from '@/tour/start'
 import { TOUR } from '@/tour/steps'
 import { TICKS, type SampleSet } from './samples'
 import { PrintFilter } from './PrintFilter'
+
+// The title's line drawing carries the line engine, so it is a chunk of its own: the title is plain type until it arrives.
+const LinesText = lazy(() => import('./LinesText'))
 import { useTick } from './tune'
 
 gsap.registerPlugin(useGSAP)
@@ -143,6 +146,8 @@ export function HubKeywordSearch({
   const [at, setAt] = useState(0)
   const tick = TICKS[at]!
   const printTitle = useTunable<boolean>('hub.title.print')
+  const linedTitle = useTunable<boolean>('hub.title.lines')
+  const titlePitch = useTunable<number>('hub.title.pitch')
   const sample = mode === 'search' ? tick.sample.query : tick.sample.question
   const hero = useRef<HTMLElement>(null)
   const skin = useRef<HTMLDivElement>(null)
@@ -273,7 +278,15 @@ export function HubKeywordSearch({
           // big half of the Search/Explorer signal, so the h1 changes when the
           // choice does. Same object either way, so the line neither re-measures
           // nor moves the page under the reader.
-          heading={tick.set.titles[mode]}
+          heading={
+            linedTitle ? (
+              <Suspense fallback={tick.set.titles[mode]}>
+                <LinesText text={tick.set.titles[mode]} pitch={titlePitch} photocopy={printTitle} />
+              </Suspense>
+            ) : (
+              tick.set.titles[mode]
+            )
+          }
           // 3.25rem from `sm`, where the longest of the twenty-four sentences is
           // 889px against 976px of measure and every one of them holds a single
           // line; 2.2rem below it, which is the size at which none of them takes
@@ -286,7 +299,7 @@ export function HubKeywordSearch({
           // so the cap did not move.
           headingClassName={cn(
             'mx-auto max-w-5xl font-serif text-[2.2rem] font-medium leading-[1.12] tracking-tight text-balance text-foreground sm:text-[3.25rem]',
-            printTitle && 'hub-print-title',
+            linedTitle ? 'hub-lined-title' : printTitle && 'hub-print-title',
           )}
         />
 

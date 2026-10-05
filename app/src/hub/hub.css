@@ -17,29 +17,28 @@
  */
 
 [data-tune='hub'] {
-  --hub-measure: 64rem; /* was max-w-5xl */
-  --hub-gutter: 1.5rem; /* was px-6 */
-  --hub-title-lines: 0.2; /* how far the fine lines through the title dim it */
+  --hub-measure: 96rem; /* was max-w-5xl */
+  --hub-gutter: 0rem; /* was px-6 */
 }
 
 /* The title, set as if it had been photocopied, modestly: the letters' edges a little rough and
- * spread (the filter, `PrintFilter.tsx`), and fine horizontal lines through them that dim the ink
- * by `--hub-title-lines` (a mask, so the paper shows through and no colour is painted). Both are
- * static: the title already fades and re-wraps on its own clock. */
+ * spread (the filter, `PrintFilter.tsx`). Padded top and bottom, and the filter's region is larger
+ * than the box, so an ascender or a descender is not cut off. Static: the title already fades and
+ * re-wraps on its own clock. */
 .hub-print-title {
   filter: url(#hub-print-title);
-  -webkit-mask-image: repeating-linear-gradient(
-    to bottom,
-    #000 0,
-    #000 2px,
-    rgb(0 0 0 / calc(1 - var(--hub-title-lines))) 2px,
-    rgb(0 0 0 / calc(1 - var(--hub-title-lines))) 3px
-  );
-  mask-image: repeating-linear-gradient(
-    to bottom,
-    #000 0,
-    #000 2px,
-    rgb(0 0 0 / calc(1 - var(--hub-title-lines))) 2px,
-    rgb(0 0 0 / calc(1 - var(--hub-title-lines))) 3px
-  );
+  padding-block: 0.2em;
+  margin-block: -0.2em;
+}
+
+/* The title drawn as lines (`LinesText.tsx`): the real text is still there, to be selected and read
+ * aloud, and is transparent while the lines stand in for it. The lines sit in the padding too, so
+ * a long stroke is not cut off by the box. */
+.hub-lined-title {
+  position: relative;
+  padding-block: 0.2em;
+  margin-block: -0.2em;
+}
+.hub-lined-title[data-lined='on'] {
+  -webkit-text-fill-color: transparent;
 }

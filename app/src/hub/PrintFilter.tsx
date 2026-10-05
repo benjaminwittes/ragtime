@@ -6,7 +6,7 @@
 export function PrintFilter() {
   return (
     <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: 'absolute' }}>
-      <filter id="hub-print-title" x="-2%" y="-5%" width="104%" height="110%" colorInterpolationFilters="sRGB">
+      <filter id="hub-print-title" x="-5%" y="-30%" width="110%" height="160%" colorInterpolationFilters="sRGB">
         <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5" result="n" />
         <feDisplacementMap in="SourceGraphic" in2="n" scale="0.9" result="w" />
         <feGaussianBlur in="w" stdDeviation="0.3" result="b" />
