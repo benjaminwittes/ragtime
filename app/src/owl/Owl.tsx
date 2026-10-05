@@ -79,6 +79,12 @@ export function Owl({
   useGaze(svg, design.motion.gazeFollow)
   useStanding(svg, design)
 
+  // A style that is one drawing (the line tiles) draws the whole figure, scaffold and all.
+  const Figure = renderStyle.figure
+  if (Figure) {
+    return <Figure design={design} poseId={pose} lantern={shown} className={className} style={style} title={title} />
+  }
+
   return (
     <OwlDrawing
       design={design}

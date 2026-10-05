@@ -13,7 +13,7 @@ import { defineTunables } from '@/tune/registry'
 export const owlEmbedKnobs = defineTunables([
   {
     id: 'owl.variant',
-    value: 'base',
+    value: 'lines',
   },
 
   {

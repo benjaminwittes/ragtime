@@ -62,7 +62,9 @@ describe('the voices', () => {
   it('keep every line short', () => {
     for (const voice of voices) {
       for (const [occasion, lines] of Object.entries(voice.lines)) {
-        for (const line of lines ?? []) expect(line.length, `${voice.id}/${occasion}: ${line}`).toBeLessThanOrEqual(40)
+        // A typed note is set wider than a stamp or a plate caption, and says a sentence.
+        const cap = voice.treatment === 'typed' ? 120 : 40
+        for (const line of lines ?? []) expect(line.length, `${voice.id}/${occasion}: ${line}`).toBeLessThanOrEqual(cap)
       }
     }
   })

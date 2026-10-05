@@ -30,7 +30,8 @@ describe('before any voice code is fetched', () => {
     expect(html).not.toContain('owl-voice-sr')
   })
 
-  it('draws the default owl with neither a box nor speech', () => {
+  it('draws the base owl with neither a box nor speech', () => {
+    applyTuneOverrides({ 'owl.variant': 'base' }, false)
     const html = renderToStaticMarkup(<OwlSpot site="gate" />)
     expect(html).not.toContain('owl-spot')
     expect(html).not.toContain('owl-voice-sr')

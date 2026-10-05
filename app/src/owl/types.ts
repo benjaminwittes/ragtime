@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, CSSProperties, ReactNode } from 'react'
 import type { TuneValue } from '@/tune/types'
 import type { OWL_PARTS } from './parts'
 
@@ -202,6 +202,16 @@ export type OwlStyle = {
    * thin ribbons are tuned the other way.
    */
   headLast?: boolean
+  /**
+   * A style that is one drawing and not a stack of layers (the line tiles: a single path
+   * made from a field of ink) draws the whole figure itself and the scaffold is not used.
+   * It is then the style's to carry the root element and its attributes (`data-owl`,
+   * `data-lantern`, the box's classes), and the eyes are its own; the gaze and the
+   * standing behaviours, which find the owl by the scaffold's parts, find nothing to move.
+   * The layers below are still required, so the lab and anything else that draws with the
+   * scaffold gets a drawing.
+   */
+  figure?: ComponentType<OwlFigureProps>
   /** Extra `<defs>` content — patterns, filters. The glow gradient is the scaffold's. */
   defs?: ComponentType<LayerProps>
   /**
@@ -225,6 +235,17 @@ export type OwlStyle = {
   wing: ComponentType<LayerProps & { side: WingSide }>
   /** Lantern hardware — handle, frame, flame — over the glow. */
   lantern: ComponentType<LayerProps>
+}
+
+/** What a style that draws the whole figure (`OwlStyle.figure`) is handed. */
+export type OwlFigureProps = {
+  design: OwlDesign
+  poseId: OwlPose
+  /** The lantern state to show, after the night hours have been applied. */
+  lantern: OwlLantern
+  className?: string
+  style?: CSSProperties
+  title?: string
 }
 
 /**

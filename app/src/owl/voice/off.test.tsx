@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { applyTuneOverrides } from '@/tune/store'
 import { OwlSpot } from '../OwlSpot'
 import { SITES } from '../embeds'
@@ -18,6 +18,9 @@ const ids = Object.keys(SITES) as OwlSiteId[]
 afterEach(() => applyTuneOverrides({}, false))
 
 describe('with no voice', () => {
+  // The line-tile variant is the default and speaks; the claim is about the owl that does not.
+  beforeEach(() => applyTuneOverrides({ 'owl.variant': 'base' }, false))
+
   it.each(ids)('%s adds no wrapper, no live region and no note', (id) => {
     const html = renderToStaticMarkup(<OwlSpot site={id} occasion="searching" />)
     expect(html).not.toContain('owl-spot')

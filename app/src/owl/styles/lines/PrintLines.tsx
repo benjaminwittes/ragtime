@@ -1,7 +1,7 @@
-import { useEffect, useId, useMemo, useRef } from 'react'
+import { useEffect, useId, useMemo, useRef, type CSSProperties, type Ref } from 'react'
 import { baseDesign } from '../../design'
-import type { LampState } from '../lines/fields'
-import type { LineKnobs, LineSubject } from '../lines/knobs'
+import type { LampState } from '../../lab/lines/fields'
+import type { LineKnobs, LineSubject } from '../../lab/lines/knobs'
 import type { Print } from './print'
 import { drawLines, seeded, STILL_WOBBLE, type Wobble } from './render'
 
@@ -17,7 +17,8 @@ import { drawLines, seeded, STILL_WOBBLE, type Wobble } from './render'
 
 
 const REDUCED = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
-const PAPER = '#fffdf2'
+/** The page's own paper, so a band of light bleaches to what is behind the owl. */
+const PAPER = 'var(--background, #fffdf2)'
 const BAR_STEPS = 10
 const BAR_SECONDS = 1.25
 const CYCLE = 24
@@ -30,6 +31,8 @@ export function PrintLines({
   print,
   moving = true,
   still = 0,
+  ink: inkColour,
+  fluid,
 }: {
   subject: LineSubject
   size: number
@@ -38,13 +41,21 @@ export function PrintLines({
   print: Print
   moving?: boolean
   still?: number
+  /** The ink; the base design's navy without one. */
+  ink?: string
+  /**
+   * In the app the owl is sized by the page's classes, not by a width of its own: the svg
+   * then carries no width or height, takes `className` and `style`, and `size` is only the
+   * size the lines are drawn for.
+   */
+  fluid?: { ref?: Ref<SVGSVGElement>; className?: string; style?: CSSProperties; title?: string; root?: Record<string, string | undefined> }
 }) {
   const uid = useId().replace(/:/g, '')
   const pathRef = useRef<SVGPathElement>(null)
   const pageRef = useRef<SVGGElement>(null)
   const barRef = useRef<SVGRectElement>(null)
   const toner = useRef<SVGGElement>(null)
-  const ink = baseDesign().palette.navy
+  const ink = inkColour ?? baseDesign().palette.navy
   const filtered = print.scan
   const first = useMemo(() => drawLines(subject, size, knobs, still, state), [subject, size, knobs, still, state])
   const specks = useMemo(() => {
@@ -130,7 +141,17 @@ export function PrintLines({
   }, [moving, subject, size, knobs, state, print, still])
 
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden className="block overflow-visible" style={{ color: ink }}>
+    <svg
+      ref={fluid?.ref}
+      {...(fluid ? {} : { width: size, height: size })}
+      {...fluid?.root}
+      viewBox="0 0 100 100"
+      role={fluid?.title ? 'img' : undefined}
+      aria-hidden={fluid?.title ? undefined : true}
+      className={'block overflow-visible' + (fluid?.className ? ' ' + fluid.className : '')}
+      style={{ color: ink, ...fluid?.style }}
+    >
+      {fluid?.title ? <title>{fluid.title}</title> : null}
       <defs>
         {/* Photocopy: spread the ink, clip it hard to one bit, wobble the edge a little. Static, so no pass is repeated for nothing. */}
         <filter id={`scan-${uid}`} x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
@@ -145,9 +166,9 @@ export function PrintLines({
           <circle cx="50" cy="50" r="46" />
         </clipPath>
         <linearGradient id={`fade-${uid}`} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor={PAPER} stopOpacity="0" />
-          <stop offset="0.55" stopColor={PAPER} stopOpacity="0.85" />
-          <stop offset="1" stopColor={PAPER} stopOpacity="0" />
+          <stop offset="0" style={{ stopColor: PAPER }} stopOpacity="0" />
+          <stop offset="0.55" style={{ stopColor: PAPER }} stopOpacity="0.85" />
+          <stop offset="1" style={{ stopColor: PAPER }} stopOpacity="0" />
         </linearGradient>
       </defs>
       <g ref={pageRef} style={{ transformOrigin: '50px 50px' }}>

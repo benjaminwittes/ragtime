@@ -16,7 +16,7 @@ import { FALLBACK_STYLE, getStyle, loadStyle, styleMetas, styleOptions } from '.
 
 describe('before any style is fetched', () => {
   it('lists every style, with its label, without loading its drawing', () => {
-    expect(styleMetas().map((m) => m.id)).toEqual(['engraved', 'flat'])
+    expect(styleMetas().map((m) => m.id)).toEqual(['engraved', 'flat', 'lines'])
     expect(styleOptions()).toContainEqual({ label: 'Engraved', value: 'engraved' })
     expect(getStyle('engraved').id).toBe(FALLBACK_STYLE)
   })

@@ -10,8 +10,8 @@ import '../../voice/voice.css'
 import '../lab.css'
 import { DEFAULT_KNOBS } from '../lines/knobs'
 import type { LampState } from '../lines/fields'
-import { PrintLines } from './PrintLines'
-import { PRINT_OFF, PRINT_ON, type Print } from './print'
+import { PrintLines } from '../../styles/lines/PrintLines'
+import { PRINT_OFF, PRINT_ON, type Print } from '../../styles/lines/print'
 
 /**
  * The owl lab, second pass (2026-10-05). The first lab is left alone at `/owl-lab`.

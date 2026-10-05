@@ -1,7 +1,7 @@
-import { computeLines, presetFor, smoothstep, type Field, type LineParams } from '../lines/engine'
-import { lanternField, type LampState } from '../lines/fields'
-import type { LineKnobs, LineSubject } from '../lines/knobs'
-import { OWLS, owlField } from '../lines/owls'
+import { computeLines, presetFor, smoothstep, type Field, type LineParams } from '../../lab/lines/engine'
+import { lanternField, type LampState } from '../../lab/lines/fields'
+import type { LineKnobs, LineSubject } from '../../lab/lines/knobs'
+import { OWLS, owlField } from '../../lab/lines/owls'
 
 /**
  * The line-tile drawing for v2. The engine and the owl's ink function are the first lab's,
