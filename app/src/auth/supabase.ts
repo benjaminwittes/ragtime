@@ -26,8 +26,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
  * and refresh expired JWTs on the fly. Same posture as the legacy app.
  */
 
-export const APP_PROJECT_URL = 'https://aikdbjprndgksibbvcfs.supabase.co'
-export const APP_PROJECT_PUBLISHABLE_KEY = 'sb_publishable_I8b_IXrRGR-bu3wOMEox5g_X9NllzgB'
+export const APP_PROJECT_URL = 'https://ascraygtmnoaytbnteyw.supabase.co'
+export const APP_PROJECT_PUBLISHABLE_KEY = 'sb_publishable_jTVsDXdo6l1j9CG5ezp11g_rsrJdhVX'
 
 /**
  * The project this build signs in against: the override pair, else the app
