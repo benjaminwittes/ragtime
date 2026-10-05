@@ -8,22 +8,31 @@ import '@/tune/knobs'
  * group was one glob; this pins that order for the groups, and the voice's knobs within one.
  */
 describe('the order the panel lists the owl’s knobs in', () => {
-  const owl = allTunables().filter((knob) => knob.scope === 'owl')
+  const owl = allTunables().filter((knob) => knob.scope === 'owl' && knob.label)
 
-  it('lists the groups in file-name order of the files that declare them', () => {
+  it('lists the groups the panel still shows, in file-name order of the files that declare them', () => {
+    // The old owl's settings (its shapes, strokes, motion and standing behaviours) are not
+    // described, so the panel and the gear's search do not list them; their defaults stand.
     const groups: string[] = []
     for (const knob of owl) if (!groups.includes(knob.group)) groups.push(knob.group)
-    expect(groups.slice(0, 7)).toEqual(['Look', 'Palette', 'Lines', 'Shapes', 'Variant', 'Sites', 'Engraving · screen'])
-    expect(groups.slice(7, 13)).toEqual([
+    expect(groups).toEqual([
+      'Look',
+      'Palette',
+      'Variant',
+      'Sites',
+      'Engraving · screen',
       'Engraving · lines',
       'Engraving · tone',
       'Engraving · form',
       'Engraving · print',
       'Engraving · small sizes',
       'Scan finish',
+      'Lantern',
+      'The owl',
+      'Voice',
+      'Voice: occasions',
+      'Voice: chat',
     ])
-    expect(groups.slice(13, 17)).toEqual(['Motion', 'Gaze', 'Lantern', 'Standing'])
-    expect(groups.slice(-3)).toEqual(['Voice', 'Voice: occasions', 'Voice: chat'])
   })
 
   it('has the voice picker first and the chat switch last among the voice’s knobs', () => {
