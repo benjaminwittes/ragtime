@@ -149,16 +149,33 @@
   top: 50%;
   transform: translate(var(--note-x), -50%);
 }
+/* The sweep: rules at the owl's pitch run out from the left edge to the full width of the note and
+ * fall back to it, leaving the drawn words alone. The words are there from the first frame; the
+ * strips are only a gesture over them, so nothing is typed. */
+.owl-note-strips {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, currentColor 0 1px, transparent 1px 4px);
+  opacity: 0.55;
+  clip-path: inset(0 100% 0 0);
+}
 @media (prefers-reduced-motion: no-preference) {
-  .owl-note[data-treatment='lines'] {
-    animation: owl-note-wipe var(--wipe-ms, 0ms) steps(24, end) both;
+  .owl-note-strips {
+    animation: owl-note-strips var(--strips-ms, 1100ms) cubic-bezier(0.6, 0, 0.3, 1) both;
   }
-  @keyframes owl-note-wipe {
-    from {
-      clip-path: inset(-20% 100% -20% 0);
+  @keyframes owl-note-strips {
+    0% {
+      clip-path: inset(0 100% 0 0);
     }
-    to {
-      clip-path: inset(-20% -10% -20% 0);
+    45% {
+      clip-path: inset(0 0 0 0);
+    }
+    55% {
+      clip-path: inset(0 0 0 0);
+    }
+    100% {
+      clip-path: inset(0 100% 0 0);
     }
   }
 }
