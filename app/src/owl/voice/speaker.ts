@@ -140,6 +140,12 @@ export class Speaker {
     if (this.current?.occasion === occasion) this.dismiss()
   }
 
+  /** Keeps the line that is up from coming down by itself, while the reader types back to it. */
+  hold(): void {
+    clearTimeout(this.standing)
+    this.standing = undefined
+  }
+
   /** Drops a line still waiting for its delay. A line already up is left to its dwell. */
   cancel(): void {
     clearTimeout(this.waiting)

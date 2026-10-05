@@ -38,7 +38,7 @@ import { baseDesign } from './design'
  */
 export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObject<Element | null> }) {
   const region = useRef<HTMLDivElement>(null)
-  const { poke, prod, say, spoken } = voice
+  const { poke, prod, say, hold, dismiss, spoken } = voice
   const standing = spoken !== null
   // The lines treatment is the listening owl: a pointer over it speaks, a click on a spoken line
   // opens a box to type back in, and Enter carries the question to the Explorer. Off the Explorer
@@ -52,7 +52,10 @@ export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObj
     const onClick = () => {
       if (!listening) return prod()
       if (typing) return
-      if (standing) setTyping(true)
+      if (standing) {
+        hold()
+        setTyping(true)
+      }
       else say('poke')
     }
     const onEnter = (event: Event) => {
@@ -64,7 +67,7 @@ export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObj
       owl.removeEventListener('click', onClick)
       owl.removeEventListener('pointerenter', onEnter)
     }
-  }, [target, prod, say, listening, standing, typing])
+  }, [target, prod, say, hold, listening, standing, typing])
 
   // Tell the figure, which is inside the box this one sits in, that it has started to speak,
   // so a behaviour (`standing/nod.ts`) can answer with a gesture. An event on the box and
@@ -89,8 +92,11 @@ export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObj
       <div ref={region} className="owl-voice-sr" aria-live="polite" aria-atomic="true">
         {voice.announced}
       </div>
-      {spoken && !typing && <Note key={spoken.key} spoken={spoken} voice={voice} />}
-      {typing && <TypeBack place={voice.place} onDone={() => setTyping(false)} />}
+      {spoken && <Note key={spoken.key} spoken={spoken} voice={voice} />}
+      {typing && <TypeBack place={voice.place} onDone={() => {
+        setTyping(false)
+        dismiss()
+      }} />}
     </>
   )
 }
@@ -155,6 +161,8 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
     const owl = el?.parentElement
     if (!el || !owl || place === 'inline') return
     const box = el.getBoundingClientRect()
+    // The box the reader types back in sits under the line, so it needs the line's height.
+    owl.style.setProperty('--note-h', box.height + 'px')
     const fit = fitNote({
       place,
       anchor: owl.getBoundingClientRect(),

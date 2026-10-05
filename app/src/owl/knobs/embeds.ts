@@ -31,7 +31,7 @@ export const owlEmbedKnobs = defineTunables([
 
   {
     id: 'owl.embed.explorer.size',
-    value: '56px',
+    value: '126px',
   },
   {
     id: 'owl.embed.explorer.variant',

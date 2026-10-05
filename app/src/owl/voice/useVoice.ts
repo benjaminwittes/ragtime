@@ -33,6 +33,8 @@ export type SiteVoice = {
   /** The reader's own doing: a click or tap on the owl. */
   prod(): void
   dismiss(): void
+  /** Keep the line up until `dismiss`, while the reader types back. */
+  hold(): void
   /** For the lab: say an occasion now, without the delay. */
   say(occasion: OccasionId): void
 }
@@ -110,6 +112,7 @@ export function useOwlVoice(
   // Stable, so the component that binds the click does not rebind it on every render.
   const prod = useCallback(() => speaker.poke(), [speaker])
   const dismiss = useCallback(() => speaker.dismiss(), [speaker])
+  const hold = useCallback(() => speaker.hold(), [speaker])
   const say = useCallback((id: OccasionId) => speaker.say(id), [speaker])
 
   if (!voice) return null
@@ -125,6 +128,7 @@ export function useOwlVoice(
       poke: false,
       prod,
       dismiss,
+      hold,
       say,
     }
   }
@@ -137,6 +141,7 @@ export function useOwlVoice(
     poke: config.poke && site.occasions.includes('poke'),
     prod,
     dismiss,
+    hold,
     say,
   }
 }

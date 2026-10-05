@@ -164,12 +164,11 @@
 }
 
 /* The box the reader types back in (`TypeBack`, `speech.tsx`): the one piece of the owl that takes
- * a click, so it overrides the note's `pointer-events: none` and sits level with the owl's middle. */
+ * a click, so it overrides the note's `pointer-events: none` and sits under the owl's line, which stays up while it is used. */
 .owl-typeback {
   position: absolute;
   z-index: 6;
-  top: 50%;
-  transform: translateY(-50%);
+  top: calc(50% + var(--note-h, 0px) / 2 + 0.6rem);
   width: min(18rem, 60vw);
 }
 .owl-typeback[data-place='beside'] {
