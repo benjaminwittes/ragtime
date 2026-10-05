@@ -17,5 +17,8 @@ export type Print = {
   barEvery: number
 }
 
-export const PRINT_ON: Print = { boil: true, breath: true, flicker: true, bar: true, scan: true, amount: 0.8, fps: 16, barEvery: 23 }
+export const PRINT_ON: Print = { boil: true, breath: true, flicker: true, bar: false, scan: true, amount: 0.8, fps: 16, barEvery: 23 }
 export const PRINT_OFF: Print = { ...PRINT_ON, boil: false, breath: false, flicker: false, bar: false, scan: false }
+
+/** What the app's owl runs: Print, calmer. The owl is on every page and must not draw the eye from the text beside it. */
+export const PRINT_APP: Print = { ...PRINT_ON, amount: 0.45, fps: 12 }

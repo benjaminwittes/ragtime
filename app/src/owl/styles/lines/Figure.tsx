@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_KNOBS } from '../../lab/lines/knobs'
 import type { OwlFigureProps } from '../../types'
 import { PrintLines } from './PrintLines'
-import { PRINT_ON } from './print'
+import { PRINT_APP } from './print'
 
 /**
  * The line-tile owl as the app draws it: one `PrintLines`, sized by the page's classes like
@@ -31,7 +31,7 @@ export function LinesFigure({ design, poseId, lantern, className, style, title }
     ro.observe(svg)
     return () => ro.disconnect()
   }, [])
-  const print = size >= SCAN_FROM ? PRINT_ON : { ...PRINT_ON, scan: false }
+  const print = size >= SCAN_FROM ? PRINT_APP : { ...PRINT_APP, scan: false }
   return (
     <PrintLines
       subject="c"

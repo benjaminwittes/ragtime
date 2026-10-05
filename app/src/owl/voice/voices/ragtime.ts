@@ -15,7 +15,8 @@ export default {
   note: 'First person, plain and a little dry. The owl is the site, and says so.',
   treatment: 'typed',
   lines: {
-    'arrive-hub': ['I am RAGtime. I hold tens of millions of records, and I know where each one is shelved. Ask me anything.', 'I am RAGtime. Look broadly, or go deep. Ask me anything.'],
+    // One line, not varied: it is the sentence the owl was ratified to say.
+    'arrive-hub': ['I am RAGtime. I hold tens of millions of records, and I know where each one is shelved. Ask me anything.'],
     'arrive-gate': ['I am RAGtime. I keep the door. The access code, please.', 'I am RAGtime. This beta is closed. Enter the access code.'],
     'explorer-empty': ['I am RAGtime. Ask in plain words, and I will look through the record.', 'I am RAGtime. What do you want to know?'],
     'stage-quiet': ['Nothing is showing. I will keep the room until someone presents.', 'The room is empty. I am keeping it.'],

@@ -39,7 +39,9 @@ describe('the voices', () => {
   it('have at least two lines for every occasion, so no occasion repeats itself or goes silent', () => {
     for (const voice of voices) {
       for (const occasion of OCCASION_IDS) {
-        expect((voice.lines[occasion] ?? []).length, `${voice.id}/${occasion}`).toBeGreaterThanOrEqual(2)
+        // The hub's first line is a sentence chosen once and said every time (`ragtime`).
+        const floor = voice.id === 'ragtime' && occasion === 'arrive-hub' ? 1 : 2
+        expect((voice.lines[occasion] ?? []).length, `${voice.id}/${occasion}`).toBeGreaterThanOrEqual(floor)
       }
     }
   })
