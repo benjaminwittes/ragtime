@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { navigateTo, toLogical } from '@/lib/routing'
 import './voice/voice.css'
 import { fitNote } from './voice/fit'
 import type { Spoken } from './voice/speaker'
@@ -37,16 +38,33 @@ import { baseDesign } from './design'
  */
 export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObject<Element | null> }) {
   const region = useRef<HTMLDivElement>(null)
-  const { poke, prod, spoken } = voice
+  const { poke, prod, say, spoken } = voice
   const standing = spoken !== null
+  // The lines treatment is the listening owl: a pointer over it speaks, a click on a spoken line
+  // opens a box to type back in, and Enter carries the question to the Explorer. Off the Explorer
+  // only, which reads `?q=` once, when it opens.
+  const listening = voice.treatment === 'lines' && toLogical(window.location.pathname) !== '/explorer'
+  const [typing, setTyping] = useState(false)
 
   useEffect(() => {
     const owl = target?.current ?? region.current?.parentElement
     if (!owl) return
-    const onClick = () => prod()
+    const onClick = () => {
+      if (!listening) return prod()
+      if (typing) return
+      if (standing) setTyping(true)
+      else say('poke')
+    }
+    const onEnter = (event: Event) => {
+      if (listening && (event as PointerEvent).pointerType === 'mouse' && !standing && !typing) say('poke')
+    }
     owl.addEventListener('click', onClick)
-    return () => owl.removeEventListener('click', onClick)
-  }, [target, prod])
+    owl.addEventListener('pointerenter', onEnter)
+    return () => {
+      owl.removeEventListener('click', onClick)
+      owl.removeEventListener('pointerenter', onEnter)
+    }
+  }, [target, prod, say, listening, standing, typing])
 
   // Tell the figure, which is inside the box this one sits in, that it has started to speak,
   // so a behaviour (`standing/nod.ts`) can answer with a gesture. An event on the box and
@@ -61,18 +79,53 @@ export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObj
   // The pointer says the owl can be clicked, only while that does something.
   useEffect(() => {
     const owl = target?.current ?? region.current?.parentElement
-    if (!owl || !(poke || standing)) return
+    if (!owl || !(poke || standing || listening)) return
     owl.setAttribute('data-voice-click', '')
     return () => owl.removeAttribute('data-voice-click')
-  }, [target, poke, standing])
+  }, [target, poke, standing, listening])
 
   return (
     <>
       <div ref={region} className="owl-voice-sr" aria-live="polite" aria-atomic="true">
         {voice.announced}
       </div>
-      {spoken && <Note key={spoken.key} spoken={spoken} voice={voice} />}
+      {spoken && !typing && <Note key={spoken.key} spoken={spoken} voice={voice} />}
+      {typing && <TypeBack place={voice.place} onDone={() => setTyping(false)} />}
     </>
+  )
+}
+
+/** The box the reader types back in: beside the owl, level with its middle, in its ink. */
+function TypeBack({ place, onDone }: { place: SiteVoice['place']; onDone: () => void }) {
+  const [value, setValue] = useState('')
+  return (
+    <form
+      className="owl-typeback"
+      data-place={place === 'beside-start' ? 'beside-start' : 'beside'}
+      style={{ color: baseDesign().palette.navy }}
+      onSubmit={(event) => {
+        event.preventDefault()
+        const question = value.trim()
+        if (!question) return onDone()
+        onDone()
+        navigateTo('/explorer?q=' + encodeURIComponent(question))
+      }}
+    >
+      <input
+        autoFocus
+        value={value}
+        maxLength={400}
+        placeholder="Ask me anything"
+        aria-label="Ask the owl a question"
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') onDone()
+        }}
+        onBlur={() => {
+          if (!value.trim()) onDone()
+        }}
+      />
+    </form>
   )
 }
 

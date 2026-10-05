@@ -163,6 +163,38 @@
   }
 }
 
+/* The box the reader types back in (`TypeBack`, `speech.tsx`): the one piece of the owl that takes
+ * a click, so it overrides the note's `pointer-events: none` and sits level with the owl's middle. */
+.owl-typeback {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(18rem, 60vw);
+}
+.owl-typeback[data-place='beside'] {
+  left: 100%;
+  margin-left: 0.5rem;
+}
+.owl-typeback[data-place='beside-start'] {
+  right: 100%;
+  margin-right: 0.5rem;
+}
+.owl-typeback input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.3rem 0.1rem;
+  border: 0;
+  border-bottom: 2px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: 800 1.2rem/1.2 var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  outline: none;
+}
+.owl-typeback input::placeholder {
+  color: color-mix(in srgb, currentColor 45%, transparent);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .owl-note {
     animation: owl-note-in 160ms ease-out;
