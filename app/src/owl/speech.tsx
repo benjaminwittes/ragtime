@@ -183,13 +183,10 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
       data-place={place}
       data-treatment={voice.treatment}
       aria-hidden="true"
-      style={lined ? ({ color: baseDesign().palette.navy, '--strips-ms': stillness() ? '0ms' : '1100ms' } as React.CSSProperties) : undefined}
+      style={lined ? ({ color: baseDesign().palette.navy, '--wipe-in': '450ms' } as React.CSSProperties) : undefined}
     >
       {lined ? (
-        <>
-          <LinesText text={text} pitch={3.6} photocopy={false} />
-          <span className="owl-note-strips" />
-        </>
+        <LinesText text={text} pitch={3.6} photocopy={false} covers={3} />
       ) : (
         <>
           <span>{text.slice(0, shown)}</span>
