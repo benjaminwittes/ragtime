@@ -24,10 +24,8 @@ describeTunables([
   {
     ...GLOBAL,
     id: 'owl.variant',
-    parent: 'owl.show',
-    label: 'Owl look',
+    label: 'Active variant',
     kind: 'select',
-    user: true,
     options: variantOptions(),
     note: 'Applies to every owl that has no variant of its own. Knobs you move below still win over it.',
   },

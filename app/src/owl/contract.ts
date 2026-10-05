@@ -5,16 +5,20 @@ import { owlGaze } from './gaze'
  *
  * `stage/mirror.ts` and `stage/presenter.ts` turn every owl on a mirrored page toward the
  * presenter's pointer, and `e2e/stage.mjs` reads the lantern state. They know the owl only
- * by what is below, so every render style must emit all of it — which is why the
- * scaffold (`scaffold.tsx`) writes these and a style cannot:
+ * by what is below, so every render style must emit the first:
  *
  *   - `svg[data-owl="<pose>"]`            the root; `data-lantern` is `dark`, `lit` or `searching`
+ *
+ * and may honour the rest, which a drawing with eyes would:
+ *
  *   - `.owl-eyes`                         the group that blinks; its first `circle` is a lens, and
  *                                         its `r` and `cy` are what the gaze arithmetic reads
  *   - `.owl-pupils`                       the group the gaze moves
- *   - `.owl-glow`                         the lantern's light, transparent while dark
  *   - `--owl-gaze-x`, `--owl-gaze-y`      what moves `.owl-pupils`, in figure units, on the root
  *   - `--owl-gaze-travel`                 how far a pupil may go, as a share of the lens radius
+ *
+ * The line-tile owl has no separate eyes to turn, so a presenter's pointer finds nothing to
+ * move on it: `lookOwlAt` leaves it as it is.
  */
 
 export const OWL_ATTR = 'data-owl'

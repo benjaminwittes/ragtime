@@ -3,8 +3,8 @@ import { useEffect, useReducer } from 'react'
 /**
  * A module the owl fetches the first time a design asks for it, and keeps.
  *
- * The owl as sent is itself one of these: the line-tile style, the standing behaviours and the
- * voice are each a chunk of their own, and the main chunk holds only an empty box to draw in
+ * The owl as sent is itself one of these: the line-tile style and the voice are each a chunk of
+ * their own, and the main chunk holds only an empty box to draw in
  * until they arrive. A design that names one draws what it can
  * without it until it arrives, and the caller re-renders when it does. Nothing here throws a
  * promise at React, so no boundary can blank a region while a chunk is on its way.

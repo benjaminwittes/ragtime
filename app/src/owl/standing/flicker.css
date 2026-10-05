@@ -1,8 +1,0 @@
-/* The flame is scaled from its base, so a flicker is a flame that grows and shrinks and not
- * one that slides. `fill-box` is the flame's own box, in either style. */
-@media (prefers-reduced-motion: no-preference) {
-  .owl[data-standing~='flicker'] .owl-flame {
-    transform-box: fill-box;
-    transform-origin: 50% 100%;
-  }
-}

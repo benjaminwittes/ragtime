@@ -1,22 +1,18 @@
-import { useRef, useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { isNight } from './resolve'
-import { OwlDrawing } from './scaffold'
-import { useStanding } from './standing'
 import { useStyle } from './styles'
 import type { OwlLantern, OwlPin, OwlPose } from './types'
 import { useTunable } from '@/tune/useTunable'
-import { useGaze } from './useGaze'
 import { useOwlDesign } from './useOwlDesign'
 
 /**
  * The RAGtime owl: an archivist in spectacles, carrying a lantern.
  *
- * The owl the site ships is drawn in line tiles (`styles/lines/`): tiles of parallel lines that
- * thicken and thin like ink, in 100×100 units. It blinks, breathes and carries a lantern that
- * can be lit, and it moves nothing outside its own box, so an owl costs the page around it
- * nothing. It stops moving for a reader who has asked for reduced motion. The engraving
- * (`styles/engraved/`) is the other drawing it can wear, from the layered scaffold
- * (`scaffold.tsx`), whose eyes also follow a pointer.
+ * The owl is drawn in line tiles (`styles/lines/`): tiles of parallel lines that thicken and
+ * thin like ink, in 100×100 units. It blinks, breathes and carries a lantern that can be lit,
+ * and it moves nothing outside its own box, so an owl costs the page around it nothing. It
+ * stops moving for a reader who has asked for reduced motion. The engraving is a setting of
+ * that drawing, not another one.
  *
  * It is not the mark. `Mark.tsx` is the fluting — the site bar, the favicon, the cursor
  * that paints an Explorer answer in — and stays what it was. The owl is a character and
@@ -24,9 +20,8 @@ import { useOwlDesign } from './useOwlDesign'
  *
  * This component is the orchestrator and holds no drawing of its own. It resolves a
  * design (the base, a variant over it, whatever is tuned over that — `resolve.ts`), hands
- * it to the render style the design names (`styles/`) inside the scaffold that writes the
- * DOM contract (`scaffold.tsx`), and wires the behaviours: the night lantern here, the
- * gaze (`useGaze.ts`), the standing behaviours (`standing/`). Pages do not place it
+ * it to the render style the design names (`styles/`), and applies the night lantern. Pages
+ * do not place it
  * directly; they mount it through `OwlSpot`, which reads how that page embeds it from
  * one table (`embeds.ts`).
  */
@@ -55,16 +50,11 @@ export function Owl({
   title?: string
   /** A variant id. Without one the owl wears the active variant (the Tune panel's, or the base). */
   variant?: string
-  /**
-   * A design laid over everything, the panel's values included, with standing knobs of its
-   * own, for a specimen that has to stay what it is while the panel moves the other owls:
-   * the lab's. Keep it stable (a constant or a memo); a new object is a new design.
-   */
+  /** A design laid over everything, the panel's values included. Keep it stable (a constant or a memo). */
   pin?: OwlPin
 }) {
   const design = useOwlDesign(variant, pin)
   const show = useTunable<boolean>('owl.show')
-  const svg = useRef<SVGSVGElement>(null)
   // Read once, when the owl arrives, rather than kept by a clock: a lantern that came on
   // at the stroke of eight under someone mid-sentence would be the page changing under
   // them, and a visit that spans the hour is rare enough to leave as it started. The hour
@@ -72,32 +62,13 @@ export function Owl({
   const [hour] = useState(() => new Date().getHours())
   const shown: OwlLantern = lantern === 'dark' && keepsHours && isNight(hour, design.night) ? 'lit' : lantern
 
-  // The style the design names, once its drawing has arrived; flat until then, in the same
-  // box, so a style that is fetched late is a swap inside the figure and no more.
+  // The style the design names, once its drawing has arrived; an empty box in the same size
+  // until then, so a style that is fetched late is a swap inside the figure and no more.
   const renderStyle = useStyle(design.style)
-
-  useGaze(svg, design.motion.gazeFollow)
-  useStanding(svg, design)
 
   // The reader's switch (the gear in the site bar): no owl, and the box it sat in is left as it was.
   if (!show) return null
 
-  // A style that is one drawing (the line tiles) draws the whole figure, scaffold and all.
   const Figure = renderStyle.figure
-  if (Figure) {
-    return <Figure design={design} poseId={pose} lantern={shown} className={className} style={style} title={title} />
-  }
-
-  return (
-    <OwlDrawing
-      design={design}
-      poseId={pose}
-      lantern={shown}
-      renderStyle={renderStyle}
-      svgRef={svg}
-      className={className}
-      style={style}
-      title={title}
-    />
-  )
+  return <Figure design={design} poseId={pose} lantern={shown} className={className} style={style} title={title} />
 }

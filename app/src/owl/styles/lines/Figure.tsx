@@ -3,6 +3,7 @@ import { DEFAULT_KNOBS } from './knobs'
 import type { OwlFigureProps } from '../../types'
 import { PrintLines } from './PrintLines'
 import { useTunable } from '@/tune/useTunable'
+import { ENGRAVE_DEFAULT } from './engrave'
 import { PRINT_APP, PRINT_ON } from './print'
 
 /**
@@ -35,6 +36,7 @@ export function LinesFigure({ design, poseId, lantern, className, style, title }
   const motion = useTunable<string>('owl.lines.motion')
   const scan = useTunable<boolean>('owl.lines.scan')
   const bar = useTunable<boolean>('owl.lines.bar')
+  const engraved = useTunable<string>('owl.lines.engraved')
   const print = { ...(motion === 'lively' ? PRINT_ON : PRINT_APP), scan: scan && size >= SCAN_FROM, bar }
   return (
     <PrintLines
@@ -44,6 +46,7 @@ export function LinesFigure({ design, poseId, lantern, className, style, title }
       knobs={DEFAULT_KNOBS}
       print={print}
       moving={motion !== 'still'}
+      engrave={engraved === 'engraved' && size >= SCAN_FROM ? ENGRAVE_DEFAULT : null}
       ink={design.palette.navy}
       fluid={{ ref: svgRef, className: className ? 'owl ' + className : 'owl', style, title, root: { 'data-owl': poseId, 'data-lantern': lantern } }}
     />

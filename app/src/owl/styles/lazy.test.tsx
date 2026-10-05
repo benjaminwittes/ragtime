@@ -16,24 +16,18 @@ import { FALLBACK_STYLE, getStyle, loadStyle, styleMetas, styleOptions } from '.
 
 describe('before any style is fetched', () => {
   it('lists every style, with its label, without loading its drawing', () => {
-    expect(styleMetas().map((m) => m.id)).toEqual(['blank', 'engraved', 'lines'])
-    expect(styleOptions()).toContainEqual({ label: 'Engraved', value: 'engraved' })
-    expect(getStyle('engraved').id).toBe(FALLBACK_STYLE)
+    expect(styleMetas().map((m) => m.id)).toEqual(['blank', 'lines'])
+    expect(styleOptions()).toContainEqual({ label: 'Line tiles', value: 'lines' })
+    expect(styleOptions().map((o) => o.value)).not.toContain('blank')
+    expect(getStyle('lines').id).toBe(FALLBACK_STYLE)
   })
 
   it('draws the default owl as an empty box on the first render, and fetches nothing for it', () => {
     const html = renderToStaticMarkup(<Owl />)
     expect(html).toContain('data-owl=')
-    expect(html).not.toContain('data-part=')
-    expect(html).not.toContain('eng-')
+    expect(html).not.toContain('<path')
     expect(getStyle('blank').id).toBe('blank')
     expect(getStyle('lines').id).toBe(FALLBACK_STYLE)
-  })
-
-  it('draws the empty box for a design that names a style that has not arrived', () => {
-    const html = renderToStaticMarkup(<Owl variant="engraved-line" />)
-    expect(html).toContain('data-owl=')
-    expect(html).not.toContain('eng-frame')
   })
 
   it('falls back to blank for a style that is not registered', () => {
@@ -43,14 +37,12 @@ describe('before any style is fetched', () => {
 
 describe('once a style has arrived', () => {
   it('resolves to the style, and the owl draws it', async () => {
-    const style = await loadStyle('engraved')
-    expect(style.id).toBe('engraved')
-    expect(getStyle('engraved')).toBe(style)
-    expect(renderToStaticMarkup(<Owl variant="engraved-line" />)).toContain('eng-frame')
-  })
-
-  it('leaves the default owl as it was', () => {
-    expect(renderToStaticMarkup(<Owl />)).not.toContain('eng-')
+    const style = await loadStyle('lines')
+    expect(style.id).toBe('lines')
+    expect(getStyle('lines')).toBe(style)
+    const html = renderToStaticMarkup(<Owl />)
+    expect(html).toContain('<path')
+    expect(html).toContain('data-lantern=')
   })
 
   it('resolves to blank for an id that is not registered, rather than failing', async () => {

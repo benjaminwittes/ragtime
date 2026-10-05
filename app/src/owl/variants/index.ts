@@ -5,8 +5,7 @@ import type { OwlVariant } from '../types'
  *
  * A variant is a file here — `variants/<name>.ts` — whose default export is an
  * `OwlVariant`: an id, a label, and a patch over the base design that may change look
- * and behaviour together (the render style, palette, timings, which standing behaviours
- * are on, later the voice). The glob finds it; nothing else needs editing, and the
+ * and behaviour together (the render style, the ink, the voice). The glob finds it; nothing else needs editing, and the
  * "Active variant" knob lists it by itself.
  *
  * `base` is the empty patch — the drawing as sent — and comes first; the rest follow in

@@ -1,15 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { mergeDesign } from '../resolve'
-import { OwlDrawing } from '../scaffold'
-import { getStyle } from '../styles'
-// The lab shows every drawing, so it has them all before the first plate is laid.
-import '../styles/all'
-import { designFor, useTuneVersion } from '../useOwlDesign'
-import { variantList } from '../variants'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import '../voice/voice.css'
-import './lab.css'
 import { DEFAULT_KNOBS } from '../styles/lines/knobs'
 import type { LampState } from '../styles/lines/fields'
+import { ENGRAVE_DEFAULT, type Engrave } from '../styles/lines/engrave'
 import { PrintLines } from '../styles/lines/PrintLines'
 import { PRINT_OFF, PRINT_ON, type Print } from '../styles/lines/print'
 
@@ -20,9 +13,9 @@ import { PRINT_OFF, PRINT_ON, type Print } from '../styles/lines/print'
  *  - `lines-owl` is the main owl; `lines-lantern` is the secondary figure, its use still open.
  *  - The owl speaks in the Typed note treatment, and what it says starts from the front
  *    page's "I am RAGtime". Its tone is not chosen, so five are set side by side.
- *  - The temperament is Print: the page re-seats on the glass, the hatching breathes, the ink
+ *  - The motion is Print: the page re-seats on the glass, the hatching breathes, the ink
  *    and the flame flicker, a light bar passes. Stepped.
- *  - The engraving is not dropped. A section lays it against the lines owl to find a blend.
+ *  - The engraving is a mode of the lines owl, an effect laid on it, and not a second drawing.
  */
 
 const PAPER = 'rounded-md border p-6 text-foreground'
@@ -231,120 +224,48 @@ function Lantern({ print }: { print: Print }) {
   )
 }
 
-/* ---- 3. The engraving, kept ---------------------------------------------- */
+/* ---- 3. The engraved mode ------------------------------------------------ */
 
-type Mode = 'crossfade' | 'wipe' | 'overprint' | 'side'
-
-function Plate({ variant, size }: { variant: string; size: number }) {
-  const version = useTuneVersion()
-  const ref = useRef<SVGSVGElement>(null)
-  const design = useMemo(
-    () => mergeDesign(designFor(variant), undefined),
-    // The tuned values are read through the store; the version is what says they moved.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [variant, version],
-  )
-  return (
-    <div style={{ width: size }}>
-      <OwlDrawing design={design} poseId="stacks" lantern="lit" renderStyle={getStyle(design.style)} svgRef={ref} className="w-full lab-still" />
-    </div>
-  )
-}
-
-function Blend({ print }: { print: Print }) {
-  const engraved = useMemo(() => variantList().filter((v) => v.design.style === 'engraved'), [])
-  const [variant, setVariant] = useState(engraved[0]?.id ?? 'engraved-line')
-  const [mode, setMode] = useState<Mode>('crossfade')
-  const [mix, setMix] = useState(0.5)
-  const [scale, setScale] = useState(1)
-  const [dx, setDx] = useState(0)
-  const [dy, setDy] = useState(0)
-  const S = 280
-  const lines = <PrintLines subject="c" size={S} state="lit" knobs={DEFAULT_KNOBS} print={print} />
-  const plate = (
-    <div style={{ transform: `translate(${dx}px, ${dy}px) scale(${scale})`, transformOrigin: 'center' }}>
-      <Plate variant={variant} size={S} />
-    </div>
-  )
-  const stack = (top: ReactNode, bottom: ReactNode, topStyle: React.CSSProperties, wrap?: React.CSSProperties) => (
-    <div className="relative" style={{ width: S, height: S, ...wrap }}>
-      <div className="absolute inset-0">{bottom}</div>
-      <div className="absolute inset-0" style={topStyle}>
-        {top}
-      </div>
-    </div>
-  )
-  const modes: Record<Mode, { label: string; note: string; view: ReactNode }> = {
-    crossfade: {
-      label: 'Crossfade',
-      note: 'One owl dissolving into the other. Good for a state change: lines when it works, engraving when it rests.',
-      view: stack(plate, lines, { opacity: mix }),
-    },
-    wipe: {
-      label: 'Wipe',
-      note: 'Engraving on the left of the line, lines on the right. Shows where the two disagree about the shape.',
-      view: stack(plate, lines, { clipPath: `inset(0 ${100 - mix * 100}% 0 0)` }),
-    },
-    overprint: {
-      label: 'Overprint',
-      note: 'The engraved plate printed over the line tiles, as a second pass. The slider is the plate’s strength.',
-      view: stack(plate, lines, { mixBlendMode: 'multiply', opacity: mix }),
-    },
-    side: {
-      label: 'Side by side',
-      note: 'No blend. Same size, same paper.',
-      view: (
-        <div className="flex gap-6">
-          {lines}
-          <Plate variant={variant} size={S} />
-        </div>
-      ),
-    },
-  }
+function Engraved({ print }: { print: Print }) {
+  const [hatch, setHatch] = useState(ENGRAVE_DEFAULT.hatch)
+  const [angle, setAngle] = useState(ENGRAVE_DEFAULT.angle)
+  const [pitch, setPitch] = useState(ENGRAVE_DEFAULT.pitch)
+  const [keyline, setKeyline] = useState(ENGRAVE_DEFAULT.keyline)
+  const [size, setSize] = useState(280)
+  const engrave = useMemo<Engrave>(() => ({ hatch, angle, pitch, keyline }), [hatch, angle, pitch, keyline])
   return (
     <>
-      <H id="engraving">Engraving, kept: blending with lines-owl</H>
+      <H id="engraving">Engraved mode: the engraving laid on lines-owl</H>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-        The engraved owl is not retired. These four blends lay a real engraved variant against the lines owl so the two can be judged together. The
-        engraved owl is drawn on a different frame, so use scale and offset to line them up by eye.
+        Not a second owl: an effect on this one. An engraver works the dark of a plate twice, so the lines that already make the tone get a second
+        screen cut across them at an angle where the ink is deepest, and a fine keyline holds the edge. Both come from the same ink function, so they
+        follow the blink and the tilt, and Print moves them with the rest. In the app it is the setting called Engraved.
       </p>
       <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <div className={PAPER + ' flex flex-col items-center gap-3'} style={PAPER_BG}>
-          <div className="overflow-x-auto py-2">{modes[mode].view}</div>
-          <p className="max-w-md text-center text-xs text-muted-foreground">{modes[mode].note}</p>
+        <div className={PAPER + ' flex flex-wrap items-end justify-center gap-10'} style={PAPER_BG}>
+          <figure className="m-0">
+            <PrintLines subject="c" size={size} state="lit" knobs={DEFAULT_KNOBS} print={print} />
+            <Cap>Plain</Cap>
+          </figure>
+          <figure className="m-0">
+            <PrintLines subject="c" size={size} state="lit" knobs={DEFAULT_KNOBS} print={print} engrave={engrave} />
+            <Cap>Engraved</Cap>
+          </figure>
         </div>
         <div className="flex flex-col gap-3 text-sm">
-          <fieldset className="grid gap-1">
-            <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Blend</legend>
-            {(Object.keys(modes) as Mode[]).map((m) => (
-              <label key={m} className="flex items-center gap-2">
-                <input type="radio" name="blend" checked={mode === m} onChange={() => setMode(m)} />
-                {modes[m].label}
-              </label>
-            ))}
-          </fieldset>
-          <label className="grid gap-1 text-xs">
-            <span className="text-muted-foreground">Engraved variant</span>
-            <select className="rounded border bg-background px-2 py-1 text-sm" value={variant} onChange={(e) => setVariant(e.target.value)}>
-              {engraved.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Slider label="mix" value={mix} min={0} max={1} step={0.02} onChange={setMix} />
-          <Slider label="engraved scale" value={scale} min={0.7} max={1.4} step={0.01} onChange={setScale} />
-          <Slider label="engraved x, px" value={dx} min={-40} max={40} step={1} onChange={setDx} />
-          <Slider label="engraved y, px" value={dy} min={-40} max={40} step={1} onChange={setDy} />
+          <Slider label="cross-hatch reach" value={hatch} min={0} max={1} step={0.05} onChange={setHatch} />
+          <Slider label="hatch angle" value={angle} min={10} max={170} step={1} onChange={setAngle} />
+          <Slider label="hatch spacing" value={pitch} min={0.8} max={3} step={0.05} onChange={setPitch} />
+          <Slider label="keyline width" value={keyline} min={0} max={1.2} step={0.05} onChange={setKeyline} />
+          <Slider label="size" value={size} min={112} max={360} step={8} onChange={setSize} />
           <button
             type="button"
             className="w-fit text-xs underline"
             onClick={() => {
-              setScale(1)
-              setDx(0)
-              setDy(0)
-              setMix(0.5)
+              setHatch(ENGRAVE_DEFAULT.hatch)
+              setAngle(ENGRAVE_DEFAULT.angle)
+              setPitch(ENGRAVE_DEFAULT.pitch)
+              setKeyline(ENGRAVE_DEFAULT.keyline)
             }}
           >
             Reset
@@ -367,11 +288,11 @@ export default function OwlLab() {
       <nav className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Sections">
         <a className="text-primary hover:underline" href="#main">The main owl</a>
         <a className="text-primary hover:underline" href="#lantern">The lantern</a>
-        <a className="text-primary hover:underline" href="#engraving">Engraving, kept</a>
+        <a className="text-primary hover:underline" href="#engraving">Engraved mode</a>
       </nav>
       <Hero print={print} setPrint={setPrint} />
       <Lantern print={print} />
-      <Blend print={print} />
+      <Engraved print={print} />
     </main>
   )
 }

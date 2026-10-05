@@ -34,6 +34,18 @@ describeTunables([
   },
   {
     ...OWL,
+    id: 'owl.lines.engraved',
+    parent: 'owl.show',
+    label: 'Engraved',
+    kind: 'select',
+    options: [
+      { label: 'Plain', value: 'plain' },
+      { label: 'Engraved', value: 'engraved' },
+    ],
+    note: 'The engraver’s finish on the owl: a second set of lines cut across its darkest parts, and a fine line round its edge. Only on the larger sizes.',
+  },
+  {
+    ...OWL,
     id: 'owl.lines.scan',
     parent: 'owl.show',
     label: 'Photocopy finish',

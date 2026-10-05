@@ -22,6 +22,11 @@ export const owlUserKnobs = defineTunables([
     value: 'calm',
   },
   {
+    // plain or engraved: the engraving laid on the line-tile owl (a second screen, a keyline).
+    id: 'owl.lines.engraved',
+    value: 'plain',
+  },
+  {
     id: 'owl.lines.scan',
     value: true,
   },

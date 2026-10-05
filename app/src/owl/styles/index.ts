@@ -28,7 +28,7 @@ const metas = import.meta.glob<OwlStyleMeta>('./*/meta.ts', { eager: true, impor
 // A glob takes literals only, so the fallback's directory is named here as well as above.
 const drawings = import.meta.glob<{ style: OwlStyle }>(['./*/index.{ts,tsx}', '!./blank/*'])
 
-/** `./engraved/meta.ts` and `./engraved/index.tsx` are both `engraved`. */
+/** `./lines/meta.ts` and `./lines/index.tsx` are both `lines`. */
 const directory = (path: string) => path.split('/')[1]!
 
 const loaders = new Map(Object.entries(drawings).map(([path, load]) => [directory(path), load]))

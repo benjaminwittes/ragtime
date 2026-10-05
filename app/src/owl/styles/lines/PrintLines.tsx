@@ -3,7 +3,8 @@ import { baseDesign } from '../../design'
 import type { LampState } from './fields'
 import type { LineKnobs, LineSubject } from './knobs'
 import type { Print } from './print'
-import { drawLines, seeded, STILL_WOBBLE, type Wobble } from './render'
+import type { Engrave } from './engrave'
+import { drawFrame, seeded, STILL_WOBBLE, type Wobble } from './render'
 
 /**
  * A line-tile drawing set the way the Print temperament sets the owl: the page re-seats on
@@ -33,6 +34,7 @@ export function PrintLines({
   still = 0,
   ink: inkColour,
   fluid,
+  engrave = null,
 }: {
   subject: LineSubject
   size: number
@@ -41,6 +43,8 @@ export function PrintLines({
   print: Print
   moving?: boolean
   still?: number
+  /** The engraving laid on the owl: a second screen cut across its darks, and a keyline. Keep it stable (a constant or a memo). */
+  engrave?: Engrave | null
   /** The ink; the base design's navy without one. */
   ink?: string
   /**
@@ -52,12 +56,14 @@ export function PrintLines({
 }) {
   const uid = useId().replace(/:/g, '')
   const pathRef = useRef<SVGPathElement>(null)
+  const hatchRef = useRef<SVGPathElement>(null)
+  const keyRef = useRef<SVGPathElement>(null)
   const pageRef = useRef<SVGGElement>(null)
   const barRef = useRef<SVGRectElement>(null)
   const toner = useRef<SVGGElement>(null)
   const ink = inkColour ?? baseDesign().palette.navy
   const filtered = print.scan
-  const first = useMemo(() => drawLines(subject, size, knobs, still, state), [subject, size, knobs, still, state])
+  const first = useMemo(() => drawFrame(subject, size, knobs, still, state, STILL_WOBBLE, engrave), [subject, size, knobs, still, state, engrave])
   const specks = useMemo(() => {
     const r = seeded(subject === 'c' ? 11 : 23)
     return Array.from({ length: 16 }, () => ({ x: 6 + r() * 88, y: 6 + r() * 88, r: 0.25 + r() * 0.55 }))
@@ -66,6 +72,8 @@ export function PrintLines({
   useEffect(() => {
     const path = pathRef.current
     const page = pageRef.current
+    const hatch = hatchRef.current
+    const key = keyRef.current
     if (!moving || !path || REDUCED()) return
     const rng = seeded(subject === 'c' ? 4 : 9)
     const cycle = Array.from({ length: CYCLE }, () => [rng(), rng(), rng(), rng()] as const)
@@ -98,7 +106,10 @@ export function PrintLines({
               gutter: print.flicker ? flick[Math.floor(e * 9) % 16] * Math.min(1, a) : 0,
             }
           : STILL_WOBBLE
-        path.setAttribute('d', drawLines(subject, size, knobs, t, state, wobble))
+        const f = drawFrame(subject, size, knobs, t, state, wobble, engrave)
+        path.setAttribute('d', f.d)
+        hatchRef.current?.setAttribute('d', f.hatch)
+        keyRef.current?.setAttribute('d', f.key)
         if (print.flicker) path.setAttribute('opacity', String(1 - 0.07 * a * flick[(Math.floor(e * 9) + 5) % 16]))
         else path.removeAttribute('opacity')
       }
@@ -134,11 +145,14 @@ export function PrintLines({
     return () => {
       cancelAnimationFrame(raf)
       io.disconnect()
-      path.setAttribute('d', drawLines(subject, size, knobs, still, state))
+      const rest = drawFrame(subject, size, knobs, still, state, STILL_WOBBLE, engrave)
+      path.setAttribute('d', rest.d)
+      hatch?.setAttribute('d', rest.hatch)
+      key?.setAttribute('d', rest.key)
       path.removeAttribute('opacity')
       if (page) page.style.transform = ''
     }
-  }, [moving, subject, size, knobs, state, print, still])
+  }, [moving, subject, size, knobs, state, print, still, engrave])
 
   return (
     <svg
@@ -173,7 +187,13 @@ export function PrintLines({
       </defs>
       <g ref={pageRef} style={{ transformOrigin: '50px 50px' }}>
         <g filter={filtered ? `url(#scan-${uid})` : undefined}>
-          <path ref={pathRef} d={first} fill="currentColor" />
+          <path ref={pathRef} d={first.d} fill="currentColor" />
+          {engrave ? (
+            <>
+              <path ref={hatchRef} d={first.hatch} transform={first.hatchTransform} fill="currentColor" />
+              <path ref={keyRef} d={first.key} fill="none" stroke="currentColor" strokeWidth={engrave.keyline} strokeLinecap="round" />
+            </>
+          ) : null}
         </g>
         {filtered ? (
           <g ref={toner} fill="currentColor" opacity="0.5">
