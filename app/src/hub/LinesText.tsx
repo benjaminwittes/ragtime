@@ -12,14 +12,14 @@ import { linesFromGrid, rasterizeText, UNIT_PX } from './textLines'
  * phone's smaller title has finer lines and not fewer of them.
  */
 
-type Drawn = { d: string; w: number; h: number; covers: string[] }
+type Drawn = { d: string; w: number; h: number; cover: string | null }
 
 /**
- * `covers` is the number of heavier layers drawn over the words, from the heaviest (every line
- * at full thickness, so the words are hidden) to just short of the words' own. A caller sweeps
- * them away in turn to thin the cover to the words (`owl/voice/voice.css`); none is drawn for 0.
+ * `cover` is the weight (0 to 1) of a band of lines laid over the whole box, which a caller can
+ * sweep across and off (`owl/voice/voice.css`): it is the same lines as the words, at an even
+ * weight and blind to them, so the words are drawn only as it goes (and are what is left). None for 0.
  */
-export default function LinesText({ text, pitch, photocopy, covers = 0 }: { text: string; pitch: number; photocopy: boolean; covers?: number }) {
+export default function LinesText({ text, pitch, photocopy, cover = 0 }: { text: string; pitch: number; photocopy: boolean; cover?: number }) {
   const svg = useRef<SVGSVGElement>(null)
   const [drawn, setDrawn] = useState<Drawn | null>(null)
 
@@ -33,12 +33,8 @@ export default function LinesText({ text, pitch, photocopy, covers = 0 }: { text
       const size = parseFloat(getComputedStyle(host).fontSize) || 52
       // Two pixels at the desktop title; no finer than a pixel and a half, below which lines blur to grey.
       const spacing = Math.max(1.5, (pitch * size) / 52)
-      const heavier = Array.from({ length: covers }, (_, j) => {
-        const lift = 1 - j / covers
-        const data = Float32Array.from(grid.data, (v) => v + (1 - v) * lift)
-        return linesFromGrid({ ...grid, data }, spacing)
-      })
-      setDrawn({ d: linesFromGrid(grid, spacing), w: grid.w, h: grid.h, covers: heavier })
+      const band = cover > 0 ? linesFromGrid({ ...grid, data: new Float32Array(grid.data.length).fill(cover) }, spacing) : null
+      setDrawn({ d: linesFromGrid(grid, spacing), w: grid.w, h: grid.h, cover: band })
     }
     const later = () => {
       cancelAnimationFrame(raf)
@@ -53,7 +49,7 @@ export default function LinesText({ text, pitch, photocopy, covers = 0 }: { text
       cancelAnimationFrame(raf)
       ro.disconnect()
     }
-  }, [text, pitch, covers])
+  }, [text, pitch, cover])
 
   // The real text steps aside only while the lines are there to stand in for it.
   useLayoutEffect(() => {
@@ -76,10 +72,8 @@ export default function LinesText({ text, pitch, photocopy, covers = 0 }: { text
         viewBox={drawn ? `0 0 ${drawn.w / UNIT_PX} ${drawn.h / UNIT_PX}` : undefined}
         style={{ overflow: 'visible' }}
       >
-        {drawn ? <path d={drawn.d} fill="currentColor" filter={photocopy ? 'url(#hub-print-title)' : undefined} /> : null}
-        {drawn?.covers.map((d, j) => (
-          <path key={j} d={d} fill="currentColor" className="lines-cover" style={{ '--layer': j } as React.CSSProperties} />
-        ))}
+        {drawn ? <path d={drawn.d} fill="currentColor" className={drawn.cover ? 'lines-words' : undefined} filter={photocopy ? 'url(#hub-print-title)' : undefined} /> : null}
+        {drawn?.cover ? <path d={drawn.cover} fill="currentColor" className="lines-cover" /> : null}
       </svg>
     </>
   )

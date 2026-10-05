@@ -186,7 +186,7 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
       style={lined ? ({ color: baseDesign().palette.navy, '--wipe-in': '450ms' } as React.CSSProperties) : undefined}
     >
       {lined ? (
-        <LinesText text={text} pitch={3.6} photocopy={false} covers={3} />
+        <LinesText text={text} pitch={3.6} photocopy={false} cover={0.55} />
       ) : (
         <>
           <span>{text.slice(0, shown)}</span>
