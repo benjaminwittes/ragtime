@@ -229,62 +229,107 @@
   border-color: #6f93a3;
 }
 
-/* A row, closed: its name and its state on one line, and the rest opens when it is focused. */
-.rt-compact {
-  padding: 0;
-  border-radius: 6px;
-  transition: background 0.15s;
+/* A group opens and closes; the rows inside it are always shown in full, one line each. */
+.rt-tune-group {
+  margin-top: 6px;
+  border-bottom: 1px solid #ededed;
 }
-.rt-compact.open {
-  background: #f6f6f4;
-}
-.rt-tune-line {
+.rt-tune-group-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 6px;
+  gap: 7px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 7px 2px;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: #333333;
 }
-.rt-tune-name {
+.rt-tune-group-head:disabled {
+  cursor: default;
+}
+.rt-tune-group-head:focus-visible {
+  outline: 2px solid #6f93a3;
+  outline-offset: 1px;
+}
+.rt-tune-group .rt-tune-group-name {
   flex: 1;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6c6c6c;
+}
+.rt-tune-chev {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 5px solid #8c8c8c;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s;
+}
+.rt-tune-group.open .rt-tune-chev {
+  transform: rotate(90deg);
+}
+.rt-tune-group-count {
+  flex: none;
+  font-size: 10.5px;
+  color: #999999;
+}
+.rt-tune-group-body {
+  padding: 0 0 8px;
+  animation: rt-reveal 0.16s ease;
+}
+
+/* A row: its name and its control on one line, what it does in its tooltip. */
+.rt-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 2px;
+  min-height: 26px;
+}
+.rt-inline .rt-tune-name {
+  flex: 1 1 45%;
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  border: 0;
-  background: none;
-  padding: 0;
-  text-align: left;
-  font: inherit;
+  gap: 5px;
   color: #333333;
-  cursor: pointer;
 }
-.rt-compact.changed .rt-tune-name {
+.rt-inline .rt-tune-name.has-note > span:first-child {
+  text-decoration: underline dotted #b8b8b8;
+  text-underline-offset: 3px;
+}
+.rt-inline .rt-tune-name.changed {
   color: #1c1c1c;
   font-weight: 600;
 }
-.rt-tune-chip {
-  flex: none;
-  max-width: 11em;
-  border-radius: 999px;
-  background: #ececea;
-  padding: 1px 9px;
-  font-size: 11px;
-  color: #444444;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rt-inline .rt-tune-control {
+  flex: 1 1 52%;
+  margin-top: 0;
+  justify-content: flex-end;
+  min-width: 0;
 }
-.rt-compact.open .rt-tune-chip {
-  background: #e2e2de;
+.rt-inline .rt-tune-control input[type='number'] {
+  width: 54px;
 }
-.rt-tune-swatch {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  margin: 0 -4px;
-  border-radius: 6px;
-  border: 1px solid #c9c9c9;
-  vertical-align: -2px;
+.rt-inline .rt-tune-control input[type='range'] {
+  min-width: 40px;
+}
+.rt-inline .rt-tune-control select {
+  max-width: 100%;
+}
+.rt-inline .rt-tune-reset {
+  color: #8a6d1f;
+  font-size: 12px;
+  padding: 0 1px;
 }
 .rt-tune-switch {
   flex: none;
@@ -315,30 +360,13 @@
 .rt-tune-switch.on::after {
   transform: translateX(13px);
 }
-.rt-tune-switch:focus-visible,
-.rt-tune-name:focus-visible {
+.rt-tune-switch:focus-visible {
   outline: 2px solid #6f93a3;
   outline-offset: 2px;
 }
-.rt-tune-more {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.18s ease;
-}
-.rt-compact.open .rt-tune-more {
-  grid-template-rows: 1fr;
-}
-.rt-tune-more > div {
-  min-height: 0;
-  overflow: hidden;
-  padding: 0 6px;
-}
-.rt-compact.open .rt-tune-more > div {
-  padding-bottom: 8px;
-}
 /* What depends on a row, nested under it behind a rule, arriving rather than appearing. */
 .rt-tune-kids {
-  margin: 0 0 4px 9px;
+  margin: 0 0 3px 8px;
   padding-left: 9px;
   border-left: 2px solid #dedcd6;
   animation: rt-reveal 0.2s ease;
@@ -350,13 +378,13 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rt-tune-more,
   .rt-tune-switch,
   .rt-tune-switch::after,
-  .rt-compact {
+  .rt-tune-chev {
     transition: none;
   }
-  .rt-tune-kids {
+  .rt-tune-kids,
+  .rt-tune-group-body {
     animation: none;
   }
 }

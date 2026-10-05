@@ -1,6 +1,6 @@
 // The same declarations and descriptions the tuner's panel lists: the reader's settings are knobs.
 import './knobs'
-import { type KnobWrite } from './controls'
+import { type KnobWrite } from './knobwrite'
 import { Panel } from './Panel'
 import { allTunables } from './registry'
 import { isUserSet, resetAllUserValues, resetUserValue, setUserValue, subscribeTune, tuneVersion } from './store'

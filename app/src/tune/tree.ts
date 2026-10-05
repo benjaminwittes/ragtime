@@ -28,15 +28,3 @@ export function isOn(value: TuneValue | undefined): boolean {
   if (typeof value === 'string') return !['off', 'none', 'still'].includes(value.toLowerCase())
   return true
 }
-
-/** One short phrase for a value, for a row that is closed: the state, seen without opening it. */
-export function summary(knob: Tunable, value: TuneValue | undefined): string {
-  if (knob.kind === 'boolean') return value ? 'On' : 'Off'
-  if (knob.kind === 'select') return knob.options?.find((o) => o.value === value)?.label ?? String(value ?? '')
-  if (knob.kind === 'int' || knob.kind === 'number') {
-    const n = Number(value ?? 0)
-    return knob.min === 0 && n === 0 && /\bms\b|Milliseconds/.test(knob.note ?? '') ? 'Whole line' : String(Math.round(n * 1000) / 1000) + (/Milliseconds/.test(knob.note ?? '') ? ' ms' : '')
-  }
-  const text = String(value ?? '')
-  return text.length > 18 ? text.slice(0, 17) + '…' : text
-}

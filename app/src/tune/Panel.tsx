@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 
 import './tune.css'
-import { KnobRow, type KnobWrite } from './controls'
+import { KnobRow } from './controls'
+import { TUNER as TUNER_WRITE, type KnobWrite } from './knobwrite'
 import { setPanelOpen, usePanelOpen } from './open'
 import { allSurfaces, surfaceIsMounted } from './registry'
 import { find, type Candidate } from './search'
@@ -47,7 +48,8 @@ export function Panel({
   const open = usePanelOpen()
   const [scope, setScope] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [openId, setOpenId] = useState<string | null>(null)
+  // Which group is open: the first until the reader opens another, one at a time; all of them while searching.
+  const [openGroup, setOpenGroup] = useState<string | undefined>(undefined)
   const input = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -94,6 +96,8 @@ export function Panel({
     else sections.push({ scope, group: node.knob.group, rows: [node] })
   }
   const total = q ? find(candidates, q).length : shown.length
+  // Open first: the group a reader would want (a setting marked for readers), else the first.
+  const firstOpen = Math.max(0, sections.findIndex((s) => s.rows.some((n) => n.knob.user)))
 
   return (
     <aside className="rt-tune" aria-label={title}>
@@ -139,14 +143,39 @@ export function Panel({
         {sections.length === 0 && (
           <p className="rt-tune-empty">{q ? <>No setting matches “{q}”.</> : <>Nothing to set here yet.</>}</p>
         )}
-        {sections.map((s) => (
-          <div key={s.scope + s.group} className="rt-tune-group">
-            <div className="rt-tune-group-name">{q ? `${s.scope} / ${s.group}` : s.group}</div>
-            {s.rows.map((node) => (
-              <Branch key={node.knob.id} node={node} write={write} openId={openId} setOpenId={setOpenId} />
-            ))}
-          </div>
-        ))}
+        {sections.map((s, i) => {
+          const key = s.scope + '/' + s.group
+          const isOpen = !!q || (openGroup === undefined ? i === firstOpen : openGroup === key)
+          const count = s.rows.reduce(function n(sum: number, node: Node): number {
+            return sum + 1 + node.kids.reduce(n, 0)
+          }, 0)
+          const moved = s.rows.some(function any(node: Node): boolean {
+            return (write ?? TUNER_WRITE).changed(node.knob.id) || node.kids.some(any)
+          })
+          return (
+            <div key={key} className={'rt-tune-group' + (isOpen ? ' open' : '')}>
+              <button
+                type="button"
+                className="rt-tune-group-head"
+                aria-expanded={isOpen}
+                disabled={!!q}
+                onClick={() => setOpenGroup(isOpen ? '' : key)}
+              >
+                <span className="rt-tune-chev" aria-hidden />
+                <span className="rt-tune-group-name">{q ? `${s.scope} / ${s.group}` : s.group}</span>
+                {moved && <span className="rt-tune-dot" title="changed" />}
+                <span className="rt-tune-group-count">{count}</span>
+              </button>
+              {isOpen && (
+                <div className="rt-tune-group-body">
+                  {s.rows.map((node) => (
+                    <Branch key={node.knob.id} node={node} write={write} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
         {total > shown.length && <p className="rt-tune-note">{total - shown.length} more. Type more of the name to narrow it.</p>}
       </div>
 
@@ -159,25 +188,15 @@ export function Panel({
  * A row and, beneath it, the rows that depend on it: shown only while it is on, indented under
  * a rule, so a setting that would do nothing is not there to be moved.
  */
-function Branch({
-  node,
-  write,
-  openId,
-  setOpenId,
-}: {
-  node: Node
-  write?: KnobWrite
-  openId: string | null
-  setOpenId: (id: string | null) => void
-}) {
+function Branch({ node, write }: { node: Node; write?: KnobWrite }) {
   const on = node.kids.length > 0 && isOn(tuneValue(node.knob.id))
   return (
     <>
-      <KnobRow knob={node.knob} write={write} open={openId === node.knob.id} onOpen={setOpenId} />
+      <KnobRow knob={node.knob} write={write} />
       {on && (
         <div className="rt-tune-kids">
           {node.kids.map((kid) => (
-            <Branch key={kid.knob.id} node={kid} write={write} openId={openId} setOpenId={setOpenId} />
+            <Branch key={kid.knob.id} node={kid} write={write} />
           ))}
         </div>
       )}
