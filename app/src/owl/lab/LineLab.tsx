@@ -1,27 +1,25 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { linesFromGrid, rasterizeText, UNIT_PX, type Grid } from '@/hub/textLines'
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { linesFromGrid, UNIT_PX } from '@/hub/textLines'
+import { frameAt, geometry, measureMorph, rowTimes, slicesOf, toneOf, type Measured, type MorphParams } from '@/hub/lineMorph/engine'
+import MorphArt from '@/hub/lineMorph/MorphArt'
+import { getTunable } from '@/tune/registry'
+import '../knobs/morph'
 
 /**
- * The line compositing builder (2026-10-06), shown as a node graph. It is not a real node engine:
- * the graph is fixed and each card is one stage whose output you can see on its own.
+ * The line compositing builder (2026-10-06), shown as a node graph. It is not a real node engine: the graph is
+ * fixed and each card is one stage whose output you can see on its own. Final is the line morph itself
+ * (`hub/lineMorph/`), the same code the owl's words are written with, so what is tuned here is what ships.
  *
- *   Lines ──┬→ Windowed Lines ─┬→ Masked Text ─────┐
- *   Window ─┘        ▲           │                    │
- *   Text ────────────┼───────────┘                    ├→ Final
- *     │              │                                │
- *     └──────────────┴→ Halftone Lines ───────────────┤   (wires are drawn on the page)
- *   Text (raw) ──────────────────────────────────────┘
+ *   Lines ──┬→ Windowed Lines ─┬→ Masked Text
+ *   Window ─┘        ▲         │
+ *   Text ────────────┼─────────┘                 (the wires are drawn on the page)
+ *     │              │
+ *     └──────────────┴→ Halftone Lines ──→ Final
  *
- * Masked Text and Halftone Lines never feed each other: both go straight to Final, which turns
- * each letter Masked Text → Halftone Lines → Raw Text, with the Windowed Lines still showing.
- *
- * The goal is a line halftone: the text is drawn by lines whose thickness follows the letters, and
- * each letter goes Masked Text → Halftone Lines → Raw Text as the Window's trailing (left) edge passes it.
- * One master timeline `t` (0 → 1) sweeps the Window across the word; scrub it or let it play and loop.
+ * Final: flat lines in a window crossing the text, a halftone swelling on them, then the original text. One
+ * master timeline `t` (0 → 1) plays it; scrub it or let it play and loop. The values the effect shares with the
+ * owl (`owl/knobs/morph.ts`) are written back there by "Write to source"; the lab's own are written to this file.
  */
-
-type Letter = { l: number; r: number } | null
-type Drawn = { grid: Grid; spacing: number; band: string; w: number; h: number; letters: Letter[] }
 
 function Slider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
   return (
@@ -54,125 +52,112 @@ function Column({ children, top }: { children: ReactNode; top?: boolean }) {
 }
 
 /** A scaled-down SVG of one stage's output, on the paper colour. */
-function Shot({ drawn, paper, children }: { drawn: Drawn | null; paper: string; children: ReactNode }) {
-  if (!drawn) return <div className="h-16" />
-  const vw = drawn.w / UNIT_PX
-  const vh = drawn.h / UNIT_PX
+function Shot({ m, paper, children }: { m: Measured | null; paper: string; children: ReactNode }) {
+  if (!m) return <div className="h-16" />
   return (
-    <svg viewBox={`0 0 ${vw} ${vh}`} className="block w-full rounded border" style={{ background: paper }} aria-hidden="true">
+    <svg viewBox={`0 0 ${m.w / UNIT_PX} ${m.h / UNIT_PX}`} className="block w-full rounded border" style={{ background: paper }} aria-hidden="true">
       {children}
     </svg>
   )
 }
 
-/** A box blur, separable, so a letter's tone spreads into the lines around it. */
-function blur(data: Float32Array, w: number, h: number, r: number): Float32Array {
-  if (r < 1) return data
-  const pass = (src: Float32Array, horizontal: boolean) => {
-    const out = new Float32Array(src.length)
-    const n = horizontal ? w : h
-    const lines = horizontal ? h : w
-    for (let k = 0; k < lines; k++) {
-      let sum = 0
-      const at = (i: number) => (horizontal ? k * w + i : i * w + k)
-      for (let i = -r; i <= r; i++) sum += src[at(Math.min(n - 1, Math.max(0, i)))]
-      for (let i = 0; i < n; i++) {
-        out[at(i)] = sum / (2 * r + 1)
-        sum += src[at(Math.min(n - 1, i + r + 1))] - src[at(Math.max(0, i - r))]
-      }
-    }
-    return out
-  }
-  return pass(pass(data, true), false)
-}
-
 /**
- * The lab's variables as they sit in source. One declaration per line, `{ id, value }`, because that is
- * the shape the dev server's write-to-source endpoint patches in place (`app/vite-plugin-tune.ts`).
- * "Write to source" in the toolbar rewrites the `value:` of every knob you have moved.
+ * The lab's own variables as they sit in source. One declaration per line, `{ id, value }`, the shape the dev
+ * server's write-to-source endpoint patches in place (`app/vite-plugin-tune.ts`).
  */
 const KNOBS = {
   text: { id: 'line-lab.text', value: 'I am RAGtime' },
   size: { id: 'line-lab.size', value: 66 },
   weight: { id: 'line-lab.weight', value: 500 },
-  pitch: { id: 'line-lab.pitch', value: 8 },
   ink: { id: 'line-lab.ink', value: '#1b2a49' },
   paper: { id: 'line-lab.paper', value: '#fffdf2' },
-  cover: { id: 'line-lab.cover', value: 0.2 },
   windowOn: { id: 'line-lab.windowOn', value: true },
-  winWidth: { id: 'line-lab.winWidth', value: 1 },
-  t: { id: 'line-lab.t', value: 1 },
+  t: { id: 'line-lab.t', value: 0.5637846153846028 },
   loop: { id: 'line-lab.loop', value: true },
-  duration: { id: 'line-lab.duration', value: 1 },
   blend: { id: 'line-lab.blend', value: 'through' },
-  spread: { id: 'line-lab.spread', value: 6 },
-  gain: { id: 'line-lab.gain', value: 0.9 },
-  ramp: { id: 'line-lab.ramp', value: 1 },
-  trail: { id: 'line-lab.trail', value: 0.6 },
-  entry: { id: 'line-lab.entry', value: 0.6 },
-  shift: { id: 'line-lab.shift', value: 0 },
-  pieces: { id: 'line-lab.pieces', value: 2 },
-  mode: { id: 'line-lab.mode', value: 'one' },
-  linesBack: { id: 'line-lab.linesBack', value: 1 },
-  backInk: { id: 'line-lab.backInk', value: '#1b2949' },
 }
-type KnobKey = keyof typeof KNOBS
+
+/** The values the effect shares with the owl, by their name here and their knob (`owl/knobs/morph.ts`). */
+const SHARED = {
+  duration: 'owl.morph.seconds',
+  pitch: 'owl.morph.pitch',
+  cover: 'owl.morph.cover',
+  winWidth: 'owl.morph.window',
+  spread: 'owl.morph.spread',
+  gain: 'owl.morph.gain',
+  ramp: 'owl.morph.ramp',
+  shift: 'owl.morph.shift',
+  trail: 'owl.morph.trail',
+  entry: 'owl.morph.entry',
+  pieces: 'owl.morph.pieces',
+  stagger: 'owl.morph.stagger',
+} as const
+const SHARED_FILE = 'src/owl/knobs/morph.ts'
+const SELF_FILE = 'src/owl/lab/LineLab.tsx'
+
+type LabKey = keyof typeof KNOBS
+type SharedKey = keyof typeof SHARED
+type Value = string | number | boolean
+const sharedDefault = (k: SharedKey) => getTunable(SHARED[k])?.value as number
 
 export default function LineLab() {
   const [text, setText] = useState(KNOBS.text.value)
   const [size, setSize] = useState(KNOBS.size.value)
   const [weight, setWeight] = useState(KNOBS.weight.value)
-  const [pitch, setPitch] = useState(KNOBS.pitch.value)
   const [ink, setInk] = useState(KNOBS.ink.value)
   const [paper, setPaper] = useState(KNOBS.paper.value)
-  const [cover, setCover] = useState(KNOBS.cover.value)
   const [windowOn, setWindowOn] = useState(KNOBS.windowOn.value)
-  const [winWidth, setWinWidth] = useState(KNOBS.winWidth.value)
   const [t, setT] = useState(KNOBS.t.value)
   const [playing, setPlaying] = useState(false)
   const [loop, setLoop] = useState(KNOBS.loop.value)
-  const [duration, setDuration] = useState(KNOBS.duration.value)
   const [blend, setBlend] = useState(KNOBS.blend.value as 'over' | 'through' | 'outside')
-  const [spread, setSpread] = useState(KNOBS.spread.value)
-  const [gain, setGain] = useState(KNOBS.gain.value)
-  const [ramp, setRamp] = useState(KNOBS.ramp.value)
-  const [trail, setTrail] = useState(KNOBS.trail.value)
-  const [entry, setEntry] = useState(KNOBS.entry.value)
-  const [shift, setShift] = useState(KNOBS.shift.value)
-  const [pieces, setPieces] = useState(KNOBS.pieces.value)
-  const [mode, setMode] = useState(KNOBS.mode.value as 'one' | 'layered')
-  const [linesBack, setLinesBack] = useState(KNOBS.linesBack.value)
-  const [backInk, setBackInk] = useState(KNOBS.backInk.value)
+  const [duration, setDuration] = useState(() => sharedDefault('duration'))
+  const [pitch, setPitch] = useState(() => sharedDefault('pitch'))
+  const [cover, setCover] = useState(() => sharedDefault('cover'))
+  const [winWidth, setWinWidth] = useState(() => sharedDefault('winWidth'))
+  const [spread, setSpread] = useState(() => sharedDefault('spread'))
+  const [gain, setGain] = useState(() => sharedDefault('gain'))
+  const [ramp, setRamp] = useState(() => sharedDefault('ramp'))
+  const [shift, setShift] = useState(() => sharedDefault('shift'))
+  const [trail, setTrail] = useState(() => sharedDefault('trail'))
+  const [entry, setEntry] = useState(() => sharedDefault('entry'))
+  const [pieces, setPieces] = useState(() => sharedDefault('pieces'))
+  const [stagger, setStagger] = useState(() => sharedDefault('stagger'))
   const [note, setNote] = useState('')
 
-  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, ramp, trail, entry, shift, pieces, mode, linesBack, backInk }
-  const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
+  const lab: Record<LabKey, Value> = { text, size, weight, ink, paper, windowOn, t, loop, blend }
+  const shared: Record<SharedKey, number> = { duration, pitch, cover, winWidth, spread, gain, ramp, shift, trail, entry, pieces, stagger }
+  const moved = [
+    ...(Object.keys(KNOBS) as LabKey[]).filter((k) => lab[k] !== KNOBS[k].value),
+    ...(Object.keys(SHARED) as SharedKey[]).filter((k) => shared[k] !== sharedDefault(k)),
+  ]
   const resetAll = () => {
-    setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
-    setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
-    setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
-    setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
-    setRamp(KNOBS.ramp.value); setTrail(KNOBS.trail.value); setEntry(KNOBS.entry.value); setShift(KNOBS.shift.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value)
+    setWindowOn(KNOBS.windowOn.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside')
+    setDuration(sharedDefault('duration')); setPitch(sharedDefault('pitch')); setCover(sharedDefault('cover')); setWinWidth(sharedDefault('winWidth'))
+    setSpread(sharedDefault('spread')); setGain(sharedDefault('gain')); setRamp(sharedDefault('ramp')); setShift(sharedDefault('shift'))
+    setTrail(sharedDefault('trail')); setEntry(sharedDefault('entry')); setPieces(sharedDefault('pieces')); setStagger(sharedDefault('stagger'))
     setNote('reset to what is in source')
   }
   const writeToSource = async () => {
     if (!moved.length) return setNote('nothing moved')
+    const edits = moved.map((k) =>
+      k in SHARED
+        ? { kind: 'value', id: SHARED[k as SharedKey], file: SHARED_FILE, value: shared[k as SharedKey] }
+        : { kind: 'value', id: KNOBS[k as LabKey].id, file: SELF_FILE, value: lab[k as LabKey] },
+    )
     try {
-      const response = await fetch('/__tune/write', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ edits: moved.map((k) => ({ kind: 'value', id: KNOBS[k].id, file: 'src/owl/lab/LineLab.tsx', value: values[k] })) }),
-      })
+      const response = await fetch('/__tune/write', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ edits }) })
       if (!response.ok) return setNote(`write failed: ${await response.text()}`)
       const { results } = (await response.json()) as { results: { id: string; ok: boolean; detail: string }[] }
       const bad = results.filter((r) => !r.ok)
-      setNote(bad.length ? `wrote ${results.length - bad.length}, failed: ${bad.map((r) => r.id).join(', ')}` : `wrote ${results.length} to src/owl/lab/LineLab.tsx`)
+      setNote(bad.length ? `wrote ${results.length - bad.length}, failed: ${bad.map((r) => r.id).join(', ')}` : `wrote ${results.length}: the owl's knobs in ${SHARED_FILE}, the lab's own here`)
     } catch (error) {
       setNote(`write failed: ${error instanceof Error ? error.message : 'no dev server'}`)
     }
   }
   const copyJson = () => {
-    void navigator.clipboard.writeText(JSON.stringify(Object.fromEntries((Object.keys(KNOBS) as KnobKey[]).map((k) => [k, values[k]])), null, 2))
+    void navigator.clipboard.writeText(JSON.stringify({ ...lab, ...shared }, null, 2))
     setNote('all values copied as JSON')
   }
 
@@ -182,30 +167,14 @@ export default function LineLab() {
 
   const uid = useId().replace(/:/g, '')
   const host = useRef<HTMLDivElement>(null)
-  const [drawn, setDrawn] = useState<Drawn | null>(null)
+  const [m, setM] = useState<Measured | null>(null)
 
+  // The text as the face lays it out: the engine's raster, letters and rows.
   useLayoutEffect(() => {
     const el = host.current
     if (!el) return
     let raf = 0
-    const draw = () => {
-      const grid = rasterizeText(el)
-      if (!grid) return
-      const spacing = Math.max(1.5, (pitch * size) / 52)
-      const flat = { ...grid, data: new Float32Array(grid.data.length).fill(cover) }
-      // Where each letter sits across the box, in px, so the reveal can treat letters one by one.
-      const node = [...el.childNodes].find((n) => n.nodeType === 3)
-      const box = el.getBoundingClientRect()
-      const range = document.createRange()
-      const letters: Letter[] = [...(node?.textContent ?? '')].map((ch, i) => {
-        if (!node || /\s/.test(ch)) return null
-        range.setStart(node, i)
-        range.setEnd(node, i + 1)
-        const r = range.getClientRects()[0]
-        return r ? { l: r.left - box.left, r: r.right - box.left } : null
-      })
-      setDrawn({ grid, spacing, band: linesFromGrid(flat, spacing), w: grid.w, h: grid.h, letters })
-    }
+    const draw = () => setM(measureMorph(el, pitch))
     const later = () => {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(draw)
@@ -213,133 +182,33 @@ export default function LineLab() {
     draw()
     void document.fonts?.ready.then(later)
     return () => cancelAnimationFrame(raf)
-  }, [text, size, weight, pitch, cover])
+  }, [text, size, weight, pitch])
 
-  // The word broken into pieces: each letter is cut into `pieces` equal slices, and every slice turns on its
-  // own, so the change can run through a letter and not only from letter to letter.
-  const slices = useMemo(() => {
-    const out: { l: number; r: number; lw: number }[] = []
-    for (const lt of drawn?.letters ?? []) {
-      if (!lt) continue
-      const step = (lt.r - lt.l) / pieces
-      for (let k = 0; k < pieces; k++) out.push({ l: lt.l + k * step, r: lt.l + (k + 1) * step, lw: lt.r - lt.l })
-    }
-    return out
-  }, [drawn, pieces])
-  // The master timeline. The window is fixed for a given t: it enters just off the left of the word at t = 0 and
-  // its leading edge has carried the whole morph band past the last slice at t = 1.
-  const winPx = drawn ? winWidth * drawn.w : 0
-  const bandPx = Math.max(1, ramp * winPx)
-  const wordEnd = slices.reduce((m, sl) => Math.max(m, sl.r), 0)
-  // The entry taper reaches `entry` window-widths ahead of the leading edge, so start that far further left.
-  const startLo = -winWidth * (1 + entry)
-  // At t = 1 the whole band is past the last slice and the window's lines, trail included, have cleared the word.
-  const finishLo = drawn ? Math.max((wordEnd + bandPx) / drawn.w - winWidth, wordEnd / drawn.w + trail * winWidth) : 1
-  const lo = startLo + t * (finishLo - startLo)
-  const hi = lo + winWidth
-  // `shift` is eased to zero over the first and last 15% of the timeline, so t = 0 is always empty and t = 1 is
-  // always the finished text, for any shift. In between it applies in full.
-  const shiftNow = shift * Math.min(1, t / 0.15, (1 - t) / 0.15)
-  const vw = drawn ? drawn.w / UNIT_PX : 0
-  const vh = drawn ? drawn.h / UNIT_PX : 0
+  const params: MorphParams = useMemo(
+    () => ({ cover, winWidth, windowOn, spread, gain, ramp, shift, trail, entry, pieces, stagger }),
+    [cover, winWidth, windowOn, spread, gain, ramp, shift, trail, entry, pieces, stagger],
+  )
+  const toned = useMemo(() => (m ? toneOf(m, spread, gain) : null), [m, spread, gain])
+  // Final, as the owl draws it: one frame of the engine at the master time.
+  const frame = useMemo(() => (m && toned ? frameAt(m, toned, params, t) : null), [m, toned, params, t])
+  // The window's place, for the previews of the stages before Final (the first row's, which is the only one of a single line).
+  const geo = useMemo(() => {
+    if (!m) return null
+    const slices = slicesOf(m.letters, pieces).filter((sl) => sl.row === 0)
+    const wordEnd = slices.reduce((e, sl) => Math.max(e, sl.r), 0)
+    return geometry(m.w, wordEnd, params, rowTimes(t, m.rows.length, stagger)[0])
+  }, [m, pieces, params, t, stagger])
+  const lo = geo?.lo ?? 0
+  const hi = geo?.hi ?? 0
+  const vw = m ? m.w / UNIT_PX : 0
+  const vh = m ? m.h / UNIT_PX : 0
   const win = `${uid}-win`
   const inWords = `${uid}-in`
   const outWords = `${uid}-out`
-  const fade = `${uid}-fade`
-  const show = `${uid}-show`
-  const rawMask = `${uid}-raw`
-  const endMask = `${uid}-end`
-  const lineFade = `${uid}-linefade`
 
-  // The morph is a band laid across the window, by position. At the band's start edge a column is still flat
-  // lines (0); `ramp` window-widths behind it the column is the finished text (1). The start edge is the
-  // window's leading edge, moved by `shift` (in window widths). The window itself never moves with the band.
-  const bandAt = (x: number) => (drawn ? Math.min(1, Math.max(0, (hi * drawn.w + shiftNow * winPx - x) / bandPx)) : 0)
-  const progress = slices.map((sl) => bandAt((sl.l + sl.r) / 2))
-  // Three phases per column, so Halftone Lines is a stage you see and not a blink: flat lines turn into halftone
-  // over the first part of the band, the halftone holds, then it turns into the original text.
-  const toHalftone = progress.map((p) => Math.min(1, p / 0.35))
-  const toRaw = progress.map((p) => Math.min(1, Math.max(0, (p - 0.65) / 0.35)))
-  const progressKey = toRaw.map((p) => p.toFixed(2)).join(',')
-
-  // Halftone Lines: the lines carry the tone. The text is softened so the lines swell toward the
-  // middle of a letter and thin out away from it. `morphed` thickens each letter's lines to the
-  // solid letter by that letter's progress, so the lines themselves become the raw text.
-  const toned = useMemo(() => (drawn ? blur(drawn.grid.data, drawn.w, drawn.h, spread).map((v) => Math.min(1, v * gain)) : new Float32Array(0)), [drawn, spread, gain])
-  const halftone = useMemo(() => {
-    if (!drawn) return { still: '', morphed: '' }
-    const { grid, spacing, w, h } = drawn
-    const still = linesFromGrid({ w, h, data: toned }, spacing)
-    const col = new Float32Array(w)
-    slices.forEach((sl, i) => {
-      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) col[x] = toRaw[i] ?? 0
-    })
-    const out = new Float32Array(toned.length)
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x
-        const solid = grid.data[i] > 0.2 ? 1 : 0
-        out[i] = toned[i] + (solid - toned[i]) * col[x]
-      }
-    }
-    return { still, morphed: linesFromGrid({ w, h, data: out }, spacing) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawn, toned, progressKey])
-
-  // The morph layer. It is the line engine's output from a field that grows from nothing: the halftone tone
-  // (lines swell where the letters are), then the solid letters, each column along the band by its own progress.
-  // The window's flat lines sit under it as a fixed underlay, so the morph can run ahead of or behind the lines
-  // without the window changing. Columns the window has not reached yet stay empty.
-  const hiPx = drawn ? Math.round(hi * drawn.w) : 0
-  const allKey = progress.map((p) => p.toFixed(3)).join(',')
-  const oneSet = useMemo(() => {
-    if (!drawn || mode !== 'one') return ''
-    const { grid, spacing, w, h } = drawn
-    // One progress value per column: the band's value at that column, held constant across a slice so the
-    // `pieces` cut still steps through each letter.
-    const colP = new Float32Array(w)
-    for (let x = 0; x < w; x++) colP[x] = bandAt(x)
-    slices.forEach((sl, i) => {
-      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) colP[x] = progress[i] ?? 0
-    })
-    const out = new Float32Array(w * h)
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (windowOn && x >= hiPx) continue
-        const i = y * w + x
-        const a = Math.min(1, colP[x] / 0.35)
-        const r = Math.min(1, Math.max(0, (colP[x] - 0.65) / 0.35))
-        const solid = grid.data[i] > 0.2 ? 1 : 0
-        // The flat lines are the window's own underlay (drawn separately), so the morph starts from nothing and
-        // only adds: the halftone swelling on the lines, then the solid letters.
-        const f = toned[i] * a
-        out[i] = f + (solid - f) * r
-      }
-    }
-    return linesFromGrid({ w, h, data: out }, spacing)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawn, toned, mode, cover, windowOn, hiPx, allKey])
-
-  // The window's lines, as a fixed underlay. Full weight inside the window; behind its trailing edge they do not
-  // stop dead, they thin out over `trail` window-widths, so the lines taper as they leave, and ahead of its leading
-  // edge they thin in over `entry` window-widths, the same taper mirrored. This is separate from the morph, so ramp shift cannot touch it.
-  const loPx = drawn ? Math.round(lo * drawn.w) : 0
-  const underlay = useMemo(() => {
-    if (!drawn || mode !== 'one') return ''
-    const { spacing, w, h } = drawn
-    const tailPx = Math.max(1, trail * winPx)
-    const headPx = Math.max(1, entry * winPx)
-    const col = new Float32Array(w)
-    for (let x = 0; x < w; x++) {
-      if (!windowOn) col[x] = cover
-      else if (x >= hiPx) col[x] = cover * Math.max(0, 1 - (x - hiPx) / headPx)
-      else if (x >= loPx) col[x] = cover
-      else col[x] = cover * Math.max(0, 1 - (loPx - x) / tailPx)
-    }
-    const data = new Float32Array(w * h)
-    for (let y = 0; y < h; y++) data.set(col, y * w)
-    return linesFromGrid({ w, h, data }, spacing)
-  }, [drawn, mode, cover, windowOn, hiPx, loPx, trail, entry, winPx])
+  // The flat lines of the Lines stage, and the halftone of the Halftone Lines stage.
+  const band = useMemo(() => (m ? linesFromGrid({ ...m.grid, data: new Float32Array(m.grid.data.length).fill(cover) }, m.spacing) : ''), [m, cover])
+  const halftone = useMemo(() => (m && toned ? linesFromGrid({ w: m.w, h: m.h, data: toned }, m.spacing) : ''), [m, toned])
 
   // Auto-play: advance t with the clock, hold a beat at the end, then loop or stop.
   const tRef = useRef(t)
@@ -387,9 +256,8 @@ export default function LineLab() {
       ['Text', 'Masked Text'],
       ['Lines', 'Halftone Lines'],
       ['Text', 'Halftone Lines'],
-      ['Windowed Lines', 'Final: reveal'],
-      ['Masked Text', 'Final: reveal'],
       ['Halftone Lines', 'Final: reveal'],
+      ['Lines', 'Final: reveal'],
       ['Text', 'Final: reveal'],
       ['Window', 'Final: reveal'],
     ]
@@ -420,69 +288,39 @@ export default function LineLab() {
     ro.observe(root)
     root.querySelectorAll('[data-node]').forEach((n) => ro.observe(n))
     return () => ro.disconnect()
-  }, [drawn])
+  }, [m])
 
   const defs = (
     <defs>
       <clipPath id={win}>
         <rect x={vw * lo} y={0} width={vw * (hi - lo)} height={vh} />
       </clipPath>
-      {drawn ? (
+      {m ? (
         <>
           <mask id={inWords} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            <path d={drawn.band} fill="#fff" clipPath={windowOn ? `url(#${win})` : undefined} />
+            <path d={band} fill="#fff" clipPath={windowOn ? `url(#${win})` : undefined} />
           </mask>
           <mask id={outWords} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
             <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
-            <path d={drawn.band} fill="#000" clipPath={windowOn ? `url(#${win})` : undefined} />
+            <path d={band} fill="#000" clipPath={windowOn ? `url(#${win})` : undefined} />
           </mask>
-          {/* Each slice mask is one rectangle painted with a gradient that steps between pieces. Separate
-              rectangles side by side leave a hairline gap where their opacities differ; one paint does not. */}
-          {slices.length ? (
-            <>
-              {(
-                [
-                  [fade, toHalftone.map((v) => 1 - v)],
-                  [show, toHalftone.map((v, i) => v * (1 - (toRaw[i] ?? 0) ** 2))],
-                  [endMask, toRaw],
-                  [lineFade, toRaw.map((v) => 1 - Math.min(1, Math.max(0, (v - 0.4) / 0.6)))],
-                  [rawMask, toRaw.map((v) => v ** 2)],
-                ] as [string, number[]][]
-              ).map(([id, vals]) => (
-                <g key={id}>
-                  <linearGradient id={`${id}-g`} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={vw} y2={0}>
-                    {slices.flatMap((sl, i) => [
-                      <stop key={`${i}a`} offset={sl.l / drawn.w} stopColor="#fff" stopOpacity={vals[i] ?? 0} />,
-                      <stop key={`${i}b`} offset={sl.r / drawn.w} stopColor="#fff" stopOpacity={vals[i] ?? 0} />,
-                    ])}
-                  </linearGradient>
-                  <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-                    <rect x={0} y={0} width={vw} height={vh} fill={`url(#${id}-g)`} />
-                  </mask>
-                </g>
-              ))}
-            </>
-          ) : null}
         </>
       ) : null}
     </defs>
   )
-  // What Windowed Lines passes on: the band inside the window, or the whole band when the window is bypassed.
-  const maskedBand = drawn ? <path d={drawn.band} fill={ink} clipPath={windowOn ? `url(#${win})` : undefined} /> : null
+  // What Windowed Lines passes on: the lines inside the window, or all of them when the window is bypassed.
+  const maskedBand = m ? <path d={band} fill={ink} clipPath={windowOn ? `url(#${win})` : undefined} /> : null
 
-  // The raw words, no effect, laid out exactly as the engine measured them.
-  const plainText = () =>
-    drawn ? (
-      <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
-        <div className="whitespace-nowrap leading-tight" style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}>
-          {text}
-        </div>
-      </foreignObject>
-    ) : null
-  const plain = plainText()
+  // The face the words are set in, here and in Final: the same box the engine measured.
+  const textStyle: CSSProperties = { fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, lineHeight: 1.25, whiteSpace: 'pre-line' }
+  const plain = m ? (
+    <foreignObject x={0} y={0} width={m.w} height={m.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
+      <div style={{ ...textStyle, color: ink, boxSizing: 'border-box', width: m.w }}>{text}</div>
+    </foreignObject>
+  ) : null
 
   // Masked Text: the Windowed Lines are the mask and the text is what shows through them.
-  const composite = drawn ? (
+  const composite = m ? (
     blend === 'over' ? (
       <>
         {plain}
@@ -490,29 +328,6 @@ export default function LineLab() {
       </>
     ) : (
       <g mask={`url(#${blend === 'through' ? inWords : outWords})`}>{plain}</g>
-    )
-  ) : null
-
-  // Final. 'one': a single set of lines grows into the word. 'layered': Masked Text → Halftone Lines → Raw Text
-  // as three stacked versions, each fading into the next.
-  const finalArt = drawn ? (
-    mode === 'one' ? (
-      <>
-        <path d={underlay} fill={ink} />
-        <g mask={`url(#${lineFade})`}>
-          <path d={oneSet} fill={ink} />
-        </g>
-        <g mask={`url(#${endMask})`}>{plain}</g>
-      </>
-    ) : (
-      <>
-        {linesBack > 0 ? <path d={drawn.band} fill={backInk} opacity={linesBack} clipPath={windowOn ? `url(#${win})` : undefined} /> : null}
-        <g mask={`url(#${fade})`}>{composite}</g>
-        <g mask={`url(#${show})`}>
-          <path d={halftone.morphed} fill={ink} />
-        </g>
-        <g mask={`url(#${rawMask})`}>{plain}</g>
-      </>
     )
   ) : null
 
@@ -570,8 +385,8 @@ export default function LineLab() {
       <div
         ref={host}
         aria-hidden="true"
-        className="pointer-events-none absolute -left-[9999px] top-0 inline-block whitespace-nowrap leading-tight"
-        style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}
+        className="pointer-events-none absolute -left-[9999px] top-0 inline-block"
+        style={{ ...textStyle, color: ink }}
       >
         {text}
       </div>
@@ -593,12 +408,12 @@ export default function LineLab() {
             title="Lines"
             kind="input"
             preview={
-              <Shot drawn={drawn} paper={paper}>
-                {drawn ? <path d={drawn.band} fill={ink} /> : null}
+              <Shot m={m} paper={paper}>
+                {m ? <path d={band} fill={ink} /> : null}
               </Shot>
             }
           >
-            <Slider label="line pitch" value={pitch} min={1.5} max={8} step={0.1} onChange={setPitch} />
+            <Slider label="line pitch" value={pitch} min={1.5} max={12} step={0.1} onChange={setPitch} />
             <Slider label="weight" value={cover} min={0.05} max={1} step={0.05} onChange={setCover} />
             <label className="flex items-center gap-2 text-xs">
               <span className="w-20 shrink-0 text-muted-foreground">ink / paper</span>
@@ -610,7 +425,7 @@ export default function LineLab() {
             title="Window"
             kind="input"
             preview={
-              <Shot drawn={drawn} paper={paper}>
+              <Shot m={m} paper={paper}>
                 <rect x={0} y={0} width={vw} height={vh} fill="#000" opacity={0.08} />
                 {windowOn ? <rect x={vw * lo} y={0} width={vw * (hi - lo)} height={vh} fill={ink} /> : <rect x={0} y={0} width={vw} height={vh} fill={ink} />}
               </Shot>
@@ -623,10 +438,10 @@ export default function LineLab() {
             <Slider label="width" value={winWidth} min={0.1} max={1} step={0.01} onChange={setWinWidth} />
             <Slider label="entry" value={entry} min={0} max={2} step={0.01} onChange={setEntry} />
             <Slider label="trail" value={trail} min={0} max={2} step={0.01} onChange={setTrail} />
-            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. In Final, the morph is a band laid across the window (see ramp shift and ramp length). In Final, entry and trail are how far ahead of its leading edge and behind its trailing edge the window's lines keep going, thinning to nothing.</p>
+            <p className="text-xs text-muted-foreground">The timeline sweeps the window across each row. In Final, entry and trail are how far ahead of its leading edge and behind its trailing edge the window's lines keep going, thinning to nothing.</p>
           </Card>
-          <Card title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
-            <input value={text} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
+          <Card title="Text" kind="input" preview={<Shot m={m} paper={paper}>{plain}</Shot>}>
+            <textarea value={text} rows={2} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
             <Slider label="size" value={size} min={24} max={200} step={1} onChange={setSize} />
             <Slider label="font weight" value={weight} min={100} max={900} step={100} onChange={setWeight} />
           </Card>
@@ -638,7 +453,7 @@ export default function LineLab() {
             kind="combine"
             from={['Lines', 'Window']}
             preview={
-              <Shot drawn={drawn} paper={paper}>
+              <Shot m={m} paper={paper}>
                 {defs}
                 {maskedBand}
               </Shot>
@@ -651,8 +466,8 @@ export default function LineLab() {
             kind="combine"
             from={['Lines', 'Text']}
             preview={
-              <Shot drawn={drawn} paper={paper}>
-                <path d={halftone.still} fill={ink} />
+              <Shot m={m} paper={paper}>
+                <path d={halftone} fill={ink} />
               </Shot>
             }
           >
@@ -668,7 +483,7 @@ export default function LineLab() {
             kind="combine"
             from={['Windowed Lines', 'Text']}
             preview={
-              <Shot drawn={drawn} paper={paper}>
+              <Shot m={m} paper={paper}>
                 {defs}
                 {composite}
               </Shot>
@@ -689,34 +504,18 @@ export default function LineLab() {
           <Card
             title="Final: reveal"
             kind="output"
-            from={mode === 'one' ? ['Lines', 'Text', 'Window'] : ['Windowed Lines', 'Masked Text', 'Halftone Lines', 'Text', 'Window']}
+            from={['Lines', 'Halftone Lines', 'Text', 'Window']}
             preview={
-              <Shot drawn={drawn} paper={paper}>
-                {defs}
-                {finalArt}
+              <Shot m={m} paper={paper}>
+                {m && frame ? <MorphArt m={m} frame={frame} text={text} textStyle={textStyle} ink={ink} /> : null}
               </Shot>
             }
           >
-            <label className="flex items-center gap-2 text-xs">
-              <span className="w-20 shrink-0 text-muted-foreground">built as</span>
-              <select value={mode} onChange={(e) => setMode(e.target.value as 'one' | 'layered')} className="rounded border px-1 py-0.5">
-                <option value="one">one set of lines</option>
-                <option value="layered">layered (3 versions)</option>
-              </select>
-            </label>
-            {mode === 'one' ? null : (
-              <>
-                <Slider label="lines shown" value={linesBack} min={0} max={1} step={0.05} onChange={setLinesBack} />
-            <label className="flex items-center gap-2 text-xs">
-              <span className="w-20 shrink-0 text-muted-foreground">line colour</span>
-              <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
-            </label>
-              </>
-            )}
             <Slider label="ramp shift" value={shift} min={-1} max={1} step={0.01} onChange={setShift} />
-            <Slider label="pieces / letter" value={pieces} min={1} max={24} step={1} onChange={setPieces} />
             <Slider label="ramp length" value={ramp} min={0.1} max={3} step={0.01} onChange={setRamp} />
-            <p className="text-xs text-muted-foreground">The morph is a band laid across the window, by position: flat lines at the window's leading edge, halftone in the middle, the original text by the time the band ends. Ramp length is the band's length in window widths. Ramp shift slides the band against the window, in window widths, and never moves the window: right makes the morph run ahead of the lines, left makes it trail behind. Shift eases to zero at the very start and end of the timeline so those stay clean. Pieces cuts each letter into slices that turn one at a time.</p>
+            <Slider label="pieces / letter" value={pieces} min={1} max={24} step={1} onChange={setPieces} />
+            <Slider label="row stagger" value={stagger} min={0} max={1} step={0.05} onChange={setStagger} />
+            <p className="text-xs text-muted-foreground">The morph is a band laid across the window, by position: flat lines at the window's leading edge, halftone in the middle, the original text by the time the band ends. Ramp length is the band's length in window widths. Ramp shift slides the band against the window and never moves the window: right makes the morph run ahead of the lines, left makes it trail behind. Shift eases to zero at the very start and end so those stay clean. Pieces cuts each letter into slices that turn one at a time. Row stagger starts each row of a wrapped text later than the one above: 0 writes every row at once, 1 one after another. This is the code the owl writes with.</p>
           </Card>
         </Column>
       </div>

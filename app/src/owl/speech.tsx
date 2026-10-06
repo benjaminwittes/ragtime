@@ -4,7 +4,8 @@ import './voice/voice.css'
 import { fitNote } from './voice/fit'
 import type { Spoken } from './voice/speaker'
 import type { SiteVoice } from './voice/useVoice'
-import LinesText from '@/hub/LinesText'
+import LineMorphText from '@/hub/lineMorph/LineMorphText'
+import { useMorph } from './useMorph'
 import { baseDesign } from './design'
 
 /**
@@ -142,9 +143,11 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
   const note = useRef<HTMLDivElement>(null)
   const { text } = spoken
   // The reveal starts from nothing unless it is off, or the reader asked for stillness.
-  // The lines are drawn once for the whole sentence and wiped in (`voice.css`), not retyped:
-  // a redraw per letter would rebuild the raster sixty times a second.
+  // The lines treatment is written by the line morph (`hub/lineMorph/`), once for the whole sentence, row by
+  // row, and ends as the real text: it is not retyped, because a redraw per letter would rebuild the raster
+  // sixty times a second.
   const lined = voice.treatment === 'lines'
+  const morph = useMorph()
   const [shown, setShown] = useState(() => (lined || voice.typeMs <= 0 || stillness() ? text.length : 0))
   const typeMs = voice.typeMs
 
@@ -183,10 +186,10 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
       data-place={place}
       data-treatment={voice.treatment}
       aria-hidden="true"
-      style={lined ? ({ color: baseDesign().palette.navy, '--wipe-in': '450ms' } as React.CSSProperties) : undefined}
+      style={lined ? { color: baseDesign().palette.navy } : undefined}
     >
       {lined ? (
-        <LinesText text={text} pitch={3.6} photocopy={false} cover={0.55} />
+        <LineMorphText text={text} params={morph.params} pitch={morph.pitch} seconds={morph.seconds} />
       ) : (
         <>
           <span>{text.slice(0, shown)}</span>

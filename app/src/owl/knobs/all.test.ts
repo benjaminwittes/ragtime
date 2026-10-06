@@ -24,6 +24,7 @@ describe('the order the panel lists the owl’s knobs in', () => {
       'Build: ink',
       'Build: engraving',
       'Build: motion',
+      'Writing',
       'Lantern',
       'The owl',
       'Voice',
