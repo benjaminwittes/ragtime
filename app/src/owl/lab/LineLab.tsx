@@ -109,7 +109,9 @@ const KNOBS = {
   gain: { id: 'line-lab.gain', value: 0.9 },
   soft: { id: 'line-lab.soft', value: 1.7 },
   lead: { id: 'line-lab.lead', value: 0.22 },
-  pieces: { id: 'line-lab.pieces', value: 6 },
+  pieces: { id: 'line-lab.pieces', value: 2 },
+  mode: { id: 'line-lab.mode', value: 'one' },
+  crisp: { id: 'line-lab.crisp', value: false },
   linesBack: { id: 'line-lab.linesBack', value: 1 },
   backInk: { id: 'line-lab.backInk', value: '#1b2949' },
 }
@@ -135,18 +137,20 @@ export default function LineLab() {
   const [soft, setSoft] = useState(KNOBS.soft.value)
   const [lead, setLead] = useState(KNOBS.lead.value)
   const [pieces, setPieces] = useState(KNOBS.pieces.value)
+  const [mode, setMode] = useState(KNOBS.mode.value as 'one' | 'layered')
+  const [crisp, setCrisp] = useState(KNOBS.crisp.value)
   const [linesBack, setLinesBack] = useState(KNOBS.linesBack.value)
   const [backInk, setBackInk] = useState(KNOBS.backInk.value)
   const [note, setNote] = useState('')
 
-  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, pieces, linesBack, backInk }
+  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, pieces, mode, crisp, linesBack, backInk }
   const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
   const resetAll = () => {
     setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
     setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
     setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
     setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
-    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setPieces(KNOBS.pieces.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setCrisp(KNOBS.crisp.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
     setNote('reset to what is in source')
   }
   const writeToSource = async () => {
@@ -252,10 +256,10 @@ export default function LineLab() {
   // Halftone Lines: the lines carry the tone. The text is softened so the lines swell toward the
   // middle of a letter and thin out away from it. `morphed` thickens each letter's lines to the
   // solid letter by that letter's progress, so the lines themselves become the raw text.
+  const toned = useMemo(() => (drawn ? blur(drawn.grid.data, drawn.w, drawn.h, spread).map((v) => Math.min(1, v * gain)) : new Float32Array(0)), [drawn, spread, gain])
   const halftone = useMemo(() => {
     if (!drawn) return { still: '', morphed: '' }
     const { grid, spacing, w, h } = drawn
-    const toned = blur(grid.data, w, h, spread).map((v) => Math.min(1, v * gain))
     const still = linesFromGrid({ w, h, data: toned }, spacing)
     const col = new Float32Array(w)
     slices.forEach((sl, i) => {
@@ -271,7 +275,40 @@ export default function LineLab() {
     }
     return { still, morphed: linesFromGrid({ w, h, data: out }, spacing) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawn, spread, gain, progressKey])
+  }, [drawn, toned, progressKey])
+
+  // One set of lines. The only thing that is drawn is the line engine's output, from a field that changes:
+  // flat (even rows) → the halftone tone (lines swell where the letters are) → the solid letters. Each column
+  // moves along that path with its own progress, so the lines themselves grow into the word. Columns the
+  // window has not reached yet stay empty.
+  const hiPx = drawn ? Math.round(hi * drawn.w) : 0
+  const allKey = progress.map((p) => p.toFixed(3)).join(',')
+  const oneSet = useMemo(() => {
+    if (!drawn || mode !== 'one') return ''
+    const { grid, spacing, w, h, letters } = drawn
+    const real = letters.filter((lt): lt is { l: number; r: number } => !!lt)
+    const avgLw = real.length ? real.reduce((a, lt) => a + (lt.r - lt.l), 0) / real.length : 40
+    const pcol = new Float32Array(w)
+    for (let x = 0; x < w; x++) pcol[x] = Math.min(1, Math.max(0, (front * w - x) / (avgLw * soft)))
+    slices.forEach((sl, i) => {
+      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) pcol[x] = progress[i] ?? 0
+    })
+    const out = new Float32Array(w * h)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (windowOn && x > hiPx) continue
+        const i = y * w + x
+        const p = pcol[x]
+        const a = Math.min(1, p / 0.35)
+        const r = Math.min(1, Math.max(0, (p - 0.65) / 0.35))
+        const solid = grid.data[i] > 0.2 ? 1 : 0
+        const f = cover + (toned[i] - cover) * a
+        out[i] = f + (solid - f) * r
+      }
+    }
+    return linesFromGrid({ w, h, data: out }, spacing)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawn, toned, mode, cover, windowOn, hiPx, allKey])
 
   // Auto-play: advance t with the clock, hold a beat at the end, then loop or stop.
   const tRef = useRef(t)
@@ -414,16 +451,24 @@ export default function LineLab() {
     )
   ) : null
 
-  // Final: every letter goes Masked Text → Halftone Lines → Raw Text as the window's trailing edge passes it.
+  // Final. 'one': a single set of lines grows into the word. 'layered': Masked Text → Halftone Lines → Raw Text
+  // as three stacked versions, each fading into the next.
   const finalArt = drawn ? (
-    <>
-      {linesBack > 0 ? <path d={drawn.band} fill={backInk} opacity={linesBack} clipPath={windowOn ? `url(#${win})` : undefined} /> : null}
-      <g mask={`url(#${fade})`}>{composite}</g>
-      <g mask={`url(#${show})`}>
-        <path d={halftone.morphed} fill={ink} />
-      </g>
-      <g mask={`url(#${rawMask})`}>{plain}</g>
-    </>
+    mode === 'one' ? (
+      <>
+        <path d={oneSet} fill={ink} />
+        {crisp ? <g mask={`url(#${rawMask})`}>{plain}</g> : null}
+      </>
+    ) : (
+      <>
+        {linesBack > 0 ? <path d={drawn.band} fill={backInk} opacity={linesBack} clipPath={windowOn ? `url(#${win})` : undefined} /> : null}
+        <g mask={`url(#${fade})`}>{composite}</g>
+        <g mask={`url(#${show})`}>
+          <path d={halftone.morphed} fill={ink} />
+        </g>
+        <g mask={`url(#${rawMask})`}>{plain}</g>
+      </>
+    )
   ) : null
 
   return (
@@ -597,7 +642,7 @@ export default function LineLab() {
           <Card
             title="Final: reveal"
             kind="output"
-            from={['Windowed Lines', 'Masked Text', 'Halftone Lines', 'Text', 'Window']}
+            from={mode === 'one' ? ['Lines', 'Text', 'Window'] : ['Windowed Lines', 'Masked Text', 'Halftone Lines', 'Text', 'Window']}
             preview={
               <Shot drawn={drawn} paper={paper}>
                 {defs}
@@ -605,11 +650,27 @@ export default function LineLab() {
               </Shot>
             }
           >
-            <Slider label="lines shown" value={linesBack} min={0} max={1} step={0.05} onChange={setLinesBack} />
+            <label className="flex items-center gap-2 text-xs">
+              <span className="w-20 shrink-0 text-muted-foreground">built as</span>
+              <select value={mode} onChange={(e) => setMode(e.target.value as 'one' | 'layered')} className="rounded border px-1 py-0.5">
+                <option value="one">one set of lines</option>
+                <option value="layered">layered (3 versions)</option>
+              </select>
+            </label>
+            {mode === 'one' ? (
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={crisp} onChange={(e) => setCrisp(e.target.checked)} />
+                crisp finish (raw text over the lines)
+              </label>
+            ) : (
+              <>
+                <Slider label="lines shown" value={linesBack} min={0} max={1} step={0.05} onChange={setLinesBack} />
             <label className="flex items-center gap-2 text-xs">
               <span className="w-20 shrink-0 text-muted-foreground">line colour</span>
               <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
             </label>
+              </>
+            )}
             <Slider label="start early" value={lead} min={0} max={1} step={0.01} onChange={setLead} />
             <Slider label="pieces / letter" value={pieces} min={1} max={24} step={1} onChange={setPieces} />
             <Slider label="ramp (letters)" value={soft} min={0.5} max={10} step={0.05} onChange={setSoft} />
