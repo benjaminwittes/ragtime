@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { UNIT_PX } from '../textLines'
+import { useMeasured } from '../useMeasured'
 import { frameAt, measureMorph, revealMask, timing, toneOf, type Measured, type MorphParams } from './engine'
 import MorphArt from './MorphArt'
 
@@ -37,7 +38,7 @@ export default function LineMorphText({
   onDone?: () => void
 }) {
   const body = useRef<HTMLSpanElement>(null)
-  const [m, setM] = useState<Measured | null>(null)
+  const m = useMeasured<Measured>(() => body.current, (el) => measureMorph(el, pitch), [text, pitch])
   const [t, setT] = useState(0)
   // Reduced motion: there is no morph, and the text is simply there.
   const [still] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -46,29 +47,6 @@ export default function LineMorphText({
   useEffect(() => {
     done.current = onDone
   }, [onDone])
-
-  useLayoutEffect(() => {
-    const el = body.current
-    if (!el) return
-    let raf = 0
-    const draw = () => {
-      const measured = measureMorph(el, pitch)
-      if (measured) setM(measured)
-    }
-    const later = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(draw)
-    }
-    draw()
-    const ro = new ResizeObserver(later)
-    ro.observe(el)
-    // The face may arrive after the first layout; the words are the same but the shapes are not.
-    void document.fonts?.ready.then(later)
-    return () => {
-      cancelAnimationFrame(raf)
-      ro.disconnect()
-    }
-  }, [text, pitch])
 
   // How long the whole takes at the one swipe speed: a longer text takes longer, a shorter one less.
   const total = m ? timing(m, params).total : 0

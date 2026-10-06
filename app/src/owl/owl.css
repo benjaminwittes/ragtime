@@ -48,13 +48,30 @@
   position: relative;
 }
 
-/* The hub's owl on a desktop (`owl/embeds.ts`): out of the flow, on its own perch at the top left of the
- * first screen, in line with the site bar's logo (that bar is `max-w-6xl` with `px-6`), and its note beside it.
- * A rule and not utilities, so the perch is one declaration. */
+/* The hub's owl (`SITES.hub`, `owl/embeds.ts`): its whole placement, in one rule. Centred above the
+ * title on a phone or a tablet, at `--owl-size` and then `--owl-size-sm` (the knobs, set by the site's
+ * `siteVars`). On a desktop (`lg`) it perches out of the flow at the top left of the first screen, in
+ * line with the site bar's logo (that bar is `max-w-6xl` with `px-6`), with its note beside it.
+ * `.owl-perch-ground` is the section it perches against: it goes on the hub's hero.
+ * After `.owl-spot`, which sets `position: relative` and would otherwise win here. */
+.owl-perch {
+  width: var(--owl-size);
+  margin: 0 auto 1.25rem;
+}
+@media (min-width: 40rem) {
+  .owl-perch {
+    width: var(--owl-size-sm);
+    margin-bottom: 1.5rem;
+  }
+}
 @media (min-width: 64rem) {
+  .owl-perch-ground {
+    position: relative;
+  }
   .owl-perch {
     position: absolute;
     top: 1.5rem;
     left: max(1.5rem, calc((100% - 72rem) / 2 + 1.5rem));
+    margin: 0;
   }
 }

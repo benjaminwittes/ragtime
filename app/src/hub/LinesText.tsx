@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { linesFromGrid, rasterizeText, UNIT_PX } from './textLines'
+import { useMeasured } from './useMeasured'
 
 /**
  * The hub's title, drawn as lines. It renders the sentence as ordinary text (the heading keeps
@@ -16,34 +17,18 @@ type Drawn = { d: string; w: number; h: number }
 
 export default function LinesText({ text, pitch, photocopy }: { text: string; pitch: number; photocopy: boolean }) {
   const svg = useRef<SVGSVGElement>(null)
-  const [drawn, setDrawn] = useState<Drawn | null>(null)
-
-  useLayoutEffect(() => {
-    const host = svg.current?.parentElement
-    if (!host) return
-    let raf = 0
-    const draw = () => {
+  const drawn = useMeasured<Drawn>(
+    () => svg.current?.parentElement,
+    (host) => {
       const grid = rasterizeText(host)
-      if (!grid) return
+      if (!grid) return null
       const size = parseFloat(getComputedStyle(host).fontSize) || 52
       // Two pixels at the desktop title; no finer than a pixel and a half, below which lines blur to grey.
       const spacing = Math.max(1.5, (pitch * size) / 52)
-      setDrawn({ d: linesFromGrid(grid, spacing), w: grid.w, h: grid.h })
-    }
-    const later = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(draw)
-    }
-    draw()
-    const ro = new ResizeObserver(later)
-    ro.observe(host)
-    // The face may arrive after the first layout; the words are the same but the shapes are not.
-    void document.fonts?.ready.then(later)
-    return () => {
-      cancelAnimationFrame(raf)
-      ro.disconnect()
-    }
-  }, [text, pitch])
+      return { d: linesFromGrid(grid, spacing), w: grid.w, h: grid.h }
+    },
+    [text, pitch],
+  )
 
   // The real text steps aside only while the lines are there to stand in for it.
   useLayoutEffect(() => {

@@ -20,7 +20,7 @@ describe('the embed table', () => {
 
   it('has a second size wherever a class reads one', () => {
     for (const id of ids) {
-      const reads = (SITES[id].figureClassName ?? '').includes('--owl-size-sm') || SITES[id].className.includes('--owl-size-sm')
+      const reads = (SITES[id].figureClassName ?? '').includes('--owl-size-sm') || SITES[id].className.includes('--owl-size-sm') || SITES[id].figureClassName === 'owl-perch'
       expect(getTunable(sizeSmKnob(id)) !== undefined, id).toBe(reads)
     }
   })
@@ -28,8 +28,8 @@ describe('the embed table', () => {
   it('sizes the element that carries the width from the knob', () => {
     for (const id of ids) {
       const carrier = SITES[id].figureClassName ?? SITES[id].className
-      // The Explorer's width is written in its own sheet, from the same property.
-      if (id !== 'explorer') expect(carrier, id).toContain('var(--owl-size)')
+      // The Explorer's width and the hub's are written in their own sheets, from the same property.
+      if (id !== 'explorer' && carrier !== 'owl-perch') expect(carrier, id).toContain('var(--owl-size)')
     }
   })
 
