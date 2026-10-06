@@ -243,14 +243,17 @@ export default function LineLab() {
   const endMask = `${uid}-end`
   const lineFade = `${uid}-linefade`
 
-  // Each letter's progress through Final, 0 → 1, driven by the Window's trailing (left) edge: the lines
-  // retreat sideways and leave the letter. The first half is Masked Text → Halftone Lines (`toHalftone`),
-  // the second half is Halftone Lines → Raw Text (`toRaw`). `soft` is how many letter widths the whole turn takes, so a few letters are in each stage at once.
-  const progress = slices.map((sl) => (drawn ? Math.min(1, Math.max(0, (front * drawn.w - sl.l) / Math.max(1e-6, sl.lw * soft))) : 0))
-  // Three phases per letter, so Halftone Lines is a stage you see and not a blink: Masked Text turns into
-  // halftone over the first third, halftone holds for the middle third, then thickens into raw text.
-  const toHalftone = progress.map((p) => Math.min(1, p / 0.35))
-  const toRaw = progress.map((p) => Math.min(1, Math.max(0, (p - 0.65) / 0.35)))
+  // Two fronts move across the word, so "start early" only moves the start of the morph:
+  //  - the early front (`front`, inside the window) starts the growth, flat lines → halftone;
+  //  - the window's trailing edge (`lo`) is the wipe, and drives the finish, halftone → the original text.
+  // With start early at 0 they are the same edge. `soft` is how many letter widths each turn takes.
+  const ramp = (edge: number, sl: { l: number; lw: number }) => (drawn ? Math.min(1, Math.max(0, (edge * drawn.w - sl.l) / Math.max(1e-6, sl.lw * soft))) : 0)
+  const progressA = slices.map((sl) => ramp(front, sl))
+  const progressB = slices.map((sl) => ramp(lo, sl))
+  // Three phases per slice, so Halftone Lines is a stage you see and not a blink: flat lines turn into halftone
+  // over the first part of A, the halftone holds, then it turns into the original text over the last part of B.
+  const toHalftone = progressA.map((p) => Math.min(1, p / 0.35))
+  const toRaw = progressB.map((p) => Math.min(1, Math.max(0, (p - 0.65) / 0.35)))
   const progressKey = toRaw.map((p) => p.toFixed(2)).join(',')
 
   // Halftone Lines: the lines carry the tone. The text is softened so the lines swell toward the
@@ -282,25 +285,31 @@ export default function LineLab() {
   // moves along that path with its own progress, so the lines themselves grow into the word. Columns the
   // window has not reached yet stay empty.
   const hiPx = drawn ? Math.round(hi * drawn.w) : 0
-  const allKey = progress.map((p) => p.toFixed(3)).join(',')
+  const allKey = progressA.map((p) => p.toFixed(3)).join(',') + '|' + progressB.map((p) => p.toFixed(3)).join(',')
   const oneSet = useMemo(() => {
     if (!drawn || mode !== 'one') return ''
     const { grid, spacing, w, h, letters } = drawn
     const real = letters.filter((lt): lt is { l: number; r: number } => !!lt)
     const avgLw = real.length ? real.reduce((a, lt) => a + (lt.r - lt.l), 0) / real.length : 40
-    const pcol = new Float32Array(w)
-    for (let x = 0; x < w; x++) pcol[x] = Math.min(1, Math.max(0, (front * w - x) / (avgLw * soft)))
+    const colA = new Float32Array(w)
+    const colB = new Float32Array(w)
+    for (let x = 0; x < w; x++) {
+      colA[x] = Math.min(1, Math.max(0, (front * w - x) / (avgLw * soft)))
+      colB[x] = Math.min(1, Math.max(0, (lo * w - x) / (avgLw * soft)))
+    }
     slices.forEach((sl, i) => {
-      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) pcol[x] = progress[i] ?? 0
+      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) {
+        colA[x] = progressA[i] ?? 0
+        colB[x] = progressB[i] ?? 0
+      }
     })
     const out = new Float32Array(w * h)
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (windowOn && x > hiPx) continue
         const i = y * w + x
-        const p = pcol[x]
-        const a = Math.min(1, p / 0.35)
-        const r = Math.min(1, Math.max(0, (p - 0.65) / 0.35))
+        const a = Math.min(1, colA[x] / 0.35)
+        const r = Math.min(1, Math.max(0, (colB[x] - 0.65) / 0.35))
         const solid = grid.data[i] > 0.2 ? 1 : 0
         const f = cover + (toned[i] - cover) * a
         out[i] = f + (solid - f) * r
@@ -682,7 +691,7 @@ export default function LineLab() {
             <Slider label="start early" value={lead} min={0} max={1} step={0.01} onChange={setLead} />
             <Slider label="pieces / letter" value={pieces} min={1} max={24} step={1} onChange={setPieces} />
             <Slider label="ramp (letters)" value={soft} min={0.5} max={10} step={0.05} onChange={setSoft} />
-            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Start early puts the front inside the window (0 = its trailing edge, 1 = its leading edge), so the turn begins while lines still cover the letter. Pieces cuts each letter into slices that turn one at a time. Ramp is how many letter widths the whole turn takes.</p>
+            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Start early only moves where the halftone growth begins (0 = the window's trailing edge, 1 = its leading edge). The lines still wipe away, and the original text arrives, at the trailing edge. Pieces cuts each letter into slices that turn one at a time. Ramp is how many letter widths the whole turn takes.</p>
           </Card>
         </Column>
       </div>
