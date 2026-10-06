@@ -26,15 +26,16 @@ import type { SpeechSite } from './voice/types'
  * `size` knob (and `variant` knob, if wanted) to `knobs/embeds.ts`.
  */
 export const SITES: Record<OwlSiteId, OwlSite> = {
-  // The first screen's owl, on the stacks, above the title. Its box is the one that
-  // travels to the Explorer's owl on a route change.
+  // The first screen's owl, on the stacks. Above the title on a phone or a tablet. On a desktop (`lg`) it
+  // perches at the top left of the first screen, out of the flow, with its note beside it (`.owl-perch`,
+  // `owl.css`; the hero section is `lg:relative` to give it that corner). Its box is the one that travels to the Explorer's owl on a route change.
   hub: {
-    label: 'Hub, above the title',
+    label: 'Hub, above the title; top left on a desktop',
     pose: 'stacks',
     lantern: 'dark',
     keepsHours: true,
     className: 'w-full',
-    figureClassName: 'mx-auto mb-5 w-[var(--owl-size)] sm:mb-6 sm:w-[var(--owl-size-sm)]',
+    figureClassName: 'mx-auto mb-5 w-[var(--owl-size)] sm:mb-6 sm:w-[var(--owl-size-sm)] owl-perch lg:mx-0 lg:mb-0',
   },
   // The Explorer's face: the owl standing, which is the pose its concept sheet recommends
   // for an avatar. Sized by `explorer.css` (`.owl-figure`) from the same property.

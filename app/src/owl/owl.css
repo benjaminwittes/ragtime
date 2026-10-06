@@ -47,3 +47,14 @@
 .owl-spot {
   position: relative;
 }
+
+/* The hub's owl on a desktop (`owl/embeds.ts`): out of the flow, on its own perch at the top left of the
+ * first screen, in line with the site bar's logo (that bar is `max-w-6xl` with `px-6`), and its note beside it.
+ * Here and not in a utility class because `.owl-spot` above is unlayered and would win over one. */
+@media (min-width: 64rem) {
+  .owl-perch {
+    position: absolute;
+    top: 1.5rem;
+    left: max(1.5rem, calc((100% - 72rem) / 2 + 1.5rem));
+  }
+}

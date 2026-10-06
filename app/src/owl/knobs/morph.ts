@@ -13,19 +13,19 @@ import { defineTunables } from '@/tune/registry'
 export const owlMorphKnobs = defineTunables([
   {
     id: 'owl.morph.speed',
-    value: 14.8,
+    value: 32,
   },
   {
     id: 'owl.morph.pitch',
-    value: 8,
+    value: 6.2,
   },
   {
     id: 'owl.morph.cover',
-    value: 0.2,
+    value: 0.15,
   },
   {
     id: 'owl.morph.window',
-    value: 6,
+    value: 6.4,
   },
   {
     id: 'owl.morph.spread',

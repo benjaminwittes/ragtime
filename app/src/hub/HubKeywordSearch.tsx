@@ -250,7 +250,8 @@ export function HubKeywordSearch({
     <section
       ref={hero}
       className={cn(
-        'flex flex-col',
+        // `lg:relative`: the hub's owl perches at this section's top left on a desktop (`owl/embeds.ts`).
+        'flex flex-col lg:relative',
         !answered && 'min-h-[calc(100dvh-var(--site-bar-h))]',
       )}
     >
