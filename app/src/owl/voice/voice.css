@@ -1,5 +1,5 @@
-/* The owl's speech (`owl/speech.tsx`): the box it is anchored to, the note, and three ways of
- * setting it.
+/* The owl's speech (`owl/speech.tsx`): the box it is anchored to, and the note, written as lines
+ * (`hub/lineMorph/`).
  *
  * Nothing here applies to an owl with no voice. The live region and the note exist only when
  * a voice does, so with the Voice knob at its default this sheet matches no element, and it
@@ -11,11 +11,11 @@
  * when it comes and goes, and `pointer-events: none`, so it cannot cover a control. The
  * placement (`data-place`) is the site's entry in `owl/embeds.ts`, and `voice/fit.ts` moves
  * it from there when the screen has no room: the numbers it writes are `--note-max` and
- * `--note-shift`. The look (`data-treatment`) is the voice's, or the panel's.
+ * `--note-shift`.
  *
  * Colour is `currentColor` throughout, so the same note reads on the paper of the hub and
- * the dark of the stage without either knowing about it. The faces are the self-hosted
- * Lato and EB Garamond and two system stacks; nothing is fetched.
+ * the dark of the stage without either knowing about it. The face is the self-hosted Lato;
+ * nothing is fetched.
  *
  * Unlayered, like `owl.css`. Imported from `owl/speech.tsx`.
  */
@@ -47,26 +47,29 @@
   z-index: 5;
   box-sizing: border-box;
   width: max-content;
-  max-width: min(var(--note-max, 16rem), 16rem);
+  max-width: min(var(--note-max, 22rem), 22rem);
   pointer-events: none;
   text-align: left;
   color: color-mix(in srgb, currentColor 88%, transparent);
   transform: translateX(var(--note-x)) rotate(var(--note-tilt));
   text-wrap: pretty;
-}
-.owl-note-rest {
-  visibility: hidden;
+  /* The owl's own lines, written (`hub/lineMorph/`): a heavy face in the owl's ink (set inline). */
+  font: 800 1.7rem/1.12 var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  letter-spacing: 0;
+  padding-block: 0.2em;
 }
 
-/* Where. A line begins level with the top of the owl's box. */
+/* Where. A line to the owl's side is level with its middle. */
 .owl-note[data-place='beside'] {
   left: 100%;
-  top: 0.25rem;
+  top: 50%;
+  transform: translate(var(--note-x), -50%);
   margin-left: var(--note-gap);
 }
 .owl-note[data-place='beside-start'] {
   right: 100%;
-  top: 0.25rem;
+  top: 50%;
+  transform: translate(var(--note-x), -50%);
   margin-right: var(--note-gap);
   text-align: right;
 }
@@ -90,108 +93,6 @@
   display: inline-block;
   max-width: none;
   margin-left: 0.25rem;
-}
-
-/* Plate caption: capitals between two hairlines, as under an engraved plate. */
-.owl-note[data-treatment='plate'] {
-  padding: 0.3rem 0.15rem;
-  border-block: 1px solid color-mix(in srgb, currentColor 50%, transparent);
-  font: 500 0.72rem/1.4 var(--font-serif, 'EB Garamond', Garamond, Georgia, serif);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  text-align: center;
-}
-
-/* Typed note: a typewriter's face and a rule down the left edge, a marginal note. */
-.owl-note[data-treatment='typed'] {
-  padding-left: 0.6rem;
-  border-left: 2px solid color-mix(in srgb, currentColor 45%, transparent);
-  font: 400 0.8rem/1.4 'Courier New', Courier, ui-monospace, monospace;
-  letter-spacing: -0.01em;
-}
-.owl-note[data-treatment='typed'][data-place='beside-start'] {
-  padding-left: 0;
-  padding-right: 0.6rem;
-  border-left: 0;
-  border-right: 2px solid color-mix(in srgb, currentColor 45%, transparent);
-}
-
-/* Rubber stamp: bold capitals in a ruled box, a degree off true. */
-.owl-note[data-treatment='stamp'] {
-  --note-tilt: -1.5deg;
-  padding: 0.25rem 0.55rem;
-  border: 2px solid currentColor;
-  border-radius: 3px;
-  color: color-mix(in srgb, currentColor 82%, transparent);
-  font: 800 0.66rem/1.25 var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-.owl-note[data-treatment='stamp'][data-place='inline'] {
-  margin-inline: 0.5rem;
-}
-
-/* The owl's lines: the words drawn as the owl is (`hub/LinesText.tsx`), in the owl's ink (set
- * inline), to its right and level with its middle. The real text is kept for the raster and
- * goes transparent once the lines stand in for it. */
-.owl-note[data-treatment='lines'] {
-  max-width: min(var(--note-max, 22rem), 22rem);
-  position: absolute;
-  font: 800 1.7rem/1.12 var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
-  letter-spacing: 0;
-  padding-block: 0.2em;
-}
-.owl-note[data-treatment='lines'][data-lined='on'] {
-  -webkit-text-fill-color: transparent;
-}
-.owl-note[data-treatment='lines'][data-place='beside'],
-.owl-note[data-treatment='lines'][data-place='beside-start'] {
-  top: 50%;
-  transform: translate(var(--note-x), -50%);
-}
-/* The sweep (`cover` in `hub/LinesText.tsx`): one band of medium-weight lines runs out from the left
- * edge to the full width of the note, then leaves to the right. The words are the mask the band
- * leaves through: they are not drawn until the front of its exit has passed, and then they are
- * the only lines left, the band's own lines stopping where the words are not. Both clips are
- * measured on the svg's own box (`view-box`), so the two fronts are one front. Nothing is typed. */
-.lines-cover {
-  display: none;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .lines-cover {
-    display: inline;
-    animation:
-      owl-cover-in var(--wipe-in, 450ms) cubic-bezier(0.3, 0, 0.3, 1) both,
-      owl-cover-out 560ms cubic-bezier(0.5, 0, 0.7, 1) calc(var(--wipe-in, 450ms) + 60ms) forwards;
-  }
-  .lines-words {
-    clip-path: inset(0 100% 0 0) view-box;
-    animation: owl-words-in 560ms cubic-bezier(0.5, 0, 0.7, 1) calc(var(--wipe-in, 450ms) + 60ms) forwards;
-  }
-  @keyframes owl-cover-in {
-    from {
-      clip-path: inset(0 100% 0 0) view-box;
-    }
-    to {
-      clip-path: inset(0 0 0 0) view-box;
-    }
-  }
-  @keyframes owl-cover-out {
-    from {
-      clip-path: inset(0 0 0 0) view-box;
-    }
-    to {
-      clip-path: inset(0 0 0 100%) view-box;
-    }
-  }
-  @keyframes owl-words-in {
-    from {
-      clip-path: inset(0 100% 0 0) view-box;
-    }
-    to {
-      clip-path: inset(0 0 0 0) view-box;
-    }
-  }
 }
 
 /* The box the reader types back in (`TypeBack`, `speech.tsx`): the one piece of the owl that takes
@@ -223,18 +124,4 @@
 }
 .owl-typeback input::placeholder {
   color: color-mix(in srgb, currentColor 45%, transparent);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .owl-note {
-    animation: owl-note-in 160ms ease-out;
-  }
-  @keyframes owl-note-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
 }

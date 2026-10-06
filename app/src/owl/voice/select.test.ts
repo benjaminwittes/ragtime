@@ -6,7 +6,6 @@ const voice: OwlVoice = {
   id: 'test',
   label: 'Test',
   note: '',
-  treatment: 'plate',
   lines: {
     searching: ['a', 'b', 'c'],
     'search-empty': ['only'],

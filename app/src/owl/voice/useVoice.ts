@@ -8,7 +8,7 @@ import { watchIdle } from './idle'
 import { getVoice } from './index'
 import { pickLine } from './select'
 import { Speaker, sessionMemory, type Spoken } from './speaker'
-import type { OccasionId, SpeechPlace, SpeechSite, TreatmentId, VoiceConfig } from './types'
+import type { OccasionId, SpeechPlace, SpeechSite, VoiceConfig } from './types'
 
 /**
  * Wires a `Speaker` to a component: what the owl says at one place, in the voice the panel
@@ -26,8 +26,6 @@ export type SiteVoice = {
   /** The text a screen reader is told: only a line that is a reply to the reader, and empty otherwise. */
   announced: string
   place: SpeechPlace
-  treatment: TreatmentId
-  typeMs: number
   /** Whether a click on the owl does anything; the owl shows a pointer for it. */
   poke: boolean
   /** The reader's own doing: a click or tap on the owl. */
@@ -123,8 +121,6 @@ export function useOwlVoice(
       spoken: asked && text ? { key: 1, text, occasion: asked, announce: false } : null,
       announced: '',
       place: site.place,
-      treatment: held.treatment ?? voice.treatment,
-      typeMs: 0,
       poke: false,
       prod,
       dismiss,
@@ -136,8 +132,6 @@ export function useOwlVoice(
     spoken,
     announced: spoken?.announce ? spoken.text : '',
     place: site.place,
-    treatment: config.treatment ?? voice.treatment,
-    typeMs: config.typeMs,
     poke: config.poke && site.occasions.includes('poke'),
     prod,
     dismiss,

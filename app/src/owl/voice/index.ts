@@ -5,7 +5,7 @@ import type { OwlVoice } from './types'
  * The voices, by id.
  *
  * A voice is a file in `voices/` whose default export is an `OwlVoice`: an id (the file's
- * name), a label, a note on its register, the treatment it is set in and its lines by
+ * name), a label, a note on its register and its lines by
  * occasion. The glob finds it; nothing else needs editing, and the "Voice" knob lists it by
  * itself. Adding or changing a voice is editing data, not components.
  *

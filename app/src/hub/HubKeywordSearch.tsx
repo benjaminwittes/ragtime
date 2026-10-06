@@ -259,7 +259,7 @@ export function HubKeywordSearch({
         <SurfaceIntro
           level={1}
           className="text-center"
-          // The owl on the stacks says "I am RAGtime" in a typed note beside it (the voice,
+          // The owl on the stacks says "I am RAGtime", written as lines beside it (the voice,
           // `owl/voice/voices/ragtime.ts`). It sits above the title rather than beside
           // it because the title fades and re-wraps every third
           // beat and the owl must not move when it does — above, it is outside all of that.

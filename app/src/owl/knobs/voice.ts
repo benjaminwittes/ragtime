@@ -6,7 +6,7 @@ import { defineTunables } from '@/tune/registry'
  * groups: the `value:` here is the only copy of each default. Voice is none and the chat
  * switch is off, so with nothing tuned the owl says nothing and the page is the page it was.
  *
- * The rest of the voice's knobs (the treatment, the timings, the occasions) are in
+ * The rest of the voice's knobs (the timings, the occasions) are in
  * `deferred/voice.ts`: only the speech code reads them, so they arrive with it. The panel's
  * labels and notes for these two are in `panel/voice.ts`.
  *

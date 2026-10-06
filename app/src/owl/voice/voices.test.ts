@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { voiceList } from './all'
 import { getVoice, voiceIds, voiceOptions } from './index'
-import { treatmentList, TREATMENTS } from './treatments'
-import { OCCASION_IDS, TREATMENT_IDS } from './types'
+import { OCCASION_IDS } from './types'
 
 /**
  * The voices are data, and these hold the data to the rules the copy has to keep. They
@@ -18,16 +17,11 @@ describe('the voices', () => {
     expect(new Set(voices.map((v) => v.id)).size).toBe(voices.length)
   })
 
-  it('each have a label, a note on the register and a known treatment', () => {
+  it('each have a label and a note on the register', () => {
     for (const voice of voices) {
       expect(voice.label, voice.id).not.toBe('')
       expect(voice.note, voice.id).not.toBe('')
-      expect(TREATMENT_IDS, voice.id).toContain(voice.treatment)
     }
-  })
-
-  it('use a treatment the page can set', () => {
-    expect(voices.map((v) => v.treatment)).toContain('typed')
   })
 
   it('only have lines for occasions that exist', () => {
@@ -64,9 +58,8 @@ describe('the voices', () => {
   it('keep every line short', () => {
     for (const voice of voices) {
       for (const [occasion, lines] of Object.entries(voice.lines)) {
-        // A typed note is set wider than a stamp or a plate caption, and says a sentence.
-        const cap = voice.treatment === 'typed' ? 120 : 40
-        for (const line of lines ?? []) expect(line.length, `${voice.id}/${occasion}: ${line}`).toBeLessThanOrEqual(cap)
+        // The note is set in rows, and says a sentence.
+        for (const line of lines ?? []) expect(line.length, `${voice.id}/${occasion}: ${line}`).toBeLessThanOrEqual(120)
       }
     }
   })
@@ -96,12 +89,5 @@ describe('the registry', () => {
 
   it('offers none first, and then every voice, to the knob', () => {
     expect(voiceOptions().map((o) => o.value)).toEqual(['none', ...voiceList().map((v) => v.id)])
-  })
-})
-
-describe('the treatments', () => {
-  it('are the three the type lists, each with a note', () => {
-    expect(treatmentList().map((t) => t.id)).toEqual([...TREATMENT_IDS])
-    for (const treatment of Object.values(TREATMENTS)) expect(treatment.note).not.toBe('')
   })
 })

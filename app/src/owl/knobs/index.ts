@@ -30,7 +30,7 @@ import { defineSurface } from '@/tune/registry'
  *                            from tuned values only, so the declared defaults decide nothing
  *   `deferred/engraved.ts`   the engraved style's halftone: imported by the style, so it
  *                            arrives with the code that reads it
- *   `deferred/voice.ts`      the voice's treatment, timings and occasions: imported by the
+ *   `deferred/voice.ts`      the voice's timings and occasions: imported by the
  *                            speech code. `voice.ts` here keeps the two knobs a page without
  *                            a voice reads
  *

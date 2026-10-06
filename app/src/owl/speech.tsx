@@ -28,10 +28,10 @@ import { baseDesign } from './design'
  *   - **The note never takes a click.** It is `pointer-events: none`, so it cannot cover a
  *     control however it lands. It comes down by itself after its dwell, on Escape, or on a
  *     click of the owl, and it holds no focusable element, so it cannot trap focus.
- *   - **Motion is only the reveal.** Letters are typed in unless the reader has asked for
- *     reduced motion, in which case the line is simply there. The unrevealed part is laid
- *     out in invisible ink, so the note's box is its final size from the first letter.
- */
+ *   - **Motion is only the reveal.** The words are written as lines and end as the text
+ *     (`hub/lineMorph/`), and never typed. The text is in the page from the first frame, so a
+ *     screen reader and the note's box are never waiting for it; with reduced motion the line
+ *     is simply there. */
 
 /**
  * `target` is the element a click on counts for; without one, the owl's box — the parent of
@@ -41,10 +41,10 @@ export function OwlSpeech({ voice, target }: { voice: SiteVoice; target?: RefObj
   const region = useRef<HTMLDivElement>(null)
   const { poke, prod, say, hold, dismiss, spoken } = voice
   const standing = spoken !== null
-  // The lines treatment is the listening owl: a pointer over it speaks, a click on a spoken line
-  // opens a box to type back in, and Enter carries the question to the Explorer. Off the Explorer
-  // only, which reads `?q=` once, when it opens.
-  const listening = voice.treatment === 'lines' && toLogical(window.location.pathname) !== '/explorer'
+  // The listening owl: a pointer over it speaks, a click on a spoken line opens a box to type back in,
+  // and Enter carries the question to the Explorer. Off the Explorer only, which reads `?q=` once,
+  // when it opens.
+  const listening = typeof window !== 'undefined' && toLogical(window.location.pathname) !== '/explorer'
   const [typing, setTyping] = useState(false)
 
   useEffect(() => {
@@ -142,23 +142,10 @@ const MARGIN = 8
 function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
   const note = useRef<HTMLDivElement>(null)
   const { text } = spoken
-  // The reveal starts from nothing unless it is off, or the reader asked for stillness.
-  // The lines treatment is written by the line morph (`hub/lineMorph/`), once for the whole sentence, row by
-  // row, and ends as the real text: it is not retyped, because a redraw per letter would rebuild the raster
-  // sixty times a second.
-  const lined = voice.treatment === 'lines'
   const morph = useMorph()
-  const [shown, setShown] = useState(() => (lined || voice.typeMs <= 0 || stillness() ? text.length : 0))
-  const typeMs = voice.typeMs
-
-  useEffect(() => {
-    if (shown >= text.length) return
-    const next = setTimeout(() => setShown(shown + 1), typeMs)
-    return () => clearTimeout(next)
-  }, [shown, text.length, typeMs])
 
   // Drawn lines stand to the owl's right, level with its middle; `fitNote` still flips them when there is no room.
-  const place = lined && voice.place !== 'inline' ? 'beside' : voice.place
+  const place = voice.place !== 'inline' ? 'beside' : voice.place
   useLayoutEffect(() => {
     const el = note.current
     const owl = el?.parentElement
@@ -180,26 +167,8 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
   }, [place])
 
   return (
-    <div
-      ref={note}
-      className="owl-note"
-      data-place={place}
-      data-treatment={voice.treatment}
-      aria-hidden="true"
-      style={lined ? { color: baseDesign().palette.navy } : undefined}
-    >
-      {lined ? (
-        <LineMorphText text={text} params={morph.params} pitch={morph.pitch} />
-      ) : (
-        <>
-          <span>{text.slice(0, shown)}</span>
-          <span className="owl-note-rest">{text.slice(shown)}</span>
-        </>
-      )}
+    <div ref={note} className="owl-note" data-place={place} aria-hidden="true" style={{ color: baseDesign().palette.navy }}>
+      <LineMorphText text={text} params={morph.params} pitch={morph.pitch} />
     </div>
   )
-}
-
-function stillness(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }

@@ -2,7 +2,6 @@ import type { TuneValue } from '@/tune/types'
 import '../knobs/deferred/voice'
 import { CHAT_KNOB, VOICE_KNOB } from './choice'
 import { getVoice } from './index'
-import { isTreatment } from './treatments'
 import { OCCASION_IDS, type ChatMode, type OccasionId, type OwlVoice, type SpeechSite, type VoiceConfig } from './types'
 
 /**
@@ -17,13 +16,11 @@ import { OCCASION_IDS, type ChatMode, type OccasionId, type OwlVoice, type Speec
  */
 
 export { CHAT_KNOB, VOICE_KNOB }
-export const TREATMENT_KNOB = 'owl.voice.treatment'
 export const DELAY_KNOB = 'owl.voice.delay'
 export const DWELL_KNOB = 'owl.voice.dwell'
 export const ONCE_KNOB = 'owl.voice.once'
 export const POKE_KNOB = 'owl.voice.poke'
 export const IDLE_KNOB = 'owl.voice.idleSeconds'
-export const TYPE_KNOB = 'owl.voice.typeMs'
 
 /** The knob that switches one occasion on. `poke` is the one occasion that has none of its own: `POKE_KNOB` is its switch. */
 export const occasionKnob = (id: OccasionId) => `owl.voice.on.${id}`
@@ -35,7 +32,6 @@ const flag = (value: TuneValue | undefined): boolean => value === true
 
 export function readVoiceConfig(read: Read): VoiceConfig {
   const picked = read(VOICE_KNOB)
-  const treatment = read(TREATMENT_KNOB)
   const chat = read(CHAT_KNOB)
   const enabled = new Set<OccasionId>()
   for (const id of OCCASION_IDS) {
@@ -49,8 +45,6 @@ export function readVoiceConfig(read: Read): VoiceConfig {
     oncePerSession: flag(read(ONCE_KNOB)),
     poke: flag(read(POKE_KNOB)),
     idleSeconds: num(read(IDLE_KNOB)),
-    treatment: isTreatment(treatment) ? treatment : null,
-    typeMs: num(read(TYPE_KNOB)),
     chat: (chat === 'row' ? 'row' : 'off') satisfies ChatMode,
   }
 }

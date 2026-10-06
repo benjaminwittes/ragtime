@@ -1,9 +1,7 @@
 import { defineTunables } from '@/tune/registry'
-import { treatmentOptions } from '../../voice/treatments'
 
 /**
- * The rest of the owl's voice: how a line is set, how long it takes about it, and which
- * occasions are switched on. Same rule as the other groups: the `value:` here is the only
+ * The rest of the owl's voice: how long it takes about it, and which occasions are switched on. Same rule as the other groups: the `value:` here is the only
  * copy of each default. `../voice.ts` has the two knobs a page without a voice still reads.
  *
  * Deferred (`./index.ts` says what that is): the speech code imports this file
@@ -16,15 +14,6 @@ const VOICE = { scope: 'owl', group: 'Voice', source: { file: SELF } } as const
 const WHEN = { scope: 'owl', group: 'Voice: occasions', source: { file: SELF }, kind: 'boolean' } as const
 
 export const owlVoiceDetailKnobs = defineTunables([
-  {
-    ...VOICE,
-    id: 'owl.voice.treatment',
-    label: 'Treatment',
-    kind: 'select',
-    value: 'typed',
-    options: treatmentOptions(),
-    note: 'How a line is set on the page. “follow the voice” uses the treatment each voice names.',
-  },
   {
     ...VOICE,
     id: 'owl.voice.delay',
@@ -46,19 +35,6 @@ export const owlVoiceDetailKnobs = defineTunables([
     max: 20000,
     step: 500,
     note: 'Milliseconds a line stays once it is up. A click on the owl, or Escape, takes it down sooner.',
-  },
-  {
-    ...VOICE,
-    id: 'owl.voice.typeMs',
-    parent: 'owl.voice.speak',
-    label: 'Type speed',
-    kind: 'int',
-    user: true,
-    value: 16,
-    min: 0,
-    max: 120,
-    step: 4,
-    note: 'Milliseconds per letter. 0 puts the line up whole. A reader who has asked for reduced motion always gets the whole line.',
   },
   {
     ...VOICE,

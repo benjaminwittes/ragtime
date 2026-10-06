@@ -1,17 +1,19 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import '../voice/voice.css'
 import { DEFAULT_KNOBS } from '../styles/lines/knobs'
 import type { LampState } from '../styles/lines/fields'
 import { ENGRAVE_DEFAULT, type Engrave } from '../styles/lines/engrave'
 import { PrintLines } from '../styles/lines/PrintLines'
 import { PRINT_OFF, PRINT_ON, type Print } from '../styles/lines/print'
+import LineMorphText from '@/hub/lineMorph/LineMorphText'
+import { useMorph } from '../useMorph'
 
 /**
  * The owl lab (2026-10-05): the line-tile owl as decided, and experiments from there. The first lab, a contact sheet of the flat owl, is gone.
  *
  * Ratified by Thomas going in:
  *  - `lines-owl` is the main owl; `lines-lantern` is the secondary figure, its use still open.
- *  - The owl speaks in the Typed note treatment, and what it says starts from the front
+ *  - The owl speaks by writing its words as lines (`hub/lineMorph/`), and what it says starts from the front
  *    page's "I am RAGtime". Its tone is not chosen, so five are set side by side.
  *  - The motion is Print: the page re-seats on the glass, the hatching breathes, the ink
  *    and the flame flicker, a light bar passes. Stepped.
@@ -73,27 +75,12 @@ const PLACES: { id: Place; label: string }[] = [
   { id: 'inline', label: 'In the flow, wide' },
 ]
 
-/** The typed note: the real Typed-note rule from `voice.css`, set out one stepped character at a time. */
-function TypedNote({ text, speed, place }: { text: string; speed: number; place: Place }) {
-  const [typed, setShown] = useState(0)
-  const [caret, setCaret] = useState(true)
-  const shown = speed === 0 ? text.length : typed
-  useEffect(() => {
-    if (speed === 0) return
-    const id = window.setInterval(() => setShown((n) => (n >= text.length ? n : n + 1)), 1000 / speed)
-    return () => window.clearInterval(id)
-  }, [text, speed])
-  useEffect(() => {
-    const id = window.setInterval(() => setCaret((c) => !c), 530)
-    return () => window.clearInterval(id)
-  }, [])
-  const done = shown >= text.length
+/** The owl's note as the site writes it: the line morph, in the real `.owl-note` rule from `voice.css`. */
+function WrittenNote({ text, place }: { text: string; place: Place }) {
+  const morph = useMorph()
   return (
-    <p className={place === 'inline' ? 'owl-note mt-4 max-w-xl' : 'owl-note'} data-treatment="typed" data-place={place} aria-label={text}>
-      <span aria-hidden>{text.slice(0, shown)}</span>
-      <span aria-hidden style={{ opacity: !done && caret ? 1 : done && caret ? 0.5 : 0 }}>
-        {'▌'}
-      </span>
+    <p className={place === 'inline' ? 'owl-note mt-4 max-w-xl' : 'owl-note'} data-place={place} aria-label={text} style={{ color: '#1b2a49' }}>
+      <LineMorphText text={text} params={morph.params} pitch={morph.pitch} />
     </p>
   )
 }
@@ -102,7 +89,6 @@ function TypedNote({ text, speed, place }: { text: string; speed: number; place:
 
 function Hero({ print, setPrint }: { print: Print; setPrint: (p: Print) => void }) {
   const [tone, setTone] = useState('records')
-  const [speed, setSpeed] = useState(60)
   const [run, setRun] = useState(0)
   const [state, setState] = useState<LampState>('lit')
   const [size, setSize] = useState(240)
@@ -111,7 +97,7 @@ function Hero({ print, setPrint }: { print: Print; setPrint: (p: Print) => void 
   const set = <K extends keyof Print>(k: K) => (v: Print[K]) => setPrint({ ...print, [k]: v })
   return (
     <>
-      <H id="main">The main owl: lines-owl, typed, in Print</H>
+      <H id="main">The main owl: lines-owl, writing its words as lines, in Print</H>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
         The owl sits where the hub puts it, above the line it speaks. Print is on by default: the page re-seats about six times a second, the hatching
         drifts and breathes, the ink and the flame flicker, and a light bar passes every few seconds. Everything steps; nothing is smooth.
@@ -122,9 +108,9 @@ function Hero({ print, setPrint }: { print: Print; setPrint: (p: Print) => void 
             {/* The note is placed against the owl's own box, as the real one is (`voice.css`, data-place). */}
             <div className="relative" style={{ width: size }}>
               <PrintLines subject="c" size={size} state={state} knobs={DEFAULT_KNOBS} print={print} />
-              {place !== 'inline' ? <TypedNote key={`${say}${run}${speed}`} text={say} speed={speed} place={place} /> : null}
+              {place !== 'inline' ? <WrittenNote key={`${say}${run}`} text={say} place={place} /> : null}
             </div>
-            {place === 'inline' ? <TypedNote key={`${say}${run}${speed}`} text={say} speed={speed} place={place} /> : null}
+            {place === 'inline' ? <WrittenNote key={`${say}${run}`} text={say} place={place} /> : null}
           </div>
         </div>
         <div className="flex flex-col gap-3 text-sm">
@@ -147,9 +133,8 @@ function Hero({ print, setPrint }: { print: Print; setPrint: (p: Print) => void 
               ))}
             </select>
           </label>
-          <Slider label="typing, chars/s" value={speed} min={0} max={60} step={2} onChange={setSpeed} />
           <button type="button" className="w-fit text-xs underline" onClick={() => setRun((r) => r + 1)}>
-            Type it again
+            Write it again
           </button>
           <fieldset className="mt-2 grid gap-1">
             <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Print</legend>

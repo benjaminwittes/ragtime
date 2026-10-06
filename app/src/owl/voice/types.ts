@@ -127,19 +127,8 @@ export const OCCASION_IDS: readonly OccasionId[] = OCCASIONS.map((o) => o.id)
 export const REPEATING: readonly OccasionId[] = ['idle', 'poke']
 
 /* -------------------------------------------------------------------------- */
-/* Treatments and places                                                       */
+/* Places                                                                      */
 /* -------------------------------------------------------------------------- */
-
-export const TREATMENT_IDS = ['plate', 'typed', 'stamp', 'lines'] as const
-export type TreatmentId = (typeof TREATMENT_IDS)[number]
-
-/** How a line is set on the page. The type and rules are `voice.css`, keyed on `data-treatment`. */
-export type Treatment = {
-  id: TreatmentId
-  label: string
-  /** One line, shown beside the treatment in the lab. */
-  note: string
-}
 
 /**
  * Where the speech goes, relative to the owl's box. `beside` is to its right, and flips to
@@ -173,8 +162,6 @@ export type OwlVoice = {
   label: string
   /** The register, in a line, for the panel and the lab. */
   note: string
-  /** How this voice is set unless a knob overrides it. */
-  treatment: TreatmentId
   lines: Partial<Record<OccasionId, readonly string[]>>
 }
 
@@ -198,10 +185,6 @@ export type VoiceConfig = {
   poke: boolean
   /** Seconds without input before `idle`; the occasion has its own switch. */
   idleSeconds: number
-  /** The treatment that wins over the voice's own, or null to follow the voice. */
-  treatment: TreatmentId | null
-  /** Milliseconds per letter when a line is typed out; 0 puts it up whole. */
-  typeMs: number
   /** Whether the owl stands in the Explorer's conversation. */
   chat: ChatMode
 }

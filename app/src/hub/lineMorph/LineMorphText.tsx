@@ -40,7 +40,7 @@ export default function LineMorphText({
   const [m, setM] = useState<Measured | null>(null)
   const [t, setT] = useState(0)
   // Reduced motion: there is no morph, and the text is simply there.
-  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const [still] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [played, setPlayed] = useState(false)
   const done = useRef(onDone)
   useEffect(() => {

@@ -18,11 +18,10 @@ const ragtime = getVoice('ragtime') as OwlVoice
 const silent: OwlVoice = { ...ragtime, id: 'silent', lines: {} }
 
 describe('the defaults', () => {
-  it('speak in the ragtime voice, set as a typed note, with the owl in the conversation', () => {
+  it('speak in the ragtime voice, with the owl in the conversation', () => {
     const c = readVoiceConfig(declared)
     expect(c.voice).toBe('ragtime')
     expect(c.chat).toBe('row')
-    expect(c.treatment).toBe('typed')
     expect(baseDesign().voice).toBe('ragtime')
     expect(chooseVoice(c, null)?.id).toBe('ragtime')
   })
@@ -37,7 +36,6 @@ describe('the defaults', () => {
     const c = readVoiceConfig(declared)
     expect(c.delayMs).toBe(declared('owl.voice.delay'))
     expect(c.dwellMs).toBe(declared('owl.voice.dwell'))
-    expect(c.typeMs).toBe(declared('owl.voice.typeMs'))
     expect(c.idleSeconds).toBe(declared('owl.voice.idleSeconds'))
     expect(c.enabled.size).toBeGreaterThan(0)
   })
@@ -47,12 +45,6 @@ describe('readVoiceConfig', () => {
   it('turns a picked voice into its id, and “none” into none', () => {
     expect(readVoiceConfig((k) => (k === 'owl.voice.id' ? 'nobody' : undefined)).voice).toBe('nobody')
     expect(readVoiceConfig((k) => (k === 'owl.voice.id' ? 'none' : undefined)).voice).toBeNull()
-  })
-
-  it('takes a treatment only if it is one', () => {
-    expect(readVoiceConfig((k) => (k === 'owl.voice.treatment' ? 'stamp' : undefined)).treatment).toBe('stamp')
-    expect(readVoiceConfig((k) => (k === 'owl.voice.treatment' ? 'voice' : undefined)).treatment).toBeNull()
-    expect(readVoiceConfig((k) => (k === 'owl.voice.treatment' ? 'neon' : undefined)).treatment).toBeNull()
   })
 
   it('does not let a stale preset put a non-number in a duration', () => {
