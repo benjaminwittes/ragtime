@@ -72,7 +72,7 @@ export default function LineLab() {
   const [windowOn, setWindowOn] = useState(true)
   const [left, setLeft] = useState(0.2)
   const [right, setRight] = useState(0.5)
-  const [wordsMode, setWordsMode] = useState<'always' | 'behind'>('always')
+  const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
 
   const uid = useId().replace(/:/g, '')
   const host = useRef<HTMLDivElement>(null)
@@ -103,25 +103,45 @@ export default function LineLab() {
   const vw = drawn ? drawn.w / UNIT_PX : 0
   const vh = drawn ? drawn.h / UNIT_PX : 0
   const win = `${uid}-win`
-  const behind = `${uid}-behind`
+  const inWords = `${uid}-in`
+  const outWords = `${uid}-out`
 
   const defs = (
     <defs>
       <clipPath id={win}>
         <rect x={vw * lo} y={0} width={vw * (hi - lo)} height={vh} />
       </clipPath>
-      <clipPath id={behind}>
-        <rect x={0} y={0} width={vw * lo} height={vh} />
-      </clipPath>
+      {drawn ? (
+        <>
+          <mask id={inWords} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+            <path d={drawn.words} fill="#fff" />
+          </mask>
+          <mask id={outWords} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+            <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
+            <path d={drawn.words} fill="#000" />
+          </mask>
+        </>
+      ) : null}
     </defs>
   )
   // What the Mask node passes on: the band inside the window, or the whole band when the window is bypassed.
   const maskedBand = drawn ? <path d={drawn.band} fill={ink} clipPath={windowOn ? `url(#${win})` : undefined} /> : null
+  // Composite: the words are the mask. 'through' keeps the masked band only where the words are,
+  // 'outside' keeps it only where they are not (the words stay as they are), 'over' just stacks them.
   const composite = drawn ? (
-    <>
-      <path d={drawn.words} fill={ink} clipPath={wordsMode === 'behind' && windowOn ? `url(#${behind})` : undefined} />
-      {maskedBand}
-    </>
+    blend === 'over' ? (
+      <>
+        <path d={drawn.words} fill={ink} />
+        {maskedBand}
+      </>
+    ) : blend === 'through' ? (
+      <g mask={`url(#${inWords})`}>{maskedBand}</g>
+    ) : (
+      <>
+        <path d={drawn.words} fill={ink} />
+        <g mask={`url(#${outWords})`}>{maskedBand}</g>
+      </>
+    )
   ) : null
 
   return (
@@ -228,10 +248,11 @@ export default function LineLab() {
             }
           >
             <label className="flex items-center gap-2 text-xs">
-              <span className="w-20 shrink-0 text-muted-foreground">words show</span>
-              <select value={wordsMode} onChange={(e) => setWordsMode(e.target.value as 'always' | 'behind')} className="rounded border px-1 py-0.5">
-                <option value="always">always</option>
-                <option value="behind">only behind the window</option>
+              <span className="w-20 shrink-0 text-muted-foreground">words are</span>
+              <select value={blend} onChange={(e) => setBlend(e.target.value as 'over' | 'through' | 'outside')} className="rounded border px-1 py-0.5">
+                <option value="through">a mask: lines only in the words</option>
+                <option value="outside">a knockout: lines only outside the words</option>
+                <option value="over">no mask: stacked</option>
               </select>
             </label>
           </Node>
