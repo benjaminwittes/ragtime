@@ -39,7 +39,7 @@ export type MorphParams = {
   winWidth: number
   /** False lets the lines run the whole box, which is what a still preview wants. */
   windowOn: boolean
-  /** How far (px) a letter's tone spreads into the lines around it. */
+  /** How far a letter's tone spreads into the lines around it, in em, so it is the same share of the letter at any size. */
   spread: number
   /** Multiplier on that tone. */
   gain: number
@@ -93,9 +93,9 @@ export function blur(data: Float32Array, w: number, h: number, r: number): Float
   return pass(pass(data, true), false)
 }
 
-/** The text's tone for the halftone: the raster, spread and scaled. */
+/** The text's tone for the halftone: the raster, spread (`spread` em) and scaled. */
 export function toneOf(m: Measured, spread: number, gain: number): Float32Array {
-  return blur(m.grid.data, m.w, m.h, spread).map((v) => Math.min(1, v * gain))
+  return blur(m.grid.data, m.w, m.h, Math.round(spread * m.size)).map((v) => Math.min(1, v * gain))
 }
 
 /**
@@ -164,14 +164,18 @@ export function slicesOf(letters: Letter[], pieces: number): Slice[] {
   return out
 }
 
+/** How long the finished text is left standing before the morph ends and the real text takes its place. */
+export const HOLD_SECONDS = 0.12
+
 /** The window's travel for one row, in px, measured from the left edge of the box. */
 export function sweep(wordEnd: number, p: MorphParams, size: number) {
   const winPx = p.winWidth * size
   const bandPx = Math.max(1, p.ramp * winPx)
   // The entry taper reaches `entry` window-widths ahead of the leading edge, so the sweep starts that far left.
   const startPx = -winPx * (1 + p.entry)
-  // At the end the whole band is past the last slice and the lines, trail included, have cleared the word.
-  const finishPx = Math.max(wordEnd + bandPx - winPx, wordEnd + p.trail * winPx)
+  // At the end the whole band is past the last slice and the lines, trail included, have cleared the word, and
+  // the text has then stood finished for a beat (`HOLD_SECONDS`), so the swap to the real text changes nothing you can see.
+  const finishPx = Math.max(wordEnd + bandPx - winPx, wordEnd + p.trail * winPx) + HOLD_SECONDS * p.speed * size
   return { winPx, bandPx, startPx, finishPx }
 }
 
@@ -251,6 +255,9 @@ export function frameAt(m: Measured, toned: Float32Array, p: MorphParams, t: num
     const lines = new Float32Array(w)
     for (let x = 0; x < w; x++) {
       if (!p.windowOn) lines[x] = p.cover
+      // No lines where this row has no words: the box is usually wider than a row, and lines left out there would
+      // all vanish at once when the morph ends.
+      else if (x >= wordEnd) lines[x] = 0
       else if (x >= hiPx) lines[x] = p.cover * Math.max(0, 1 - (x - hiPx) / headPx)
       else if (x >= loPx) lines[x] = p.cover
       else lines[x] = p.cover * Math.max(0, 1 - (loPx - x) / tailPx)

@@ -26,7 +26,7 @@ function layout(rows = 2): Measured {
   }
 }
 
-const params: MorphParams = { cover: 0.5, winWidth: 4, windowOn: true, spread: 4, gain: 1, ramp: 1, shift: 0, trail: 0.6, entry: 0.6, speed: 10, pieces: 2, stagger: 0.5 }
+const params: MorphParams = { cover: 0.5, winWidth: 4, windowOn: true, spread: 0.2, gain: 1, ramp: 1, shift: 0, trail: 0.6, entry: 0.6, speed: 10, pieces: 2, stagger: 0.5 }
 
 describe('timing and rowTimes', () => {
   const m = layout()
@@ -151,6 +151,28 @@ describe('frameAt', () => {
     const f = frameAt(m, toned, p, (tm.durations[0] * 0.999) / tm.total)
     expect(f.rows[1].raw.every((v) => v === 0)).toBe(true)
     expect(f.rows[0].raw.some((v) => v > 0)).toBe(true)
+  })
+
+  it('draws no lines past the end of a row’s words, however wide the box is', () => {
+    const wide = layout(1)
+    const w = 600
+    const widened: Measured = { ...wide, w, grid: { w, h: wide.h, data: new Float32Array(w * wide.h) } }
+    const wordEnd = Math.max(...widened.letters.map((lt) => lt!.r))
+    for (const t of [0.3, 0.6, 0.9]) {
+      const f = frameAt(widened, new Float32Array(w * wide.h), { ...params, stagger: 0 }, t)
+      const xs = [...f.underlay.matchAll(/-?\d+(?:\.\d+)?/g)].map((m) => Number(m[0]))
+      // The path's numbers alternate x, y in svg units (px / UNIT_PX); every x is inside the words' extent.
+      for (let i = 0; i < xs.length; i += 2) expect(xs[i] * 2).toBeLessThanOrEqual(wordEnd + 3)
+    }
+  })
+
+  it('stands finished for a beat before the end: every slice solid and no lines, a little before t = 1', () => {
+    const tm = timing(m, params)
+    const f = frameAt(m, toned, { ...params, stagger: 0 }, 1 - 0.05 / tm.total)
+    for (const row of f.rows) {
+      expect(row.raw.every((v) => v === 1)).toBe(true)
+      expect(row.lines.every((v) => v === 0)).toBe(true)
+    }
   })
 
   it('does not move the lines when the shift changes', () => {

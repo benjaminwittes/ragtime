@@ -474,7 +474,7 @@ export default function LineLab() {
               </Shot>
             }
           >
-            <Slider label="spread" value={spread} min={0} max={30} step={1} onChange={setSpread} />
+            <Slider label="spread (em)" value={spread} min={0} max={0.6} step={0.01} onChange={setSpread} />
             <Slider label="gain" value={gain} min={0.5} max={4} step={0.1} onChange={setGain} />
             <p className="text-xs text-muted-foreground">The lines carry the tone. Each swells where the text is and thins away from it.</p>
           </Card>

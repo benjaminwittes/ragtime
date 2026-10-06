@@ -29,7 +29,7 @@ export const owlMorphKnobs = defineTunables([
   },
   {
     id: 'owl.morph.spread',
-    value: 8,
+    value: 0.12,
   },
   {
     id: 'owl.morph.gain',
