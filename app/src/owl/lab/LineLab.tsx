@@ -109,6 +109,7 @@ const KNOBS = {
   gain: { id: 'line-lab.gain', value: 0.9 },
   ramp: { id: 'line-lab.ramp', value: 1 },
   trail: { id: 'line-lab.trail', value: 0.6 },
+  entry: { id: 'line-lab.entry', value: 0.6 },
   shift: { id: 'line-lab.shift', value: 0 },
   pieces: { id: 'line-lab.pieces', value: 2 },
   mode: { id: 'line-lab.mode', value: 'one' },
@@ -136,6 +137,7 @@ export default function LineLab() {
   const [gain, setGain] = useState(KNOBS.gain.value)
   const [ramp, setRamp] = useState(KNOBS.ramp.value)
   const [trail, setTrail] = useState(KNOBS.trail.value)
+  const [entry, setEntry] = useState(KNOBS.entry.value)
   const [shift, setShift] = useState(KNOBS.shift.value)
   const [pieces, setPieces] = useState(KNOBS.pieces.value)
   const [mode, setMode] = useState(KNOBS.mode.value as 'one' | 'layered')
@@ -143,14 +145,14 @@ export default function LineLab() {
   const [backInk, setBackInk] = useState(KNOBS.backInk.value)
   const [note, setNote] = useState('')
 
-  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, ramp, trail, shift, pieces, mode, linesBack, backInk }
+  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, ramp, trail, entry, shift, pieces, mode, linesBack, backInk }
   const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
   const resetAll = () => {
     setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
     setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
     setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
     setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
-    setRamp(KNOBS.ramp.value); setTrail(KNOBS.trail.value); setShift(KNOBS.shift.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setRamp(KNOBS.ramp.value); setTrail(KNOBS.trail.value); setEntry(KNOBS.entry.value); setShift(KNOBS.shift.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
     setNote('reset to what is in source')
   }
   const writeToSource = async () => {
@@ -229,7 +231,8 @@ export default function LineLab() {
   const winPx = drawn ? winWidth * drawn.w : 0
   const bandPx = Math.max(1, ramp * winPx)
   const wordEnd = slices.reduce((m, sl) => Math.max(m, sl.r), 0)
-  const startLo = -winWidth
+  // The entry taper reaches `entry` window-widths ahead of the leading edge, so start that far further left.
+  const startLo = -winWidth * (1 + entry)
   // At t = 1 the whole band is past the last slice and the window's lines, trail included, have cleared the word.
   const finishLo = drawn ? Math.max((wordEnd + bandPx) / drawn.w - winWidth, wordEnd / drawn.w + trail * winWidth) : 1
   const lo = startLo + t * (finishLo - startLo)
@@ -318,24 +321,25 @@ export default function LineLab() {
   }, [drawn, toned, mode, cover, windowOn, hiPx, allKey])
 
   // The window's lines, as a fixed underlay. Full weight inside the window; behind its trailing edge they do not
-  // stop dead, they thin out over `trail` window-widths, so the lines taper as they leave. Nothing ahead of the
-  // leading edge. This is separate from the morph, so ramp shift cannot touch it.
+  // stop dead, they thin out over `trail` window-widths, so the lines taper as they leave, and ahead of its leading
+  // edge they thin in over `entry` window-widths, the same taper mirrored. This is separate from the morph, so ramp shift cannot touch it.
   const loPx = drawn ? Math.round(lo * drawn.w) : 0
   const underlay = useMemo(() => {
     if (!drawn || mode !== 'one') return ''
     const { spacing, w, h } = drawn
     const tailPx = Math.max(1, trail * winPx)
+    const headPx = Math.max(1, entry * winPx)
     const col = new Float32Array(w)
     for (let x = 0; x < w; x++) {
       if (!windowOn) col[x] = cover
-      else if (x >= hiPx) col[x] = 0
+      else if (x >= hiPx) col[x] = cover * Math.max(0, 1 - (x - hiPx) / headPx)
       else if (x >= loPx) col[x] = cover
       else col[x] = cover * Math.max(0, 1 - (loPx - x) / tailPx)
     }
     const data = new Float32Array(w * h)
     for (let y = 0; y < h; y++) data.set(col, y * w)
     return linesFromGrid({ w, h, data }, spacing)
-  }, [drawn, mode, cover, windowOn, hiPx, loPx, trail, winPx])
+  }, [drawn, mode, cover, windowOn, hiPx, loPx, trail, entry, winPx])
 
   // Auto-play: advance t with the clock, hold a beat at the end, then loop or stop.
   const tRef = useRef(t)
@@ -617,8 +621,9 @@ export default function LineLab() {
               on (off lets everything through)
             </label>
             <Slider label="width" value={winWidth} min={0.1} max={1} step={0.01} onChange={setWinWidth} />
+            <Slider label="entry" value={entry} min={0} max={2} step={0.01} onChange={setEntry} />
             <Slider label="trail" value={trail} min={0} max={2} step={0.01} onChange={setTrail} />
-            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. In Final, the morph is a band laid across the window (see ramp shift and ramp length). Trail is how far behind its trailing edge the window's lines keep going, thinning to nothing, in Final.</p>
+            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. In Final, the morph is a band laid across the window (see ramp shift and ramp length). In Final, entry and trail are how far ahead of its leading edge and behind its trailing edge the window's lines keep going, thinning to nothing.</p>
           </Card>
           <Card title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
             <input value={text} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
