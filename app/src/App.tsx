@@ -24,7 +24,7 @@ import { demoView, type DemoView } from '@/demo/kit'
 import { spokeSlugFor } from '@/lib/deep-link'
 import { navigateTo, toHref, toLogical } from '@/lib/routing'
 import { withViewTransition } from '@/lib/transition'
-import { OWL_LAB } from '@/owl/lab/path'
+import { LINE_LAB, OWL_LAB } from '@/owl/lab/path'
 import { OwlSpot } from '@/owl/OwlSpot'
 import { PresentPage } from '@/stage/PresentPage'
 import { StageDock } from '@/stage/StageDock'
@@ -83,6 +83,7 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  * under it is never followed: the lab leaves no chunk in a production build.
  */
 const OwlLab = __RT_TUNE__ ? lazy(() => import('@/owl/lab/OwlLab')) : null
+const LineLab = __RT_TUNE__ ? lazy(() => import('@/owl/lab/LineLab')) : null
 
 type Route =
   | { kind: 'hub' }
@@ -94,6 +95,7 @@ type Route =
   | { kind: 'present' }
   | { kind: 'terrain' }
   | { kind: 'owl-lab' }
+  | { kind: 'line-lab' }
   | { kind: 'privacy' }
   | { kind: 'terms' }
   | { kind: 'spoke'; slug: CorpusSlug }
@@ -117,6 +119,7 @@ function parseRoute(pathname: string): Route {
   if (pathname === '/present' || pathname === '/present/') return { kind: 'present' }
   if (pathname === '/terrain' || pathname === '/terrain/') return { kind: 'terrain' }
   if (__RT_TUNE__ && (pathname === OWL_LAB || pathname === OWL_LAB + '/')) return { kind: 'owl-lab' }
+  if (__RT_TUNE__ && (pathname === LINE_LAB || pathname === LINE_LAB + '/')) return { kind: 'line-lab' }
   const link = links.parse(pathname)
   if (link) {
     // `/corpus/<slug>` and `/corpus/<slug>/<id>` both mount the spoke; the
@@ -183,6 +186,8 @@ function App() {
       ? <TerrainPage />
       : route.kind === 'owl-lab' && OwlLab
       ? <Suspense fallback={null}><OwlLab /></Suspense>
+      : route.kind === 'line-lab' && LineLab
+      ? <Suspense fallback={null}><LineLab /></Suspense>
       : route.kind === 'spoke'
       ? (() => {
           const spoke = getSpokeBySlug(route.slug)

@@ -3,3 +3,6 @@
  * the tuning layer, so nothing links to it.
  */
 export const OWL_LAB = '/owl-lab'
+
+/** The line compositing builder, built up a layer at a time (`owl/lab/LineLab.tsx`). Same rules as the owl lab. */
+export const LINE_LAB = '/line-lab'

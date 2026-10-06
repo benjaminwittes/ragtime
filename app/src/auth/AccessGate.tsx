@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { OwlSpot } from '@/owl/OwlSpot'
 import { Input } from '@/components/ui/input'
 import { toLogical } from '@/lib/routing'
-import { OWL_LAB } from '@/owl/lab/path'
+import { LINE_LAB, OWL_LAB } from '@/owl/lab/path'
 
 /**
  * Soft outer-gate for the closed beta. Sits in front of everything (the whole
@@ -51,7 +51,7 @@ function persistUnlocked() {
 
 function onOpenPath(): boolean {
   const path = toLogical(window.location.pathname).replace(/\/+$/, '')
-  return path === '/stage' || (__RT_TUNE__ === true && path === OWL_LAB)
+  return path === '/stage' || (__RT_TUNE__ === true && (path === OWL_LAB || path === LINE_LAB))
 }
 
 export function AccessGate({ children }: { children: ReactNode }) {
