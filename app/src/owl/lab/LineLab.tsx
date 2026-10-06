@@ -5,10 +5,15 @@ import { linesFromGrid, rasterizeText, UNIT_PX, type Grid } from '@/hub/textLine
  * The line compositing builder (2026-10-06), shown as a node graph. It is not a real node engine:
  * the graph is fixed and each card is one stage whose output you can see on its own.
  *
- *   Lines ──┐
- *           ├→ Windowed Lines ─┐
- *   Window ─┤                  ├→ Masked Text ──→ Halftone Lines ──→ Raw Text   (one letter at a time, in Final)
- *   Text ───┴──────────────────┘        ↑ Halftone Lines is built from Lines + Text, and only joins at Final
+ *   Lines ──┬→ Windowed Lines ─┬→ Masked Text ─────┐
+ *   Window ─┘        ▲           │                    │
+ *   Text ────────────┼───────────┘                    ├→ Final
+ *     │              │                                │
+ *     └──────────────┴→ Halftone Lines ───────────────┤   (wires are drawn on the page)
+ *   Text (raw) ──────────────────────────────────────┘
+ *
+ * Masked Text and Halftone Lines never feed each other: both go straight to Final, which turns
+ * each letter Masked Text → Halftone Lines → Raw Text, with the Windowed Lines still showing.
  *
  * The goal is a line halftone: the text is drawn by lines whose thickness follows the letters, and
  * each letter goes Masked Text → Halftone Lines → Raw Text as the Window's trailing (left) edge passes it. Nothing animates;
@@ -44,12 +49,8 @@ function Card({ title, kind, from, preview, children }: { title: string; kind: '
   )
 }
 
-function Arrow() {
-  return <div className="flex shrink-0 items-center self-center px-1 text-xl text-muted-foreground">→</div>
-}
-
-function Column({ children }: { children: ReactNode }) {
-  return <div className="flex shrink-0 flex-col justify-center gap-4">{children}</div>
+function Column({ children, top }: { children: ReactNode; top?: boolean }) {
+  return <div className={`relative z-10 flex shrink-0 flex-col gap-4 ${top ? 'justify-start' : 'justify-center'}`}>{children}</div>
 }
 
 /** A scaled-down SVG of one stage's output, on the paper colour. */
@@ -100,6 +101,11 @@ export default function LineLab() {
   const [spread, setSpread] = useState(12)
   const [gain, setGain] = useState(1.0)
   const [soft, setSoft] = useState(1.5)
+  const [linesBack, setLinesBack] = useState(0.35)
+  const [backInk, setBackInk] = useState('#c2410c')
+  const graph = useRef<HTMLDivElement>(null)
+  const [wires, setWires] = useState<{ d: string; key: string }[]>([])
+  const [wireBox, setWireBox] = useState({ w: 0, h: 0 })
 
   const uid = useId().replace(/:/g, '')
   const host = useRef<HTMLDivElement>(null)
@@ -182,6 +188,52 @@ export default function LineLab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn, spread, gain, progressKey])
 
+  // The wires between cards, measured from where the cards actually sit.
+  useLayoutEffect(() => {
+    const root = graph.current
+    if (!root) return
+    const EDGES: [string, string][] = [
+      ['Lines', 'Windowed Lines'],
+      ['Window', 'Windowed Lines'],
+      ['Windowed Lines', 'Masked Text'],
+      ['Text', 'Masked Text'],
+      ['Lines', 'Halftone Lines'],
+      ['Text', 'Halftone Lines'],
+      ['Windowed Lines', 'Final: reveal'],
+      ['Masked Text', 'Final: reveal'],
+      ['Halftone Lines', 'Final: reveal'],
+      ['Text', 'Final: reveal'],
+      ['Window', 'Final: reveal'],
+    ]
+    const measure = () => {
+      const box = root.getBoundingClientRect()
+      const at = (name: string) => root.querySelector(`[data-node="${name}"]`)?.getBoundingClientRect()
+      const incoming: Record<string, number> = {}
+      const total: Record<string, number> = {}
+      EDGES.forEach(([, to]) => (total[to] = (total[to] ?? 0) + 1))
+      const next: { d: string; key: string }[] = []
+      for (const [from, to] of EDGES) {
+        const a = at(from)
+        const b = at(to)
+        if (!a || !b) continue
+        const k = (incoming[to] = (incoming[to] ?? -1) + 1)
+        const x1 = a.right - box.left
+        const y1 = a.top + a.height / 2 - box.top
+        const x2 = b.left - box.left
+        const y2 = b.top + 24 + (k * Math.min(b.height - 48, 120)) / Math.max(1, total[to] - 1) - box.top
+        const c = Math.max(24, (x2 - x1) / 2)
+        next.push({ key: `${from}>${to}`, d: `M${x1},${y1} C${x1 + c},${y1} ${x2 - c},${y2} ${x2},${y2}` })
+      }
+      setWires(next)
+      setWireBox({ w: box.width, h: box.height })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(root)
+    root.querySelectorAll('[data-node]').forEach((n) => ro.observe(n))
+    return () => ro.disconnect()
+  }, [drawn])
+
   const defs = (
     <defs>
       <clipPath id={win}>
@@ -240,6 +292,7 @@ export default function LineLab() {
   // Final: every letter goes Masked Text → Halftone Lines → Raw Text as the window's trailing edge passes it.
   const finalArt = drawn ? (
     <>
+      {linesBack > 0 ? <path d={drawn.band} fill={backInk} opacity={linesBack} clipPath={windowOn ? `url(#${win})` : undefined} /> : null}
       <g mask={`url(#${fade})`}>{composite}</g>
       <g mask={`url(#${show})`}>
         <path d={halftone.morphed} fill={ink} />
@@ -263,7 +316,18 @@ export default function LineLab() {
         {text}
       </div>
 
-      <div className="flex items-stretch overflow-x-auto pb-4">
+      <div className="overflow-x-auto pb-4">
+      <div ref={graph} className="relative flex items-stretch gap-20">
+        <svg className="pointer-events-none absolute left-0 top-0 z-0" width={wireBox.w} height={wireBox.h} aria-hidden="true">
+          <defs>
+            <marker id={`${uid}-ah`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#8a8f98" />
+            </marker>
+          </defs>
+          {wires.map((w) => (
+            <path key={w.key} d={w.d} fill="none" stroke="#8a8f98" strokeWidth={1.5} markerEnd={`url(#${uid}-ah)`} />
+          ))}
+        </svg>
         <Column>
           <Card
             title="Lines"
@@ -307,9 +371,7 @@ export default function LineLab() {
           </Card>
         </Column>
 
-        <Arrow />
-
-        <Column>
+        <Column top>
           <Card
             title="Windowed Lines"
             kind="combine"
@@ -323,11 +385,23 @@ export default function LineLab() {
           >
             <p className="text-xs text-muted-foreground">The lines, kept only where the window is open. Not a mask yet.</p>
           </Card>
+          <Card
+            title="Halftone Lines"
+            kind="combine"
+            from={['Lines', 'Text']}
+            preview={
+              <Shot drawn={drawn} paper={paper}>
+                <path d={halftone.still} fill={ink} />
+              </Shot>
+            }
+          >
+            <Slider label="spread" value={spread} min={0} max={30} step={1} onChange={setSpread} />
+            <Slider label="gain" value={gain} min={0.5} max={4} step={0.1} onChange={setGain} />
+            <p className="text-xs text-muted-foreground">The lines carry the tone. Each swells where the text is and thins away from it.</p>
+          </Card>
         </Column>
 
-        <Arrow />
-
-        <Column>
+        <Column top>
           <Card
             title="Masked Text"
             kind="combine"
@@ -350,32 +424,11 @@ export default function LineLab() {
           </Card>
         </Column>
 
-        <Arrow />
-
-        <Column>
-          <Card
-            title="Halftone Lines"
-            kind="combine"
-            from={['Lines', 'Text']}
-            preview={
-              <Shot drawn={drawn} paper={paper}>
-                <path d={halftone.still} fill={ink} />
-              </Shot>
-            }
-          >
-            <Slider label="spread" value={spread} min={0} max={30} step={1} onChange={setSpread} />
-            <Slider label="gain" value={gain} min={0.5} max={4} step={0.1} onChange={setGain} />
-            <p className="text-xs text-muted-foreground">The lines carry the tone. Each swells where the text is and thins away from it.</p>
-          </Card>
-        </Column>
-
-        <Arrow />
-
         <Column>
           <Card
             title="Final: reveal"
             kind="output"
-            from={['Masked Text', 'Halftone Lines', 'Text', 'Window']}
+            from={['Windowed Lines', 'Masked Text', 'Halftone Lines', 'Text', 'Window']}
             preview={
               <Shot drawn={drawn} paper={paper}>
                 {defs}
@@ -383,10 +436,16 @@ export default function LineLab() {
               </Shot>
             }
           >
+            <Slider label="lines shown" value={linesBack} min={0} max={1} step={0.05} onChange={setLinesBack} />
+            <label className="flex items-center gap-2 text-xs">
+              <span className="w-20 shrink-0 text-muted-foreground">line colour</span>
+              <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
+            </label>
             <Slider label="ramp (letters)" value={soft} min={0.05} max={4} step={0.05} onChange={setSoft} />
             <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the Window's left edge passes it. Ramp is how many letter widths the whole turn takes.</p>
           </Card>
         </Column>
+      </div>
       </div>
     </main>
   )
