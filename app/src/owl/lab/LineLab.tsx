@@ -1,5 +1,5 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { linesFromGrid, rasterizeText, UNIT_PX } from '@/hub/textLines'
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { linesFromGrid, rasterizeText, UNIT_PX, type Grid } from '@/hub/textLines'
 
 /**
  * The line compositing builder (2026-10-06), shown as a node graph. It is not a real node engine:
@@ -7,15 +7,17 @@ import { linesFromGrid, rasterizeText, UNIT_PX } from '@/hub/textLines'
  *
  *   Lines ──┐
  *           ├→ Windowed Lines ─┐
- *   Window ─┘                  ├→ Masked Text ─→ Masked Text + Lines ─→ Final
- *   Text ──────────────────────┘                                          ↑
- *   Text (raw, again) ───────────────────────────────────────────────────┘
+ *   Window ─┤                  ├→ Masked Text ─→ Masked Text + Lines ──┐
+ *   Text ───┼──────────────────┘                                        ├→ Final
+ *           └→ Halftone Lines (the lines carry the tone) ───────────────┘
  *
- * Nothing animates. A new node is added only when the ones before it read right to Thomas.
+ * The goal is a line halftone: the text is drawn by lines whose thickness follows the letters, and
+ * each letter thickens into the raw text as the Window's right edge reaches it. Nothing animates;
+ * you drag the Window to play it.
  */
 
 type Letter = { l: number; r: number } | null
-type Drawn = { words: string; band: string; w: number; h: number; letters: Letter[] }
+type Drawn = { grid: Grid; spacing: number; band: string; w: number; h: number; letters: Letter[] }
 
 function Slider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
   return (
@@ -28,10 +30,10 @@ function Slider({ label, value, min, max, step, onChange }: { label: string; val
 }
 
 /** One card of the graph: a title, what it reads from, its controls, and a preview of its output. */
-function Node({ title, kind, from, preview, children }: { title: string; kind: 'input' | 'mask' | 'combine' | 'output'; from?: string[]; preview: ReactNode; children?: ReactNode }) {
+function Card({ title, kind, from, preview, children }: { title: string; kind: 'input' | 'mask' | 'combine' | 'output'; from?: string[]; preview: ReactNode; children?: ReactNode }) {
   const tint = { input: 'bg-emerald-600', mask: 'bg-amber-600', combine: 'bg-sky-600', output: 'bg-violet-700' }[kind]
   return (
-    <div className="flex w-[19rem] shrink-0 flex-col overflow-hidden rounded-lg border bg-background shadow-sm" data-node={title}>
+    <div className="flex w-[17rem] shrink-0 flex-col overflow-hidden rounded-lg border bg-background shadow-sm" data-node={title}>
       <header className={`flex items-center justify-between px-3 py-1.5 text-xs font-medium text-white ${tint}`}>
         <span>{title}</span>
         <span className="opacity-80">{kind}</span>
@@ -63,11 +65,32 @@ function Shot({ drawn, paper, children }: { drawn: Drawn | null; paper: string; 
   )
 }
 
+/** A box blur, separable, so a letter's tone spreads into the lines around it. */
+function blur(data: Float32Array, w: number, h: number, r: number): Float32Array {
+  if (r < 1) return data
+  const pass = (src: Float32Array, horizontal: boolean) => {
+    const out = new Float32Array(src.length)
+    const n = horizontal ? w : h
+    const lines = horizontal ? h : w
+    for (let k = 0; k < lines; k++) {
+      let sum = 0
+      const at = (i: number) => (horizontal ? k * w + i : i * w + k)
+      for (let i = -r; i <= r; i++) sum += src[at(Math.min(n - 1, Math.max(0, i)))]
+      for (let i = 0; i < n; i++) {
+        out[at(i)] = sum / (2 * r + 1)
+        sum += src[at(Math.min(n - 1, i + r + 1))] - src[at(Math.max(0, i - r))]
+      }
+    }
+    return out
+  }
+  return pass(pass(data, true), false)
+}
+
 export default function LineLab() {
   const [text, setText] = useState('I am RAGtime')
   const [size, setSize] = useState(96)
   const [weight, setWeight] = useState(800)
-  const [pitch, setPitch] = useState(3.6)
+  const [pitch, setPitch] = useState(5.5)
   const [ink, setInk] = useState('#1b2a49')
   const [paper, setPaper] = useState('#fffdf2')
   const [cover, setCover] = useState(0.55)
@@ -77,8 +100,10 @@ export default function LineLab() {
   const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
   const [linesBack, setLinesBack] = useState(0.35)
   const [backInk, setBackInk] = useState('#c2410c')
-  const [front, setFront] = useState(0.4)
-  const [soft, setSoft] = useState(0.6)
+  const [spread, setSpread] = useState(12)
+  const [gain, setGain] = useState(1.0)
+  const [source, setSource] = useState<'halftone' | 'masked'>('halftone')
+  const [soft, setSoft] = useState(1.5)
 
   const uid = useId().replace(/:/g, '')
   const host = useRef<HTMLDivElement>(null)
@@ -104,7 +129,7 @@ export default function LineLab() {
         const r = range.getClientRects()[0]
         return r ? { l: r.left - box.left, r: r.right - box.left } : null
       })
-      setDrawn({ words: linesFromGrid(grid, spacing), band: linesFromGrid(flat, spacing), w: grid.w, h: grid.h, letters })
+      setDrawn({ grid, spacing, band: linesFromGrid(flat, spacing), w: grid.w, h: grid.h, letters })
     }
     const later = () => {
       cancelAnimationFrame(raf)
@@ -124,6 +149,40 @@ export default function LineLab() {
   const outWords = `${uid}-out`
   const fade = `${uid}-fade`
 
+  // Progress of each letter from halftone (0) to raw text (1). The front is the Window's right edge.
+  // A letter starts to turn as the front touches its left edge and has turned once the front is
+  // `soft` letter-widths past it.
+  const progress = (drawn?.letters ?? []).map((lt) => {
+    if (!lt || !drawn) return 0
+    return Math.min(1, Math.max(0, (hi * drawn.w - lt.l) / Math.max(1e-6, (lt.r - lt.l) * soft)))
+  })
+  const progressKey = progress.map((p) => p.toFixed(2)).join(',')
+
+  // Halftone Lines: the lines carry the tone. The text is softened so the lines swell toward the
+  // middle of a letter and thin out away from it. `morphed` thickens each letter's lines to the
+  // solid letter by that letter's progress, so the lines themselves become the raw text.
+  const halftone = useMemo(() => {
+    if (!drawn) return { still: '', morphed: '' }
+    const { grid, spacing, letters, w, h } = drawn
+    const toned = blur(grid.data, w, h, spread).map((v) => Math.min(1, v * gain))
+    const still = linesFromGrid({ w, h, data: toned }, spacing)
+    const col = new Float32Array(w)
+    letters.forEach((lt, i) => {
+      if (!lt) return
+      for (let x = Math.max(0, Math.floor(lt.l)); x < Math.min(w, Math.ceil(lt.r)); x++) col[x] = progress[i] ?? 0
+    })
+    const out = new Float32Array(toned.length)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        const solid = grid.data[i] > 0.2 ? 1 : 0
+        out[i] = toned[i] + (solid - toned[i]) * col[x]
+      }
+    }
+    return { still, morphed: linesFromGrid({ w, h, data: out }, spacing) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawn, spread, gain, progressKey])
+
   const defs = (
     <defs>
       <clipPath id={win}>
@@ -138,25 +197,31 @@ export default function LineLab() {
             <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
             <path d={drawn.band} fill="#000" clipPath={windowOn ? `url(#${win})` : undefined} />
           </mask>
+          <mask id={fade} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+            <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
+            {drawn.letters.map((lt, i) =>
+              lt ? <rect key={i} x={lt.l / UNIT_PX} y={0} width={(lt.r - lt.l) / UNIT_PX} height={vh} fill="#000" opacity={progress[i] ?? 0} /> : null,
+            )}
+          </mask>
         </>
       ) : null}
     </defs>
   )
-  // What the Mask node passes on: the band inside the window, or the whole band when the window is bypassed.
+  // What Windowed Lines passes on: the band inside the window, or the whole band when the window is bypassed.
   const maskedBand = drawn ? <path d={drawn.band} fill={ink} clipPath={windowOn ? `url(#${win})` : undefined} /> : null
-  // The raw words, no effect, laid out exactly as the engine measured them.
-  const plain = drawn ? (
-    <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
-      <div
-        className="whitespace-nowrap leading-tight"
-        style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}
-      >
-        {text}
-      </div>
-    </foreignObject>
-  ) : null
+
+  // The raw words, no effect, laid out exactly as the engine measured them. `opacities` fades single letters.
+  const plainText = (opacities?: number[]) =>
+    drawn ? (
+      <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
+        <div className="whitespace-nowrap leading-tight" style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}>
+          {opacities ? [...text].map((ch, i) => <span key={i} style={{ opacity: opacities[i] ?? 0 }}>{ch}</span>) : text}
+        </div>
+      </foreignObject>
+    ) : null
+  const plain = plainText()
+
   // Masked Text: the Windowed Lines are the mask and the text is what shows through them.
-  // 'through' keeps the text only inside the lines; 'outside' keeps it only between them; 'over' stacks.
   const composite = drawn ? (
     blend === 'over' ? (
       <>
@@ -168,7 +233,7 @@ export default function LineLab() {
     )
   ) : null
 
-  // Windowed Lines laid back over Masked Text, at their own strength.
+  // Windowed Lines laid back under Masked Text, in their own colour.
   const linesAndMasked = drawn ? (
     <>
       {linesBack > 0 ? <path d={drawn.band} fill={backInk} opacity={linesBack} clipPath={windowOn ? `url(#${win})` : undefined} /> : null}
@@ -176,44 +241,27 @@ export default function LineLab() {
     </>
   ) : null
 
-  // Reveal: a letter turns from halftone to raw text as the front reaches it. Progress is 0 before
-  // the front touches the letter and 1 once it has crossed `soft` letter-widths past its left edge.
-  const progress = (drawn?.letters ?? []).map((lt) => {
-    if (!lt || !drawn) return 0
-    const x = front * drawn.w
-    return Math.min(1, Math.max(0, (x - lt.l) / Math.max(1e-6, (lt.r - lt.l) * soft)))
-  })
-  const rawLetters = drawn ? (
-    <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
-      <div className="whitespace-nowrap leading-tight" style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}>
-        {[...text].map((ch, i) => (
-          <span key={i} style={{ opacity: progress[i] ?? 0 }}>
-            {ch}
-          </span>
-        ))}
-      </div>
-    </foreignObject>
-  ) : null
+  // Final: every letter starts as halftone; each one turns into raw text as the front reaches it.
   const finalArt = drawn ? (
-    <>
-      <defs>
-        <mask id={fade} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-          <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
-          {drawn.letters.map((lt, i) =>
-            lt ? <rect key={i} x={lt.l / UNIT_PX} y={0} width={(lt.r - lt.l) / UNIT_PX} height={vh} fill="#000" opacity={progress[i] ?? 0} /> : null,
-          )}
-        </mask>
-      </defs>
-      <g mask={`url(#${fade})`}>{linesAndMasked}</g>
-      {rawLetters}
-    </>
+    source === 'halftone' ? (
+      <>
+        <path d={halftone.morphed} fill={ink} />
+        {plainText(progress.map((p) => p * p))}
+      </>
+    ) : (
+      <>
+        <g mask={`url(#${fade})`}>{composite}</g>
+        {plainText(progress)}
+      </>
+    )
   ) : null
-  return (
-    <main className="mx-auto max-w-[96rem] px-6 py-8" data-line-lab>
-      <h1 className="text-lg font-semibold">Line compositing builder</h1>
-      <p className="mb-6 text-sm text-muted-foreground">Read left to right. Each card shows what that stage outputs. No motion yet.</p>
 
-      {/* The words are measured here, off screen. The Text node shows what the engine drew from them. */}
+  return (
+    <main className="mx-auto max-w-[110rem] px-6 py-8" data-line-lab>
+      <h1 className="text-lg font-semibold">Line compositing builder</h1>
+      <p className="mb-6 text-sm text-muted-foreground">Read left to right. Each card shows what that stage outputs. Drag the Window to play the reveal.</p>
+
+      {/* The words are measured here, off screen. The Text node shows the plain words. */}
       <div
         ref={host}
         aria-hidden="true"
@@ -225,7 +273,7 @@ export default function LineLab() {
 
       <div className="flex items-stretch overflow-x-auto pb-4">
         <Column>
-          <Node
+          <Card
             title="Lines"
             kind="input"
             preview={
@@ -241,8 +289,8 @@ export default function LineLab() {
               <input type="color" value={ink} onChange={(e) => setInk(e.target.value)} />
               <input type="color" value={paper} onChange={(e) => setPaper(e.target.value)} />
             </label>
-          </Node>
-          <Node
+          </Card>
+          <Card
             title="Window"
             kind="input"
             preview={
@@ -258,18 +306,19 @@ export default function LineLab() {
             </label>
             <Slider label="left edge" value={left} min={0} max={1} step={0.005} onChange={setLeft} />
             <Slider label="right edge" value={right} min={0} max={1} step={0.005} onChange={setRight} />
-          </Node>
-          <Node title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
+            <p className="text-xs text-muted-foreground">The right edge is also the reveal front in Final.</p>
+          </Card>
+          <Card title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
             <input value={text} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
             <Slider label="size" value={size} min={24} max={200} step={1} onChange={setSize} />
             <Slider label="font weight" value={weight} min={100} max={900} step={100} onChange={setWeight} />
-          </Node>
+          </Card>
         </Column>
 
         <Arrow />
 
         <Column>
-          <Node
+          <Card
             title="Windowed Lines"
             kind="combine"
             from={['Lines', 'Window']}
@@ -281,13 +330,27 @@ export default function LineLab() {
             }
           >
             <p className="text-xs text-muted-foreground">The lines, kept only where the window is open. Not a mask yet.</p>
-          </Node>
+          </Card>
+          <Card
+            title="Halftone Lines"
+            kind="combine"
+            from={['Lines', 'Text']}
+            preview={
+              <Shot drawn={drawn} paper={paper}>
+                <path d={halftone.still} fill={ink} />
+              </Shot>
+            }
+          >
+            <Slider label="spread" value={spread} min={0} max={30} step={1} onChange={setSpread} />
+            <Slider label="gain" value={gain} min={0.5} max={4} step={0.1} onChange={setGain} />
+            <p className="text-xs text-muted-foreground">The lines carry the tone. Each swells where the text is and thins away from it.</p>
+          </Card>
         </Column>
 
         <Arrow />
 
         <Column>
-          <Node
+          <Card
             title="Masked Text"
             kind="combine"
             from={['Windowed Lines', 'Text']}
@@ -306,13 +369,13 @@ export default function LineLab() {
                 <option value="over">no mask: stacked</option>
               </select>
             </label>
-          </Node>
+          </Card>
         </Column>
 
         <Arrow />
 
         <Column>
-          <Node
+          <Card
             title="Masked Text + Lines"
             kind="combine"
             from={['Masked Text', 'Windowed Lines']}
@@ -328,17 +391,17 @@ export default function LineLab() {
               <span className="w-20 shrink-0 text-muted-foreground">line colour</span>
               <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
             </label>
-            <p className="text-xs text-muted-foreground">Windowed Lines laid back under Masked Text, in their own colour. 0 leaves Masked Text alone.</p>
-          </Node>
+            <p className="text-xs text-muted-foreground">Windowed Lines laid back under Masked Text, in their own colour.</p>
+          </Card>
         </Column>
 
         <Arrow />
 
         <Column>
-          <Node
+          <Card
             title="Final: reveal"
             kind="output"
-            from={['Masked Text + Lines', 'Text']}
+            from={[source === 'halftone' ? 'Halftone Lines' : 'Masked Text', 'Text', 'Window']}
             preview={
               <Shot drawn={drawn} paper={paper}>
                 {defs}
@@ -346,10 +409,16 @@ export default function LineLab() {
               </Shot>
             }
           >
-            <Slider label="front" value={front} min={0} max={1} step={0.005} onChange={setFront} />
-            <Slider label="ramp (letters)" value={soft} min={0.05} max={3} step={0.05} onChange={setSoft} />
-            <p className="text-xs text-muted-foreground">Each letter turns from halftone to raw text as the front reaches it. Ramp is how many letter widths the turn takes.</p>
-          </Node>
+            <label className="flex items-center gap-2 text-xs">
+              <span className="w-20 shrink-0 text-muted-foreground">starts as</span>
+              <select value={source} onChange={(e) => setSource(e.target.value as 'halftone' | 'masked')} className="rounded border px-1 py-0.5">
+                <option value="halftone">Halftone Lines</option>
+                <option value="masked">Masked Text</option>
+              </select>
+            </label>
+            <Slider label="ramp (letters)" value={soft} min={0.05} max={4} step={0.05} onChange={setSoft} />
+            <p className="text-xs text-muted-foreground">Every letter starts as halftone. It turns into raw text as the Window's right edge reaches it. Ramp is how many letter widths the turn takes.</p>
+          </Card>
         </Column>
       </div>
     </main>
