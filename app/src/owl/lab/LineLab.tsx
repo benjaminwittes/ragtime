@@ -93,23 +93,24 @@ function blur(data: Float32Array, w: number, h: number, r: number): Float32Array
  */
 const KNOBS = {
   text: { id: 'line-lab.text', value: 'I am RAGtime' },
-  size: { id: 'line-lab.size', value: 96 },
-  weight: { id: 'line-lab.weight', value: 800 },
-  pitch: { id: 'line-lab.pitch', value: 5.5 },
+  size: { id: 'line-lab.size', value: 66 },
+  weight: { id: 'line-lab.weight', value: 500 },
+  pitch: { id: 'line-lab.pitch', value: 8 },
   ink: { id: 'line-lab.ink', value: '#1b2a49' },
   paper: { id: 'line-lab.paper', value: '#fffdf2' },
-  cover: { id: 'line-lab.cover', value: 0.55 },
+  cover: { id: 'line-lab.cover', value: 0.2 },
   windowOn: { id: 'line-lab.windowOn', value: true },
   winWidth: { id: 'line-lab.winWidth', value: 0.4 },
   t: { id: 'line-lab.t', value: 0.5 },
   loop: { id: 'line-lab.loop', value: true },
   duration: { id: 'line-lab.duration', value: 6 },
   blend: { id: 'line-lab.blend', value: 'through' },
-  spread: { id: 'line-lab.spread', value: 12 },
-  gain: { id: 'line-lab.gain', value: 1 },
+  spread: { id: 'line-lab.spread', value: 6 },
+  gain: { id: 'line-lab.gain', value: 0.9 },
   soft: { id: 'line-lab.soft', value: 5 },
-  linesBack: { id: 'line-lab.linesBack', value: 0.35 },
-  backInk: { id: 'line-lab.backInk', value: '#c2410c' },
+  lead: { id: 'line-lab.lead', value: 0.5 },
+  linesBack: { id: 'line-lab.linesBack', value: 1 },
+  backInk: { id: 'line-lab.backInk', value: '#1b2949' },
 }
 type KnobKey = keyof typeof KNOBS
 
@@ -131,18 +132,19 @@ export default function LineLab() {
   const [spread, setSpread] = useState(KNOBS.spread.value)
   const [gain, setGain] = useState(KNOBS.gain.value)
   const [soft, setSoft] = useState(KNOBS.soft.value)
+  const [lead, setLead] = useState(KNOBS.lead.value)
   const [linesBack, setLinesBack] = useState(KNOBS.linesBack.value)
   const [backInk, setBackInk] = useState(KNOBS.backInk.value)
   const [note, setNote] = useState('')
 
-  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, linesBack, backInk }
+  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, linesBack, backInk }
   const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
   const resetAll = () => {
     setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
     setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
     setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
     setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
-    setSoft(KNOBS.soft.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
     setNote('reset to what is in source')
   }
   const writeToSource = async () => {
@@ -211,6 +213,9 @@ export default function LineLab() {
   const endLo = drawn ? Math.max(0, ...drawn.letters.map((lt) => (lt ? (lt.l + (lt.r - lt.l) * soft) / drawn.w : 0))) || 1 : 1
   const lo = -winWidth + t * (endLo + winWidth)
   const hi = lo + winWidth
+  // The reveal front: `lead` slides it from the trailing edge (0) to the leading edge (1) of the window, so a
+  // letter can start turning while the lines are still over it.
+  const front = lo + lead * winWidth
   const vw = drawn ? drawn.w / UNIT_PX : 0
   const vh = drawn ? drawn.h / UNIT_PX : 0
   const win = `${uid}-win`
@@ -224,7 +229,7 @@ export default function LineLab() {
   // the second half is Halftone Lines → Raw Text (`toRaw`). `soft` is how many letter widths the whole turn takes, so a few letters are in each stage at once.
   const progress = (drawn?.letters ?? []).map((lt) => {
     if (!lt || !drawn) return 0
-    return Math.min(1, Math.max(0, (lo * drawn.w - lt.l) / Math.max(1e-6, (lt.r - lt.l) * soft)))
+    return Math.min(1, Math.max(0, (front * drawn.w - lt.l) / Math.max(1e-6, (lt.r - lt.l) * soft)))
   })
   // Three phases per letter, so Halftone Lines is a stage you see and not a blink: Masked Text turns into
   // halftone over the first third, halftone holds for the middle third, then thickens into raw text.
@@ -510,7 +515,7 @@ export default function LineLab() {
               on (off lets everything through)
             </label>
             <Slider label="width" value={winWidth} min={0.1} max={1} step={0.01} onChange={setWinWidth} />
-            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. Its left edge is the reveal front in Final: letters it has passed turn into raw text.</p>
+            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. In Final, the reveal front sits inside it (see start early).</p>
           </Card>
           <Card title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
             <input value={text} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
@@ -589,8 +594,9 @@ export default function LineLab() {
               <span className="w-20 shrink-0 text-muted-foreground">line colour</span>
               <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
             </label>
+            <Slider label="start early" value={lead} min={0} max={1} step={0.01} onChange={setLead} />
             <Slider label="ramp (letters)" value={soft} min={0.5} max={10} step={0.05} onChange={setSoft} />
-            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the Window's left edge passes it. Ramp is how many letter widths the whole turn takes.</p>
+            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Start early puts the front inside the window (0 = its trailing edge, 1 = its leading edge), so the turn begins while lines still cover the letter. Ramp is how many letter widths the whole turn takes.</p>
           </Card>
         </Column>
       </div>
