@@ -24,6 +24,9 @@ import { usePaid } from '@/auth/use-paid'
 import { getDemoPassword, setDemoPassword } from '@/lib/demo-access'
 import { setUsageLogEnabled, useUsageLogEnabled, usageLoggingBuildEnabled } from '@/lib/usage-log'
 import { toHref } from '@/lib/routing'
+import { AppLink } from '@/components/AppLink'
+import { MY_COLLECTIONS_PATH } from '@/my-collections/availability'
+import { useMyCollections } from '@/my-collections/use-my-collections'
 import type { Provider } from './byok-context'
 import { useByok } from './use-byok'
 
@@ -425,6 +428,7 @@ function SignInForm() {
 
 function SignedInView({ onClose }: { onClose: () => void }) {
   const paid = usePaid()
+  const collections = useMyCollections()
   const [signingOut, setSigningOut] = useState(false)
   const [topupOpen, setTopupOpen] = useState(false)
 
@@ -499,6 +503,23 @@ function SignedInView({ onClose }: { onClose: () => void }) {
               Prepaid blocks via Stripe Checkout.
             </span>
           </div>
+        </section>
+      )}
+
+      {/* Present only when the worker has collections switched on for this account. */}
+      {collections.available && (
+        <section>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Collections
+          </h3>
+          <p className="mt-1 text-sm">
+            <AppLink to={MY_COLLECTIONS_PATH} onClickCapture={onClose} className="text-primary hover:underline">
+              My collections
+            </AppLink>
+            <span className="ml-2 text-xs text-muted-foreground">
+              Documents you have saved.
+            </span>
+          </p>
         </section>
       )}
 

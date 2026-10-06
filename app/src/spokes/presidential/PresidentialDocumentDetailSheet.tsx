@@ -13,6 +13,7 @@ import { DocsHint } from '@/docs/DocsHint'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type PresidentialDispositionIn,
   type PresidentialDispositionOut,
@@ -149,6 +150,7 @@ function PresidentialDocumentDetailBody({
             {citation}
           </SheetTitle>
           <TextQualityBadge value={detail?.text_quality ?? row.text_quality} />
+          <SaveToCollection corpus="presidential" docId={row.id} title={title ?? citation} sourceUrl={frUrl} naturalKey={citation} />
           {frUrl && (
             <a
               href={frUrl}

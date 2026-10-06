@@ -20,6 +20,8 @@ import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import { ExplorerPage } from '@/explorer/ExplorerPage'
 import { CollectionPage, CollectionsIndex } from '@/collections/CollectionsPage'
+import { parseMyCollectionsPath } from '@/my-collections/availability'
+import { MyCollectionPage, MyCollectionsIndex } from '@/my-collections/MyCollectionsPage'
 import { DemoPage } from '@/demo/DemoPage'
 import { demoView, type DemoView } from '@/demo/kit'
 import { spokeSlugFor } from '@/lib/deep-link'
@@ -42,6 +44,10 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *                                  into the spokes (`src/explorer/`)
  *   `/collections`               → curated litigation collections
  *   `/collections/<slug>`        → one collection's cases (`src/collections/`)
+ *   `/my/collections`            → the signed-in reader's own collections
+ *   `/my/collections/<id>`       → one of them (`src/my-collections/`). Both are
+ *                                  "not found" for anyone who has none to show:
+ *                                  signed out, or the worker not serving them yet
  *   `/demo`, `/demo/deck`        → a presenter's guide and deck, served sealed
  *                                  and opened in the browser by the link that
  *                                  carries its passphrase (`src/demo/`)
@@ -78,6 +84,8 @@ type Route =
   | { kind: 'explorer' }
   | { kind: 'collections' }
   | { kind: 'collection'; slug: string }
+  | { kind: 'my-collections'; pathname: string }
+  | { kind: 'my-collection'; id: string; pathname: string }
   | { kind: 'demo'; view: DemoView }
   | { kind: 'stage' }
   | { kind: 'present' }
@@ -99,6 +107,12 @@ function parseRoute(pathname: string): Route {
   if (pathname === '/collections' || pathname === '/collections/') return { kind: 'collections' }
   const coll = pathname.match(/^\/collections\/([a-z0-9][a-z0-9-]{0,63})\/?$/)
   if (coll) return { kind: 'collection', slug: coll[1] }
+  const mine = parseMyCollectionsPath(pathname)
+  if (mine) {
+    return mine.kind === 'index'
+      ? { kind: 'my-collections', pathname }
+      : { kind: 'my-collection', id: mine.id, pathname }
+  }
   const demo = demoView(pathname)
   if (demo) return { kind: 'demo', view: demo }
   if (pathname === '/stage' || pathname === '/stage/') return { kind: 'stage' }
@@ -160,6 +174,16 @@ function App() {
       ? <CollectionsIndex />
       : route.kind === 'collection'
       ? <CollectionPage key={route.slug} slug={route.slug} />
+      : route.kind === 'my-collections'
+      ? <MyCollectionsIndex fallback={<NotFound pathname={route.pathname} onNavigate={navigateTo} />} />
+      : route.kind === 'my-collection'
+      ? (
+          <MyCollectionPage
+            key={route.id}
+            id={route.id}
+            fallback={<NotFound pathname={route.pathname} onNavigate={navigateTo} />}
+          />
+        )
       : route.kind === 'demo'
       ? <DemoPage view={route.view} />
       : route.kind === 'stage'

@@ -13,6 +13,8 @@ import { Mark } from '@/components/Mark'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { Feedback } from '@/feedback/Feedback'
 import { AccessSettings } from '@/llm/AccessSettings'
+import { MY_COLLECTIONS_PATH } from '@/my-collections/availability'
+import { useMyCollections } from '@/my-collections/use-my-collections'
 import { cn } from '@/lib/utils'
 
 /**
@@ -48,6 +50,7 @@ import { cn } from '@/lib/utils'
 export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
   const setSlot = useContext(SlotRefContext)
   const bar = useRef<HTMLElement>(null)
+  const collections = useMyCollections()
 
   useEffect(() => {
     const el = bar.current
@@ -148,6 +151,18 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
           >
             Explorer
           </AppLink>
+          {/* Only for a signed-in reader whose worker has collections switched on; for
+              everyone else this link does not exist. It waits for `lg`, as the note at
+              the far right does: below that the row has no room, and the same link is in
+              the AI access sheet beside the account it belongs to. */}
+          {collections.available && (
+            <AppLink
+              to={MY_COLLECTIONS_PATH}
+              className="hidden font-serif text-[15px] text-primary underline-offset-4 hover:underline lg:inline"
+            >
+              My collections
+            </AppLink>
+          )}
         </div>
         {/* The route's own controls. Empty on most surfaces, where it is just the spacer
             that pushes the global cluster right. A page that wants its controls on the

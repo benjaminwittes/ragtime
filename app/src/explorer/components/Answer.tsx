@@ -1,6 +1,7 @@
 import type { ExplorerBrief } from '@lawfare/ragtime-client'
 
 import { AppLink } from '@/components/AppLink'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import { detectShape, firstCitation, firstNumber, linkifyCitations, splitListAnswer } from '../model/answer-shape.ts'
 import { costLine, stopBadge } from '../model/format.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from '../model/sources.ts'
@@ -145,6 +146,8 @@ function Sources({ report }: { report: ReturnType<typeof sourcesOf> }) {
               <span className={'tag ' + (s.read ? 'tag-read' : 'tag-seen')}>{s.read ? 'read' : 'from search'}</span>
               <AppLink to={s.path}>{s.title}</AppLink>
               <span className="source-slug">{s.slug}</span>
+              {/* Renders nothing unless the reader is signed in and has collections. */}
+              <SaveToCollection corpus={s.slug} docId={s.id} title={s.title} className="ml-2" />
             </li>
           ))}
         </ul>

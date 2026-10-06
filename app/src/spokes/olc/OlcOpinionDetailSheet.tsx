@@ -13,6 +13,7 @@ import { DocsHint } from '@/docs/DocsHint'
 import { usePaid } from '@/auth/use-paid'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
+import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import {
   type OlcOpinionDetail,
   type OlcOpinionDisplayRow,
@@ -148,6 +149,7 @@ function OlcOpinionDetailBody({
             {title}
           </SheetTitle>
           {source && <SourceBadge value={source} />}
+          <SaveToCollection corpus="olc" docId={row.id} title={title} sourceUrl={sourceUrl} />
           {sourceUrl && (
             <a
               href={sourceUrl}
