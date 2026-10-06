@@ -107,8 +107,7 @@ const KNOBS = {
   blend: { id: 'line-lab.blend', value: 'through' },
   spread: { id: 'line-lab.spread', value: 6 },
   gain: { id: 'line-lab.gain', value: 0.9 },
-  soft: { id: 'line-lab.soft', value: 1.7 },
-  lead: { id: 'line-lab.lead', value: 0.22 },
+  ramp: { id: 'line-lab.ramp', value: 1 },
   shift: { id: 'line-lab.shift', value: 0 },
   pieces: { id: 'line-lab.pieces', value: 2 },
   mode: { id: 'line-lab.mode', value: 'one' },
@@ -134,8 +133,7 @@ export default function LineLab() {
   const [blend, setBlend] = useState(KNOBS.blend.value as 'over' | 'through' | 'outside')
   const [spread, setSpread] = useState(KNOBS.spread.value)
   const [gain, setGain] = useState(KNOBS.gain.value)
-  const [soft, setSoft] = useState(KNOBS.soft.value)
-  const [lead, setLead] = useState(KNOBS.lead.value)
+  const [ramp, setRamp] = useState(KNOBS.ramp.value)
   const [shift, setShift] = useState(KNOBS.shift.value)
   const [pieces, setPieces] = useState(KNOBS.pieces.value)
   const [mode, setMode] = useState(KNOBS.mode.value as 'one' | 'layered')
@@ -143,14 +141,14 @@ export default function LineLab() {
   const [backInk, setBackInk] = useState(KNOBS.backInk.value)
   const [note, setNote] = useState('')
 
-  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, shift, pieces, mode, linesBack, backInk }
+  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, ramp, shift, pieces, mode, linesBack, backInk }
   const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
   const resetAll = () => {
     setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
     setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
     setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
     setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
-    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setShift(KNOBS.shift.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setRamp(KNOBS.ramp.value); setShift(KNOBS.shift.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
     setNote('reset to what is in source')
   }
   const writeToSource = async () => {
@@ -213,12 +211,8 @@ export default function LineLab() {
     return () => cancelAnimationFrame(raf)
   }, [text, size, weight, pitch, cover])
 
-  // The master timeline. At t = 0 the window is just off the left of the word and nothing is shown; the
-  // window then sweeps right. By t = 1 its trailing edge is far enough past the last letter for every
-  // letter to have finished turning into raw text.
   // The word broken into pieces: each letter is cut into `pieces` equal slices, and every slice turns on its
-  // own, so the change can run through a letter and not only from letter to letter. `lw` is the width of the
-  // slice's letter, which keeps the ramp measured in letter widths however fine the cut.
+  // own, so the change can run through a letter and not only from letter to letter.
   const slices = useMemo(() => {
     const out: { l: number; r: number; lw: number }[] = []
     for (const lt of drawn?.letters ?? []) {
@@ -228,20 +222,18 @@ export default function LineLab() {
     }
     return out
   }, [drawn, pieces])
-  const endLo = drawn ? Math.max(0, ...slices.map((sl) => (sl.l + sl.lw * soft) / drawn.w)) || 1 : 1
-  // The window depends only on time and its width: it enters just off the left of the word and leaves just
-  // past the last slice. `shift` and `start early` move the morph against it and never move the window.
+  // The master timeline. The window is fixed for a given t: it enters just off the left of the word at t = 0 and
+  // its leading edge has carried the whole morph band past the last slice at t = 1.
+  const winPx = drawn ? winWidth * drawn.w : 0
+  const bandPx = Math.max(1, ramp * winPx)
+  const wordEnd = slices.reduce((m, sl) => Math.max(m, sl.r), 0)
   const startLo = -winWidth
-  const finishLo = endLo
+  const finishLo = drawn ? (wordEnd + bandPx) / drawn.w - winWidth : 1
   const lo = startLo + t * (finishLo - startLo)
-  // Shift is eased in over the first stretch of the timeline and out over the last, so t = 0 is always empty
-  // and t = 1 is always the finished text, for any shift. In between it applies in full.
-  const shiftNow = shift * Math.min(1, t / 0.15, (1 - t) / 0.15)
   const hi = lo + winWidth
-  // The reveal front: `lead` slides it from the trailing edge (0) to the leading edge (1) of the window, so a
-  // letter can start turning while the lines are still over it.
-  const edgeB = lo + shiftNow * winWidth
-  const front = edgeB + lead * winWidth
+  // `shift` is eased to zero over the first and last 15% of the timeline, so t = 0 is always empty and t = 1 is
+  // always the finished text, for any shift. In between it applies in full.
+  const shiftNow = shift * Math.min(1, t / 0.15, (1 - t) / 0.15)
   const vw = drawn ? drawn.w / UNIT_PX : 0
   const vh = drawn ? drawn.h / UNIT_PX : 0
   const win = `${uid}-win`
@@ -253,17 +245,15 @@ export default function LineLab() {
   const endMask = `${uid}-end`
   const lineFade = `${uid}-linefade`
 
-  // Two fronts move across the word, so "start early" only moves the start of the morph:
-  //  - the early front (`front`, inside the window) starts the growth, flat lines → halftone;
-  //  - the window's trailing edge (`lo`) is the wipe, and drives the finish, halftone → the original text.
-  // With start early at 0 they are the same edge. `soft` is how many letter widths each turn takes.
-  const ramp = (edge: number, sl: { l: number; lw: number }) => (drawn ? Math.min(1, Math.max(0, (edge * drawn.w - sl.l) / Math.max(1e-6, sl.lw * soft))) : 0)
-  const progressA = slices.map((sl) => ramp(front, sl))
-  const progressB = slices.map((sl) => ramp(edgeB, sl))
-  // Three phases per slice, so Halftone Lines is a stage you see and not a blink: flat lines turn into halftone
-  // over the first part of A, the halftone holds, then it turns into the original text over the last part of B.
-  const toHalftone = progressA.map((p) => Math.min(1, p / 0.35))
-  const toRaw = progressB.map((p) => Math.min(1, Math.max(0, (p - 0.65) / 0.35)))
+  // The morph is a band laid across the window, by position. At the band's start edge a column is still flat
+  // lines (0); `ramp` window-widths behind it the column is the finished text (1). The start edge is the
+  // window's leading edge, moved by `shift` (in window widths). The window itself never moves with the band.
+  const bandAt = (x: number) => (drawn ? Math.min(1, Math.max(0, (hi * drawn.w + shiftNow * winPx - x) / bandPx)) : 0)
+  const progress = slices.map((sl) => bandAt((sl.l + sl.r) / 2))
+  // Three phases per column, so Halftone Lines is a stage you see and not a blink: flat lines turn into halftone
+  // over the first part of the band, the halftone holds, then it turns into the original text.
+  const toHalftone = progress.map((p) => Math.min(1, p / 0.35))
+  const toRaw = progress.map((p) => Math.min(1, Math.max(0, (p - 0.65) / 0.35)))
   const progressKey = toRaw.map((p) => p.toFixed(2)).join(',')
 
   // Halftone Lines: the lines carry the tone. The text is softened so the lines swell toward the
@@ -295,31 +285,24 @@ export default function LineLab() {
   // moves along that path with its own progress, so the lines themselves grow into the word. Columns the
   // window has not reached yet stay empty.
   const hiPx = drawn ? Math.round(hi * drawn.w) : 0
-  const allKey = progressA.map((p) => p.toFixed(3)).join(',') + '|' + progressB.map((p) => p.toFixed(3)).join(',')
+  const allKey = progress.map((p) => p.toFixed(3)).join(',')
   const oneSet = useMemo(() => {
     if (!drawn || mode !== 'one') return ''
-    const { grid, spacing, w, h, letters } = drawn
-    const real = letters.filter((lt): lt is { l: number; r: number } => !!lt)
-    const avgLw = real.length ? real.reduce((a, lt) => a + (lt.r - lt.l), 0) / real.length : 40
-    const colA = new Float32Array(w)
-    const colB = new Float32Array(w)
-    for (let x = 0; x < w; x++) {
-      colA[x] = Math.min(1, Math.max(0, (front * w - x) / (avgLw * soft)))
-      colB[x] = Math.min(1, Math.max(0, (edgeB * w - x) / (avgLw * soft)))
-    }
+    const { grid, spacing, w, h } = drawn
+    // One progress value per column: the band's value at that column, held constant across a slice so the
+    // `pieces` cut still steps through each letter.
+    const colP = new Float32Array(w)
+    for (let x = 0; x < w; x++) colP[x] = bandAt(x)
     slices.forEach((sl, i) => {
-      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) {
-        colA[x] = progressA[i] ?? 0
-        colB[x] = progressB[i] ?? 0
-      }
+      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) colP[x] = progress[i] ?? 0
     })
     const out = new Float32Array(w * h)
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        if (windowOn && x > hiPx) continue
+        if (windowOn && x >= hiPx) continue
         const i = y * w + x
-        const a = Math.min(1, colA[x] / 0.35)
-        const r = Math.min(1, Math.max(0, (colB[x] - 0.65) / 0.35))
+        const a = Math.min(1, colP[x] / 0.35)
+        const r = Math.min(1, Math.max(0, (colP[x] - 0.65) / 0.35))
         const solid = grid.data[i] > 0.2 ? 1 : 0
         const f = cover + (toned[i] - cover) * a
         out[i] = f + (solid - f) * r
@@ -608,7 +591,7 @@ export default function LineLab() {
               on (off lets everything through)
             </label>
             <Slider label="width" value={winWidth} min={0.1} max={1} step={0.01} onChange={setWinWidth} />
-            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. In Final, the reveal front sits inside it (see start early).</p>
+            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. In Final, the morph is a band laid across the window (see ramp shift and ramp length).</p>
           </Card>
           <Card title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
             <input value={text} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
@@ -699,10 +682,9 @@ export default function LineLab() {
               </>
             )}
             <Slider label="ramp shift" value={shift} min={-1} max={1} step={0.01} onChange={setShift} />
-            <Slider label="start early" value={lead} min={0} max={1} step={0.01} onChange={setLead} />
             <Slider label="pieces / letter" value={pieces} min={1} max={24} step={1} onChange={setPieces} />
-            <Slider label="ramp (letters)" value={soft} min={0.5} max={10} step={0.05} onChange={setSoft} />
-            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Ramp shift slides the whole morph band against the window, in window widths, and never moves the window: left makes the morph trail behind the window, right makes it run ahead. It eases to zero at the very start and end of the timeline so those stay clean. Start early only moves where the halftone growth begins (0 = the window's trailing edge, 1 = its leading edge). The lines still wipe away, and the original text arrives, at the trailing edge. Pieces cuts each letter into slices that turn one at a time. Ramp is how many letter widths the whole turn takes.</p>
+            <Slider label="ramp length" value={ramp} min={0.1} max={3} step={0.01} onChange={setRamp} />
+            <p className="text-xs text-muted-foreground">The morph is a band laid across the window, by position: flat lines at the window's leading edge, halftone in the middle, the original text by the time the band ends. Ramp length is the band's length in window widths. Ramp shift slides the band against the window, in window widths, and never moves the window: right makes the morph run ahead of the lines, left makes it trail behind. Shift eases to zero at the very start and end of the timeline so those stay clean. Pieces cuts each letter into slices that turn one at a time.</p>
           </Card>
         </Column>
       </div>
