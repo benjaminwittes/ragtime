@@ -74,6 +74,7 @@ export default function LineLab() {
   const [left, setLeft] = useState(0.2)
   const [right, setRight] = useState(0.5)
   const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
+  const [textFrom, setTextFrom] = useState<'plain' | 'lines'>('plain')
   const [linesBack, setLinesBack] = useState(0.35)
   const [rawText, setRawText] = useState<'under' | 'over' | 'off'>('under')
 
@@ -117,11 +118,11 @@ export default function LineLab() {
       {drawn ? (
         <>
           <mask id={inWords} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            <path d={drawn.words} fill="#fff" />
+            <path d={drawn.band} fill="#fff" clipPath={windowOn ? `url(#${win})` : undefined} />
           </mask>
           <mask id={outWords} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
             <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
-            <path d={drawn.words} fill="#000" />
+            <path d={drawn.band} fill="#000" clipPath={windowOn ? `url(#${win})` : undefined} />
           </mask>
         </>
       ) : null}
@@ -129,32 +130,6 @@ export default function LineLab() {
   )
   // What the Mask node passes on: the band inside the window, or the whole band when the window is bypassed.
   const maskedBand = drawn ? <path d={drawn.band} fill={ink} clipPath={windowOn ? `url(#${win})` : undefined} /> : null
-  // Composite: the words are the mask. 'through' keeps the masked band only where the words are,
-  // 'outside' keeps it only where they are not (the words stay as they are), 'over' just stacks them.
-  const composite = drawn ? (
-    blend === 'over' ? (
-      <>
-        <path d={drawn.words} fill={ink} />
-        {maskedBand}
-      </>
-    ) : blend === 'through' ? (
-      <g mask={`url(#${inWords})`}>{maskedBand}</g>
-    ) : (
-      <>
-        <path d={drawn.words} fill={ink} />
-        <g mask={`url(#${outWords})`}>{maskedBand}</g>
-      </>
-    )
-  ) : null
-
-  // Windowed Lines laid back over Masked Text, at their own strength.
-  const linesAndMasked = drawn ? (
-    <>
-      {composite}
-      {linesBack > 0 ? <g opacity={linesBack}>{maskedBand}</g> : null}
-    </>
-  ) : null
-
   // The raw words, no effect, laid out exactly as the engine measured them.
   const plain = drawn ? (
     <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
@@ -166,6 +141,29 @@ export default function LineLab() {
       </div>
     </foreignObject>
   ) : null
+  const textArt = drawn ? (textFrom === 'plain' ? plain : <path d={drawn.words} fill={ink} />) : null
+
+  // Masked Text: the Windowed Lines are the mask and the text is what shows through them.
+  // 'through' keeps the text only inside the lines; 'outside' keeps it only between them; 'over' stacks.
+  const composite = drawn ? (
+    blend === 'over' ? (
+      <>
+        {textArt}
+        {maskedBand}
+      </>
+    ) : (
+      <g mask={`url(#${blend === 'through' ? inWords : outWords})`}>{textArt}</g>
+    )
+  ) : null
+
+  // Windowed Lines laid back over Masked Text, at their own strength.
+  const linesAndMasked = drawn ? (
+    <>
+      {composite}
+      {linesBack > 0 ? <g opacity={linesBack}>{maskedBand}</g> : null}
+    </>
+  ) : null
+
   const finalArt = (
     <>
       {rawText === 'under' ? plain : null}
@@ -268,7 +266,7 @@ export default function LineLab() {
           <Node
             title="Masked Text"
             kind="combine"
-            from={['Windowed Lines', 'Text as Lines']}
+            from={['Windowed Lines', textFrom === 'plain' ? 'Text' : 'Text as Lines']}
             preview={
               <Shot drawn={drawn} paper={paper}>
                 {defs}
@@ -277,10 +275,17 @@ export default function LineLab() {
             }
           >
             <label className="flex items-center gap-2 text-xs">
-              <span className="w-20 shrink-0 text-muted-foreground">text acts as</span>
+              <span className="w-20 shrink-0 text-muted-foreground">text is</span>
+              <select value={textFrom} onChange={(e) => setTextFrom(e.target.value as 'plain' | 'lines')} className="rounded border px-1 py-0.5">
+                <option value="plain">the plain words</option>
+                <option value="lines">the words as lines</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs">
+              <span className="w-20 shrink-0 text-muted-foreground">shown</span>
               <select value={blend} onChange={(e) => setBlend(e.target.value as 'over' | 'through' | 'outside')} className="rounded border px-1 py-0.5">
-                <option value="through">a mask: lines only in the text</option>
-                <option value="outside">a knockout: lines only outside the text</option>
+                <option value="through">only in the lines</option>
+                <option value="outside">only between the lines</option>
                 <option value="over">no mask: stacked</option>
               </select>
             </label>
