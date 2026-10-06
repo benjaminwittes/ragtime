@@ -432,33 +432,33 @@ export default function LineLab() {
             <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
             <path d={drawn.band} fill="#000" clipPath={windowOn ? `url(#${win})` : undefined} />
           </mask>
-          <mask id={fade} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
-            {slices.map((sl, i) => (
-              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#000" opacity={toHalftone[i] ?? 0} />
-            ))}
-          </mask>
-          <mask id={show} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            {slices.map((sl, i) => (
-              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={(toHalftone[i] ?? 0) * (1 - (toRaw[i] ?? 0) ** 2)} />
-            ))}
-          </mask>
-          <mask id={endMask} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            {slices.map((sl, i) => (
-              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={toRaw[i] ?? 0} />
-            ))}
-          </mask>
-          <mask id={lineFade} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
-            {slices.map((sl, i) => (
-              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#000" opacity={Math.min(1, Math.max(0, ((toRaw[i] ?? 0) - 0.4) / 0.6))} />
-            ))}
-          </mask>
-          <mask id={rawMask} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            {slices.map((sl, i) => (
-              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={(toRaw[i] ?? 0) ** 2} />
-            ))}
-          </mask>
+          {/* Each slice mask is one rectangle painted with a gradient that steps between pieces. Separate
+              rectangles side by side leave a hairline gap where their opacities differ; one paint does not. */}
+          {slices.length ? (
+            <>
+              {(
+                [
+                  [fade, toHalftone.map((v) => 1 - v)],
+                  [show, toHalftone.map((v, i) => v * (1 - (toRaw[i] ?? 0) ** 2))],
+                  [endMask, toRaw],
+                  [lineFade, toRaw.map((v) => 1 - Math.min(1, Math.max(0, (v - 0.4) / 0.6)))],
+                  [rawMask, toRaw.map((v) => v ** 2)],
+                ] as [string, number[]][]
+              ).map(([id, vals]) => (
+                <g key={id}>
+                  <linearGradient id={`${id}-g`} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={vw} y2={0}>
+                    {slices.flatMap((sl, i) => [
+                      <stop key={`${i}a`} offset={sl.l / drawn.w} stopColor="#fff" stopOpacity={vals[i] ?? 0} />,
+                      <stop key={`${i}b`} offset={sl.r / drawn.w} stopColor="#fff" stopOpacity={vals[i] ?? 0} />,
+                    ])}
+                  </linearGradient>
+                  <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+                    <rect x={0} y={0} width={vw} height={vh} fill={`url(#${id}-g)`} />
+                  </mask>
+                </g>
+              ))}
+            </>
+          ) : null}
         </>
       ) : null}
     </defs>
