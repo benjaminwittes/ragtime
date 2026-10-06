@@ -17,6 +17,9 @@ import {
   subscribeAmaPreflightSkip,
 } from '@/lib/ama-preflight-skip'
 import { TopupDialog } from '@/auth/TopupDialog'
+import { GoogleButton, OrByEmail } from '@/auth/GoogleSignIn'
+import { GOOGLE_REQUIRED, mustUseGoogle } from '@/auth/sign-in'
+import { useGoogleOffered } from '@/auth/use-google-offered'
 import { usePaid } from '@/auth/use-paid'
 import { getDemoPassword, setDemoPassword } from '@/lib/demo-access'
 import { setUsageLogEnabled, useUsageLogEnabled, usageLoggingBuildEnabled } from '@/lib/usage-log'
@@ -33,7 +36,8 @@ type AccessTab = 'paid' | 'byok' | 'demo'
  * "AI access" header affordance — opens a sheet with two ways to authorize
  * AI mode calls:
  *
- *   1. Lawfare-billed (paid tier) — magic-link sign-in via Supabase Auth.
+ *   1. Lawfare-billed (paid tier) — sign-in via Supabase Auth, by magic
+ *      link or, when the auth project offers it, with Google.
  *      Signed-in users see their email, balance, and per-query cap, plus
  *      a sign-out button. Top-up (Stripe Checkout) is a follow-up PR.
  *
@@ -50,11 +54,17 @@ type AccessTab = 'paid' | 'byok' | 'demo'
  */
 export function AccessSettings() {
   const auth = useAuth()
-  const [open, setOpen] = useState(false)
+  const { returnError } = usePaid()
+  // Someone who followed a sign-in link, or came back from Google, and got no
+  // session lands on a page that looks exactly as it did before they tried.
+  // The sheet opens on the sign-in form, which says what happened.
+  const [open, setOpen] = useState(returnError !== null)
   // Default the active tab to whatever the user has configured (or paid
   // when neither, since paid is the recommended path). Persisted only for
   // the lifetime of the sheet open — re-opens restart from the default.
-  const [tab, setTab] = useState<AccessTab>(() => defaultTab(auth))
+  const [tab, setTab] = useState<AccessTab>(() =>
+    returnError !== null ? 'paid' : defaultTab(auth),
+  )
 
   const pipColor = auth.isPaid
     ? 'bg-primary'
@@ -206,8 +216,8 @@ function TabRow({
       <TabButton
         active={tab === 'paid'}
         onClick={() => setTab('paid')}
-        label="Lawfare-billed"
-        sub="Prepaid blocks"
+        label="Account"
+        sub="Your balance, or Lawfare staff"
       />
       <TabButton
         active={tab === 'byok'}
@@ -218,8 +228,8 @@ function TabRow({
       <TabButton
         active={tab === 'demo'}
         onClick={() => setTab('demo')}
-        label="Demo"
-        sub="Lawfare key"
+        label="Demo code"
+        sub="Shared key, by invitation"
       />
     </div>
   )
@@ -265,10 +275,31 @@ function PaidPanel({ onClose }: { onClose: () => void }) {
 
 function SignInForm() {
   const paid = usePaid()
+  const google = useGoogleOffered()
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const [sentTo, setSentTo] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // A failed return is this form's first error, and is said once: taken
+  // from the context here, and forgotten there.
+  const [error, setError] = useState<string | null>(paid.returnError)
+  const { clearReturnError } = paid
+  useEffect(() => clearReturnError(), [clearReturnError])
+  // An address that signs in with Google gets no email link. Said as soon as
+  // the address is typed, and only when there is a Google button to point at.
+  const needsGoogle = mustUseGoogle(email, google)
+
+  async function handleGoogle() {
+    setError(null)
+    setLeaving(true)
+    const errMsg = await paid.signInWithGoogle()
+    // No error means the browser is already on its way to Google, and the
+    // button stays as it is until the page goes.
+    if (errMsg) {
+      setError(errMsg)
+      setLeaving(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -277,6 +308,8 @@ function SignInForm() {
       setError('Enter a valid email address.')
       return
     }
+    // The notice under the field already says why; nothing is sent.
+    if (needsGoogle) return
     setError(null)
     setSubmitting(true)
     try {
@@ -318,13 +351,26 @@ function SignInForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <p className="text-sm text-foreground/90">
-          Sign in to use Lawfare-billed Anthropic credit. We send a one-time
-          sign-in link to your email — no password.
+          Sign in to use RAGtime&apos;s AI credit. Your balance pays for AI
+          calls; Lawfare staff accounts are covered by Lawfare.
+          {!google &&
+            ' We send a one-time sign-in link to your email — no password.'}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           First-time users start with a $0 balance; top up after sign-in.
         </p>
       </div>
+      {google && (
+        <>
+          <GoogleButton
+            onClick={() => void handleGoogle()}
+            leaving={leaving}
+            disabled={submitting}
+            pointedAt={needsGoogle}
+          />
+          <OrByEmail />
+        </>
+      )}
       <label className="block space-y-1.5">
         <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Email
@@ -335,11 +381,28 @@ function SignInForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          disabled={submitting}
+          disabled={submitting || leaving}
         />
+        {google && (
+          <span className="block text-xs text-muted-foreground">
+            We send a one-time sign-in link — no password.
+          </span>
+        )}
       </label>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      <Button type="submit" disabled={submitting || !email.trim()}>
+      {needsGoogle && (
+        <p role="status" data-google-required="" className="text-xs text-foreground">
+          {GOOGLE_REQUIRED} Use the button above.
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      <Button
+        type="submit"
+        disabled={submitting || leaving || !email.trim() || needsGoogle}
+      >
         {submitting ? 'Sending…' : 'Send sign-in link'}
       </Button>
       <p className="text-xs text-muted-foreground">
@@ -390,52 +453,58 @@ function SignedInView({ onClose }: { onClose: () => void }) {
         </p>
       </section>
 
-      <section className="rounded-md border border-border bg-card p-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Balance
-          </h3>
-          <button
-            type="button"
-            onClick={() => void paid.refreshBalance()}
-            className="text-[11px] text-primary hover:underline"
-            disabled={paid.balanceLoading}
+      {paid.googleRequired ? (
+        <GoogleRequired />
+      ) : paid.account?.billing === 'org' ? (
+        <OrgCovered />
+      ) : (
+        <section className="rounded-md border border-border bg-card p-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Balance
+            </h3>
+            <button
+              type="button"
+              onClick={() => void paid.refreshBalance()}
+              className="text-[11px] text-primary hover:underline"
+              disabled={paid.balanceLoading}
+            >
+              {paid.balanceLoading ? 'refreshing…' : 'refresh'}
+            </button>
+          </div>
+          <p
+            className={cn(
+              'mt-1 font-mono text-3xl font-semibold tabular-nums',
+              paid.account && paid.account.balance_cents <= 50
+                ? 'text-destructive'
+                : paid.account && paid.account.balance_cents <= 500
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-foreground',
+            )}
           >
-            {paid.balanceLoading ? 'refreshing…' : 'refresh'}
-          </button>
-        </div>
-        <p
-          className={cn(
-            'mt-1 font-mono text-3xl font-semibold tabular-nums',
-            paid.account && paid.account.balance_cents <= 50
-              ? 'text-destructive'
-              : paid.account && paid.account.balance_cents <= 500
-                ? 'text-amber-600 dark:text-amber-400'
-                : 'text-foreground',
-          )}
-        >
-          {paid.account ? fmtCents(paid.account.balance_cents) : '—'}
-        </p>
-        {paid.account && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Per-query cap:{' '}
-            <span className="font-mono">
-              {fmtCents(paid.account.per_query_cap_cents)}
-            </span>
+            {paid.account ? fmtCents(paid.account.balance_cents) : '—'}
           </p>
-        )}
-        {paid.balanceError && (
-          <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
-        )}
-        <div className="mt-4 flex items-center gap-2">
-          <Button type="button" onClick={() => setTopupOpen(true)}>
-            Top up
-          </Button>
-          <span className="text-[11px] text-muted-foreground">
-            Prepaid blocks via Stripe Checkout.
-          </span>
-        </div>
-      </section>
+          {paid.account && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Per-query cap:{' '}
+              <span className="font-mono">
+                {fmtCents(paid.account.per_query_cap_cents)}
+              </span>
+            </p>
+          )}
+          {paid.balanceError && (
+            <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
+          )}
+          <div className="mt-4 flex items-center gap-2">
+            <Button type="button" onClick={() => setTopupOpen(true)}>
+              Top up
+            </Button>
+            <span className="text-[11px] text-muted-foreground">
+              Prepaid blocks via Stripe Checkout.
+            </span>
+          </div>
+        </section>
+      )}
 
       {/* Present only when the worker has collections switched on for this account. */}
       {collections.available && (
@@ -469,6 +538,101 @@ function SignedInView({ onClose }: { onClose: () => void }) {
 
       <TopupDialog open={topupOpen} onOpenChange={setTopupOpen} />
     </div>
+  )
+}
+
+/**
+ * What a session the service refuses for not being made by Google sees where a balance
+ * would be: the service's sentence, and the button that fixes it. It replaces the raw
+ * "403" a failed balance fetch would otherwise print under an empty balance and a Top up
+ * button that could not help.
+ */
+function GoogleRequired() {
+  const paid = usePaid()
+  const google = useGoogleOffered()
+  const [leaving, setLeaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleGoogle() {
+    setError(null)
+    setLeaving(true)
+    const errMsg = await paid.signInWithGoogle()
+    if (errMsg) {
+      setError(errMsg)
+      setLeaving(false)
+    }
+  }
+
+  return (
+    <section
+      className="space-y-3 rounded-md border border-border bg-card p-4"
+      data-google-required=""
+    >
+      <p role="status" className="text-sm font-medium text-foreground">
+        {GOOGLE_REQUIRED}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        This sign-in was not made with Google. To use AI on this address,
+        continue with Google using the same address.
+      </p>
+      {google && (
+        <GoogleButton onClick={() => void handleGoogle()} leaving={leaving} />
+      )}
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </section>
+  )
+}
+
+/**
+ * What an account on the organisation's allowance sees where a balance would be. Its AI
+ * use is paid for, so there is no balance to show and nothing to top up; the one limit
+ * it can meet is the day's shared count, which is shown when the Worker sent it.
+ */
+function OrgCovered() {
+  const paid = usePaid()
+  const allowance = paid.account?.allowance
+  return (
+    <section
+      className="rounded-md border border-border bg-card p-4"
+      data-billing="org"
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Covered by Lawfare
+        </h3>
+        <button
+          type="button"
+          onClick={() => void paid.refreshBalance()}
+          className="text-[11px] text-primary hover:underline"
+          disabled={paid.balanceLoading}
+        >
+          {paid.balanceLoading ? 'refreshing…' : 'refresh'}
+        </button>
+      </div>
+      <p className="mt-1 text-sm text-foreground/90">
+        AI use on this account is paid for by Lawfare. There is nothing to top
+        up.
+      </p>
+      {allowance && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Shared allowance today:{' '}
+          <span className="font-mono">
+            {allowance.calls_today === null
+              ? '—'
+              : allowance.calls_today.toLocaleString()}{' '}
+            of {allowance.daily_quota.toLocaleString()}
+          </span>{' '}
+          model calls, counted across everyone on it.
+        </p>
+      )}
+      {paid.balanceError && (
+        <p className="mt-2 text-xs text-destructive">{paid.balanceError}</p>
+      )}
+    </section>
   )
 }
 

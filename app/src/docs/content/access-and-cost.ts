@@ -20,7 +20,7 @@ import type { DocsEntry } from '../types'
 export const accessAndCostEntry: DocsEntry = {
   slug: 'access-and-cost',
   title: 'Access & Cost',
-  summary: 'Free search and filtering, bring-your-own-key, or a Lawfare-billed prepaid balance — and how charges work.',
+  summary: 'Free search and filtering, bring-your-own-key, or a signed-in account with a prepaid balance — and how charges work.',
   scope: { kind: 'global' },
   order: 3,
   content: `
@@ -34,10 +34,11 @@ account, no key, no card, and no cap on how much you search.
 AI modes. Those calls bill to your provider, not to Lawfare. The key stays in
 this browser; the Worker forwards it on each call and keeps no copy.
 
-**3. Lawfare-billed.** With no key of your own, buy a prepaid block ($5 /
+**3. Account.** With no key of your own, buy a prepaid block ($5 /
 $20 / $50) and Lawfare runs Anthropic models for you, charging $1.35 for
 every $1.00 of actual API cost. Your balance and your per-query cap are at
-the top of the paid tab in **AI access**.
+the top of the **Account** tab in **AI access**. Lawfare staff who sign in
+with Google on a Lawfare address are covered by Lawfare and carry no balance.
 
 **Estimates are estimates; the balance is the floor.** Every AI action is
 priced before it runs, by a planning step that guesses, so the figure can be

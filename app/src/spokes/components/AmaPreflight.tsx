@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Dialog } from 'radix-ui'
 import { XIcon } from 'lucide-react'
+import { ownBalance } from '@/auth/account'
 import { Button } from '@/components/ui/button'
 import { setAmaPreflightSkipped } from '@/lib/ama-preflight-skip'
 import { cn } from '@/lib/utils'
@@ -30,7 +31,7 @@ export function AmaPreflight({
   open,
   onProceed,
   onCancel,
-  paidAccount,
+  paidAccount: account,
 }: {
   plan: AmaPlan | null
   open: boolean
@@ -41,9 +42,14 @@ export function AmaPreflight({
   paidAccount: {
     balance_cents: number
     per_query_cap_cents: number
+    billing?: 'self' | 'org'
   } | null
 }) {
   const [dontShowAgain, setDontShowAgain] = useState(false)
+  // An account on the organisation's allowance spends no balance, so the
+  // balance and cap below are not about it and are hidden as they are for an
+  // own-key caller.
+  const paidAccount = ownBalance(account)
 
   function handleProceed() {
     if (dontShowAgain) setAmaPreflightSkipped(true)

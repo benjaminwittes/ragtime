@@ -10,7 +10,8 @@ import { LAST_UPDATED, PRIVACY_POLICY_MD } from './privacy-policy-content'
  *
  * The Tailwind typography plugin isn't installed, so the markdown is styled
  * directly via arbitrary descendant variants (same convention as DocsOverlay),
- * plus table styling for the mode/subprocessor tables.
+ * plus table styling for the mode/subprocessor tables. A blockquote is the
+ * "In plain terms" reading that closes each section.
  */
 export function PrivacyPolicy({ onNavigate }: { onNavigate: (path: string) => void }) {
   return (
@@ -43,6 +44,7 @@ export function PrivacyPolicy({ onNavigate }: { onNavigate: (path: string) => vo
             '[&_table]:my-5 [&_table]:w-full [&_table]:border-collapse [&_table]:text-[13px]',
             '[&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:p-2 [&_th]:text-left [&_th]:align-top [&_th]:font-semibold',
             '[&_td]:border [&_td]:border-border [&_td]:p-2 [&_td]:align-top',
+            '[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-foreground [&_blockquote_p]:my-1',
           )}
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{PRIVACY_POLICY_MD}</ReactMarkdown>
