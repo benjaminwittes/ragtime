@@ -16,8 +16,8 @@ import { linesFromGrid, rasterizeText, UNIT_PX, type Grid } from '@/hub/textLine
  * each letter Masked Text → Halftone Lines → Raw Text, with the Windowed Lines still showing.
  *
  * The goal is a line halftone: the text is drawn by lines whose thickness follows the letters, and
- * each letter goes Masked Text → Halftone Lines → Raw Text as the Window's trailing (left) edge passes it. Nothing animates;
- * you drag the Window to play it.
+ * each letter goes Masked Text → Halftone Lines → Raw Text as the Window's trailing (left) edge passes it.
+ * One master timeline `t` (0 → 1) sweeps the Window across the word; scrub it or let it play and loop.
  */
 
 type Letter = { l: number; r: number } | null
@@ -86,23 +86,86 @@ function blur(data: Float32Array, w: number, h: number, r: number): Float32Array
   return pass(pass(data, true), false)
 }
 
+/**
+ * The lab's variables as they sit in source. One declaration per line, `{ id, value }`, because that is
+ * the shape the dev server's write-to-source endpoint patches in place (`app/vite-plugin-tune.ts`).
+ * "Write to source" in the toolbar rewrites the `value:` of every knob you have moved.
+ */
+const KNOBS = {
+  text: { id: 'line-lab.text', value: 'I am RAGtime' },
+  size: { id: 'line-lab.size', value: 96 },
+  weight: { id: 'line-lab.weight', value: 800 },
+  pitch: { id: 'line-lab.pitch', value: 5.5 },
+  ink: { id: 'line-lab.ink', value: '#1b2a49' },
+  paper: { id: 'line-lab.paper', value: '#fffdf2' },
+  cover: { id: 'line-lab.cover', value: 0.55 },
+  windowOn: { id: 'line-lab.windowOn', value: true },
+  winWidth: { id: 'line-lab.winWidth', value: 0.4 },
+  t: { id: 'line-lab.t', value: 0.5 },
+  loop: { id: 'line-lab.loop', value: true },
+  duration: { id: 'line-lab.duration', value: 6 },
+  blend: { id: 'line-lab.blend', value: 'through' },
+  spread: { id: 'line-lab.spread', value: 12 },
+  gain: { id: 'line-lab.gain', value: 1 },
+  soft: { id: 'line-lab.soft', value: 5 },
+  linesBack: { id: 'line-lab.linesBack', value: 0.35 },
+  backInk: { id: 'line-lab.backInk', value: '#c2410c' },
+}
+type KnobKey = keyof typeof KNOBS
+
 export default function LineLab() {
-  const [text, setText] = useState('I am RAGtime')
-  const [size, setSize] = useState(96)
-  const [weight, setWeight] = useState(800)
-  const [pitch, setPitch] = useState(5.5)
-  const [ink, setInk] = useState('#1b2a49')
-  const [paper, setPaper] = useState('#fffdf2')
-  const [cover, setCover] = useState(0.55)
-  const [windowOn, setWindowOn] = useState(true)
-  const [left, setLeft] = useState(0.2)
-  const [right, setRight] = useState(0.5)
-  const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
-  const [spread, setSpread] = useState(12)
-  const [gain, setGain] = useState(1.0)
-  const [soft, setSoft] = useState(5)
-  const [linesBack, setLinesBack] = useState(0.35)
-  const [backInk, setBackInk] = useState('#c2410c')
+  const [text, setText] = useState(KNOBS.text.value)
+  const [size, setSize] = useState(KNOBS.size.value)
+  const [weight, setWeight] = useState(KNOBS.weight.value)
+  const [pitch, setPitch] = useState(KNOBS.pitch.value)
+  const [ink, setInk] = useState(KNOBS.ink.value)
+  const [paper, setPaper] = useState(KNOBS.paper.value)
+  const [cover, setCover] = useState(KNOBS.cover.value)
+  const [windowOn, setWindowOn] = useState(KNOBS.windowOn.value)
+  const [winWidth, setWinWidth] = useState(KNOBS.winWidth.value)
+  const [t, setT] = useState(KNOBS.t.value)
+  const [playing, setPlaying] = useState(false)
+  const [loop, setLoop] = useState(KNOBS.loop.value)
+  const [duration, setDuration] = useState(KNOBS.duration.value)
+  const [blend, setBlend] = useState(KNOBS.blend.value as 'over' | 'through' | 'outside')
+  const [spread, setSpread] = useState(KNOBS.spread.value)
+  const [gain, setGain] = useState(KNOBS.gain.value)
+  const [soft, setSoft] = useState(KNOBS.soft.value)
+  const [linesBack, setLinesBack] = useState(KNOBS.linesBack.value)
+  const [backInk, setBackInk] = useState(KNOBS.backInk.value)
+  const [note, setNote] = useState('')
+
+  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, linesBack, backInk }
+  const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
+  const resetAll = () => {
+    setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
+    setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
+    setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
+    setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
+    setSoft(KNOBS.soft.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setNote('reset to what is in source')
+  }
+  const writeToSource = async () => {
+    if (!moved.length) return setNote('nothing moved')
+    try {
+      const response = await fetch('/__tune/write', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ edits: moved.map((k) => ({ kind: 'value', id: KNOBS[k].id, file: 'src/owl/lab/LineLab.tsx', value: values[k] })) }),
+      })
+      if (!response.ok) return setNote(`write failed: ${await response.text()}`)
+      const { results } = (await response.json()) as { results: { id: string; ok: boolean; detail: string }[] }
+      const bad = results.filter((r) => !r.ok)
+      setNote(bad.length ? `wrote ${results.length - bad.length}, failed: ${bad.map((r) => r.id).join(', ')}` : `wrote ${results.length} to src/owl/lab/LineLab.tsx`)
+    } catch (error) {
+      setNote(`write failed: ${error instanceof Error ? error.message : 'no dev server'}`)
+    }
+  }
+  const copyJson = () => {
+    void navigator.clipboard.writeText(JSON.stringify(Object.fromEntries((Object.keys(KNOBS) as KnobKey[]).map((k) => [k, values[k]])), null, 2))
+    setNote('all values copied as JSON')
+  }
+
   const graph = useRef<HTMLDivElement>(null)
   const [wires, setWires] = useState<{ d: string; key: string }[]>([])
   const [wireBox, setWireBox] = useState({ w: 0, h: 0 })
@@ -142,8 +205,12 @@ export default function LineLab() {
     return () => cancelAnimationFrame(raf)
   }, [text, size, weight, pitch, cover])
 
-  const lo = Math.min(left, right)
-  const hi = Math.max(left, right)
+  // The master timeline. At t = 0 the window is just off the left of the word and nothing is shown; the
+  // window then sweeps right. By t = 1 its trailing edge is far enough past the last letter for every
+  // letter to have finished turning into raw text.
+  const endLo = drawn ? Math.max(0, ...drawn.letters.map((lt) => (lt ? (lt.l + (lt.r - lt.l) * soft) / drawn.w : 0))) || 1 : 1
+  const lo = -winWidth + t * (endLo + winWidth)
+  const hi = lo + winWidth
   const vw = drawn ? drawn.w / UNIT_PX : 0
   const vh = drawn ? drawn.h / UNIT_PX : 0
   const win = `${uid}-win`
@@ -189,6 +256,41 @@ export default function LineLab() {
     return { still, morphed: linesFromGrid({ w, h, data: out }, spacing) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn, spread, gain, progressKey])
+
+  // Auto-play: advance t with the clock, hold a beat at the end, then loop or stop.
+  const tRef = useRef(t)
+  useLayoutEffect(() => {
+    tRef.current = t
+  }, [t])
+  useLayoutEffect(() => {
+    if (!playing) return
+    let raf = 0
+    let prev = performance.now()
+    let holdUntil = 0
+    const tick = (now: number) => {
+      const dt = now - prev
+      prev = now
+      if (holdUntil) {
+        if (now >= holdUntil) {
+          holdUntil = 0
+          setT(0)
+        }
+      } else {
+        const next = tRef.current + dt / (duration * 1000)
+        if (next >= 1) {
+          setT(1)
+          if (loop) holdUntil = now + 700
+          else {
+            setPlaying(false)
+            return
+          }
+        } else setT(next)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, loop, duration])
 
   // The wires between cards, measured from where the cards actually sit.
   useLayoutEffect(() => {
@@ -258,7 +360,7 @@ export default function LineLab() {
           </mask>
           <mask id={show} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
             {drawn.letters.map((lt, i) =>
-              lt ? <rect key={i} x={lt.l / UNIT_PX} y={0} width={(lt.r - lt.l) / UNIT_PX} height={vh} fill="#fff" opacity={toHalftone[i] ?? 0} /> : null,
+              lt ? <rect key={i} x={lt.l / UNIT_PX} y={0} width={(lt.r - lt.l) / UNIT_PX} height={vh} fill="#fff" opacity={(toHalftone[i] ?? 0) * (1 - (toRaw[i] ?? 0) ** 2)} /> : null,
             )}
           </mask>
         </>
@@ -306,7 +408,52 @@ export default function LineLab() {
   return (
     <main className="mx-auto max-w-[110rem] px-6 py-8" data-line-lab>
       <h1 className="text-lg font-semibold">Line compositing builder</h1>
-      <p className="mb-6 text-sm text-muted-foreground">Read left to right. Each card shows what that stage outputs. Drag the Window's left edge to play the reveal.</p>
+      <p className="mb-6 text-sm text-muted-foreground">Read left to right. Each card shows what that stage outputs. Scrub the timeline or press play.</p>
+
+      <div className="sticky top-2 z-20 mb-6 flex flex-wrap items-center gap-4 rounded-lg border bg-background/95 px-4 py-2 shadow-sm backdrop-blur" data-timeline>
+        <button
+          type="button"
+          onClick={() => {
+            if (!playing && t >= 1) setT(0)
+            setPlaying(!playing)
+          }}
+          className="w-16 rounded border px-2 py-1 text-sm font-medium"
+        >
+          {playing ? 'Pause' : 'Play'}
+        </button>
+        <input
+          type="range"
+          aria-label="timeline"
+          min={0}
+          max={1}
+          step={0.001}
+          value={t}
+          onPointerDown={() => setPlaying(false)}
+          onChange={(e) => setT(Number(e.target.value))}
+          className="min-w-[16rem] flex-1"
+        />
+        <span className="w-28 text-xs tabular-nums text-muted-foreground">{(t * duration).toFixed(1)}s / {duration}s</span>
+        <label className="flex items-center gap-1.5 text-xs">
+          <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
+          loop
+        </label>
+        <label className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">length</span>
+          <input type="range" min={1} max={20} step={0.5} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-28" />
+        </label>
+        <span className="mx-1 h-6 w-px bg-border" />
+        <span className="text-xs text-muted-foreground" data-moved>{moved.length ? `${moved.length} moved: ${moved.join(', ')}` : 'matches source'}</span>
+        <button type="button" onClick={() => void writeToSource()} disabled={!moved.length} className="rounded border px-2 py-1 text-xs font-medium disabled:opacity-40">
+          Write to source
+        </button>
+        <button type="button" onClick={resetAll} disabled={!moved.length} className="rounded border px-2 py-1 text-xs disabled:opacity-40">
+          Reset to source
+        </button>
+        <button type="button" onClick={copyJson} className="rounded border px-2 py-1 text-xs">
+          Copy JSON
+        </button>
+        {note ? <span className="text-xs text-muted-foreground" data-note>{note}</span> : null}
+      </div>
 
       {/* The words are measured here, off screen. The Text node shows the plain words. */}
       <div
@@ -362,9 +509,8 @@ export default function LineLab() {
               <input type="checkbox" checked={windowOn} onChange={(e) => setWindowOn(e.target.checked)} />
               on (off lets everything through)
             </label>
-            <Slider label="left edge" value={left} min={0} max={1} step={0.005} onChange={setLeft} />
-            <Slider label="right edge" value={right} min={0} max={1} step={0.005} onChange={setRight} />
-            <p className="text-xs text-muted-foreground">The left edge is the reveal front in Final: letters it has passed turn into raw text.</p>
+            <Slider label="width" value={winWidth} min={0.1} max={1} step={0.01} onChange={setWinWidth} />
+            <p className="text-xs text-muted-foreground">The timeline sweeps the window across the word. Its left edge is the reveal front in Final: letters it has passed turn into raw text.</p>
           </Card>
           <Card title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
             <input value={text} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
