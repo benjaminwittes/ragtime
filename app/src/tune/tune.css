@@ -1,3 +1,4 @@
+@layer components {
 /* The tuning panel's own look.
  *
  * Deliberately written in literal values and system fonts, using none of the
@@ -387,4 +388,5 @@
   .rt-tune-group-body {
     animation: none;
   }
+}
 }

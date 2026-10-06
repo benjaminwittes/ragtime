@@ -1,3 +1,4 @@
+@layer components {
 /* The Explorer's conversation, when the owl is put in it (`ChatOwl.tsx`, which imports this
  * sheet): the owl is a small figure in a row that is already a line of text, and the line is
  * said after it. The figure is drawn before the speech code is, and with no voice that code
@@ -20,4 +21,5 @@
   margin: 0.6rem 0;
   font-size: 13px;
   color: var(--dim, inherit);
+}
 }

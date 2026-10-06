@@ -4,8 +4,8 @@
  * Everything here acts inside the figure's own box. `overflow: visible` is for the lantern's
  * glow, which is allowed to fall on the paper beside it.
  *
- * Unlayered, like `explorer.css`, so these rules hold inside `.explorer` as well as outside it
- * without either sheet having to know about the other.
+ * In the `components` layer, like the other app sheets (`index.css`), so a utility class on the
+ * same element wins over a rule here, and these rules hold inside `.explorer` as well as outside it.
  *
  * Imported from `src/index.css`, before `./transitions.css`.
  */
@@ -50,7 +50,7 @@
 
 /* The hub's owl on a desktop (`owl/embeds.ts`): out of the flow, on its own perch at the top left of the
  * first screen, in line with the site bar's logo (that bar is `max-w-6xl` with `px-6`), and its note beside it.
- * Here and not in a utility class because `.owl-spot` above is unlayered and would win over one. */
+ * A rule and not utilities, so the perch is one declaration. */
 @media (min-width: 64rem) {
   .owl-perch {
     position: absolute;

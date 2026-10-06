@@ -24,17 +24,17 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
-@import './explorer/explorer.css';
-@import './hub/hub.css';
-@import './owl/owl.css';
+@import './explorer/explorer.css' layer(components);
+@import './hub/hub.css' layer(components);
+@import './owl/owl.css' layer(components);
 /* Last of the imports, and it has to be: it names pieces of both sheets above and sets
  * `--vt-*` against them, so it reads them rather than the other way round. What happens
  * between two routes — which pieces travel, which leave, in what order. */
 @import './transitions.css';
 /* After it, for once: the stage names two pieces of its own and animates them with the
  * keyframes and the `--vt-*` timings that sheet defines. */
-@import './stage/stage.css';
-@import './stage/record.css';
+@import './stage/stage.css' layer(components);
+@import './stage/record.css' layer(components);
 
 @custom-variant dark (&:is(.dark *));
 

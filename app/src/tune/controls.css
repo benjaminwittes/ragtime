@@ -1,3 +1,4 @@
+@layer components {
 /* The look of a knob's row and its control (`controls.tsx`): literal values and system fonts, as
  * the panel's own (`tune.css`), because the gear in the site bar shows these rows in a production
  * build, where none of the app's tokens are the tuner's to move. */
@@ -90,3 +91,4 @@
   color: #8a6d1f;
 }
 
+}
