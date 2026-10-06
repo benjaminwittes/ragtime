@@ -1,7 +1,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { linesFromGrid, UNIT_PX } from '@/hub/textLines'
-import { frameAt, geometry, measureMorph, rowTimes, timing, toneOf, type Measured, type MorphParams } from '@/hub/lineMorph/engine'
-import MorphArt from '@/hub/lineMorph/MorphArt'
+import { geometry, measureMorph, rowTimes, timing, toneOf, type Measured, type MorphParams } from '@/hub/lineMorph/engine'
+import LineMorphText from '@/hub/lineMorph/LineMorphText'
 import { getTunable } from '@/tune/registry'
 import '../knobs/morph'
 
@@ -32,10 +32,10 @@ function Slider({ label, value, min, max, step, onChange }: { label: string; val
 }
 
 /** One card of the graph: a title, what it reads from, its controls, and a preview of its output. */
-function Card({ title, kind, from, preview, children }: { title: string; kind: 'input' | 'mask' | 'combine' | 'output'; from?: string[]; preview: ReactNode; children?: ReactNode }) {
+function Card({ title, kind, from, preview, children, wide }: { title: string; kind: 'input' | 'mask' | 'combine' | 'output'; from?: string[]; preview: ReactNode; children?: ReactNode; wide?: boolean }) {
   const tint = { input: 'bg-emerald-600', mask: 'bg-amber-600', combine: 'bg-sky-600', output: 'bg-violet-700' }[kind]
   return (
-    <div className="flex w-[17rem] shrink-0 flex-col overflow-hidden rounded-lg border bg-background shadow-sm" data-node={title}>
+    <div className={`flex ${wide ? 'w-[32rem]' : 'w-[17rem]'} shrink-0 flex-col overflow-hidden rounded-lg border bg-background shadow-sm`} data-node={title}>
       <header className={`flex items-center justify-between px-3 py-1.5 text-xs font-medium text-white ${tint}`}>
         <span>{title}</span>
         <span className="opacity-80">{kind}</span>
@@ -189,8 +189,6 @@ export default function LineLab() {
     [cover, winWidth, windowOn, spread, gain, ramp, shift, trail, entry, speed, pieces, stagger],
   )
   const toned = useMemo(() => (m ? toneOf(m, spread, gain) : null), [m, spread, gain])
-  // Final, as the owl draws it: one frame of the engine at the master time.
-  const frame = useMemo(() => (m && toned ? frameAt(m, toned, params, t) : null), [m, toned, params, t])
   // How long the whole takes at the one swipe speed, for this text.
   const tm = useMemo(() => (m ? timing(m, params) : null), [m, params])
   const total = tm?.total ?? 1
@@ -507,11 +505,15 @@ export default function LineLab() {
           <Card
             title="Final: reveal"
             kind="output"
+            wide
             from={['Lines', 'Halftone Lines', 'Text', 'Window']}
             preview={
-              <Shot m={m} paper={paper}>
-                {m && frame ? <MorphArt m={m} frame={frame} text={text} textStyle={textStyle} ink={ink} /> : null}
-              </Shot>
+              // The real component, held at the master time: the same lines, the same mask and the same text the owl writes with.
+              <div className="overflow-hidden rounded border p-3" style={{ background: paper }}>
+                <div style={{ ...textStyle, color: ink }}>
+                  <LineMorphText text={text} params={params} pitch={pitch} t={t} />
+                </div>
+              </div>
             }
           >
             <Slider label="ramp shift" value={shift} min={-1} max={1} step={0.01} onChange={setShift} />

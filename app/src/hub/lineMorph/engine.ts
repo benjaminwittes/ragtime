@@ -287,3 +287,35 @@ export function frameAt(m: Measured, toned: Float32Array, p: MorphParams, t: num
     finished: t >= 1,
   }
 }
+
+/**
+ * The mask that reveals the real text slice by slice: one horizontal gradient per row, stepping between slices,
+ * each placed on its own band of the box. Returned as the style to put on the element holding the text, with the
+ * `-webkit-` names Safari still wants. Rows with no letters have no layer, and no frame at all means no mask.
+ */
+export function revealMask(frame: Frame | null, m: Measured): Record<string, string> {
+  const layers = (frame?.rows ?? []).filter((row) => row.slices.length)
+  if (!layers.length) return {}
+  const image = layers
+    .map((row) => {
+      const stops = row.slices.flatMap((sl, i) => {
+        const c = `rgba(0,0,0,${(row.raw[i] ?? 0).toFixed(3)})`
+        return [`${c} ${sl.l.toFixed(2)}px`, `${c} ${sl.r.toFixed(2)}px`]
+      })
+      return `linear-gradient(to right, ${stops.join(', ')})`
+    })
+    .join(', ')
+  const size = layers.map((row) => `${m.w}px ${row.y1 - row.y0}px`).join(', ')
+  const position = layers.map((row) => `0 ${row.y0}px`).join(', ')
+  const repeat = layers.map(() => 'no-repeat').join(', ')
+  return {
+    maskImage: image,
+    WebkitMaskImage: image,
+    maskSize: size,
+    WebkitMaskSize: size,
+    maskPosition: position,
+    WebkitMaskPosition: position,
+    maskRepeat: repeat,
+    WebkitMaskRepeat: repeat,
+  }
+}

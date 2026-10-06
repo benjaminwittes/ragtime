@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { frameAt, geometry, groupRows, rowTimes, slicesOf, sweep, timing, toneOf, type Measured, type MorphParams } from './engine'
+import { frameAt, geometry, groupRows, revealMask, rowTimes, slicesOf, sweep, timing, toneOf, type Measured, type MorphParams } from './engine'
 
 /** Two rows of three letters, as a layout the browser might have made, with a raster that has ink where the letters are. */
 function layout(rows = 2): Measured {
@@ -211,5 +211,26 @@ describe('groupRows', () => {
   it('numbers rows top to bottom whatever order the letters arrive in', () => {
     const { letters } = groupRows([box(0, 30), box(0, 0)], 60)
     expect(letters.map((l) => l!.row)).toEqual([1, 0])
+  })
+})
+
+describe('revealMask', () => {
+  const m = layout()
+  const toned = toneOf(m, params.spread, params.gain)
+  it('is no mask at all when there is no frame', () => {
+    expect(revealMask(null, m)).toEqual({})
+  })
+  it('has one gradient layer per row, each placed on its own band of the box', () => {
+    const mask = revealMask(frameAt(m, toned, params, 0.5), m)
+    expect(mask.maskImage.match(/linear-gradient/g)).toHaveLength(2)
+    expect(mask.maskPosition).toBe('0 0px, 0 40px')
+    expect(mask.maskSize).toBe(`${m.w}px 40px, ${m.w}px 40px`)
+    expect(mask.WebkitMaskImage).toBe(mask.maskImage)
+  })
+  it('hides all the text at the start and shows all of it at the end', () => {
+    const first = revealMask(frameAt(m, toned, params, 0), m).maskImage
+    const last = revealMask(frameAt(m, toned, params, 1), m).maskImage
+    expect(first).not.toMatch(/rgba\(0,0,0,(?!0\.000)/)
+    expect(last).not.toMatch(/rgba\(0,0,0,(?!1\.000)/)
   })
 })
