@@ -3,12 +3,13 @@ import { linesFromGrid, rasterizeText, UNIT_PX } from '@/hub/textLines'
 
 /**
  * The line compositing builder (2026-10-06), shown as a node graph. It is not a real node engine:
- * the graph is fixed and each card is one stage whose output you can see on its own. Read left to
- * right, the effect builds from piece to piece.
+ * the graph is fixed and each card is one stage whose output you can see on its own.
  *
- *   [Lines]  even lines over the whole box, blind to the words   ─┐
- *   [Window] a left and a right edge, a mask                     ─┴→ [Mask] lines ∩ window ─┐
- *   [Text]   the words, drawn as lines by the hub engine         ───────────────────────────┴→ [Composite] → [Output]
+ *   Lines ──┐
+ *           ├→ Windowed Lines ──┬──────────────────────────┐
+ *   Window ─┘                   ├→ Masked Text ─→ Masked Text + Lines ─→ Final
+ *   Text ──→ Text as Lines ─────┘                                          ↑
+ *   Text (raw, again) ────────────────────────────────────────────────────┘
  *
  * Nothing animates. A new node is added only when the ones before it read right to Thomas.
  */
@@ -73,6 +74,8 @@ export default function LineLab() {
   const [left, setLeft] = useState(0.2)
   const [right, setRight] = useState(0.5)
   const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
+  const [linesBack, setLinesBack] = useState(0.35)
+  const [rawText, setRawText] = useState<'under' | 'over' | 'off'>('under')
 
   const uid = useId().replace(/:/g, '')
   const host = useRef<HTMLDivElement>(null)
@@ -144,6 +147,33 @@ export default function LineLab() {
     )
   ) : null
 
+  // Windowed Lines laid back over Masked Text, at their own strength.
+  const linesAndMasked = drawn ? (
+    <>
+      {composite}
+      {linesBack > 0 ? <g opacity={linesBack}>{maskedBand}</g> : null}
+    </>
+  ) : null
+
+  // The raw words, no effect, laid out exactly as the engine measured them.
+  const plain = drawn ? (
+    <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
+      <div
+        className="whitespace-nowrap leading-tight"
+        style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}
+      >
+        {text}
+      </div>
+    </foreignObject>
+  ) : null
+  const finalArt = (
+    <>
+      {rawText === 'under' ? plain : null}
+      {linesAndMasked}
+      {rawText === 'over' ? plain : null}
+    </>
+  )
+
   return (
     <main className="mx-auto max-w-[96rem] px-6 py-8" data-line-lab>
       <h1 className="text-lg font-semibold">Line compositing builder</h1>
@@ -179,14 +209,23 @@ export default function LineLab() {
             </label>
           </Node>
           <Node
-            title="Text"
+            title="Window"
             kind="input"
             preview={
               <Shot drawn={drawn} paper={paper}>
-                {drawn ? <path d={drawn.words} fill={ink} /> : null}
+                <rect x={0} y={0} width={vw} height={vh} fill="#000" opacity={0.08} />
+                {windowOn ? <rect x={vw * lo} y={0} width={vw * (hi - lo)} height={vh} fill={ink} /> : <rect x={0} y={0} width={vw} height={vh} fill={ink} />}
               </Shot>
             }
           >
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={windowOn} onChange={(e) => setWindowOn(e.target.checked)} />
+              on (off lets everything through)
+            </label>
+            <Slider label="left edge" value={left} min={0} max={1} step={0.005} onChange={setLeft} />
+            <Slider label="right edge" value={right} min={0} max={1} step={0.005} onChange={setRight} />
+          </Node>
+          <Node title="Text" kind="input" preview={<Shot drawn={drawn} paper={paper}>{plain}</Shot>}>
             <input value={text} onChange={(e) => setText(e.target.value)} className="rounded border px-2 py-1 text-sm" />
             <Slider label="size" value={size} min={24} max={200} step={1} onChange={setSize} />
             <Slider label="font weight" value={weight} min={100} max={900} step={100} onChange={setWeight} />
@@ -197,29 +236,7 @@ export default function LineLab() {
 
         <Column>
           <Node
-            title="Window"
-            kind="mask"
-            preview={
-              <Shot drawn={drawn} paper={paper}>
-                <rect x={0} y={0} width={vw} height={vh} fill="#000" opacity={0.08} />
-                {windowOn ? <rect x={vw * lo} y={0} width={vw * (hi - lo)} height={vh} fill={ink} /> : <rect x={0} y={0} width={vw} height={vh} fill={ink} />}
-              </Shot>
-            }
-          >
-            <label className="flex items-center gap-2 text-xs">
-              <input type="checkbox" checked={windowOn} onChange={(e) => setWindowOn(e.target.checked)} />
-              on (off passes everything)
-            </label>
-            <Slider label="left edge" value={left} min={0} max={1} step={0.005} onChange={setLeft} />
-            <Slider label="right edge" value={right} min={0} max={1} step={0.005} onChange={setRight} />
-          </Node>
-        </Column>
-
-        <Arrow />
-
-        <Column>
-          <Node
-            title="Mask"
+            title="Windowed Lines"
             kind="combine"
             from={['Lines', 'Window']}
             preview={
@@ -229,7 +246,19 @@ export default function LineLab() {
               </Shot>
             }
           >
-            <p className="text-xs text-muted-foreground">Keeps the lines only where the window is open.</p>
+            <p className="text-xs text-muted-foreground">The lines, kept only where the window is open. Not a mask yet.</p>
+          </Node>
+          <Node
+            title="Text as Lines"
+            kind="combine"
+            from={['Text']}
+            preview={
+              <Shot drawn={drawn} paper={paper}>
+                {drawn ? <path d={drawn.words} fill={ink} /> : null}
+              </Shot>
+            }
+          >
+            <p className="text-xs text-muted-foreground">The words redrawn as lines by the engine. Thick where the letters are.</p>
           </Node>
         </Column>
 
@@ -237,9 +266,9 @@ export default function LineLab() {
 
         <Column>
           <Node
-            title="Composite"
+            title="Masked Text"
             kind="combine"
-            from={['Text', 'Mask']}
+            from={['Windowed Lines', 'Text as Lines']}
             preview={
               <Shot drawn={drawn} paper={paper}>
                 {defs}
@@ -248,10 +277,10 @@ export default function LineLab() {
             }
           >
             <label className="flex items-center gap-2 text-xs">
-              <span className="w-20 shrink-0 text-muted-foreground">words are</span>
+              <span className="w-20 shrink-0 text-muted-foreground">text acts as</span>
               <select value={blend} onChange={(e) => setBlend(e.target.value as 'over' | 'through' | 'outside')} className="rounded border px-1 py-0.5">
-                <option value="through">a mask: lines only in the words</option>
-                <option value="outside">a knockout: lines only outside the words</option>
+                <option value="through">a mask: lines only in the text</option>
+                <option value="outside">a knockout: lines only outside the text</option>
                 <option value="over">no mask: stacked</option>
               </select>
             </label>
@@ -262,16 +291,44 @@ export default function LineLab() {
 
         <Column>
           <Node
-            title="Output"
-            kind="output"
-            from={['Composite']}
+            title="Masked Text + Lines"
+            kind="combine"
+            from={['Masked Text', 'Windowed Lines']}
             preview={
               <Shot drawn={drawn} paper={paper}>
                 {defs}
-                {composite}
+                {linesAndMasked}
               </Shot>
             }
-          />
+          >
+            <Slider label="lines back" value={linesBack} min={0} max={1} step={0.05} onChange={setLinesBack} />
+            <p className="text-xs text-muted-foreground">Windowed Lines laid back over Masked Text. 0 leaves Masked Text alone.</p>
+          </Node>
+        </Column>
+
+        <Arrow />
+
+        <Column>
+          <Node
+            title="Final"
+            kind="output"
+            from={['Masked Text + Lines', 'Text']}
+            preview={
+              <Shot drawn={drawn} paper={paper}>
+                {defs}
+                {finalArt}
+              </Shot>
+            }
+          >
+            <label className="flex items-center gap-2 text-xs">
+              <span className="w-20 shrink-0 text-muted-foreground">raw text</span>
+              <select value={rawText} onChange={(e) => setRawText(e.target.value as 'under' | 'over' | 'off')} className="rounded border px-1 py-0.5">
+                <option value="under">under the lines</option>
+                <option value="over">over the lines</option>
+                <option value="off">off</option>
+              </select>
+            </label>
+          </Node>
         </Column>
       </div>
     </main>
