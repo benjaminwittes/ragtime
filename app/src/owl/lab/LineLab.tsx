@@ -109,6 +109,7 @@ const KNOBS = {
   gain: { id: 'line-lab.gain', value: 0.9 },
   soft: { id: 'line-lab.soft', value: 1.7 },
   lead: { id: 'line-lab.lead', value: 0.22 },
+  pieces: { id: 'line-lab.pieces', value: 6 },
   linesBack: { id: 'line-lab.linesBack', value: 1 },
   backInk: { id: 'line-lab.backInk', value: '#1b2949' },
 }
@@ -133,18 +134,19 @@ export default function LineLab() {
   const [gain, setGain] = useState(KNOBS.gain.value)
   const [soft, setSoft] = useState(KNOBS.soft.value)
   const [lead, setLead] = useState(KNOBS.lead.value)
+  const [pieces, setPieces] = useState(KNOBS.pieces.value)
   const [linesBack, setLinesBack] = useState(KNOBS.linesBack.value)
   const [backInk, setBackInk] = useState(KNOBS.backInk.value)
   const [note, setNote] = useState('')
 
-  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, linesBack, backInk }
+  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, pieces, linesBack, backInk }
   const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
   const resetAll = () => {
     setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
     setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
     setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
     setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
-    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setPieces(KNOBS.pieces.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
     setNote('reset to what is in source')
   }
   const writeToSource = async () => {
@@ -210,7 +212,19 @@ export default function LineLab() {
   // The master timeline. At t = 0 the window is just off the left of the word and nothing is shown; the
   // window then sweeps right. By t = 1 its trailing edge is far enough past the last letter for every
   // letter to have finished turning into raw text.
-  const endLo = drawn ? Math.max(0, ...drawn.letters.map((lt) => (lt ? (lt.l + (lt.r - lt.l) * soft) / drawn.w : 0))) || 1 : 1
+  // The word broken into pieces: each letter is cut into `pieces` equal slices, and every slice turns on its
+  // own, so the change can run through a letter and not only from letter to letter. `lw` is the width of the
+  // slice's letter, which keeps the ramp measured in letter widths however fine the cut.
+  const slices = useMemo(() => {
+    const out: { l: number; r: number; lw: number }[] = []
+    for (const lt of drawn?.letters ?? []) {
+      if (!lt) continue
+      const step = (lt.r - lt.l) / pieces
+      for (let k = 0; k < pieces; k++) out.push({ l: lt.l + k * step, r: lt.l + (k + 1) * step, lw: lt.r - lt.l })
+    }
+    return out
+  }, [drawn, pieces])
+  const endLo = drawn ? Math.max(0, ...slices.map((sl) => (sl.l + sl.lw * soft) / drawn.w)) || 1 : 1
   const lo = -winWidth + t * (endLo + winWidth)
   const hi = lo + winWidth
   // The reveal front: `lead` slides it from the trailing edge (0) to the leading edge (1) of the window, so a
@@ -223,14 +237,12 @@ export default function LineLab() {
   const outWords = `${uid}-out`
   const fade = `${uid}-fade`
   const show = `${uid}-show`
+  const rawMask = `${uid}-raw`
 
   // Each letter's progress through Final, 0 → 1, driven by the Window's trailing (left) edge: the lines
   // retreat sideways and leave the letter. The first half is Masked Text → Halftone Lines (`toHalftone`),
   // the second half is Halftone Lines → Raw Text (`toRaw`). `soft` is how many letter widths the whole turn takes, so a few letters are in each stage at once.
-  const progress = (drawn?.letters ?? []).map((lt) => {
-    if (!lt || !drawn) return 0
-    return Math.min(1, Math.max(0, (front * drawn.w - lt.l) / Math.max(1e-6, (lt.r - lt.l) * soft)))
-  })
+  const progress = slices.map((sl) => (drawn ? Math.min(1, Math.max(0, (front * drawn.w - sl.l) / Math.max(1e-6, sl.lw * soft))) : 0))
   // Three phases per letter, so Halftone Lines is a stage you see and not a blink: Masked Text turns into
   // halftone over the first third, halftone holds for the middle third, then thickens into raw text.
   const toHalftone = progress.map((p) => Math.min(1, p / 0.35))
@@ -242,13 +254,12 @@ export default function LineLab() {
   // solid letter by that letter's progress, so the lines themselves become the raw text.
   const halftone = useMemo(() => {
     if (!drawn) return { still: '', morphed: '' }
-    const { grid, spacing, letters, w, h } = drawn
+    const { grid, spacing, w, h } = drawn
     const toned = blur(grid.data, w, h, spread).map((v) => Math.min(1, v * gain))
     const still = linesFromGrid({ w, h, data: toned }, spacing)
     const col = new Float32Array(w)
-    letters.forEach((lt, i) => {
-      if (!lt) return
-      for (let x = Math.max(0, Math.floor(lt.l)); x < Math.min(w, Math.ceil(lt.r)); x++) col[x] = toRaw[i] ?? 0
+    slices.forEach((sl, i) => {
+      for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) col[x] = toRaw[i] ?? 0
     })
     const out = new Float32Array(toned.length)
     for (let y = 0; y < h; y++) {
@@ -359,14 +370,19 @@ export default function LineLab() {
           </mask>
           <mask id={fade} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
             <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
-            {drawn.letters.map((lt, i) =>
-              lt ? <rect key={i} x={lt.l / UNIT_PX} y={0} width={(lt.r - lt.l) / UNIT_PX} height={vh} fill="#000" opacity={toHalftone[i] ?? 0} /> : null,
-            )}
+            {slices.map((sl, i) => (
+              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#000" opacity={toHalftone[i] ?? 0} />
+            ))}
           </mask>
           <mask id={show} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
-            {drawn.letters.map((lt, i) =>
-              lt ? <rect key={i} x={lt.l / UNIT_PX} y={0} width={(lt.r - lt.l) / UNIT_PX} height={vh} fill="#fff" opacity={(toHalftone[i] ?? 0) * (1 - (toRaw[i] ?? 0) ** 2)} /> : null,
-            )}
+            {slices.map((sl, i) => (
+              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={(toHalftone[i] ?? 0) * (1 - (toRaw[i] ?? 0) ** 2)} />
+            ))}
+          </mask>
+          <mask id={rawMask} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+            {slices.map((sl, i) => (
+              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={(toRaw[i] ?? 0) ** 2} />
+            ))}
           </mask>
         </>
       ) : null}
@@ -375,12 +391,12 @@ export default function LineLab() {
   // What Windowed Lines passes on: the band inside the window, or the whole band when the window is bypassed.
   const maskedBand = drawn ? <path d={drawn.band} fill={ink} clipPath={windowOn ? `url(#${win})` : undefined} /> : null
 
-  // The raw words, no effect, laid out exactly as the engine measured them. `opacities` fades single letters.
-  const plainText = (opacities?: number[]) =>
+  // The raw words, no effect, laid out exactly as the engine measured them.
+  const plainText = () =>
     drawn ? (
       <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
         <div className="whitespace-nowrap leading-tight" style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}>
-          {opacities ? [...text].map((ch, i) => <span key={i} style={{ opacity: opacities[i] ?? 0 }}>{ch}</span>) : text}
+          {text}
         </div>
       </foreignObject>
     ) : null
@@ -406,7 +422,7 @@ export default function LineLab() {
       <g mask={`url(#${show})`}>
         <path d={halftone.morphed} fill={ink} />
       </g>
-      {plainText(toRaw.map((p) => p * p))}
+      <g mask={`url(#${rawMask})`}>{plain}</g>
     </>
   ) : null
 
@@ -595,8 +611,9 @@ export default function LineLab() {
               <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
             </label>
             <Slider label="start early" value={lead} min={0} max={1} step={0.01} onChange={setLead} />
+            <Slider label="pieces / letter" value={pieces} min={1} max={24} step={1} onChange={setPieces} />
             <Slider label="ramp (letters)" value={soft} min={0.5} max={10} step={0.05} onChange={setSoft} />
-            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Start early puts the front inside the window (0 = its trailing edge, 1 = its leading edge), so the turn begins while lines still cover the letter. Ramp is how many letter widths the whole turn takes.</p>
+            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Start early puts the front inside the window (0 = its trailing edge, 1 = its leading edge), so the turn begins while lines still cover the letter. Pieces cuts each letter into slices that turn one at a time. Ramp is how many letter widths the whole turn takes.</p>
           </Card>
         </Column>
       </div>
