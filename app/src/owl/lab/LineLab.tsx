@@ -100,15 +100,15 @@ const KNOBS = {
   paper: { id: 'line-lab.paper', value: '#fffdf2' },
   cover: { id: 'line-lab.cover', value: 0.2 },
   windowOn: { id: 'line-lab.windowOn', value: true },
-  winWidth: { id: 'line-lab.winWidth', value: 0.4 },
-  t: { id: 'line-lab.t', value: 0.5 },
+  winWidth: { id: 'line-lab.winWidth', value: 1 },
+  t: { id: 'line-lab.t', value: 1 },
   loop: { id: 'line-lab.loop', value: true },
-  duration: { id: 'line-lab.duration', value: 6 },
+  duration: { id: 'line-lab.duration', value: 1 },
   blend: { id: 'line-lab.blend', value: 'through' },
   spread: { id: 'line-lab.spread', value: 6 },
   gain: { id: 'line-lab.gain', value: 0.9 },
-  soft: { id: 'line-lab.soft', value: 5 },
-  lead: { id: 'line-lab.lead', value: 0.5 },
+  soft: { id: 'line-lab.soft', value: 1.7 },
+  lead: { id: 'line-lab.lead', value: 0.22 },
   linesBack: { id: 'line-lab.linesBack', value: 1 },
   backInk: { id: 'line-lab.backInk', value: '#1b2949' },
 }
@@ -444,7 +444,7 @@ export default function LineLab() {
         </label>
         <label className="flex items-center gap-2 text-xs">
           <span className="text-muted-foreground">length</span>
-          <input type="range" min={1} max={20} step={0.5} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-28" />
+          <input type="range" min={0.2} max={3} step={0.1} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-28" />
         </label>
         <span className="mx-1 h-6 w-px bg-border" />
         <span className="text-xs text-muted-foreground" data-moved>{moved.length ? `${moved.length} moved: ${moved.join(', ')}` : 'matches source'}</span>
