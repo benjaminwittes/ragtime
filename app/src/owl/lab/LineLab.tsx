@@ -75,6 +75,7 @@ export default function LineLab() {
   const [right, setRight] = useState(0.5)
   const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
   const [linesBack, setLinesBack] = useState(0.35)
+  const [backInk, setBackInk] = useState('#c2410c')
   const [rawText, setRawText] = useState<'under' | 'over' | 'off'>('under')
 
   const uid = useId().replace(/:/g, '')
@@ -156,8 +157,8 @@ export default function LineLab() {
   // Windowed Lines laid back over Masked Text, at their own strength.
   const linesAndMasked = drawn ? (
     <>
+      {linesBack > 0 ? <path d={drawn.band} fill={backInk} opacity={linesBack} clipPath={windowOn ? `url(#${win})` : undefined} /> : null}
       {composite}
-      {linesBack > 0 ? <g opacity={linesBack}>{maskedBand}</g> : null}
     </>
   ) : null
 
@@ -285,7 +286,11 @@ export default function LineLab() {
             }
           >
             <Slider label="lines back" value={linesBack} min={0} max={1} step={0.05} onChange={setLinesBack} />
-            <p className="text-xs text-muted-foreground">Windowed Lines laid back over Masked Text. 0 leaves Masked Text alone.</p>
+            <label className="flex items-center gap-2 text-xs">
+              <span className="w-20 shrink-0 text-muted-foreground">line colour</span>
+              <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
+            </label>
+            <p className="text-xs text-muted-foreground">Windowed Lines laid back under Masked Text, in their own colour. 0 leaves Masked Text alone.</p>
           </Node>
         </Column>
 
