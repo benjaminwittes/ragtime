@@ -228,7 +228,8 @@ export default function LineLab() {
   const bandPx = Math.max(1, ramp * winPx)
   const wordEnd = slices.reduce((m, sl) => Math.max(m, sl.r), 0)
   const startLo = -winWidth
-  const finishLo = drawn ? (wordEnd + bandPx) / drawn.w - winWidth : 1
+  // At t = 1 the whole band is past the last slice and the window's lines have cleared the word.
+  const finishLo = drawn ? Math.max((wordEnd + bandPx) / drawn.w - winWidth, wordEnd / drawn.w) : 1
   const lo = startLo + t * (finishLo - startLo)
   const hi = lo + winWidth
   // `shift` is eased to zero over the first and last 15% of the timeline, so t = 0 is always empty and t = 1 is
@@ -280,10 +281,10 @@ export default function LineLab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn, toned, progressKey])
 
-  // One set of lines. The only thing that is drawn is the line engine's output, from a field that changes:
-  // flat (even rows) → the halftone tone (lines swell where the letters are) → the solid letters. Each column
-  // moves along that path with its own progress, so the lines themselves grow into the word. Columns the
-  // window has not reached yet stay empty.
+  // The morph layer. It is the line engine's output from a field that grows from nothing: the halftone tone
+  // (lines swell where the letters are), then the solid letters, each column along the band by its own progress.
+  // The window's flat lines sit under it as a fixed underlay, so the morph can run ahead of or behind the lines
+  // without the window changing. Columns the window has not reached yet stay empty.
   const hiPx = drawn ? Math.round(hi * drawn.w) : 0
   const allKey = progress.map((p) => p.toFixed(3)).join(',')
   const oneSet = useMemo(() => {
@@ -304,7 +305,9 @@ export default function LineLab() {
         const a = Math.min(1, colP[x] / 0.35)
         const r = Math.min(1, Math.max(0, (colP[x] - 0.65) / 0.35))
         const solid = grid.data[i] > 0.2 ? 1 : 0
-        const f = cover + (toned[i] - cover) * a
+        // The flat lines are the window's own underlay (drawn separately), so the morph starts from nothing and
+        // only adds: the halftone swelling on the lines, then the solid letters.
+        const f = toned[i] * a
         out[i] = f + (solid - f) * r
       }
     }
@@ -469,6 +472,7 @@ export default function LineLab() {
   const finalArt = drawn ? (
     mode === 'one' ? (
       <>
+        <path d={drawn.band} fill={ink} clipPath={windowOn ? `url(#${win})` : undefined} />
         <g mask={`url(#${lineFade})`}>
           <path d={oneSet} fill={ink} />
         </g>
