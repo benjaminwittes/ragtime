@@ -229,16 +229,18 @@ export default function LineLab() {
     return out
   }, [drawn, pieces])
   const endLo = drawn ? Math.max(0, ...slices.map((sl) => (sl.l + sl.lw * soft) / drawn.w)) || 1 : 1
-  // The window depends only on time and its width. `shift` and `start early` move the morph against it and
-  // never move the window itself. The range is wide enough (a window width of slack each side) that at t = 0
-  // nothing has started and at t = 1 every slice has finished, for any shift from -1 to 1.
-  const startLo = -2 * winWidth
-  const finishLo = endLo + winWidth
+  // The window depends only on time and its width: it enters just off the left of the word and leaves just
+  // past the last slice. `shift` and `start early` move the morph against it and never move the window.
+  const startLo = -winWidth
+  const finishLo = endLo
   const lo = startLo + t * (finishLo - startLo)
+  // Shift is eased in over the first stretch of the timeline and out over the last, so t = 0 is always empty
+  // and t = 1 is always the finished text, for any shift. In between it applies in full.
+  const shiftNow = shift * Math.min(1, t / 0.15, (1 - t) / 0.15)
   const hi = lo + winWidth
   // The reveal front: `lead` slides it from the trailing edge (0) to the leading edge (1) of the window, so a
   // letter can start turning while the lines are still over it.
-  const edgeB = lo + shift * winWidth
+  const edgeB = lo + shiftNow * winWidth
   const front = edgeB + lead * winWidth
   const vw = drawn ? drawn.w / UNIT_PX : 0
   const vh = drawn ? drawn.h / UNIT_PX : 0
@@ -700,7 +702,7 @@ export default function LineLab() {
             <Slider label="start early" value={lead} min={0} max={1} step={0.01} onChange={setLead} />
             <Slider label="pieces / letter" value={pieces} min={1} max={24} step={1} onChange={setPieces} />
             <Slider label="ramp (letters)" value={soft} min={0.5} max={10} step={0.05} onChange={setSoft} />
-            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Ramp shift slides the whole morph band against the window, in window widths, and never moves the window: left makes the morph trail behind the window, right makes it run ahead. Start early only moves where the halftone growth begins (0 = the window's trailing edge, 1 = its leading edge). The lines still wipe away, and the original text arrives, at the trailing edge. Pieces cuts each letter into slices that turn one at a time. Ramp is how many letter widths the whole turn takes.</p>
+            <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the front passes it. Ramp shift slides the whole morph band against the window, in window widths, and never moves the window: left makes the morph trail behind the window, right makes it run ahead. It eases to zero at the very start and end of the timeline so those stay clean. Start early only moves where the halftone growth begins (0 = the window's trailing edge, 1 = its leading edge). The lines still wipe away, and the original text arrives, at the trailing edge. Pieces cuts each letter into slices that turn one at a time. Ramp is how many letter widths the whole turn takes.</p>
           </Card>
         </Column>
       </div>
