@@ -6,10 +6,10 @@ import { linesFromGrid, rasterizeText, UNIT_PX } from '@/hub/textLines'
  * the graph is fixed and each card is one stage whose output you can see on its own.
  *
  *   Lines ──┐
- *           ├→ Windowed Lines ──┬──────────────────────────┐
- *   Window ─┘                   ├→ Masked Text ─→ Masked Text + Lines ─→ Final
- *   Text ──→ Text as Lines ─────┘                                          ↑
- *   Text (raw, again) ────────────────────────────────────────────────────┘
+ *           ├→ Windowed Lines ─┐
+ *   Window ─┘                  ├→ Masked Text ─→ Masked Text + Lines ─→ Final
+ *   Text ──────────────────────┘                                          ↑
+ *   Text (raw, again) ───────────────────────────────────────────────────┘
  *
  * Nothing animates. A new node is added only when the ones before it read right to Thomas.
  */
@@ -74,7 +74,6 @@ export default function LineLab() {
   const [left, setLeft] = useState(0.2)
   const [right, setRight] = useState(0.5)
   const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
-  const [textFrom, setTextFrom] = useState<'plain' | 'lines'>('plain')
   const [linesBack, setLinesBack] = useState(0.35)
   const [rawText, setRawText] = useState<'under' | 'over' | 'off'>('under')
 
@@ -141,18 +140,16 @@ export default function LineLab() {
       </div>
     </foreignObject>
   ) : null
-  const textArt = drawn ? (textFrom === 'plain' ? plain : <path d={drawn.words} fill={ink} />) : null
-
   // Masked Text: the Windowed Lines are the mask and the text is what shows through them.
   // 'through' keeps the text only inside the lines; 'outside' keeps it only between them; 'over' stacks.
   const composite = drawn ? (
     blend === 'over' ? (
       <>
-        {textArt}
+        {plain}
         {maskedBand}
       </>
     ) : (
-      <g mask={`url(#${blend === 'through' ? inWords : outWords})`}>{textArt}</g>
+      <g mask={`url(#${blend === 'through' ? inWords : outWords})`}>{plain}</g>
     )
   ) : null
 
@@ -246,18 +243,6 @@ export default function LineLab() {
           >
             <p className="text-xs text-muted-foreground">The lines, kept only where the window is open. Not a mask yet.</p>
           </Node>
-          <Node
-            title="Text as Lines"
-            kind="combine"
-            from={['Text']}
-            preview={
-              <Shot drawn={drawn} paper={paper}>
-                {drawn ? <path d={drawn.words} fill={ink} /> : null}
-              </Shot>
-            }
-          >
-            <p className="text-xs text-muted-foreground">The words redrawn as lines by the engine. Thick where the letters are.</p>
-          </Node>
         </Column>
 
         <Arrow />
@@ -266,7 +251,7 @@ export default function LineLab() {
           <Node
             title="Masked Text"
             kind="combine"
-            from={['Windowed Lines', textFrom === 'plain' ? 'Text' : 'Text as Lines']}
+            from={['Windowed Lines', 'Text']}
             preview={
               <Shot drawn={drawn} paper={paper}>
                 {defs}
@@ -274,13 +259,6 @@ export default function LineLab() {
               </Shot>
             }
           >
-            <label className="flex items-center gap-2 text-xs">
-              <span className="w-20 shrink-0 text-muted-foreground">text is</span>
-              <select value={textFrom} onChange={(e) => setTextFrom(e.target.value as 'plain' | 'lines')} className="rounded border px-1 py-0.5">
-                <option value="plain">the plain words</option>
-                <option value="lines">the words as lines</option>
-              </select>
-            </label>
             <label className="flex items-center gap-2 text-xs">
               <span className="w-20 shrink-0 text-muted-foreground">shown</span>
               <select value={blend} onChange={(e) => setBlend(e.target.value as 'over' | 'through' | 'outside')} className="rounded border px-1 py-0.5">
