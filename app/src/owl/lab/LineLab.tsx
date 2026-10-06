@@ -111,7 +111,6 @@ const KNOBS = {
   lead: { id: 'line-lab.lead', value: 0.22 },
   pieces: { id: 'line-lab.pieces', value: 2 },
   mode: { id: 'line-lab.mode', value: 'one' },
-  crisp: { id: 'line-lab.crisp', value: false },
   linesBack: { id: 'line-lab.linesBack', value: 1 },
   backInk: { id: 'line-lab.backInk', value: '#1b2949' },
 }
@@ -138,19 +137,18 @@ export default function LineLab() {
   const [lead, setLead] = useState(KNOBS.lead.value)
   const [pieces, setPieces] = useState(KNOBS.pieces.value)
   const [mode, setMode] = useState(KNOBS.mode.value as 'one' | 'layered')
-  const [crisp, setCrisp] = useState(KNOBS.crisp.value)
   const [linesBack, setLinesBack] = useState(KNOBS.linesBack.value)
   const [backInk, setBackInk] = useState(KNOBS.backInk.value)
   const [note, setNote] = useState('')
 
-  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, pieces, mode, crisp, linesBack, backInk }
+  const values: Record<KnobKey, string | number | boolean> = { text, size, weight, pitch, ink, paper, cover, windowOn, winWidth, t, loop, duration, blend, spread, gain, soft, lead, pieces, mode, linesBack, backInk }
   const moved = (Object.keys(KNOBS) as KnobKey[]).filter((k) => values[k] !== KNOBS[k].value)
   const resetAll = () => {
     setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setPitch(KNOBS.pitch.value)
     setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value); setCover(KNOBS.cover.value); setWindowOn(KNOBS.windowOn.value)
     setWinWidth(KNOBS.winWidth.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setDuration(KNOBS.duration.value)
     setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside'); setSpread(KNOBS.spread.value); setGain(KNOBS.gain.value)
-    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setCrisp(KNOBS.crisp.value); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
+    setSoft(KNOBS.soft.value); setLead(KNOBS.lead.value); setPieces(KNOBS.pieces.value); setMode(KNOBS.mode.value as 'one' | 'layered'); setLinesBack(KNOBS.linesBack.value); setBackInk(KNOBS.backInk.value)
     setNote('reset to what is in source')
   }
   const writeToSource = async () => {
@@ -242,6 +240,8 @@ export default function LineLab() {
   const fade = `${uid}-fade`
   const show = `${uid}-show`
   const rawMask = `${uid}-raw`
+  const endMask = `${uid}-end`
+  const lineFade = `${uid}-linefade`
 
   // Each letter's progress through Final, 0 → 1, driven by the Window's trailing (left) edge: the lines
   // retreat sideways and leave the letter. The first half is Masked Text → Halftone Lines (`toHalftone`),
@@ -416,6 +416,17 @@ export default function LineLab() {
               <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={(toHalftone[i] ?? 0) * (1 - (toRaw[i] ?? 0) ** 2)} />
             ))}
           </mask>
+          <mask id={endMask} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+            {slices.map((sl, i) => (
+              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={toRaw[i] ?? 0} />
+            ))}
+          </mask>
+          <mask id={lineFade} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+            <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
+            {slices.map((sl, i) => (
+              <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#000" opacity={Math.min(1, Math.max(0, ((toRaw[i] ?? 0) - 0.4) / 0.6))} />
+            ))}
+          </mask>
           <mask id={rawMask} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
             {slices.map((sl, i) => (
               <rect key={i} x={sl.l / UNIT_PX} y={0} width={(sl.r - sl.l) / UNIT_PX + 0.02} height={vh} fill="#fff" opacity={(toRaw[i] ?? 0) ** 2} />
@@ -456,8 +467,10 @@ export default function LineLab() {
   const finalArt = drawn ? (
     mode === 'one' ? (
       <>
-        <path d={oneSet} fill={ink} />
-        {crisp ? <g mask={`url(#${rawMask})`}>{plain}</g> : null}
+        <g mask={`url(#${lineFade})`}>
+          <path d={oneSet} fill={ink} />
+        </g>
+        <g mask={`url(#${endMask})`}>{plain}</g>
       </>
     ) : (
       <>
@@ -657,12 +670,7 @@ export default function LineLab() {
                 <option value="layered">layered (3 versions)</option>
               </select>
             </label>
-            {mode === 'one' ? (
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={crisp} onChange={(e) => setCrisp(e.target.checked)} />
-                crisp finish (raw text over the lines)
-              </label>
-            ) : (
+            {mode === 'one' ? null : (
               <>
                 <Slider label="lines shown" value={linesBack} min={0} max={1} step={0.05} onChange={setLinesBack} />
             <label className="flex items-center gap-2 text-xs">
