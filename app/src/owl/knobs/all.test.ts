@@ -16,13 +16,10 @@ describe('the order the panel lists the owl’s knobs in', () => {
     const groups: string[] = []
     for (const knob of owl) if (!groups.includes(knob.group)) groups.push(knob.group)
     expect(groups).toEqual([
-      'Look',
       'Palette',
-      'Variant',
       'Sites',
       'Build: tiles',
       'Build: ink',
-      'Build: engraving',
       'Build: motion',
       'Writing',
       'Lantern',

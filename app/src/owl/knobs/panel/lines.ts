@@ -11,7 +11,6 @@ const base = (group: string) => ({ scope: 'owl', group, kind: 'number', source: 
 
 const TILES = base('Build: tiles')
 const INK = base('Build: ink')
-const ENGRAVE = base('Build: engraving')
 const MOTION = base('Build: motion')
 
 describeTunables([
@@ -115,42 +114,6 @@ describeTunables([
     step: 0.1,
     units: ['px'],
     note: 'Gaps narrower than this, on screen, close, so there are no slivers of paper.',
-  },
-  {
-    ...ENGRAVE,
-    id: 'owl.lines.engrave.hatch',
-    label: 'Cross-hatch reach',
-    min: 0,
-    max: 1,
-    step: 0.05,
-    note: 'How far into the lighter tones the second screen goes. 0 is none.',
-  },
-  {
-    ...ENGRAVE,
-    id: 'owl.lines.engrave.angle',
-    label: 'Hatch angle',
-    min: 10,
-    max: 170,
-    step: 1,
-    note: 'Degrees the second screen is cut at.',
-  },
-  {
-    ...ENGRAVE,
-    id: 'owl.lines.engrave.pitch',
-    label: 'Hatch spacing',
-    min: 0.8,
-    max: 3,
-    step: 0.05,
-    note: 'The second screen’s spacing, as a multiple of the first’s.',
-  },
-  {
-    ...ENGRAVE,
-    id: 'owl.lines.engrave.keyline',
-    label: 'Keyline width',
-    min: 0,
-    max: 1.2,
-    step: 0.05,
-    note: 'The fine line round the form, in units of the 100-unit box. 0 is none.',
   },
   {
     ...MOTION,

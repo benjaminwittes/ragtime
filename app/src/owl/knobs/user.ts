@@ -2,7 +2,7 @@ import { defineTunables } from '@/tune/registry'
 
 /**
  * What a reader can do about the owl, from the gear in the site bar: whether it is there,
- * how much its drawing moves, and the two finishes of the line-tile drawing. These are
+ * and how much its drawing moves. These are
  * declared here, with their defaults, because the owl reads them in every build; what the gear
  * shows of each is in `panel/user.ts`, which only the gear and the tuner load. Whether it
  * *speaks* is `owl.voice.speak`, in `voice.ts`, next to the voice's other shipped knobs.
@@ -20,14 +20,5 @@ export const owlUserKnobs = defineTunables([
     // still, calm or lively: what the line-tile owl does with the page's own time.
     id: 'owl.lines.motion',
     value: 'calm',
-  },
-  {
-    // plain or engraved: the engraving laid on the line-tile owl (a second screen, a keyline).
-    id: 'owl.lines.engraved',
-    value: 'plain',
-  },
-  {
-    id: 'owl.lines.scan',
-    value: false,
   },
 ])

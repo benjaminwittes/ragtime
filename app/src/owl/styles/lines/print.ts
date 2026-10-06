@@ -7,8 +7,6 @@ export type Print = {
   flicker: boolean
   /** A band of light crosses, stepping. */
   bar: boolean
-  /** The photocopied finish: ink spread, a hard clip, edge wobble, toner. */
-  scan: boolean
   /** How strongly all of it moves; 1 is the owl's own Print temperament. */
   amount: number
   /** How much of that the page's shifting takes: the horizontal and vertical jitter, as a multiple of `amount`. */
@@ -19,6 +17,6 @@ export type Print = {
   barEvery: number
 }
 
-export const PRINT_ON: Print = { boil: true, breath: true, flicker: true, bar: false, scan: true, amount: 0.8, jitter: 1, fps: 16, barEvery: 23 }
-export const PRINT_OFF: Print = { ...PRINT_ON, boil: false, breath: false, flicker: false, bar: false, scan: false }
+export const PRINT_ON: Print = { boil: true, breath: true, flicker: true, bar: false, amount: 0.8, jitter: 1, fps: 16, barEvery: 23 }
+export const PRINT_OFF: Print = { ...PRINT_ON, boil: false, breath: false, flicker: false, bar: false }
 

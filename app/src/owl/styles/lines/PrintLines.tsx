@@ -3,7 +3,6 @@ import { baseDesign } from '../../design'
 import type { LampState } from './fields'
 import type { LineKnobs, LineSubject } from './knobs'
 import type { Print } from './print'
-import type { Engrave } from './engrave'
 import { drawFrame, seeded, STILL_WOBBLE, type Wobble } from './render'
 
 /**
@@ -34,7 +33,6 @@ export function PrintLines({
   still = 0,
   ink: inkColour,
   fluid,
-  engrave = null,
 }: {
   subject: LineSubject
   size: number
@@ -43,8 +41,6 @@ export function PrintLines({
   print: Print
   moving?: boolean
   still?: number
-  /** The engraving laid on the owl: a second screen cut across its darks, and a keyline. Keep it stable (a constant or a memo). */
-  engrave?: Engrave | null
   /** The ink; the base design's navy without one. */
   ink?: string
   /**
@@ -56,24 +52,14 @@ export function PrintLines({
 }) {
   const uid = useId().replace(/:/g, '')
   const pathRef = useRef<SVGPathElement>(null)
-  const hatchRef = useRef<SVGPathElement>(null)
-  const keyRef = useRef<SVGPathElement>(null)
   const pageRef = useRef<SVGGElement>(null)
   const barRef = useRef<SVGRectElement>(null)
-  const toner = useRef<SVGGElement>(null)
   const ink = inkColour ?? baseDesign().palette.navy
-  const filtered = print.scan
-  const first = useMemo(() => drawFrame(subject, size, knobs, still, state, STILL_WOBBLE, engrave), [subject, size, knobs, still, state, engrave])
-  const specks = useMemo(() => {
-    const r = seeded(subject === 'c' ? 11 : 23)
-    return Array.from({ length: 16 }, () => ({ x: 6 + r() * 88, y: 6 + r() * 88, r: 0.25 + r() * 0.55 }))
-  }, [subject])
+  const first = useMemo(() => drawFrame(subject, size, knobs, still, state, STILL_WOBBLE), [subject, size, knobs, still, state])
 
   useEffect(() => {
     const path = pathRef.current
     const page = pageRef.current
-    const hatch = hatchRef.current
-    const key = keyRef.current
     if (!moving || !path || REDUCED()) return
     const rng = seeded(subject === 'c' ? 4 : 9)
     const cycle = Array.from({ length: CYCLE }, () => [rng(), rng(), rng(), rng()] as const)
@@ -85,7 +71,6 @@ export function PrintLines({
     let visible = true
     let drawn = -1
     let seat = -1
-    let lit = -1
     const start = performance.now()
     const tick = () => {
       raf = requestAnimationFrame(tick)
@@ -93,7 +78,7 @@ export function PrintLines({
       const e = (performance.now() - start) / 1000
       const anyPrint = print.boil || print.breath || print.flicker
       // Stepped: the drawing's own time moves in whole steps, so it is shot on twos, not smooth.
-      const step = anyPrint || print.scan ? Math.floor(e * print.fps) : -1
+      const step = anyPrint ? Math.floor(e * print.fps) : -1
       const t = step < 0 ? e : step / print.fps
       const k = step < 0 ? Math.floor(e * 60) : step
       if (k !== drawn) {
@@ -108,10 +93,7 @@ export function PrintLines({
               gutter: print.flicker ? flick[Math.floor(e * 9) % 16] * Math.min(1, a) : 0,
             }
           : STILL_WOBBLE
-        const f = drawFrame(subject, size, knobs, t, state, wobble, engrave)
-        path.setAttribute('d', f.d)
-        hatchRef.current?.setAttribute('d', f.hatch)
-        keyRef.current?.setAttribute('d', f.key)
+        path.setAttribute('d', drawFrame(subject, size, knobs, t, state, wobble).d)
         if (print.flicker) path.setAttribute('opacity', String(1 - 0.07 * a * flick[(Math.floor(e * 9) + 5) % 16]))
         else path.removeAttribute('opacity')
       }
@@ -123,13 +105,6 @@ export function PrintLines({
         pageRef.current.style.transform = print.boil
           ? `translate(${(x - 0.5) * 2 * 0.22 * j}px, ${(y - 0.5) * 2 * 0.22 * j}px) rotate(${(r - 0.5) * 2 * 0.12 * j}deg)`
           : ''
-      }
-      if (toner.current && print.scan) {
-        const f = Math.floor(e * 9)
-        if (f !== lit) {
-          lit = f
-          toner.current.setAttribute('opacity', String(0.25 + 0.6 * flick[f % 16]))
-        }
       }
       const bar = barRef.current
       if (bar) {
@@ -147,14 +122,11 @@ export function PrintLines({
     return () => {
       cancelAnimationFrame(raf)
       io.disconnect()
-      const rest = drawFrame(subject, size, knobs, still, state, STILL_WOBBLE, engrave)
-      path.setAttribute('d', rest.d)
-      hatch?.setAttribute('d', rest.hatch)
-      key?.setAttribute('d', rest.key)
+      path.setAttribute('d', drawFrame(subject, size, knobs, still, state, STILL_WOBBLE).d)
       path.removeAttribute('opacity')
       if (page) page.style.transform = ''
     }
-  }, [moving, subject, size, knobs, state, print, still, engrave])
+  }, [moving, subject, size, knobs, state, print, still])
 
   return (
     <svg
@@ -169,15 +141,6 @@ export function PrintLines({
     >
       {fluid?.title ? <title>{fluid.title}</title> : null}
       <defs>
-        {/* Photocopy: spread the ink, clip it hard to one bit, wobble the edge a little. Static, so no pass is repeated for nothing. */}
-        <filter id={`scan-${uid}`} x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="n" />
-          <feDisplacementMap in="SourceGraphic" in2="n" scale="0.45" result="w" />
-          <feGaussianBlur in="w" stdDeviation="0.16" result="b" />
-          <feComponentTransfer in="b">
-            <feFuncA type="linear" slope="3" intercept="-0.9" />
-          </feComponentTransfer>
-        </filter>
         <clipPath id={`disc-${uid}`}>
           <circle cx="50" cy="50" r="46" />
         </clipPath>
@@ -188,22 +151,7 @@ export function PrintLines({
         </linearGradient>
       </defs>
       <g ref={pageRef} style={{ transformOrigin: '50px 50px' }}>
-        <g filter={filtered ? `url(#scan-${uid})` : undefined}>
-          <path ref={pathRef} d={first.d} fill="currentColor" />
-          {engrave ? (
-            <>
-              <path ref={hatchRef} d={first.hatch} transform={first.hatchTransform} fill="currentColor" />
-              <path ref={keyRef} d={first.key} fill="none" stroke="currentColor" strokeWidth={engrave.keyline} strokeLinecap="round" />
-            </>
-          ) : null}
-        </g>
-        {filtered ? (
-          <g ref={toner} fill="currentColor" opacity="0.5">
-            {specks.map((s, i) => (
-              <circle key={i} cx={s.x} cy={s.y} r={s.r} />
-            ))}
-          </g>
-        ) : null}
+        <path ref={pathRef} d={first.d} fill="currentColor" />
       </g>
       {print.bar ? (
         <g clipPath={`url(#disc-${uid})`} pointerEvents="none">

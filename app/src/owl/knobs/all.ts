@@ -16,7 +16,7 @@ import.meta.glob(['./panel/*.ts', './deferred/*.ts'], { eager: true })
  * The panel lists groups in the order their knobs registered, and the deferred groups
  * register after the shipped ones, so what would read `Look, Variant, Sites, Voice, Engraving,
  * Motion, Standing` reads in file-name order instead, as it did when every group was one glob:
- * design, embeds, engraved, motion, standing, voice. A file is named by its base name whether
+ * design, embeds, motion, standing, voice. A file is named by its base name whether
  * it is shipped or deferred. The voice's two shipped knobs are declared apart from the rest,
  * and the voice picker goes first and the chat switch last, as they did in one file.
  */

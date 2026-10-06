@@ -1,5 +1,4 @@
 import { computeLines, presetFor, smoothstep, type Field, type LineParams } from './engine'
-import { contour, hatchPath, type Engrave } from './engrave'
 import { lanternField, type LampState } from './fields'
 import type { LineKnobs, LineSubject } from './knobs'
 import { OWLS, owlField } from './owls'
@@ -35,10 +34,10 @@ function pocket(subject: LineSubject, state: LampState): { x: number; y: number;
   return subject === 'c' ? { x: 79, y: 70, r: 30 } : { x: 50, y: 54, r: 40 }
 }
 
-/** What one frame of the owl is made of: the lines, and with the engraving on, the second screen and the keyline. */
-export type Frame = { d: string; hatch: string; hatchTransform: string; key: string }
+/** What one frame of the owl is made of: its lines, as one path. */
+export type Frame = { d: string }
 
-function frame(subject: LineSubject, size: number, knobs: LineKnobs, t: number, state: LampState, w: Wobble, engrave: Engrave | null): Frame {
+function frame(subject: LineSubject, size: number, knobs: LineKnobs, t: number, state: LampState, w: Wobble): Frame {
   const preset = presetFor(size)
   const params: LineParams = {
     ...knobs,
@@ -65,20 +64,16 @@ function frame(subject: LineSubject, size: number, knobs: LineKnobs, t: number, 
           }
           return v
         }
-  const d = computeLines(field, params).d
-  if (!engrave) return { d, hatch: '', hatchTransform: '', key: '' }
-  const h = engrave.hatch > 0 ? hatchPath(field, engrave, params) : { d: '', transform: '' }
-  const key = engrave.keyline > 0 ? contour(field, 0.42, 4, 4, 96, 96, 1) : ''
-  return { d, hatch: h.d, hatchTransform: h.transform, key }
+  return { d: computeLines(field, params).d }
 }
 
 export function drawLines(subject: LineSubject, size: number, knobs: LineKnobs, t: number, state: LampState, w: Wobble = STILL_WOBBLE): string {
-  return frame(subject, size, knobs, t, state, w, null).d
+  return frame(subject, size, knobs, t, state, w).d
 }
 
-/** The whole frame: lines, and the engraving over them when `engrave` is given. */
-export function drawFrame(subject: LineSubject, size: number, knobs: LineKnobs, t: number, state: LampState, w: Wobble, engrave: Engrave | null): Frame {
-  return frame(subject, size, knobs, t, state, w, engrave)
+/** The whole frame. */
+export function drawFrame(subject: LineSubject, size: number, knobs: LineKnobs, t: number, state: LampState, w: Wobble): Frame {
+  return frame(subject, size, knobs, t, state, w)
 }
 
 /** A small seeded stream, so a boil is the same boil each visit and does not repeat in the ear. */

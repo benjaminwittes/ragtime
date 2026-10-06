@@ -1,6 +1,5 @@
 import { describeTunables } from '@/tune/registry'
 import '../design'
-import { styleOptions } from '../../styles'
 
 /**
  * What the panel draws for each knob in `../design.ts`: its label, group, kind, range and note.
@@ -9,19 +8,9 @@ import { styleOptions } from '../../styles'
 
 const SELF = 'src/owl/knobs/design.ts'
 
-const STYLE = { scope: 'owl', group: 'Look', source: { file: SELF } } as const
-
 const PALETTE = { scope: 'owl', group: 'Palette', kind: 'color', source: { file: SELF } } as const
 
 describeTunables([
-  {
-    ...STYLE,
-    id: 'owl.design.style',
-    label: 'Render style',
-    kind: 'select',
-    options: styleOptions(),
-    note: 'How the body is drawn. The eyes, the gaze and the lantern state are the same in every style.',
-  },
 
   {
     ...PALETTE,

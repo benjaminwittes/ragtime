@@ -1,8 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import '../voice/voice.css'
 import { DEFAULT_KNOBS } from '../styles/lines/knobs'
 import type { LampState } from '../styles/lines/fields'
-import { ENGRAVE_DEFAULT, type Engrave } from '../styles/lines/engrave'
 import { PrintLines } from '../styles/lines/PrintLines'
 import { PRINT_OFF, PRINT_ON, type Print } from '../styles/lines/print'
 import LineMorphText from '@/hub/lineMorph/LineMorphText'
@@ -17,7 +16,6 @@ import { useMorph } from '../useMorph'
  *    page's "I am RAGtime". Its tone is not chosen, so five are set side by side.
  *  - The motion is Print: the page re-seats on the glass, the hatching breathes, the ink
  *    and the flame flicker, a light bar passes. Stepped.
- *  - The engraving is a mode of the lines owl, an effect laid on it, and not a second drawing.
  */
 
 const PAPER = 'rounded-md border p-6 text-foreground'
@@ -142,7 +140,6 @@ function Hero({ print, setPrint }: { print: Print; setPrint: (p: Print) => void 
             <Check label="Hatching breathes" checked={print.breath} onChange={set('breath')} />
             <Check label="Ink and flame flicker" checked={print.flicker} onChange={set('flicker')} />
             <Check label="Light bar passes" checked={print.bar} onChange={set('bar')} />
-            <Check label="Scanned finish" checked={print.scan} onChange={set('scan')} />
             <Slider label="amount" value={print.amount} min={0.4} max={3} step={0.1} onChange={set('amount')} />
             <Slider label="steps/s" value={print.fps} min={4} max={24} step={1} onChange={set('fps')} />
             <Slider label="bar every, s" value={print.barEvery} min={3} max={29} step={1} onChange={set('barEvery')} />
@@ -209,58 +206,6 @@ function Lantern({ print }: { print: Print }) {
   )
 }
 
-/* ---- 3. The engraved mode ------------------------------------------------ */
-
-function Engraved({ print }: { print: Print }) {
-  const [hatch, setHatch] = useState(ENGRAVE_DEFAULT.hatch)
-  const [angle, setAngle] = useState(ENGRAVE_DEFAULT.angle)
-  const [pitch, setPitch] = useState(ENGRAVE_DEFAULT.pitch)
-  const [keyline, setKeyline] = useState(ENGRAVE_DEFAULT.keyline)
-  const [size, setSize] = useState(280)
-  const engrave = useMemo<Engrave>(() => ({ hatch, angle, pitch, keyline }), [hatch, angle, pitch, keyline])
-  return (
-    <>
-      <H id="engraving">Engraved mode: the engraving laid on lines-owl</H>
-      <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-        Not a second owl: an effect on this one. An engraver works the dark of a plate twice, so the lines that already make the tone get a second
-        screen cut across them at an angle where the ink is deepest, and a fine keyline holds the edge. Both come from the same ink function, so they
-        follow the blink and the tilt, and Print moves them with the rest. In the app it is the setting called Engraved.
-      </p>
-      <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <div className={PAPER + ' flex flex-wrap items-end justify-center gap-10'} style={PAPER_BG}>
-          <figure className="m-0">
-            <PrintLines subject="c" size={size} state="lit" knobs={DEFAULT_KNOBS} print={print} />
-            <Cap>Plain</Cap>
-          </figure>
-          <figure className="m-0">
-            <PrintLines subject="c" size={size} state="lit" knobs={DEFAULT_KNOBS} print={print} engrave={engrave} />
-            <Cap>Engraved</Cap>
-          </figure>
-        </div>
-        <div className="flex flex-col gap-3 text-sm">
-          <Slider label="cross-hatch reach" value={hatch} min={0} max={1} step={0.05} onChange={setHatch} />
-          <Slider label="hatch angle" value={angle} min={10} max={170} step={1} onChange={setAngle} />
-          <Slider label="hatch spacing" value={pitch} min={0.8} max={3} step={0.05} onChange={setPitch} />
-          <Slider label="keyline width" value={keyline} min={0} max={1.2} step={0.05} onChange={setKeyline} />
-          <Slider label="size" value={size} min={112} max={360} step={8} onChange={setSize} />
-          <button
-            type="button"
-            className="w-fit text-xs underline"
-            onClick={() => {
-              setHatch(ENGRAVE_DEFAULT.hatch)
-              setAngle(ENGRAVE_DEFAULT.angle)
-              setPitch(ENGRAVE_DEFAULT.pitch)
-              setKeyline(ENGRAVE_DEFAULT.keyline)
-            }}
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-    </>
-  )
-}
-
 export default function OwlLab() {
   const [print, setPrint] = useState<Print>(PRINT_ON)
   return (
@@ -273,11 +218,9 @@ export default function OwlLab() {
       <nav className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Sections">
         <a className="text-primary hover:underline" href="#main">The main owl</a>
         <a className="text-primary hover:underline" href="#lantern">The lantern</a>
-        <a className="text-primary hover:underline" href="#engraving">Engraved mode</a>
       </nav>
       <Hero print={print} setPrint={setPrint} />
       <Lantern print={print} />
-      <Engraved print={print} />
     </main>
   )
 }

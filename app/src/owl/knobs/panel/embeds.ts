@@ -1,6 +1,5 @@
 import { describeTunables } from '@/tune/registry'
 import '../embeds'
-import { variantOptions } from '../../variants'
 
 /**
  * What the panel draws for each knob in `../embeds.ts`: its label, group, kind, range and note.
@@ -9,26 +8,9 @@ import { variantOptions } from '../../variants'
 
 const SELF = 'src/owl/knobs/embeds.ts'
 
-const GLOBAL = { scope: 'owl', group: 'Variant', source: { file: SELF } } as const
 const SIZE = { scope: 'owl', group: 'Sites', source: { file: SELF } } as const
 
-const PER_SITE_VARIANT = {
-  ...SIZE,
-  kind: 'select',
-  note: 'Overrides the variant for this site alone. “inherit” follows the site’s table entry, then the variant above.',
-} as const
-
-const inherit = { label: 'inherit', value: 'inherit' } as const
-
 describeTunables([
-  {
-    ...GLOBAL,
-    id: 'owl.variant',
-    label: 'Active variant',
-    kind: 'select',
-    options: variantOptions(),
-    note: 'Applies to every owl that has no variant of its own. Knobs you move below still win over it.',
-  },
 
   {
     ...SIZE,
@@ -51,12 +33,6 @@ describeTunables([
     max: 20,
     step: 0.25,
   },
-  {
-    ...PER_SITE_VARIANT,
-    id: 'owl.embed.hub.variant',
-    label: 'Hub: variant',
-    options: [inherit, ...variantOptions()],
-  },
 
   {
     ...SIZE,
@@ -67,12 +43,6 @@ describeTunables([
     min: 24,
     max: 192,
     step: 2,
-  },
-  {
-    ...PER_SITE_VARIANT,
-    id: 'owl.embed.explorer.variant',
-    label: 'Explorer: variant',
-    options: [inherit, ...variantOptions()],
   },
 
   {
@@ -85,12 +55,6 @@ describeTunables([
     max: 16,
     step: 0.25,
   },
-  {
-    ...PER_SITE_VARIANT,
-    id: 'owl.embed.gate.variant',
-    label: 'Access gate: variant',
-    options: [inherit, ...variantOptions()],
-  },
 
   {
     ...SIZE,
@@ -101,12 +65,6 @@ describeTunables([
     min: 2,
     max: 16,
     step: 0.25,
-  },
-  {
-    ...PER_SITE_VARIANT,
-    id: 'owl.embed.not-found.variant',
-    label: 'Not found: variant',
-    options: [inherit, ...variantOptions()],
   },
 
   {
@@ -119,12 +77,6 @@ describeTunables([
     max: 20,
     step: 0.25,
   },
-  {
-    ...PER_SITE_VARIANT,
-    id: 'owl.embed.stage.variant',
-    label: 'Stage, empty: variant',
-    options: [inherit, ...variantOptions()],
-  },
 
   {
     ...SIZE,
@@ -132,11 +84,5 @@ describeTunables([
     label: 'Record stage: size',
     kind: 'text',
     note: 'A CSS width, because it scales with the stage: cqi is a share of the stage’s own width.',
-  },
-  {
-    ...PER_SITE_VARIANT,
-    id: 'owl.embed.record.variant',
-    label: 'Record stage: variant',
-    options: [inherit, ...variantOptions()],
   },
 ])
