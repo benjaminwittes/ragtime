@@ -12,12 +12,12 @@ const base = { scope: 'owl', group: 'Writing', kind: 'number', source: { file: S
 describeTunables([
   {
     ...base,
-    id: 'owl.morph.seconds',
-    label: 'Time to write',
-    min: 0.2,
-    max: 3,
-    step: 0.1,
-    note: 'Seconds from nothing to the finished text, for one row. Rows after the first start later and all finish together.',
+    id: 'owl.morph.speed',
+    label: 'Swipe speed',
+    min: 2,
+    max: 40,
+    step: 0.5,
+    note: 'How fast the window crosses the text, in type sizes a second. One speed for every text: a longer sentence takes longer, and a short one less, and they look the same.',
   },
   {
     ...base,
@@ -41,10 +41,10 @@ describeTunables([
     ...base,
     id: 'owl.morph.window',
     label: 'Window width',
-    min: 0.1,
-    max: 1,
-    step: 0.01,
-    note: 'The block of flat lines that crosses each row, as a fraction of the row’s box.',
+    min: 0.5,
+    max: 12,
+    step: 0.1,
+    note: 'The block of flat lines that crosses each row, in type sizes (ems), so it is the same size on a short text and a long one.',
   },
   {
     ...base,

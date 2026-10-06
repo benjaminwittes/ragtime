@@ -4,12 +4,11 @@ import { useTunable } from '@/tune/useTunable'
 import './knobs/morph'
 
 /**
- * The line morph as the owl is tuned to write it (`knobs/morph.ts`): the engine's numbers and how long it
- * takes. A knob moved in the panel changes the next note; the declared defaults are what ships.
+ * The line morph as the owl is tuned to write it (`knobs/morph.ts`): the engine's numbers, which include the swipe's speed. A knob moved in the panel changes the next note; the declared defaults are what ships.
  */
-export function useMorph(): { params: MorphParams; pitch: number; seconds: number } {
+export function useMorph(): { params: MorphParams; pitch: number } {
   const pitch = useTunable<number>('owl.morph.pitch')
-  const seconds = useTunable<number>('owl.morph.seconds')
+  const speed = useTunable<number>('owl.morph.speed')
   const cover = useTunable<number>('owl.morph.cover')
   const winWidth = useTunable<number>('owl.morph.window')
   const spread = useTunable<number>('owl.morph.spread')
@@ -21,8 +20,8 @@ export function useMorph(): { params: MorphParams; pitch: number; seconds: numbe
   const pieces = useTunable<number>('owl.morph.pieces')
   const stagger = useTunable<number>('owl.morph.stagger')
   const params = useMemo<MorphParams>(
-    () => ({ cover, winWidth, windowOn: true, spread, gain, ramp, shift, trail, entry, pieces, stagger }),
-    [cover, winWidth, spread, gain, ramp, shift, trail, entry, pieces, stagger],
+    () => ({ cover, winWidth, windowOn: true, spread, gain, ramp, shift, trail, entry, speed, pieces, stagger }),
+    [cover, winWidth, spread, gain, ramp, shift, trail, entry, speed, pieces, stagger],
   )
-  return { params, pitch, seconds }
+  return { params, pitch }
 }

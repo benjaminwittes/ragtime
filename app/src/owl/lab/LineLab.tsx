@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { linesFromGrid, UNIT_PX } from '@/hub/textLines'
-import { frameAt, geometry, measureMorph, rowTimes, slicesOf, toneOf, type Measured, type MorphParams } from '@/hub/lineMorph/engine'
+import { frameAt, geometry, measureMorph, rowTimes, timing, toneOf, type Measured, type MorphParams } from '@/hub/lineMorph/engine'
 import MorphArt from '@/hub/lineMorph/MorphArt'
 import { getTunable } from '@/tune/registry'
 import '../knobs/morph'
@@ -79,7 +79,7 @@ const KNOBS = {
 
 /** The values the effect shares with the owl, by their name here and their knob (`owl/knobs/morph.ts`). */
 const SHARED = {
-  duration: 'owl.morph.seconds',
+  speed: 'owl.morph.speed',
   pitch: 'owl.morph.pitch',
   cover: 'owl.morph.cover',
   winWidth: 'owl.morph.window',
@@ -111,7 +111,7 @@ export default function LineLab() {
   const [playing, setPlaying] = useState(false)
   const [loop, setLoop] = useState(KNOBS.loop.value)
   const [blend, setBlend] = useState(KNOBS.blend.value as 'over' | 'through' | 'outside')
-  const [duration, setDuration] = useState(() => sharedDefault('duration'))
+  const [speed, setSpeed] = useState(() => sharedDefault('speed'))
   const [pitch, setPitch] = useState(() => sharedDefault('pitch'))
   const [cover, setCover] = useState(() => sharedDefault('cover'))
   const [winWidth, setWinWidth] = useState(() => sharedDefault('winWidth'))
@@ -126,7 +126,7 @@ export default function LineLab() {
   const [note, setNote] = useState('')
 
   const lab: Record<LabKey, Value> = { text, size, weight, ink, paper, windowOn, t, loop, blend }
-  const shared: Record<SharedKey, number> = { duration, pitch, cover, winWidth, spread, gain, ramp, shift, trail, entry, pieces, stagger }
+  const shared: Record<SharedKey, number> = { speed, pitch, cover, winWidth, spread, gain, ramp, shift, trail, entry, pieces, stagger }
   const moved = [
     ...(Object.keys(KNOBS) as LabKey[]).filter((k) => lab[k] !== KNOBS[k].value),
     ...(Object.keys(SHARED) as SharedKey[]).filter((k) => shared[k] !== sharedDefault(k)),
@@ -134,7 +134,7 @@ export default function LineLab() {
   const resetAll = () => {
     setText(KNOBS.text.value); setSize(KNOBS.size.value); setWeight(KNOBS.weight.value); setInk(KNOBS.ink.value); setPaper(KNOBS.paper.value)
     setWindowOn(KNOBS.windowOn.value); setT(KNOBS.t.value); setLoop(KNOBS.loop.value); setBlend(KNOBS.blend.value as 'over' | 'through' | 'outside')
-    setDuration(sharedDefault('duration')); setPitch(sharedDefault('pitch')); setCover(sharedDefault('cover')); setWinWidth(sharedDefault('winWidth'))
+    setSpeed(sharedDefault('speed')); setPitch(sharedDefault('pitch')); setCover(sharedDefault('cover')); setWinWidth(sharedDefault('winWidth'))
     setSpread(sharedDefault('spread')); setGain(sharedDefault('gain')); setRamp(sharedDefault('ramp')); setShift(sharedDefault('shift'))
     setTrail(sharedDefault('trail')); setEntry(sharedDefault('entry')); setPieces(sharedDefault('pieces')); setStagger(sharedDefault('stagger'))
     setNote('reset to what is in source')
@@ -185,21 +185,23 @@ export default function LineLab() {
   }, [text, size, weight, pitch])
 
   const params: MorphParams = useMemo(
-    () => ({ cover, winWidth, windowOn, spread, gain, ramp, shift, trail, entry, pieces, stagger }),
-    [cover, winWidth, windowOn, spread, gain, ramp, shift, trail, entry, pieces, stagger],
+    () => ({ cover, winWidth, windowOn, spread, gain, ramp, shift, trail, entry, speed, pieces, stagger }),
+    [cover, winWidth, windowOn, spread, gain, ramp, shift, trail, entry, speed, pieces, stagger],
   )
   const toned = useMemo(() => (m ? toneOf(m, spread, gain) : null), [m, spread, gain])
   // Final, as the owl draws it: one frame of the engine at the master time.
   const frame = useMemo(() => (m && toned ? frameAt(m, toned, params, t) : null), [m, toned, params, t])
+  // How long the whole takes at the one swipe speed, for this text.
+  const tm = useMemo(() => (m ? timing(m, params) : null), [m, params])
+  const total = tm?.total ?? 1
   // The window's place, for the previews of the stages before Final (the first row's, which is the only one of a single line).
   const geo = useMemo(() => {
-    if (!m) return null
-    const slices = slicesOf(m.letters, pieces).filter((sl) => sl.row === 0)
-    const wordEnd = slices.reduce((e, sl) => Math.max(e, sl.r), 0)
-    return geometry(m.w, wordEnd, params, rowTimes(t, m.rows.length, stagger)[0])
-  }, [m, pieces, params, t, stagger])
-  const lo = geo?.lo ?? 0
-  const hi = geo?.hi ?? 0
+    if (!m || !tm) return null
+    const wordEnd = m.letters.reduce((e, lt) => (lt && lt.row === 0 ? Math.max(e, lt.r) : e), 0)
+    return geometry(wordEnd, params, m.size, rowTimes(tm, t * tm.total)[0])
+  }, [m, tm, params, t])
+  const lo = m && geo ? geo.loPx / m.w : 0
+  const hi = m && geo ? geo.hiPx / m.w : 0
   const vw = m ? m.w / UNIT_PX : 0
   const vh = m ? m.h / UNIT_PX : 0
   const win = `${uid}-win`
@@ -229,7 +231,7 @@ export default function LineLab() {
           setT(0)
         }
       } else {
-        const next = tRef.current + dt / (duration * 1000)
+        const next = tRef.current + dt / (total * 1000)
         if (next >= 1) {
           setT(1)
           if (loop) holdUntil = now + 700
@@ -243,7 +245,7 @@ export default function LineLab() {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [playing, loop, duration])
+  }, [playing, loop, total])
 
   // The wires between cards, measured from where the cards actually sit.
   useLayoutEffect(() => {
@@ -358,14 +360,15 @@ export default function LineLab() {
           onChange={(e) => setT(Number(e.target.value))}
           className="min-w-[16rem] flex-1"
         />
-        <span className="w-28 text-xs tabular-nums text-muted-foreground">{(t * duration).toFixed(1)}s / {duration}s</span>
+        <span className="w-28 text-xs tabular-nums text-muted-foreground">{(t * total).toFixed(1)}s / {total.toFixed(1)}s</span>
         <label className="flex items-center gap-1.5 text-xs">
           <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
           loop
         </label>
         <label className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">length</span>
-          <input type="range" min={0.2} max={3} step={0.1} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-28" />
+          <span className="text-muted-foreground">speed</span>
+          <input type="range" min={2} max={40} step={0.5} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="w-28" />
+          <span className="w-16 tabular-nums">{speed} em/s</span>
         </label>
         <span className="mx-1 h-6 w-px bg-border" />
         <span className="text-xs text-muted-foreground" data-moved>{moved.length ? `${moved.length} moved: ${moved.join(', ')}` : 'matches source'}</span>
@@ -435,7 +438,7 @@ export default function LineLab() {
               <input type="checkbox" checked={windowOn} onChange={(e) => setWindowOn(e.target.checked)} />
               on (off lets everything through)
             </label>
-            <Slider label="width" value={winWidth} min={0.1} max={1} step={0.01} onChange={setWinWidth} />
+            <Slider label="width (em)" value={winWidth} min={0.5} max={12} step={0.1} onChange={setWinWidth} />
             <Slider label="entry" value={entry} min={0} max={2} step={0.01} onChange={setEntry} />
             <Slider label="trail" value={trail} min={0} max={2} step={0.01} onChange={setTrail} />
             <p className="text-xs text-muted-foreground">The timeline sweeps the window across each row. In Final, entry and trail are how far ahead of its leading edge and behind its trailing edge the window's lines keep going, thinning to nothing.</p>

@@ -21,6 +21,8 @@ import { linesFromGrid, rasterizeText, type Grid } from '../textLines'
  *     ease `shift` to zero, so `t = 0` is always empty and `t = 1` is always the finished text.
  *   - **Pieces** cut each letter into slices that turn one at a time, so the change runs through a letter.
  *   - **Rows** run in sequence: each row has its own `t`, started `stagger` of a row's length after the last.
+ *   - **One speed.** Lengths are in em (the type size) and the swipe is `speed` em a second, so a long text
+ *     takes longer and a short one less, and the window, the band and the pace look the same on both.
  */
 
 export type Letter = { l: number; r: number; row: number } | null
@@ -28,12 +30,12 @@ export type Row = { y0: number; y1: number }
 export type Slice = { l: number; r: number; row: number }
 
 /** The text as the browser set it: its raster, where each letter and row sits, and the line spacing. */
-export type Measured = { grid: Grid; w: number; h: number; spacing: number; letters: Letter[]; rows: Row[] }
+export type Measured = { grid: Grid; w: number; h: number; spacing: number; letters: Letter[]; rows: Row[]; /** The type size in px: one em. */ size: number }
 
 export type MorphParams = {
   /** Weight (0 to 1) of the window's flat lines. */
   cover: number
-  /** Window width, as a fraction of the box. */
+  /** Window width, in em (the type size). */
   winWidth: number
   /** False lets the lines run the whole box, which is what a still preview wants. */
   windowOn: boolean
@@ -49,9 +51,11 @@ export type MorphParams = {
   trail: number
   /** How far ahead of the leading edge the lines thin in, in window widths. */
   entry: number
+  /** The swipe's pace, in em a second: the window crosses this many type sizes each second, whatever the text. */
+  speed: number
   /** Slices per letter. */
   pieces: number
-  /** How far one row's start is behind the last, as a fraction of a row's own length: 0 all at once, 1 one after another. */
+  /** How far one row's start is behind the last, as a fraction of the last row's own time: 0 all at once, 1 one after another. */
   stagger: number
 }
 
@@ -114,7 +118,7 @@ export function measureMorph(host: HTMLElement, pitch: number): Measured | null 
     return rect ? { l: rect.left - box.left, r: rect.right - box.left, top: rect.top - box.top, bottom: rect.bottom - box.top } : null
   })
   const { letters, rows } = groupRows(rects, grid.h)
-  return { grid, w: grid.w, h: grid.h, spacing, letters, rows }
+  return { grid, w: grid.w, h: grid.h, spacing, letters, rows, size }
 }
 
 /**
@@ -160,41 +164,69 @@ export function slicesOf(letters: Letter[], pieces: number): Slice[] {
   return out
 }
 
-/** Each row's own time: a row starts `stagger` of its length after the one above it, and all end together at 1. */
-export function rowTimes(t: number, rows: number, stagger: number): number[] {
-  const length = 1 / (1 + (rows - 1) * stagger)
+/** The window's travel for one row, in px, measured from the left edge of the box. */
+export function sweep(wordEnd: number, p: MorphParams, size: number) {
+  const winPx = p.winWidth * size
+  const bandPx = Math.max(1, p.ramp * winPx)
+  // The entry taper reaches `entry` window-widths ahead of the leading edge, so the sweep starts that far left.
+  const startPx = -winPx * (1 + p.entry)
+  // At the end the whole band is past the last slice and the lines, trail included, have cleared the word.
+  const finishPx = Math.max(wordEnd + bandPx - winPx, wordEnd + p.trail * winPx)
+  return { winPx, bandPx, startPx, finishPx }
+}
+
+/** How long each row takes, when it starts, and how long the whole thing takes, all in seconds. */
+export type Timing = { starts: number[]; durations: number[]; total: number }
+
+/**
+ * One pace for every text: a row takes as long as its sweep is long at `speed` em a second. A row starts
+ * `stagger` of the row above's time after that one did. The whole takes until the last row has finished.
+ */
+export function timing(m: Measured, p: MorphParams): Timing {
+  const pxPerSecond = Math.max(1e-6, p.speed * m.size)
+  const ends = m.rows.map((_, k) => m.letters.reduce((e, lt) => (lt && lt.row === k ? Math.max(e, lt.r) : e), 0))
+  const durations = ends.map((end) => {
+    const s = sweep(end, p, m.size)
+    return (s.finishPx - s.startPx) / pxPerSecond
+  })
+  const starts: number[] = []
+  durations.forEach((_, k) => starts.push(k === 0 ? 0 : starts[k - 1] + p.stagger * durations[k - 1]))
+  return { starts, durations, total: Math.max(0, ...starts.map((s, k) => s + durations[k])) }
+}
+
+/** Each row's own time (0 to 1) at `seconds` into the whole. */
+export function rowTimes(tm: Timing, seconds: number): number[] {
   // Rounding must not leave a row a hair short of finished: the last frame has to be the text and nothing else.
-  return Array.from({ length: rows }, (_, k) => {
-    const v = clamp01((t - k * stagger * length) / length)
+  return tm.durations.map((d, k) => {
+    const v = clamp01((seconds - tm.starts[k]) / Math.max(1e-9, d))
     return v > 1 - 1e-9 ? 1 : v < 1e-9 ? 0 : v
   })
 }
 
-/** Where the window is, and how long the band is, for one row at its own time `t`. All in fractions or px of the box. */
-export type Geometry = { lo: number; hi: number; shiftNow: number; winPx: number; bandPx: number }
+/** Where the window is, and how long the band is, for one row at its own time `t`. In px. */
+export type Geometry = { loPx: number; hiPx: number; shiftNow: number; winPx: number; bandPx: number }
 
-export function geometry(w: number, wordEnd: number, p: MorphParams, t: number): Geometry {
-  const winPx = p.winWidth * w
-  const bandPx = Math.max(1, p.ramp * winPx)
-  // The entry taper reaches `entry` window-widths ahead of the leading edge, so the sweep starts that far left.
-  const startLo = -p.winWidth * (1 + p.entry)
-  // At t = 1 the whole band is past the last slice and the lines, trail included, have cleared the word.
-  const finishLo = Math.max((wordEnd + bandPx) / w - p.winWidth, wordEnd / w + p.trail * p.winWidth)
-  const lo = startLo + t * (finishLo - startLo)
-  // `shift` is eased to zero over the first and last 15% of the timeline.
+export function geometry(wordEnd: number, p: MorphParams, size: number, t: number): Geometry {
+  const { winPx, bandPx, startPx, finishPx } = sweep(wordEnd, p, size)
+  const loPx = startPx + t * (finishPx - startPx)
+  // `shift` is eased to zero over the first and last 15% of the row's time.
   const shiftNow = p.shift * Math.min(1, t / 0.15, (1 - t) / 0.15) + 0
-  return { lo, hi: lo + p.winWidth, shiftNow, winPx, bandPx }
+  return { loPx, hiPx: loPx + winPx, shiftNow, winPx, bandPx }
 }
 
 /** The morph's progress (0 flat lines, 1 the text) at column `x`. */
-export const bandAt = (g: Geometry, w: number, x: number) => clamp01((g.hi * w + g.shiftNow * g.winPx - x) / g.bandPx)
+export const bandAt = (g: Geometry, x: number) => clamp01((g.hiPx + g.shiftNow * g.winPx - x) / g.bandPx)
 
-/** One frame at time `t` (0 to 1). `toned` is `toneOf(m, spread, gain)`, which only changes with those two. */
+/**
+ * One frame, `t` (0 to 1) of the way through the whole (`timing(m, p).total` seconds). `toned` is
+ * `toneOf(m, spread, gain)`, which only changes with those two.
+ */
 export function frameAt(m: Measured, toned: Float32Array, p: MorphParams, t: number): Frame {
   const { w, h, grid, spacing } = m
   const rows = m.rows
   const slices = slicesOf(m.letters, p.pieces)
-  const times = rowTimes(t, rows.length, p.stagger)
+  const tm = timing(m, p)
+  const times = rowTimes(tm, t * tm.total)
   const morph = new Float32Array(w * h)
   const under = new Float32Array(w * h)
   const steps: RowSteps[] = []
@@ -202,16 +234,16 @@ export function frameAt(m: Measured, toned: Float32Array, p: MorphParams, t: num
   rows.forEach((row, k) => {
     const mine = slices.filter((sl) => sl.row === k)
     const wordEnd = mine.reduce((e, sl) => Math.max(e, sl.r), 0)
-    const g = geometry(w, wordEnd, p, times[k])
-    const hiPx = Math.round(g.hi * w)
-    const loPx = Math.round(g.lo * w)
+    const g = geometry(wordEnd, p, m.size, times[k])
+    const hiPx = Math.round(g.hiPx)
+    const loPx = Math.round(g.loPx)
     const tailPx = Math.max(1, p.trail * g.winPx)
     const headPx = Math.max(1, p.entry * g.winPx)
 
     // One progress value per column, held across a slice so the pieces still step through each letter.
     const col = new Float32Array(w)
-    for (let x = 0; x < w; x++) col[x] = bandAt(g, w, x)
-    const progress = mine.map((sl) => bandAt(g, w, (sl.l + sl.r) / 2))
+    for (let x = 0; x < w; x++) col[x] = bandAt(g, x)
+    const progress = mine.map((sl) => bandAt(g, (sl.l + sl.r) / 2))
     mine.forEach((sl, i) => {
       for (let x = Math.max(0, Math.floor(sl.l)); x < Math.min(w, Math.ceil(sl.r)); x++) col[x] = progress[i]
     })

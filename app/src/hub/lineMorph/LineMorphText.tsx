@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { UNIT_PX } from '../textLines'
-import { frameAt, measureMorph, toneOf, type Measured, type MorphParams } from './engine'
+import { frameAt, measureMorph, timing, toneOf, type Measured, type MorphParams } from './engine'
 import MorphArt from './MorphArt'
 
 /**
@@ -21,23 +21,20 @@ export default function LineMorphText({
   text,
   params,
   pitch,
-  seconds,
   onDone,
 }: {
   text: string
   params: MorphParams
   /** Line spacing at the desktop title size (`measureMorph`). */
   pitch: number
-  /** How long the morph takes, from nothing to the text. */
-  seconds: number
   onDone?: () => void
 }) {
   const svg = useRef<SVGSVGElement>(null)
   const [m, setM] = useState<Measured | null>(null)
   const [textStyle, setTextStyle] = useState<CSSProperties>({})
   const [t, setT] = useState(0)
-  // Reduced motion, or no time to play in: there is no morph, and the text is simply there.
-  const [still] = useState(() => seconds <= 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  // Reduced motion: there is no morph, and the text is simply there.
+  const [still] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [played, setPlayed] = useState(false)
   const finished = still || played
   const done = useRef(onDone)
@@ -84,14 +81,22 @@ export default function LineMorphText({
     }
   }, [text, pitch])
 
-  // Play once, as soon as there is a layout to play on. A resize or a late font re-measures and carries on from `t`.
+  // How long the whole takes at the swipe's one speed: a longer text takes longer, a shorter one less.
+  const total = m ? timing(m, params).total : 0
+  const totalRef = useRef(total)
+  useEffect(() => {
+    totalRef.current = total
+  }, [total])
+
+  // Play once, as soon as there is a layout to play on. A resize or a late font re-measures, and the clock
+  // carries on against the new length.
   const ready = m !== null
   useEffect(() => {
     if (!ready || still) return
     let raf = 0
     const start = performance.now()
     const tick = (now: number) => {
-      const next = Math.min(1, (now - start) / (seconds * 1000))
+      const next = Math.min(1, (now - start) / 1000 / Math.max(1e-3, totalRef.current))
       setT(next)
       if (next >= 1) {
         setPlayed(true)
@@ -102,7 +107,7 @@ export default function LineMorphText({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [ready, still, seconds])
+  }, [ready, still])
   useEffect(() => {
     if (still) done.current?.()
   }, [still])

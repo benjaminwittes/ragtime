@@ -12,8 +12,8 @@ import { defineTunables } from '@/tune/registry'
 
 export const owlMorphKnobs = defineTunables([
   {
-    id: 'owl.morph.seconds',
-    value: 1.3,
+    id: 'owl.morph.speed',
+    value: 14.8,
   },
   {
     id: 'owl.morph.pitch',
@@ -25,7 +25,7 @@ export const owlMorphKnobs = defineTunables([
   },
   {
     id: 'owl.morph.window',
-    value: 1,
+    value: 6,
   },
   {
     id: 'owl.morph.spread',

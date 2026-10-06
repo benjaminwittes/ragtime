@@ -189,7 +189,7 @@ function Note({ spoken, voice }: { spoken: Spoken; voice: SiteVoice }) {
       style={lined ? { color: baseDesign().palette.navy } : undefined}
     >
       {lined ? (
-        <LineMorphText text={text} params={morph.params} pitch={morph.pitch} seconds={morph.seconds} />
+        <LineMorphText text={text} params={morph.params} pitch={morph.pitch} />
       ) : (
         <>
           <span>{text.slice(0, shown)}</span>
