@@ -14,7 +14,8 @@ import { linesFromGrid, rasterizeText, UNIT_PX } from '@/hub/textLines'
  * Nothing animates. A new node is added only when the ones before it read right to Thomas.
  */
 
-type Drawn = { words: string; band: string; w: number; h: number }
+type Letter = { l: number; r: number } | null
+type Drawn = { words: string; band: string; w: number; h: number; letters: Letter[] }
 
 function Slider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
   return (
@@ -76,7 +77,8 @@ export default function LineLab() {
   const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
   const [linesBack, setLinesBack] = useState(0.35)
   const [backInk, setBackInk] = useState('#c2410c')
-  const [rawText, setRawText] = useState<'under' | 'over' | 'off'>('under')
+  const [front, setFront] = useState(0.4)
+  const [soft, setSoft] = useState(0.6)
 
   const uid = useId().replace(/:/g, '')
   const host = useRef<HTMLDivElement>(null)
@@ -91,7 +93,18 @@ export default function LineLab() {
       if (!grid) return
       const spacing = Math.max(1.5, (pitch * size) / 52)
       const flat = { ...grid, data: new Float32Array(grid.data.length).fill(cover) }
-      setDrawn({ words: linesFromGrid(grid, spacing), band: linesFromGrid(flat, spacing), w: grid.w, h: grid.h })
+      // Where each letter sits across the box, in px, so the reveal can treat letters one by one.
+      const node = [...el.childNodes].find((n) => n.nodeType === 3)
+      const box = el.getBoundingClientRect()
+      const range = document.createRange()
+      const letters: Letter[] = [...(node?.textContent ?? '')].map((ch, i) => {
+        if (!node || /\s/.test(ch)) return null
+        range.setStart(node, i)
+        range.setEnd(node, i + 1)
+        const r = range.getClientRects()[0]
+        return r ? { l: r.left - box.left, r: r.right - box.left } : null
+      })
+      setDrawn({ words: linesFromGrid(grid, spacing), band: linesFromGrid(flat, spacing), w: grid.w, h: grid.h, letters })
     }
     const later = () => {
       cancelAnimationFrame(raf)
@@ -109,6 +122,7 @@ export default function LineLab() {
   const win = `${uid}-win`
   const inWords = `${uid}-in`
   const outWords = `${uid}-out`
+  const fade = `${uid}-fade`
 
   const defs = (
     <defs>
@@ -162,14 +176,38 @@ export default function LineLab() {
     </>
   ) : null
 
-  const finalArt = (
+  // Reveal: a letter turns from halftone to raw text as the front reaches it. Progress is 0 before
+  // the front touches the letter and 1 once it has crossed `soft` letter-widths past its left edge.
+  const progress = (drawn?.letters ?? []).map((lt) => {
+    if (!lt || !drawn) return 0
+    const x = front * drawn.w
+    return Math.min(1, Math.max(0, (x - lt.l) / Math.max(1e-6, (lt.r - lt.l) * soft)))
+  })
+  const rawLetters = drawn ? (
+    <foreignObject x={0} y={0} width={drawn.w} height={drawn.h} transform={`scale(${1 / UNIT_PX})`} style={{ overflow: 'visible' }}>
+      <div className="whitespace-nowrap leading-tight" style={{ fontFamily: 'Lato, sans-serif', fontSize: size, fontWeight: weight, color: ink }}>
+        {[...text].map((ch, i) => (
+          <span key={i} style={{ opacity: progress[i] ?? 0 }}>
+            {ch}
+          </span>
+        ))}
+      </div>
+    </foreignObject>
+  ) : null
+  const finalArt = drawn ? (
     <>
-      {rawText === 'under' ? plain : null}
-      {linesAndMasked}
-      {rawText === 'over' ? plain : null}
+      <defs>
+        <mask id={fade} maskUnits="userSpaceOnUse" x={0} y={0} width={vw} height={vh}>
+          <rect x={0} y={0} width={vw} height={vh} fill="#fff" />
+          {drawn.letters.map((lt, i) =>
+            lt ? <rect key={i} x={lt.l / UNIT_PX} y={0} width={(lt.r - lt.l) / UNIT_PX} height={vh} fill="#000" opacity={progress[i] ?? 0} /> : null,
+          )}
+        </mask>
+      </defs>
+      <g mask={`url(#${fade})`}>{linesAndMasked}</g>
+      {rawLetters}
     </>
-  )
-
+  ) : null
   return (
     <main className="mx-auto max-w-[96rem] px-6 py-8" data-line-lab>
       <h1 className="text-lg font-semibold">Line compositing builder</h1>
@@ -298,7 +336,7 @@ export default function LineLab() {
 
         <Column>
           <Node
-            title="Final"
+            title="Final: reveal"
             kind="output"
             from={['Masked Text + Lines', 'Text']}
             preview={
@@ -308,14 +346,9 @@ export default function LineLab() {
               </Shot>
             }
           >
-            <label className="flex items-center gap-2 text-xs">
-              <span className="w-20 shrink-0 text-muted-foreground">raw text</span>
-              <select value={rawText} onChange={(e) => setRawText(e.target.value as 'under' | 'over' | 'off')} className="rounded border px-1 py-0.5">
-                <option value="under">under the lines</option>
-                <option value="over">over the lines</option>
-                <option value="off">off</option>
-              </select>
-            </label>
+            <Slider label="front" value={front} min={0} max={1} step={0.005} onChange={setFront} />
+            <Slider label="ramp (letters)" value={soft} min={0.05} max={3} step={0.05} onChange={setSoft} />
+            <p className="text-xs text-muted-foreground">Each letter turns from halftone to raw text as the front reaches it. Ramp is how many letter widths the turn takes.</p>
           </Node>
         </Column>
       </div>
