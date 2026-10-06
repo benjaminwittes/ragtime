@@ -100,7 +100,7 @@ export default function LineLab() {
   const [blend, setBlend] = useState<'over' | 'through' | 'outside'>('through')
   const [spread, setSpread] = useState(12)
   const [gain, setGain] = useState(1.0)
-  const [soft, setSoft] = useState(1.5)
+  const [soft, setSoft] = useState(5)
   const [linesBack, setLinesBack] = useState(0.35)
   const [backInk, setBackInk] = useState('#c2410c')
   const graph = useRef<HTMLDivElement>(null)
@@ -154,13 +154,15 @@ export default function LineLab() {
 
   // Each letter's progress through Final, 0 → 1, driven by the Window's trailing (left) edge: the lines
   // retreat sideways and leave the letter. The first half is Masked Text → Halftone Lines (`toHalftone`),
-  // the second half is Halftone Lines → Raw Text (`toRaw`). `soft` is how many letter widths the whole turn takes.
+  // the second half is Halftone Lines → Raw Text (`toRaw`). `soft` is how many letter widths the whole turn takes, so a few letters are in each stage at once.
   const progress = (drawn?.letters ?? []).map((lt) => {
     if (!lt || !drawn) return 0
     return Math.min(1, Math.max(0, (lo * drawn.w - lt.l) / Math.max(1e-6, (lt.r - lt.l) * soft)))
   })
-  const toHalftone = progress.map((p) => Math.min(1, 2 * p))
-  const toRaw = progress.map((p) => Math.max(0, 2 * p - 1))
+  // Three phases per letter, so Halftone Lines is a stage you see and not a blink: Masked Text turns into
+  // halftone over the first third, halftone holds for the middle third, then thickens into raw text.
+  const toHalftone = progress.map((p) => Math.min(1, p / 0.35))
+  const toRaw = progress.map((p) => Math.min(1, Math.max(0, (p - 0.65) / 0.35)))
   const progressKey = toRaw.map((p) => p.toFixed(2)).join(',')
 
   // Halftone Lines: the lines carry the tone. The text is softened so the lines swell toward the
@@ -441,7 +443,7 @@ export default function LineLab() {
               <span className="w-20 shrink-0 text-muted-foreground">line colour</span>
               <input type="color" value={backInk} onChange={(e) => setBackInk(e.target.value)} />
             </label>
-            <Slider label="ramp (letters)" value={soft} min={0.05} max={4} step={0.05} onChange={setSoft} />
+            <Slider label="ramp (letters)" value={soft} min={0.5} max={10} step={0.05} onChange={setSoft} />
             <p className="text-xs text-muted-foreground">Each letter goes Masked Text → Halftone Lines → Raw Text as the Window's left edge passes it. Ramp is how many letter widths the whole turn takes.</p>
           </Card>
         </Column>
