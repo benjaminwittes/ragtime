@@ -29,7 +29,7 @@ import {
 } from './auth-arg.ts'
 import type { CorpusSlug } from './corpus-types.ts'
 
-import { workerUrl } from './config.ts'
+import { workerFetch, workerUrl } from './config.ts'
 
 /* ----------------------------------------------------------------------------
  * /corpus/hub/keyword (PR 4u) — free cross-corpus keyword search
@@ -83,7 +83,7 @@ export async function runHubKeyword(
   query: string,
   corpora?: readonly HubCorpusSlug[],
 ): Promise<HubKeywordResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/hub/keyword`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/hub/keyword`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -215,7 +215,7 @@ export async function hubAmaPlan(
   question: string,
   corpora?: readonly HubCorpusSlug[],
 ): Promise<HubAmaPlanResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/hub/ama/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/hub/ama/plan`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -242,7 +242,7 @@ export async function hubAmaExecute(
   token: string,
   auth: AuthArg,
 ): Promise<HubAmaReport> {
-  const r = await fetch(`${workerUrl()}/corpus/hub/ama/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/hub/ama/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -299,7 +299,7 @@ export type CorpusFacets = {
 }
 
 export async function fetchCorpusFacets(): Promise<CorpusFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -390,7 +390,7 @@ export async function runManualFilter(
   scope?: FilterScope,
   cursor?: string,
 ): Promise<FilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -428,7 +428,7 @@ export async function fetchMatchSnippets(
 ): Promise<Record<number, string>> {
   if (!search.trim() || clIds.length === 0) return {}
   try {
-    const r = await fetch(`${workerUrl()}/corpus/snippets`, {
+    const r = await workerFetch(`${workerUrl()}/corpus/snippets`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ cl_ids: clIds, search }),
@@ -532,7 +532,7 @@ export async function runClaudeSql(
   req: SqlGenRequest,
   auth: AuthArg,
 ): Promise<SqlGenResult | SqlGenConfirmNeeded> {
-  const r = await fetch(`${workerUrl()}/corpus/sql`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sql`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -563,7 +563,7 @@ export async function confirmClaudeSql(
   token: string,
   auth: AuthArg,
 ): Promise<SqlGenResult> {
-  const r = await fetch(`${workerUrl()}/corpus/sql`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sql`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({ ...authBody(auth), confirm_token: token }),
@@ -629,7 +629,7 @@ export async function runClaudeAnalysis(
   clIds: readonly number[],
   auth: AuthArg,
 ): Promise<AnalysisResult> {
-  const r = await fetch(`${workerUrl()}/corpus/analyze`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/analyze`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -695,7 +695,7 @@ export type UscFacets = {
 }
 
 export async function fetchUscFacets(): Promise<UscFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/usc/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/usc/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -749,7 +749,7 @@ export type UscFilterResult = {
 export async function runUscFilter(
   fields: UscFilterFields,
 ): Promise<UscFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/usc/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/usc/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -791,7 +791,7 @@ export type UscSectionDetail = {
 }
 
 export async function fetchUscSection(id: number): Promise<UscSectionDetail> {
-  const r = await fetch(`${workerUrl()}/corpus/usc/section`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/usc/section`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -848,7 +848,7 @@ export async function runUscPlan(
   scope: UscAmaScope,
   auth: AuthArg,
 ): Promise<UscAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/usc/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/usc/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -875,7 +875,7 @@ export async function runUscExecute(
   token: string,
   auth: AuthArg,
 ): Promise<UscAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/usc/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/usc/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -909,7 +909,7 @@ export async function summarizeUscSection(
   id: number,
   auth: AuthArg,
 ): Promise<UscSectionSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/usc/summarize-section`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/usc/summarize-section`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -957,7 +957,7 @@ export type CfrFacets = {
 }
 
 export async function fetchCfrFacets(): Promise<CfrFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/cfr/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/cfr/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -1006,7 +1006,7 @@ export type CfrFilterResult = {
 export async function runCfrFilter(
   fields: CfrFilterFields,
 ): Promise<CfrFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/cfr/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/cfr/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -1040,7 +1040,7 @@ export type CfrSectionDetail = {
 }
 
 export async function fetchCfrSection(id: number): Promise<CfrSectionDetail> {
-  const r = await fetch(`${workerUrl()}/corpus/cfr/section`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/cfr/section`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -1096,7 +1096,7 @@ export async function runCfrPlan(
   scope: CfrAmaScope,
   auth: AuthArg,
 ): Promise<CfrAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/cfr/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/cfr/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1123,7 +1123,7 @@ export async function runCfrExecute(
   token: string,
   auth: AuthArg,
 ): Promise<CfrAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/cfr/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/cfr/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1157,7 +1157,7 @@ export async function summarizeCfrSection(
   id: number,
   auth: AuthArg,
 ): Promise<CfrSectionSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/cfr/summarize-section`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/cfr/summarize-section`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1207,7 +1207,7 @@ export type OlcFacets = {
 }
 
 export async function fetchOlcFacets(): Promise<OlcFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/olc/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/olc/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -1263,7 +1263,7 @@ export type OlcFilterResult = {
 export async function runOlcFilter(
   fields: OlcFilterFields,
 ): Promise<OlcFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/olc/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/olc/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -1300,7 +1300,7 @@ export type OlcOpinionDetail = {
 }
 
 export async function fetchOlcOpinion(id: number): Promise<OlcOpinionDetail> {
-  const r = await fetch(`${workerUrl()}/corpus/olc/opinion`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/olc/opinion`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -1371,7 +1371,7 @@ export async function runOlcPlan(
   scope: OlcAmaScope,
   auth: AuthArg,
 ): Promise<OlcAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/olc/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/olc/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1398,7 +1398,7 @@ export async function runOlcExecute(
   token: string,
   auth: AuthArg,
 ): Promise<OlcAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/olc/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/olc/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1435,7 +1435,7 @@ export async function summarizeOlcOpinion(
   id: number,
   auth: AuthArg,
 ): Promise<OlcOpinionSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/olc/summarize-opinion`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/olc/summarize-opinion`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1492,7 +1492,7 @@ export type PresidentialFacets = {
 }
 
 export async function fetchPresidentialFacets(): Promise<PresidentialFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/presidential/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/presidential/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -1553,7 +1553,7 @@ export type PresidentialFilterResult = {
 export async function runPresidentialFilter(
   fields: PresidentialFilterFields,
 ): Promise<PresidentialFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/presidential/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/presidential/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -1625,7 +1625,7 @@ export type PresidentialDocumentResponse = {
 export async function fetchPresidentialDocument(
   id: number,
 ): Promise<PresidentialDocumentResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/presidential/document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/presidential/document`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -1674,7 +1674,7 @@ export async function runPresidentialPlan(
   scope: PresidentialAmaScope,
   auth: AuthArg,
 ): Promise<PresidentialAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/presidential/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/presidential/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1701,7 +1701,7 @@ export async function runPresidentialExecute(
   token: string,
   auth: AuthArg,
 ): Promise<PresidentialAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/presidential/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/presidential/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1735,7 +1735,7 @@ export async function summarizePresidentialDocument(
   id: number,
   auth: AuthArg,
 ): Promise<PresidentialDocumentSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/presidential/summarize-document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/presidential/summarize-document`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -1793,7 +1793,7 @@ export type FrFacets = {
 }
 
 export async function fetchFrFacets(): Promise<FrFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/fr/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fr/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -1862,7 +1862,7 @@ export type FrFilterResult = {
 export async function runFrFilter(
   fields: FrFilterFields,
 ): Promise<FrFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/fr/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fr/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -1924,7 +1924,7 @@ export type FrDocumentResponse = {
 }
 
 export async function fetchFrDocument(id: number): Promise<FrDocumentResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/fr/document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fr/document`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -1973,7 +1973,7 @@ export async function runFrPlan(
   scope: FrAmaScope,
   auth: AuthArg,
 ): Promise<FrAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/fr/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fr/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2000,7 +2000,7 @@ export async function runFrExecute(
   token: string,
   auth: AuthArg,
 ): Promise<FrAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/fr/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fr/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2034,7 +2034,7 @@ export async function runFrSummarizeDocument(
   id: number,
   auth: AuthArg,
 ): Promise<FrDocumentSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/fr/summarize-document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fr/summarize-document`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2099,7 +2099,7 @@ export type CongressFacets = {
 }
 
 export async function fetchCongressFacets(): Promise<CongressFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/congress/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -2240,7 +2240,7 @@ export type CongressFilterResult = {
 export async function runCongressFilter(
   fields: CongressFilterFields,
 ): Promise<CongressFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/congress/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -2342,7 +2342,7 @@ export async function fetchCongressDocument<C extends CongressCollection>(
   collection: C,
   id: number,
 ): Promise<CongressDocumentResponse<C>> {
-  const r = await fetch(`${workerUrl()}/corpus/congress/document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/document`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ collection, id }),
@@ -2405,7 +2405,7 @@ export type CongressTurnsResult = {
 export async function runCongressTurns(
   fields: CongressTurnsFields,
 ): Promise<CongressTurnsResult> {
-  const r = await fetch(`${workerUrl()}/corpus/congress/turns`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/turns`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -2459,7 +2459,7 @@ export async function runCongressPlan(
   scope: CongressAmaScope,
   auth: AuthArg,
 ): Promise<CongressAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/congress/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2486,7 +2486,7 @@ export async function runCongressExecute(
   token: string,
   auth: AuthArg,
 ): Promise<CongressAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/congress/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2521,7 +2521,7 @@ export async function runCongressSummarizeDocument(
   id: number,
   auth: AuthArg,
 ): Promise<CongressDocumentSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/congress/summarize-document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/summarize-document`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2564,7 +2564,7 @@ export type ClemencyFacets = {
 }
 
 export async function fetchClemencyFacets(): Promise<ClemencyFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/clemency/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/clemency/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -2621,7 +2621,7 @@ export type ClemencyFilterResult = {
 export async function runClemencyFilter(
   fields: ClemencyFilterFields,
 ): Promise<ClemencyFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/clemency/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/clemency/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -2652,7 +2652,7 @@ export type ClemencyGrantDetail = ClemencyGrantDisplayRow & {
 export async function fetchClemencyGrant(
   id: number,
 ): Promise<ClemencyGrantDetail> {
-  const r = await fetch(`${workerUrl()}/corpus/clemency/grant`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/clemency/grant`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -2712,7 +2712,7 @@ export type LawfareFacets = {
 }
 
 export async function fetchLawfareFacets(): Promise<LawfareFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/lawfare/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/lawfare/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -2773,7 +2773,7 @@ export type LawfareFilterResult = {
 export async function runLawfareFilter(
   fields: LawfareFilterFields,
 ): Promise<LawfareFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/lawfare/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/lawfare/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -2809,7 +2809,7 @@ export type LawfareArticleDetail = {
 export async function fetchLawfareArticle(
   id: string,
 ): Promise<LawfareArticleDetail> {
-  const r = await fetch(`${workerUrl()}/corpus/lawfare/article`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/lawfare/article`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -2872,7 +2872,7 @@ export async function runLawfarePlan(
   scope: LawfareAmaScope,
   auth: AuthArg,
 ): Promise<LawfareAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/lawfare/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/lawfare/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2902,7 +2902,7 @@ export async function runLawfareExecute(
    *  usage_log row the inline annotation later upserts onto. */
   interactionId?: string,
 ): Promise<LawfareAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/lawfare/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/lawfare/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -2939,7 +2939,7 @@ export async function summarizeLawfareArticle(
   id: string,
   auth: AuthArg,
 ): Promise<LawfareArticleSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/lawfare/summarize-article`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/lawfare/summarize-article`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -3025,7 +3025,7 @@ export type CommentaryFacets = {
 }
 
 export async function fetchCommentaryFacets(): Promise<CommentaryFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/commentary/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/commentary/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -3089,7 +3089,7 @@ export type CommentaryFilterResult = {
 export async function runCommentaryFilter(
   fields: CommentaryFilterFields,
 ): Promise<CommentaryFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/commentary/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/commentary/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -3135,7 +3135,7 @@ export async function fetchCommentaryDocument(
   publication: CommentaryPublication,
   id: number,
 ): Promise<CommentaryDocumentDetail> {
-  const r = await fetch(`${workerUrl()}/corpus/commentary/document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/commentary/document`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ publication, id }),
@@ -3160,7 +3160,7 @@ export async function fetchCommentaryItemsByIds(
   publication: CommentaryPublication,
   ids: Array<string | number>,
 ): Promise<CommentaryDisplayRow[]> {
-  const r = await fetch(`${workerUrl()}/corpus/commentary/items-by-ids`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/commentary/items-by-ids`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ publication, ids }),
@@ -3236,7 +3236,7 @@ export async function runCommentaryPlan(
   scope: CommentaryAmaScope,
   auth: AuthArg,
 ): Promise<CommentaryAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/commentary/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/commentary/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -3266,7 +3266,7 @@ export async function runCommentaryExecute(
    *  usage_log row the inline annotation later upserts onto. */
   interactionId?: string,
 ): Promise<CommentaryAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/commentary/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/commentary/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -3305,7 +3305,7 @@ export async function summarizeCommentaryDocument(
   id: number,
   auth: AuthArg,
 ): Promise<CommentaryDocumentSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/commentary/summarize-document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/commentary/summarize-document`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -3372,7 +3372,7 @@ export type FbiFacets = {
 }
 
 export async function fetchFbiFacets(): Promise<FbiFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/fbi/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fbi/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -3391,7 +3391,7 @@ export async function fetchFbiCollections(
   q: string,
   limit = 20,
 ): Promise<FbiCollectionCount[]> {
-  const r = await fetch(`${workerUrl()}/corpus/fbi/collections`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fbi/collections`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ q, limit }),
@@ -3450,7 +3450,7 @@ export type FbiFilterResult = {
 export async function runFbiFilter(
   fields: FbiFilterFields,
 ): Promise<FbiFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/fbi/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fbi/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -3490,7 +3490,7 @@ export type FbiDocumentResponse = {
 }
 
 export async function fetchFbiDocument(id: number): Promise<FbiDocumentResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/fbi/document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fbi/document`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -3541,7 +3541,7 @@ export async function runFbiPlan(
   scope: FbiAmaScope,
   auth: AuthArg,
 ): Promise<FbiAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/fbi/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fbi/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -3571,7 +3571,7 @@ export async function runFbiExecute(
    *  usage_log row the inline annotation later upserts onto. */
   interactionId?: string,
 ): Promise<FbiAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/fbi/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fbi/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -3606,7 +3606,7 @@ export async function runFbiSummarizeDocument(
   id: number,
   auth: AuthArg,
 ): Promise<FbiDocumentSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/fbi/summarize-document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/fbi/summarize-document`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -3680,7 +3680,7 @@ export type SanctionsEntityFacets = {
 }
 
 export async function fetchSanctionsEntityFacets(): Promise<SanctionsEntityFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/entity-facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/entity-facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -3736,7 +3736,7 @@ export type SanctionsEntityFilterResult = {
 export async function runSanctionsEntityFilter(
   fields: SanctionsEntityFilterFields,
 ): Promise<SanctionsEntityFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/entity-filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/entity-filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -3779,7 +3779,7 @@ export type SanctionsEntityResponse = {
 export async function fetchSanctionsEntity(
   ref: { id: number } | { ofac_uid: string },
 ): Promise<SanctionsEntityResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/entity`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/entity`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(ref),
@@ -3807,7 +3807,7 @@ export type SanctionsGuidanceFacets = {
 }
 
 export async function fetchSanctionsGuidanceFacets(): Promise<SanctionsGuidanceFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -3858,7 +3858,7 @@ export type SanctionsGuidanceFilterResult = {
 export async function runSanctionsGuidanceFilter(
   fields: SanctionsGuidanceFilterFields,
 ): Promise<SanctionsGuidanceFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -3893,7 +3893,7 @@ export type SanctionsGuidanceDocumentResponse = {
 export async function fetchSanctionsGuidanceDocument(
   id: number,
 ): Promise<SanctionsGuidanceDocumentResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/document`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -3925,7 +3925,7 @@ export type SanctionsFrFacets = {
 }
 
 export async function fetchSanctionsFrFacets(): Promise<SanctionsFrFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/fr-facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/fr-facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -3964,7 +3964,7 @@ export type SanctionsFrFilterResult = {
 export async function runSanctionsFrFilter(
   fields: SanctionsFrFilterFields,
 ): Promise<SanctionsFrFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/fr-filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/fr-filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -4075,7 +4075,7 @@ export async function runSanctionsPlan(
   question: string,
   auth: AuthArg,
 ): Promise<SanctionsAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4104,7 +4104,7 @@ export async function runSanctionsExecute(
    *  usage_log row the inline annotation later upserts onto. */
   interactionId?: string,
 ): Promise<SanctionsAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/sanctions/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/sanctions/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4157,7 +4157,7 @@ export type FrusFacets = {
 }
 
 export async function fetchFrusFacets(): Promise<FrusFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/frus/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/frus/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -4212,7 +4212,7 @@ export type FrusFilterResult = {
 export async function runFrusFilter(
   fields: FrusFilterFields,
 ): Promise<FrusFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/frus/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/frus/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -4262,7 +4262,7 @@ export type FrusDocumentDetail = {
 }
 
 export async function fetchFrusDocument(id: number): Promise<FrusDocumentDetail> {
-  const r = await fetch(`${workerUrl()}/corpus/frus/document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/frus/document`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -4326,7 +4326,7 @@ export async function runFrusPlan(
   scope: FrusAmaScope,
   auth: AuthArg,
 ): Promise<FrusAmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/frus/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/frus/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4353,7 +4353,7 @@ export async function runFrusExecute(
   token: string,
   auth: AuthArg,
 ): Promise<FrusAmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/frus/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/frus/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4387,7 +4387,7 @@ export async function summarizeFrusDocument(
   id: number,
   auth: AuthArg,
 ): Promise<FrusDocumentSummary> {
-  const r = await fetch(`${workerUrl()}/corpus/frus/summarize-document`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/frus/summarize-document`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4498,7 +4498,7 @@ export async function runClaudePlan(
   scope: AmaScope,
   auth: AuthArg,
 ): Promise<AmaPlan> {
-  const r = await fetch(`${workerUrl()}/corpus/plan`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/plan`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4525,7 +4525,7 @@ export async function runClaudeExecute(
   token: string,
   auth: AuthArg,
 ): Promise<AmaSynthesis> {
-  const r = await fetch(`${workerUrl()}/corpus/execute`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/execute`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4583,7 +4583,7 @@ export async function startCheckout(opts: {
   sessionToken: string
   returnOrigin: string
 }): Promise<CheckoutSession> {
-  const r = await fetch(`${workerUrl()}/api/checkout`, {
+  const r = await workerFetch(`${workerUrl()}/api/checkout`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -4609,7 +4609,7 @@ export async function fetchCasesByIds(
   ids: readonly number[],
 ): Promise<CaseDisplayRow[]> {
   if (ids.length === 0) return []
-  const r = await fetch(`${workerUrl()}/corpus/cases`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/cases`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ids }),
@@ -4625,7 +4625,7 @@ export async function fetchCasesByIds(
 
 /** Every litigation collection, with its size. */
 export async function fetchCollections(): Promise<CollectionRef[]> {
-  const r = await fetch(`${workerUrl()}/corpus/collections`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/collections`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -4660,7 +4660,7 @@ export async function fetchCollectionCases(
   slug: string,
   opts: { offset?: number; limit?: number } = {},
 ): Promise<CollectionCasesPage> {
-  const r = await fetch(`${workerUrl()}/corpus/collections/cases`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/collections/cases`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ slug, offset: opts.offset ?? 0, limit: opts.limit ?? 100 }),
@@ -4702,7 +4702,7 @@ export async function runReadBatch(
   if (clIds.length > READ_MAX_BATCH) {
     throw new Error(`Batch too large: ${clIds.length} > ${READ_MAX_BATCH}`)
   }
-  const r = await fetch(`${workerUrl()}/corpus/read-batch`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/read-batch`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -4803,7 +4803,7 @@ export type CaseEntriesResult = {
 }
 
 export async function fetchCaseEntries(clId: number): Promise<CaseEntriesResult> {
-  const r = await fetch(`${workerUrl()}/corpus/entries`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/entries`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ cl_id: clId }),
@@ -4925,7 +4925,7 @@ async function fetchItemsByIds<Row, Id = number>(
   ids: readonly Id[],
 ): Promise<Row[]> {
   if (ids.length === 0) return []
-  const r = await fetch(url, {
+  const r = await workerFetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ids }),
@@ -5051,7 +5051,7 @@ export async function fetchCongressItemsByIds<C extends CongressCollection>(
   ids: readonly number[],
 ): Promise<CongressDisplayRowMap[C][]> {
   if (ids.length === 0) return []
-  const r = await fetch(`${workerUrl()}/corpus/congress/items-by-ids`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/congress/items-by-ids`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ collection, ids }),
@@ -5134,7 +5134,7 @@ export async function runSemanticSearch(
   query: string,
   opts?: { k?: number; mode?: 'semantic' | 'hybrid' },
 ): Promise<SemanticSearchResult> {
-  const r = await fetch(`${workerUrl()}/corpus/semantic-search`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/semantic-search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -5252,7 +5252,7 @@ export async function runMoreLikeThis(
   req: MoreLikeThisRequest,
   auth: AuthArg,
 ): Promise<MoreLikeThisResult> {
-  const r = await fetch(`${workerUrl()}/corpus/${req.slug}/more-like-this`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/${req.slug}/more-like-this`, {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({
@@ -5332,7 +5332,7 @@ export type BooksFacets = {
 }
 
 export async function fetchBooksFacets(): Promise<BooksFacets> {
-  const r = await fetch(`${workerUrl()}/corpus/books/facets`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/books/facets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -5421,7 +5421,7 @@ export type BooksFilterResult = {
 export async function runBooksFilter(
   fields: BooksFilterFields,
 ): Promise<BooksFilterResult> {
-  const r = await fetch(`${workerUrl()}/corpus/books/filter`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/books/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -5478,7 +5478,7 @@ export type BookRecordResponse = {
 export async function fetchBooksRecord(
   key: { id: number } | { lccn: string },
 ): Promise<BookRecordResponse> {
-  const r = await fetch(`${workerUrl()}/corpus/books/record`, {
+  const r = await workerFetch(`${workerUrl()}/corpus/books/record`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(key),

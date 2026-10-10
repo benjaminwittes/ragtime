@@ -33,7 +33,15 @@ export * from './worker-client.ts'
 export * from './explorer.ts'
 export * from './registry.ts'
 export * from './my-collections.ts'
-export { DEFAULT_WORKER_URL, configureWorkerClient, workerUrl } from './config.ts'
+export {
+  DEFAULT_WORKER_URL,
+  configureWorkerClient,
+  workerUrl,
+  tagHeaders,
+  workerFetch,
+  type RequestTags,
+  type TagsSource,
+} from './config.ts'
 export {
   links,
   LINK_MODES,

@@ -24,6 +24,7 @@ import {
   type ExplorerTurnRequest,
 } from '@lawfare/ragtime-client'
 
+import { beginInteraction } from '@/lib/interaction'
 import { explainRefusal } from '../model/allowance.ts'
 import { mergePinnedCorpora, normalizeBrief } from '../model/brief.ts'
 import {
@@ -321,6 +322,9 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
       if (turnPhase === 'research' && briefToUse) req.brief = briefToUse
       const ac = new AbortController()
       abort.current = ac
+      // The conversation is the interaction: every turn of it carries the same
+      // `x-rt-interaction`, so the console reads a conversation, not N turns.
+      beginInteraction(cidRef.current)
       const events = client.explorer.turn(req, auth, { signal: ac.signal })
       try {
         for await (const ev of events) {

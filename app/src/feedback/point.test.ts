@@ -1,6 +1,8 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
+import { configureWorkerClient } from '@lawfare/ragtime-client'
+
 import {
   POINT,
   feedbackRequested,
@@ -138,4 +140,19 @@ test('a link can ask for the panel, and anything but 0 is asking', () => {
   assert.equal(feedbackRequested('?feedback=0'), false)
   assert.equal(feedbackRequested('?q=feedback'), false)
   assert.equal(feedbackRequested(''), false)
+})
+
+test('a report sent to the worker carries the tags, and one sent elsewhere does not', async () => {
+  configureWorkerClient({ baseUrl: 'http://worker.test', tags: { client: 'ragtime-web', interaction: 'ix-9' } })
+  const note = noteFor({ ...plain, body: 'hello' })
+  const worker = recording(200)
+  assert.equal(await sendNote('http://worker.test/problem-reports', note, 'report', worker.fetchImpl), 'sent')
+  const sentHeaders = worker.seen.init?.headers as Record<string, string>
+  assert.equal(sentHeaders['x-rt-client'], 'ragtime-web')
+  assert.equal(sentHeaders['x-rt-interaction'], 'ix-9')
+  const elsewhere = recording(200)
+  assert.equal(await sendNote('https://capture.example/point', note, 'note', elsewhere.fetchImpl), 'sent')
+  const otherHeaders = elsewhere.seen.init?.headers as Record<string, string>
+  assert.equal('x-rt-client' in otherHeaders, false)
+  configureWorkerClient({ tags: {} })
 })

@@ -24,6 +24,8 @@
  *     route's own.
  */
 
+import { tagHeaders, workerUrl } from '@lawfare/ragtime-client'
+
 const QUOTE_LIMIT = 280
 const PATH_DEPTH = 5
 const SUMMARY_LIMIT = 200
@@ -203,9 +205,13 @@ export async function sendNote(
 ): Promise<PointOutcome> {
   if (!note.body) return 'empty'
   try {
+    // The tags go only to the worker: the console joins a report to the interaction it
+    // came from by `x-rt-interaction`, and an external capture route (`VITE_POINT_URL`)
+    // has not allowed the headers and would refuse the preflight.
+    const tags = endpoint.startsWith(workerUrl()) ? tagHeaders() : {}
     const response = await fetchImpl(endpoint, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { ...tags, 'content-type': 'application/json' },
       body: JSON.stringify(wire === 'report' ? reportFor(note) : note),
     })
     if (response.ok) return 'sent'
