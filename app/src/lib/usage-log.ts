@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import { type AuthArg, authCredentialBody, authHeaders } from '@lawfare/ragtime-client'
+import { type AuthArg, authCredentialBody, authHeaders, workerFetch } from '@lawfare/ragtime-client'
+
+import { beginInteraction } from './interaction.ts'
+import { WORKER_URL } from './worker-url.ts'
 
 /**
  * Usage + annotation log (feature: ragtime-usage-log-feedback).
@@ -32,10 +35,6 @@ import { type AuthArg, authCredentialBody, authHeaders } from '@lawfare/ragtime-
  * /corpus/feedback/log handler + the usage_log table). Same disposable
  * posture as demo-access.ts.
  */
-
-const WORKER_URL =
-  (import.meta.env.VITE_WORKER_URL as string | undefined) ||
-  'https://ragtimeproxy.benjamin-wittes.workers.dev'
 
 const KEY = 'ragtime_usage_log_v1'
 const EVENT = 'ragtime:usage-log-toggle-changed'
@@ -94,9 +93,14 @@ export function useUsageLogEnabled(): boolean {
   return useSyncExternalStore(subscribe, isUsageLogEnabled, () => false)
 }
 
-/** Fresh per-interaction id (client-generated; the upsert key). */
+/**
+ * Fresh per-interaction id (client-generated; the upsert key). Minting one also makes it
+ * the page's current interaction (`lib/interaction.ts`), so every worker call the shell
+ * makes next carries it as `x-rt-interaction` and the console can join them to this
+ * record.
+ */
 export function newInteractionId(): string {
-  return crypto.randomUUID()
+  return beginInteraction()
 }
 
 /**
@@ -161,7 +165,7 @@ export async function postUsageLog(
 ): Promise<boolean> {
   if (!usageLogActiveFor(auth)) return false
   try {
-    const r = await fetch(`${WORKER_URL}/corpus/feedback/log`, {
+    const r = await workerFetch(`${WORKER_URL}/corpus/feedback/log`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

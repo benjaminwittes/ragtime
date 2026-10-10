@@ -14,7 +14,7 @@
  * than an error: it returns null, and a caller shows nothing.
  */
 
-import { workerUrl } from './config.ts'
+import { tagHeaders, workerUrl } from './config.ts'
 
 export type MyCollectionScope = 'private' | 'org'
 
@@ -100,7 +100,7 @@ async function call(
   opts: MyCollectionsOptions,
 ): Promise<Response> {
   const doFetch = opts.fetch ?? globalThis.fetch
-  const headers: Record<string, string> = { Authorization: `Bearer ${sessionToken}` }
+  const headers: Record<string, string> = { ...tagHeaders(), Authorization: `Bearer ${sessionToken}` }
   const init: RequestInit = { method, headers }
   if (body !== undefined) {
     headers['content-type'] = 'application/json'

@@ -8,7 +8,7 @@
  * rather than from a hand-kept list.
  */
 
-import { workerUrl } from './config.ts'
+import { tagHeaders, workerUrl } from './config.ts'
 
 export type RegistryFreshness = {
   /** `liveness` only where GET /status's one data-freshness probe reads that corpus. */
@@ -70,7 +70,7 @@ export type FetchRegistryOptions = {
 
 export async function fetchRegistry(opts: FetchRegistryOptions = {}): Promise<CorpusRegistry> {
   const doFetch = opts.fetch ?? globalThis.fetch
-  const r = await doFetch(`${workerUrl()}/corpus/registry`, { method: 'GET', signal: opts.signal })
+  const r = await doFetch(`${workerUrl()}/corpus/registry`, { method: 'GET', headers: tagHeaders(), signal: opts.signal })
   if (!r.ok) throw new Error(`GET /corpus/registry failed: HTTP ${r.status}`)
   return (await r.json()) as CorpusRegistry
 }

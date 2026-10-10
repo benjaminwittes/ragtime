@@ -66,6 +66,14 @@ environment read, `configureWorkerClient` at module load, imported first by `mai
 no other module's body can run before it. Skipping that step does not fail loudly; it sends
 every call to the production default while the developer believes otherwise.
 
+The same call takes `tags`: what every request says about its origin, as three headers the
+worker's telemetry keeps only as labels — `x-rt-client` (the program: `ragtime-web`),
+`x-rt-surface` (the page or verb) and `x-rt-interaction` (an id joining the requests of one
+thing the reader did). Pass a function and it is read per request, so the surface can follow
+the route. `workerFetch` is the global `fetch` with those headers on, and is what every
+corpus function calls; the three functions that take an injectable `fetch` (`fetchRegistry`,
+`explorerTurn`, the collections calls) spread `tagHeaders()` into their own headers instead.
+
 ## Running it
 
 ```sh

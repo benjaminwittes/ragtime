@@ -20,7 +20,26 @@
 
 import { DEFAULT_WORKER_URL, configureWorkerClient } from '@lawfare/ragtime-client'
 
+import { currentInteraction } from './interaction.ts'
+import { surfaceOf } from './surface.ts'
+
 /** The worker origin every call in the app is built on. No trailing slash. */
 export const WORKER_URL = ((import.meta.env.VITE_WORKER_URL as string | undefined) || DEFAULT_WORKER_URL).replace(/\/+$/, '')
 
-configureWorkerClient({ baseUrl: WORKER_URL })
+/** What this program calls itself to the worker's telemetry (`x-rt-client`). */
+export const CLIENT_NAME = 'ragtime-web'
+
+/**
+ * What every request says about its origin, read per request: the program, the surface
+ * the route names (`lib/surface.ts`) and the interaction the page is in
+ * (`lib/interaction.ts`). The worker keeps these as labels and joins requests on the
+ * interaction id; nothing here identifies the reader.
+ */
+configureWorkerClient({
+  baseUrl: WORKER_URL,
+  tags: () => ({
+    client: CLIENT_NAME,
+    surface: typeof window === 'undefined' ? undefined : surfaceOf(window.location.pathname),
+    interaction: currentInteraction(),
+  }),
+})

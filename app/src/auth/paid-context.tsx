@@ -9,6 +9,8 @@ import {
 import type { Session } from '@supabase/supabase-js'
 import { accountFrom, type PaidAccount } from './account'
 import { getSupabase } from './supabase'
+import { workerFetch } from '@lawfare/ragtime-client'
+import { WORKER_URL } from '@/lib/worker-url'
 import {
   GOOGLE_REQUIRED,
   googleOffered,
@@ -35,10 +37,6 @@ import {
  * Per the React-refresh fast-refresh contract, the `usePaid` hook lives
  * in a sibling `use-paid.ts` so this file only exports a component.
  */
-
-const WORKER_URL =
-  (import.meta.env.VITE_WORKER_URL as string | undefined) ||
-  'https://ragtimeproxy.benjamin-wittes.workers.dev'
 
 export type { PaidAccount, PaidLedgerEntry } from './account'
 
@@ -162,7 +160,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
     setBalanceLoading(true)
     setBalanceError(null)
     try {
-      let resp = await fetch(`${WORKER_URL}/api/balance`, {
+      let resp = await workerFetch(`${WORKER_URL}/api/balance`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${current.access_token}` },
       })
@@ -171,7 +169,7 @@ export function PaidProvider({ children }: { children: ReactNode }) {
         const refreshed = await sb.auth.refreshSession()
         const newTok = refreshed.data.session?.access_token
         if (newTok) {
-          resp = await fetch(`${WORKER_URL}/api/balance`, {
+          resp = await workerFetch(`${WORKER_URL}/api/balance`, {
             method: 'GET',
             headers: { Authorization: `Bearer ${newTok}` },
           })

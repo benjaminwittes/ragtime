@@ -18,7 +18,7 @@
  */
 
 import { type AuthArg, authCredentialBody, authHeaders } from './auth-arg.ts'
-import { workerUrl } from './config.ts'
+import { tagHeaders, workerUrl } from './config.ts'
 
 export type ExplorerPhase = 'orient' | 'research'
 
@@ -261,7 +261,7 @@ export async function* explorerTurn(
 
   const res = await doFetch(`${workerUrl()}/explorer/turn`, {
     method: 'POST',
-    headers: { ...authHeaders(auth), accept: 'text/event-stream' },
+    headers: { ...tagHeaders(), ...authHeaders(auth), accept: 'text/event-stream' },
     body: JSON.stringify(body),
     signal: opts.signal,
   })
