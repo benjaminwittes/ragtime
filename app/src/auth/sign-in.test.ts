@@ -6,10 +6,47 @@ import {
   isGoogleRequired,
   mustUseGoogle,
   offersGoogle,
+  opensTheGate,
   refusalInWords,
   returnErrorIn,
   withoutReturnError,
 } from './sign-in.ts'
+
+describe('opensTheGate', () => {
+  const google = { provider: 'google', providers: ['google'] }
+
+  it('opens for a Lawfare address signed in with Google, however it is typed', () => {
+    expect(opensTheGate({ email: 'reader@lawfaremedia.org', app_metadata: google })).toBe(true)
+    expect(opensTheGate({ email: 'Reader@LawfareMedia.ORG', app_metadata: google })).toBe(true)
+  })
+
+  it('opens when Google is one of several ways the account signs in', () => {
+    const both = { provider: 'email', providers: ['email', 'google'] }
+    expect(opensTheGate({ email: 'reader@lawfaremedia.org', app_metadata: both })).toBe(true)
+  })
+
+  it('stays shut for a Lawfare address that signed in by email link only', () => {
+    const email = { provider: 'email', providers: ['email'] }
+    expect(opensTheGate({ email: 'reader@lawfaremedia.org', app_metadata: email })).toBe(false)
+    expect(opensTheGate({ email: 'reader@lawfaremedia.org' })).toBe(false)
+  })
+
+  it('stays shut for other domains, including ones that only look like Lawfare', () => {
+    for (const email of [
+      'reader@gmail.com',
+      'reader@mail.lawfaremedia.org',
+      'reader@lawfaremedia.org.example.com',
+    ]) {
+      expect(opensTheGate({ email, app_metadata: google })).toBe(false)
+    }
+  })
+
+  it('stays shut with nobody signed in', () => {
+    expect(opensTheGate(null)).toBe(false)
+    expect(opensTheGate(undefined)).toBe(false)
+    expect(opensTheGate({ email: null, app_metadata: google })).toBe(false)
+  })
+})
 
 describe('mustUseGoogle', () => {
   it('names one domain, and one sentence', () => {

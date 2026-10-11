@@ -78,6 +78,30 @@ export function mustUseGoogle(email: string, google: boolean): boolean {
   return GOOGLE_ONLY_DOMAINS.includes(domain)
 }
 
+/** The part of a signed-in user the beta gate reads. */
+export type GateUser = {
+  email?: string | null
+  app_metadata?: { provider?: unknown; providers?: unknown } | null
+}
+
+/**
+ * Whether a signed-in user opens the beta gate without the code: an address on a
+ * Google-only domain, on an account that signs in with Google. The domain is compared
+ * whole, as `mustUseGoogle` compares it. Google is required because that is how the
+ * service knows the address is Lawfare's: anyone can type a Lawfare address into an email
+ * form, and only Lawfare's Google can sign one in.
+ */
+export function opensTheGate(user: GateUser | null | undefined): boolean {
+  if (!user?.email) return false
+  const at = user.email.lastIndexOf('@')
+  if (at < 1) return false
+  const domain = user.email.slice(at + 1).trim().toLowerCase()
+  if (!GOOGLE_ONLY_DOMAINS.includes(domain)) return false
+  const meta = user.app_metadata ?? {}
+  const providers = Array.isArray(meta.providers) ? meta.providers : [meta.provider]
+  return providers.includes('google')
+}
+
 /** Whether the service refused a call because this address must sign in with Google. */
 export function isGoogleRequired(status: number, body: unknown): boolean {
   if (status !== 403 || typeof body !== 'object' || body === null) return false
