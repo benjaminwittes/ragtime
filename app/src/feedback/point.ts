@@ -41,6 +41,10 @@ export const POINT = {
   clear: 'Forget that element',
   placeholder: 'What is wrong, missing, or worth keeping?',
   reply: 'Email, if you want a reply (optional)',
+  sentAs: 'Sent as',
+  signInFirst: 'Sign in to send feedback, so we can answer you.',
+  signInWhy: 'Your note is kept with the address of your account, so we can write back.',
+  signInUnavailable: 'Sign-in is not available right now. Please try again later.',
   send: 'Send',
   sending: 'Sending…',
   sent: 'Thank you. Your note was sent.',
@@ -202,16 +206,22 @@ export async function sendNote(
   note: PointNote,
   wire: PointWire = 'note',
   fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+  sessionToken: string | null = null,
 ): Promise<PointOutcome> {
   if (!note.body) return 'empty'
   try {
     // The tags go only to the worker: the console joins a report to the interaction it
     // came from by `x-rt-interaction`, and an external capture route (`VITE_POINT_URL`)
-    // has not allowed the headers and would refuse the preflight.
-    const tags = endpoint.startsWith(workerUrl()) ? tagHeaders() : {}
+    // has not allowed the headers and would refuse the preflight. The reader's session
+    // goes the same way and for a stronger reason: it is a credential, and only the worker
+    // that issued it may see it. The worker verifies it and puts the account on the report,
+    // which is how a note gets answered (ten days of anonymous feedback could not be).
+    const toWorker = endpoint.startsWith(workerUrl())
+    const headers: Record<string, string> = { ...(toWorker ? tagHeaders() : {}), 'content-type': 'application/json' }
+    if (toWorker && sessionToken) headers.authorization = `Bearer ${sessionToken}`
     const response = await fetchImpl(endpoint, {
       method: 'POST',
-      headers: { ...tags, 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(wire === 'report' ? reportFor(note) : note),
     })
     if (response.ok) return 'sent'

@@ -156,3 +156,20 @@ test('a report sent to the worker carries the tags, and one sent elsewhere does 
   assert.equal('x-rt-client' in otherHeaders, false)
   configureWorkerClient({ tags: {} })
 })
+
+test('a report sent to the worker with the reader\'s session carries it, so the report names who sent it', async () => {
+  configureWorkerClient({ baseUrl: 'http://worker.test', tags: {} })
+  const note = noteFor({ ...plain, body: 'hello' })
+  const worker = recording(201)
+  assert.equal(await sendNote('http://worker.test/problem-reports', note, 'report', worker.fetchImpl, 'sess.jwt'), 'sent')
+  const sentHeaders = worker.seen.init?.headers as Record<string, string>
+  assert.equal(sentHeaders['authorization'], 'Bearer sess.jwt')
+  // Signed out, no header at all rather than an empty one.
+  const anon = recording(201)
+  await sendNote('http://worker.test/problem-reports', note, 'report', anon.fetchImpl, null)
+  assert.equal('authorization' in (anon.seen.init?.headers as Record<string, string>), false)
+  // A capture route elsewhere never sees the session.
+  const elsewhere = recording(200)
+  await sendNote('https://capture.example/point', note, 'note', elsewhere.fetchImpl, 'sess.jwt')
+  assert.equal('authorization' in (elsewhere.seen.init?.headers as Record<string, string>), false)
+})
