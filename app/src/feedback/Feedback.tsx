@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MessageSquareIcon } from 'lucide-react'
 
+import { GoogleButton } from '@/auth/GoogleSignIn'
+import { useGoogleOffered } from '@/auth/use-google-offered'
+import { usePaid } from '@/auth/use-paid'
 import { Button } from '@/components/ui/button'
 import { toLogical } from '@/lib/routing'
 
@@ -47,7 +50,13 @@ export function Feedback() {
     feedbackRequested(window.location.search) ? 'open' : 'shut',
   )
   const [note, setNote] = useState('')
-  const [email, setEmail] = useState('')
+  // Who is sending. A note is kept with the account that sent it, so it can be answered;
+  // signed out, the panel asks for a sign-in before it offers the words at all. The
+  // address itself travels as the session, verified by the worker (`point.ts`), not as a
+  // typed field.
+  const paid = usePaid()
+  const googleOffered = useGoogleOffered()
+  const [leaving, setLeaving] = useState(false)
   const [selector, setSelector] = useState<string | null>(null)
   const [quote, setQuote] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -152,9 +161,10 @@ export function Feedback() {
         route: pageAddress(pathname, window.location.search),
         selector,
         quote,
-        email,
       }),
       POINT_WIRE,
+      globalThis.fetch,
+      paid.session?.access_token ?? null,
     )
     setSending(false)
     if (outcome === 'sent') {
@@ -165,6 +175,15 @@ export function Feedback() {
       return
     }
     setSaid(outcomeSaid(outcome))
+  }
+
+  async function signIn() {
+    setLeaving(true)
+    const refused = await paid.signInWithGoogle()
+    if (refused !== null) {
+      setLeaving(false)
+      setSaid(refused)
+    }
   }
 
   const toggle = () => (mode === 'shut' ? open() : shut())
@@ -239,6 +258,22 @@ export function Feedback() {
                     </Button>
                   </div>
                 </>
+              ) : !paid.signedIn ? (
+                <>
+                  <p className="text-xs text-lawfare-text-secondary">{POINT.nature}</p>
+                  <p className="text-[13px]">{POINT.signInFirst}</p>
+                  {paid.ready && googleOffered ? (
+                    <GoogleButton onClick={() => void signIn()} leaving={leaving} />
+                  ) : (
+                    <p className="text-xs text-lawfare-text-secondary">{POINT.signInUnavailable}</p>
+                  )}
+                  {said !== null && (
+                    <p role="alert" className="text-xs text-destructive">
+                      {said}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-lawfare-muted">{POINT.signInWhy}</p>
+                </>
               ) : (
                 <>
                   <p className="text-xs text-lawfare-text-secondary">{POINT.nature}</p>
@@ -279,15 +314,11 @@ export function Feedback() {
                     onChange={(e) => setNote(e.target.value)}
                     className="w-full resize-y rounded-md border border-lawfare-line-strong bg-background p-2 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   />
-                  <input
-                    type="email"
-                    value={email}
-                    placeholder={POINT.reply}
-                    aria-label={POINT.reply}
-                    autoComplete="email"
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-md border border-lawfare-line-strong bg-background px-2 py-1.5 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                  />
+                  {paid.email && (
+                    <p className="text-xs text-lawfare-text-secondary">
+                      {POINT.sentAs} <span className="text-foreground">{paid.email}</span>
+                    </p>
+                  )}
                   {said !== null && (
                     <p role="alert" className="text-xs text-destructive">
                       {said}
