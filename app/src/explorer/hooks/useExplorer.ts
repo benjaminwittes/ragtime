@@ -27,6 +27,7 @@ import {
 import { beginInteraction } from '@/lib/interaction'
 import { explainRefusal } from '../model/allowance.ts'
 import { mergePinnedCorpora, normalizeBrief } from '../model/brief.ts'
+import { openTurn } from '../model/envelope.ts'
 import {
   CONVERSATION_PREFIX,
   INDEX_KEY,
@@ -325,7 +326,14 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
       // The conversation is the interaction: every turn of it carries the same
       // `x-rt-interaction`, so the console reads a conversation, not N turns.
       beginInteraction(cidRef.current)
-      const events = client.explorer.turn(req, auth, { signal: ac.signal })
+      // A conversation kept past its envelope's day (an old tab, a reopened conversation)
+      // sends an envelope the worker refuses; the turn goes on without it and the worker
+      // mints a new one, which `done` brings back (`model/envelope.ts`).
+      const events = openTurn((r) => client.explorer.turn(r, auth, { signal: ac.signal }), req, {
+        onEnvelopeDropped: () => {
+          conv.current = { ...conv.current, envelope: null }
+        },
+      })
       try {
         for await (const ev of events) {
           commit(applyEvent(turn, ev, Date.now()))
