@@ -25,6 +25,7 @@
 
 import type { CaseDisplayRow, FilterFields, QueryMode } from '@lawfare/ragtime-client'
 import type { ResultSource } from './components/ResultsList'
+import { judgeLabel } from './litigation/judges'
 
 /** One frame in the operations stack. */
 export type StackPage = {
@@ -90,8 +91,9 @@ export function buildManualFilterLabel(fields: FilterFields): string {
   if (fields.collection) {
     return truncate(`Collection: ${fields.collection}`)
   }
-  if (fields.judge?.trim()) {
-    return truncate(`Judge: ${fields.judge.trim()}`)
+  const judges = judgeLabel(fields.judge)
+  if (judges) {
+    return truncate(`${Array.isArray(fields.judge) && fields.judge.length > 1 ? 'Judges' : 'Judge'}: ${judges}`)
   }
   if (fields.cause?.trim()) {
     return truncate(`Cause: ${fields.cause.trim()}`)

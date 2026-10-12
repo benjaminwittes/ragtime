@@ -13,6 +13,7 @@ import {
   type FacetSpec,
 } from '@lawfare/ragtime-client'
 import { courtDisplayName } from '@/spokes/litigation/court-names'
+import { judgeField } from '@/spokes/litigation/judges'
 
 /**
  * Brief #6 §2's eight-axis filter form, ported from index.html.
@@ -27,8 +28,9 @@ import { courtDisplayName } from '@/spokes/litigation/court-names'
  * CourtListener at any filing date), courts = all-courts preset.
  *
  * Judge: a dropdown when the facet data carries a judge list, a free-text
- * name otherwise (CourtListener has no judge pick-list; its filter matches
- * the assigned judge by name).
+ * field otherwise (CourtListener has no judge pick-list; its filter matches
+ * the assigned judge by name). The text field takes several names separated
+ * by commas or semicolons and sends them as a list (site feedback 2026-10-01).
  */
 
 type FacetData = {
@@ -127,7 +129,8 @@ export function FilterForm({
     const fields: FilterFields = {
       ...(search ? { search } : {}),
       ...(name ? { name } : {}),
-      ...(judge ? { judge } : {}),
+      // One name or several, split on commas and semicolons (`litigation/judges.ts`).
+      ...judgeField(judge),
       ...(caseType ? { caseType } : {}),
       ...(collection ? { collection } : {}),
       ...(cause ? { cause } : {}),
@@ -284,7 +287,7 @@ export function FilterForm({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {showJudge && judgeAsText && (
-          <Field label="Judge" hint="Name">
+          <Field label="Judge" hint="One name, or several separated by commas">
             <Input
               value={judge}
               onChange={(e) => setJudge(e.target.value)}
