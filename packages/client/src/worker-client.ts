@@ -282,7 +282,7 @@ export type CollectionRef = {
  *  `case_count` its docket count over those courts — null when the count probe
  *  failed. `entry_count` and `last_synced` are null: there is no mirror and no
  *  sync. `judges` is empty — there is no judge pick-list upstream (the filter
- *  matches a judge by name). `collections` is the project's own curation;
+ *  matches a judge by name, one or several). `collections` is the project's own curation;
  *  `collections_unavailable` is true when it could not be read. */
 export type CorpusFacets = {
   case_count: number | null
@@ -326,8 +326,8 @@ export type FilterFields = {
   courts?: string[]
   /** Shortcut: include all courts (skips the courts predicate entirely). */
   allCourts?: boolean
-  /** Exact match on cases.judge. */
-  judge?: string
+  /** The assigned judge, matched by name: one name, or a list of names any of which matches. */
+  judge?: string | string[]
   /** One of cv / cr / mj / mc (civil / criminal / magistrate / misc). */
   caseType?: 'cv' | 'cr' | 'mj' | 'mc'
   /** Collection slug (from facets `collections`). The Worker resolves it to
