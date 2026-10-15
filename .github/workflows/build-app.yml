@@ -73,6 +73,12 @@ jobs:
         working-directory: .
         run: npm ci
 
+      # The family design tokens under src/vendor/ragtime-design/ are copied from the
+      # ragtime-design repo unchanged. verify.mjs checks each file against the hash in its
+      # own header, so a hand edit fails here; change the tokens upstream and re-vendor.
+      - name: Verify vendored design tokens
+        run: npm run verify:design
+
       - name: Lint
         run: npm run lint
 

@@ -1,0 +1,219 @@
+// ragtime-design v0.1.0 sha256:3dd5a1df55c4de793ee7c865c6f0eb8251033d1a444d4eee32dbd80e6dbda518
+{
+  "$description": "RAGtime family design tokens. The one source of truth: edit this file, run `task build`, never edit dist/ by hand. Values are round 1 proposals (2026-10-15), see docs/decisions.md.",
+  "version": "0.1.0",
+  "color": {
+    "light": {
+      "accent": {
+        "value": "#006a72",
+        "note": "Lawfare teal. Links, focus, the current place. The one live colour."
+      },
+      "accent-soft": {
+        "value": "#dcebea",
+        "note": "Selection, current row, quiet highlight."
+      },
+      "ink": {
+        "value": "#1d2125",
+        "note": "Body text and headings."
+      },
+      "ink-soft": {
+        "value": "#4a4f55",
+        "note": "Secondary text, nav links."
+      },
+      "ink-faint": {
+        "value": "#767a7f",
+        "note": "Metadata, separators, placeholders."
+      },
+      "rule": {
+        "value": "#d8d4cb",
+        "note": "Hairlines. Warm, never blue-grey."
+      },
+      "rule-soft": {
+        "value": "#e9e5dc",
+        "note": "Rules inside a raised surface."
+      },
+      "paper": {
+        "value": "#f5f3ee",
+        "note": "The page. Chrome paints this, never white."
+      },
+      "raised": {
+        "value": "#fbfaf7",
+        "note": "Sheets, menus, cards."
+      },
+      "sunk": {
+        "value": "#efece5",
+        "note": "Wells, inputs, table stripes."
+      },
+      "press": {
+        "value": "#e8e1cf",
+        "note": "Display surface: Recordbench front page, hero bands."
+      },
+      "desk": {
+        "value": "#ddd9d0",
+        "note": "What the paper lies on."
+      }
+    },
+    "dark": {
+      "accent": {
+        "value": "#6cc0bf"
+      },
+      "accent-soft": {
+        "value": "#1d3233"
+      },
+      "ink": {
+        "value": "#e6e3dc"
+      },
+      "ink-soft": {
+        "value": "#b4b1aa"
+      },
+      "ink-faint": {
+        "value": "#85837d"
+      },
+      "rule": {
+        "value": "#33383c"
+      },
+      "rule-soft": {
+        "value": "#262a2d"
+      },
+      "paper": {
+        "value": "#16191b"
+      },
+      "raised": {
+        "value": "#20252a"
+      },
+      "sunk": {
+        "value": "#1c2023"
+      },
+      "press": {
+        "value": "#131416"
+      },
+      "desk": {
+        "value": "#0c0e10"
+      }
+    }
+  },
+  "font": {
+    "ui": {
+      "value": "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+      "note": "All chrome: bars, buttons, labels, metadata."
+    },
+    "mono": {
+      "value": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+      "note": "Docket numbers, ids, dates."
+    },
+    "garamond": {
+      "value": "'EB Garamond', Garamond, 'Times New Roman', serif",
+      "note": "RAGtime voice."
+    },
+    "schola": {
+      "value": "'TeX Gyre Schola', 'Century Schoolbook', 'New Century Schoolbook', Georgia, serif",
+      "note": "The Ledger voice."
+    },
+    "iowan": {
+      "value": "'Iowan Old Style', Charter, 'Bitstream Charter', Georgia, serif",
+      "note": "Recordbench reading voice."
+    },
+    "didot": {
+      "value": "Didot, 'Bodoni 72', 'Bodoni MT', 'Playfair Display', serif",
+      "note": "Recordbench Press display."
+    }
+  },
+  "text": {
+    "xs": {
+      "value": "0.6875rem",
+      "note": "11px. The floor: nothing smaller."
+    },
+    "sm": {
+      "value": "0.75rem",
+      "note": "12px"
+    },
+    "ui": {
+      "value": "0.84375rem",
+      "note": "13.5px. Default chrome size."
+    },
+    "md": {
+      "value": "0.9375rem",
+      "note": "15px"
+    },
+    "read": {
+      "value": "1.0625rem",
+      "note": "17px. Body reading size."
+    },
+    "lg": {
+      "value": "1.3125rem",
+      "note": "21px"
+    },
+    "xl": {
+      "value": "1.75rem",
+      "note": "28px"
+    },
+    "2xl": {
+      "value": "2.5rem",
+      "note": "40px"
+    }
+  },
+  "space": {
+    "1": {
+      "value": "0.25rem"
+    },
+    "2": {
+      "value": "0.5rem"
+    },
+    "3": {
+      "value": "0.75rem"
+    },
+    "4": {
+      "value": "1rem"
+    },
+    "5": {
+      "value": "1.5rem"
+    },
+    "6": {
+      "value": "2rem"
+    },
+    "7": {
+      "value": "2.5rem"
+    },
+    "8": {
+      "value": "4rem"
+    }
+  },
+  "radius": {
+    "default": {
+      "value": "3px"
+    },
+    "press": {
+      "value": "0"
+    },
+    "pill": {
+      "value": "999px"
+    }
+  },
+  "chrome": {
+    "bar-height": {
+      "value": "52px",
+      "note": "Top bar. A phone adds the safe-area inset and at most one row."
+    },
+    "target": {
+      "value": "32px",
+      "note": "Icon target, desktop."
+    },
+    "target-phone": {
+      "value": "44px",
+      "note": "Icon target below the phone breakpoint."
+    },
+    "icon-stroke": {
+      "value": "1.5"
+    }
+  },
+  "breakpoint": {
+    "phone": {
+      "value": "40rem",
+      "note": "Below this: one column, 44px targets, the nav's phone form."
+    },
+    "tablet": {
+      "value": "64rem",
+      "note": "40-64rem: bar on one row, no side rails. At or above: desktop."
+    }
+  }
+}

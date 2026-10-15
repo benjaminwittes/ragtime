@@ -1,7 +1,10 @@
 /* RAGtime React app — design system base.
  *
- * Structure (Tailwind 4 + shadcn/ui + Lawfare brand overrides):
- *   1. Tailwind + shadcn imports
+ * Structure (Tailwind 4 + shadcn/ui + the RAGtime family tokens):
+ *   1. Tailwind + shadcn imports, then the family tokens vendored from
+ *      ragtime-design (`./vendor/ragtime-design/`, copied unchanged; the gate's
+ *      `verify:design` fails on a hand edit). They declare the `--rt-*` custom
+ *      properties and the `rt-*` utilities; everything below maps onto them.
  *   2. Custom-variant for dark mode (declared but not active — Lawfare brand
  *      is light-mode-only today; dark mode preserved as future-option)
  *   3. @theme inline — maps shadcn's --primary / --secondary / etc. semantics
@@ -9,11 +12,12 @@
  *      to the Lawfare fonts.
  *   4. Lawfare-extra @theme block — tokens shadcn doesn't have semantic slots
  *      for (e.g., lawfare-accent palette, surface variants).
- *   5. :root — color values for the shadcn semantics. Most are shadcn neutral
- *      defaults; the LAWFARE OVERRIDES section at the bottom switches --primary
- *      and --ring to Lawfare teal so brand color flows through Button focus etc.
- *   6. .dark — kept as shadcn default; not actively triggered (no .dark class
- *      added to <html> today). Reserved for future dark-mode work.
+ *   5. :root — the shadcn semantics, pointed at the family tokens wherever one
+ *      reads as text, a rule or a surface. What has no family counterpart
+ *      (destructive, the chart ramp, the sidebar set) keeps shadcn's value.
+ *   6. .dark — the same mapping, re-declared so it resolves inside a `.dark`
+ *      subtree as well as on <html>. Nothing sets the class yet; when something
+ *      does, the family's dark values follow without further edits here.
  *   7. @layer base — element-level resets via @apply.
  */
 
@@ -24,6 +28,11 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+/* The RAGtime family tokens, from ragtime-design. family.css declares the `--rt-*`
+ * properties (light on :root, dark on `.dark` / `[data-scheme="dark"]`); family.tailwind.css
+ * turns them into `rt-*` utilities. Before the app's own sheets, which read them. */
+@import './vendor/ragtime-design/family.css';
+@import './vendor/ragtime-design/family.tailwind.css';
 @import './explorer/explorer.css';
 @import './hub/hub.css';
 @import './components/owl.css';
@@ -88,27 +97,32 @@
 
 /* Lawfare-specific tokens that don't map onto shadcn's semantic vocabulary.
  * Accessible as Tailwind utility class names (e.g., `bg-lawfare-teal`,
- * `text-lawfare-muted`).
+ * `text-lawfare-muted`). The names stay; the values now come from the family
+ * tokens wherever the family has the same role, so a token change upstream
+ * repaints every `*-lawfare-*` utility without an edit here.
  */
 @theme {
-  /* Lawfare brand palette — teal + variants */
-  --color-lawfare-teal: #006a72;
+  /* Lawfare teal — the family's one accent: links, focus, the current place. */
+  --color-lawfare-teal: var(--rt-accent);
+  /* Hover and pressed shades. The family has no step for them yet, so they stay literal. */
   --color-lawfare-teal-light: #008a94;
   --color-lawfare-teal-dark: #00535a;
-  --color-lawfare-teal-bg: #e6f0f1;
+  /* The pale teal behind pills, chips and the reader's own turns: the family's accent-soft. */
+  --color-lawfare-teal-bg: var(--rt-accent-soft);
 
   /* Editorial surface tokens (the "blend" redesign — Direction 1 identity).
-   * `paper` is the warm off-white the magazine-style surfaces sit on (vs. the
-   * pure-white --card); `line` is the warm hairline rule used for editorial
-   * dividers (vs. the cooler --border #ddd). */
-  --color-lawfare-paper: #fbfaf7;
-  --color-lawfare-line: #e3e0d8;
+   * `paper` is what the page and the site bar sit on, so it is the family's page
+   * paper (`--rt-paper`); the raised surfaces (cards, sheets, menus) take
+   * `--rt-raised` through --card and --popover below. `line` is the warm hairline
+   * rule used for editorial dividers. */
+  --color-lawfare-paper: var(--rt-paper);
+  --color-lawfare-line: var(--rt-rule);
 
-  /* Lawfare-extra neutrals (legacy index.html uses these for secondary text +
-   * subtle surface variants where shadcn's --muted doesn't quite fit) */
-  --color-lawfare-text: #303030;
-  --color-lawfare-text-secondary: #555555;
-  --color-lawfare-muted: #777777;
+  /* Lawfare-extra neutrals. The three text steps are the family's ink ramp; the
+   * surface and border steps below have no current users and keep their values. */
+  --color-lawfare-text: var(--rt-ink);
+  --color-lawfare-text-secondary: var(--rt-ink-soft);
+  --color-lawfare-muted: var(--rt-ink-faint);
   --color-lawfare-surface: #f3f3f3;
   --color-lawfare-surface-alt: #eeeeee;
   --color-lawfare-border: #dddddd;
@@ -142,24 +156,32 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* shadcn semantics → the family tokens. The page is the family's paper and every
+   * raised surface (card, popover, sheet) is `--rt-raised`, which keeps the layering
+   * the editorial redesign set up: warm paper underneath, a lighter sheet on top. */
+  --background: var(--rt-paper);
+  --foreground: var(--rt-ink);
+  --card: var(--rt-raised);
+  --card-foreground: var(--rt-ink);
+  --popover: var(--rt-raised);
+  --popover-foreground: var(--rt-ink);
+  /* --primary was already Lawfare teal here (the default Button, links, focus), so it
+   * points at the family accent rather than going back to shadcn's near-black. */
+  --primary: var(--rt-accent);
+  --primary-foreground: #ffffff;
+  /* shadcn's quiet fills (hover rows, muted wells, secondary buttons) are the family's
+   * sunk surface. Note shadcn's `--accent` is one of these fills; the family's accent
+   * colour is `--primary` / `--rt-accent`. */
+  --secondary: var(--rt-sunk);
+  --secondary-foreground: var(--rt-ink);
+  --muted: var(--rt-sunk);
+  --muted-foreground: var(--rt-ink-soft);
+  --accent: var(--rt-sunk);
+  --accent-foreground: var(--rt-ink);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: var(--rt-rule);
+  --input: var(--rt-rule);
+  --ring: var(--rt-accent);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -174,23 +196,6 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-
-  /* LAWFARE OVERRIDES — switch shadcn semantic vars to Lawfare brand values.
-   * --primary drives default Button background, link color, etc.
-   * --ring drives focus-visible outlines.
-   * Hex values match the legacy index.html exactly.
-   */
-  --primary: #006a72;
-  --primary-foreground: #ffffff;
-  --ring: #006a72;
-  --foreground: #303030;
-  /* Editorial redesign ("blend" Direction 1): the app sits on warm paper with
-   * warm hairline rules; white --card surfaces (forms, results, sheets) layer
-   * on top. Shifting these two tokens carries the identity across the hub and
-   * all five spokes without repainting each surface. */
-  --background: #fbfaf7;
-  --border: #e3e0d8;
-  --input: #e3e0d8;
 
   /* The ask box, measured. This site asks a question in one component
    * (`components/AskBox.tsx`) wearing two skins: the hub's cross-corpus search and the
@@ -230,25 +235,37 @@
   --ask-font-size: 1.25rem; /* was text-xl, whose line height is now said as leading-7 */
 }
 
+/* The same mapping as :root. family.css swaps the `--rt-*` values under `.dark`, and a
+ * custom property resolves its var() where it is declared, so re-declaring here is what
+ * lets a `.dark` subtree (not only <html>) pick up the dark values. The lawfare-* palette
+ * is re-declared for the same reason. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: var(--rt-paper);
+  --foreground: var(--rt-ink);
+  --card: var(--rt-raised);
+  --card-foreground: var(--rt-ink);
+  --popover: var(--rt-raised);
+  --popover-foreground: var(--rt-ink);
+  --primary: var(--rt-accent);
+  /* The dark accent is a light teal, so text on it is the dark page paper, not white. */
+  --primary-foreground: var(--rt-paper);
+  --secondary: var(--rt-sunk);
+  --secondary-foreground: var(--rt-ink);
+  --muted: var(--rt-sunk);
+  --muted-foreground: var(--rt-ink-soft);
+  --accent: var(--rt-sunk);
+  --accent-foreground: var(--rt-ink);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: var(--rt-rule);
+  --input: var(--rt-rule);
+  --ring: var(--rt-accent);
+  --color-lawfare-teal: var(--rt-accent);
+  --color-lawfare-teal-bg: var(--rt-accent-soft);
+  --color-lawfare-paper: var(--rt-paper);
+  --color-lawfare-line: var(--rt-rule);
+  --color-lawfare-text: var(--rt-ink);
+  --color-lawfare-text-secondary: var(--rt-ink-soft);
+  --color-lawfare-muted: var(--rt-ink-faint);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);

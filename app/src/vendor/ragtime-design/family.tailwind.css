@@ -1,0 +1,39 @@
+/* ragtime-design v0.1.0 sha256:f00ee4fa7f982e6bee26eabc204fc0b1b2d1e3f3074485b3a0a20eef77e56808 */
+/*
+ * RAGtime family tokens as a Tailwind v4 theme. Import after family.css.
+ * Generated from tokens/family.json in Lawfare-Media/ragtime-design. Do not edit.
+ */
+
+@theme inline {
+  --color-rt-accent: var(--rt-accent);
+  --color-rt-accent-soft: var(--rt-accent-soft);
+  --color-rt-ink: var(--rt-ink);
+  --color-rt-ink-soft: var(--rt-ink-soft);
+  --color-rt-ink-faint: var(--rt-ink-faint);
+  --color-rt-rule: var(--rt-rule);
+  --color-rt-rule-soft: var(--rt-rule-soft);
+  --color-rt-paper: var(--rt-paper);
+  --color-rt-raised: var(--rt-raised);
+  --color-rt-sunk: var(--rt-sunk);
+  --color-rt-press: var(--rt-press);
+  --color-rt-desk: var(--rt-desk);
+  --font-rt-ui: var(--rt-font-ui);
+  --font-rt-mono: var(--rt-font-mono);
+  --font-rt-garamond: var(--rt-font-garamond);
+  --font-rt-schola: var(--rt-font-schola);
+  --font-rt-iowan: var(--rt-font-iowan);
+  --font-rt-didot: var(--rt-font-didot);
+  --text-rt-xs: var(--rt-text-xs);
+  --text-rt-sm: var(--rt-text-sm);
+  --text-rt-ui: var(--rt-text-ui);
+  --text-rt-md: var(--rt-text-md);
+  --text-rt-read: var(--rt-text-read);
+  --text-rt-lg: var(--rt-text-lg);
+  --text-rt-xl: var(--rt-text-xl);
+  --text-rt-2xl: var(--rt-text-2xl);
+  --radius-rt-default: var(--rt-radius-default);
+  --radius-rt-press: var(--rt-radius-press);
+  --radius-rt-pill: var(--rt-radius-pill);
+  --breakpoint-rt-phone: 40rem;
+  --breakpoint-rt-tablet: 64rem;
+}

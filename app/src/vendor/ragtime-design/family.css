@@ -1,0 +1,70 @@
+/* ragtime-design v0.1.0 sha256:aaccc9296c532a58dfe1b4c48f22057fee2b12ce12a4b1fa6b610630d4099eba */
+/*
+ * RAGtime family tokens. Generated from tokens/family.json in Lawfare-Media/ragtime-design.
+ * Do not edit: change the source, run `task build`, re-vendor.
+ *
+ * Breakpoints (media queries cannot read custom properties, so write the literal):
+ *   phone   40rem  Below this: one column, 44px targets, the nav's phone form.
+ *   tablet  64rem  40-64rem: bar on one row, no side rails. At or above: desktop.
+ */
+
+:root {
+  --rt-accent: #006a72; /* Lawfare teal. Links, focus, the current place. The one live colour. */
+  --rt-accent-soft: #dcebea; /* Selection, current row, quiet highlight. */
+  --rt-ink: #1d2125; /* Body text and headings. */
+  --rt-ink-soft: #4a4f55; /* Secondary text, nav links. */
+  --rt-ink-faint: #767a7f; /* Metadata, separators, placeholders. */
+  --rt-rule: #d8d4cb; /* Hairlines. Warm, never blue-grey. */
+  --rt-rule-soft: #e9e5dc; /* Rules inside a raised surface. */
+  --rt-paper: #f5f3ee; /* The page. Chrome paints this, never white. */
+  --rt-raised: #fbfaf7; /* Sheets, menus, cards. */
+  --rt-sunk: #efece5; /* Wells, inputs, table stripes. */
+  --rt-press: #e8e1cf; /* Display surface: Recordbench front page, hero bands. */
+  --rt-desk: #ddd9d0; /* What the paper lies on. */
+  --rt-font-ui: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; /* All chrome: bars, buttons, labels, metadata. */
+  --rt-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; /* Docket numbers, ids, dates. */
+  --rt-font-garamond: 'EB Garamond', Garamond, 'Times New Roman', serif; /* RAGtime voice. */
+  --rt-font-schola: 'TeX Gyre Schola', 'Century Schoolbook', 'New Century Schoolbook', Georgia, serif; /* The Ledger voice. */
+  --rt-font-iowan: 'Iowan Old Style', Charter, 'Bitstream Charter', Georgia, serif; /* Recordbench reading voice. */
+  --rt-font-didot: Didot, 'Bodoni 72', 'Bodoni MT', 'Playfair Display', serif; /* Recordbench Press display. */
+  --rt-text-xs: 0.6875rem; /* 11px. The floor: nothing smaller. */
+  --rt-text-sm: 0.75rem; /* 12px */
+  --rt-text-ui: 0.84375rem; /* 13.5px. Default chrome size. */
+  --rt-text-md: 0.9375rem; /* 15px */
+  --rt-text-read: 1.0625rem; /* 17px. Body reading size. */
+  --rt-text-lg: 1.3125rem; /* 21px */
+  --rt-text-xl: 1.75rem; /* 28px */
+  --rt-text-2xl: 2.5rem; /* 40px */
+  --rt-space-1: 0.25rem;
+  --rt-space-2: 0.5rem;
+  --rt-space-3: 0.75rem;
+  --rt-space-4: 1rem;
+  --rt-space-5: 1.5rem;
+  --rt-space-6: 2rem;
+  --rt-space-7: 2.5rem;
+  --rt-space-8: 4rem;
+  --rt-radius-default: 3px;
+  --rt-radius-press: 0;
+  --rt-radius-pill: 999px;
+  --rt-bar-height: 52px; /* Top bar. A phone adds the safe-area inset and at most one row. */
+  --rt-target: 32px; /* Icon target, desktop. */
+  --rt-target-phone: 44px; /* Icon target below the phone breakpoint. */
+  --rt-icon-stroke: 1.5;
+}
+
+:root[data-scheme="dark"],
+:root[data-mode="dark"],
+.dark {
+  --rt-accent: #6cc0bf;
+  --rt-accent-soft: #1d3233;
+  --rt-ink: #e6e3dc;
+  --rt-ink-soft: #b4b1aa;
+  --rt-ink-faint: #85837d;
+  --rt-rule: #33383c;
+  --rt-rule-soft: #262a2d;
+  --rt-paper: #16191b;
+  --rt-raised: #20252a;
+  --rt-sunk: #1c2023;
+  --rt-press: #131416;
+  --rt-desk: #0c0e10;
+}
