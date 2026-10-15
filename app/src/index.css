@@ -21,9 +21,11 @@
  *   7. @layer base — element-level resets via @apply.
  */
 
-/* Self-hosted EB Garamond + Lato. First, because @font-face must be declared
- * before anything can use it. Generated — see app/scripts/fetch-fonts.mjs. */
+/* The faces, first, because @font-face must be declared before anything can use it.
+ * EB Garamond is self-hosted here (generated — see app/scripts/fetch-fonts.mjs). Inter,
+ * the family's chrome face, comes from the design package with its own file. */
 @import './fonts.css';
+@import '@lawfare/ragtime-design/family-fonts.css';
 
 @import 'tailwindcss';
 @import 'tw-animate-css';
@@ -50,7 +52,8 @@
 
 @theme inline {
   /* Fonts (Lawfare identity, self-hosted — see ./fonts.css) */
-  --font-sans: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* The family's chrome face (Inter). EB Garamond stays the serif: wordmark, headings, reading. */
+  --font-sans: var(--rt-font-ui);
   --font-serif: 'EB Garamond', Garamond, Georgia, serif;
   --font-mono: ui-monospace, 'SF Mono', Monaco, Menlo, monospace;
   --font-heading: var(--font-serif);

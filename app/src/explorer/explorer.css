@@ -13,7 +13,7 @@
  */
 
 /* RAGtime Explorer — one stylesheet for the first shape. Lawfare's fonts
- * (Lato for the page and its answers, EB Garamond for headings, the names of
+ * (Inter for the page and its answers, EB Garamond for headings, the names of
  * documents and the record's own quoted words) with system fallbacks;
  * teal as the one accent. Layout: a strip of meter, allowance and the trail's
  * toggle across the top, the conversation under it at full width, and the trail
@@ -45,7 +45,7 @@
   --ok: #1f7a3a;
   --bad: #a52a2a;
   --bad-soft: #fdecec;
-  --sans: var(--font-sans, 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  --sans: var(--font-sans, var(--rt-font-ui));
   --serif: var(--font-serif, 'EB Garamond', Garamond, Georgia, serif);
   --mono: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
 
@@ -273,7 +273,8 @@
 
 /* The faces, inverted.
  *
- * Lato speaks for the app and EB Garamond for the record. The whole answer used to be set
+ * The sans (Inter since the family moved its chrome there; Lato before) speaks for the app
+ * and EB Garamond for the record. The whole answer used to be set
  * in the serif, so the reader had no way to tell the page's own synthesis from the words it
  * was synthesised from — the two voices wore one face. The synthesis is now the app's, in
  * the app's sans at the site's own body size; the serif is kept for three things and marked
@@ -282,13 +283,13 @@
  * record's own quoted words, which also take a leading rule.
  *
  * 16px/1.6 rather than 17px/1.55. The old numbers were chosen for Garamond's small
- * x-height; Lato's is about a sixth larger, so 16px Lato stands as tall as 17px Garamond
- * on the page, and 16px is what the site sets its own body copy at. The line pitch goes
+ * x-height; Lato's was about a sixth larger, so 16px Lato stood as tall as 17px Garamond
+ * on the page (Inter's x-height is larger again, so 16px Inter stands a little taller), and 16px is what the site sets its own body copy at. The line pitch goes
  * from 26.35px to 25.6px — under 3% — so the answer's vertical rhythm barely moves while
  * its voice changes, which is the point.
  *
  * The measure is untouched, and deliberately: `--x-measure` is 80ch declared on
- * `.conversation`, which inherits the Explorer's own 15px Lato, so the `ch` never resolved
+ * `.conversation`, which inherits the Explorer's own 15px sans, so the `ch` never resolved
  * against the serif and the column is exactly the width it was. Restating it in `rem` for
  * this one rule would also have desynced it from `.brief-bar .brief`, which reads the same
  * property so that a brief sits over the answer it produced. */

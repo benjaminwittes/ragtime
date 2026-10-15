@@ -137,7 +137,7 @@ export const globalKnobs = defineTunables([
     group: 'Type',
     scope: 'global',
     kind: 'text',
-    value: "'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    value: 'var(--rt-font-ui)',
     prop: '--font-sans',
     source: { file: INDEX_CSS, selector: '@theme inline' },
     note: 'A full stack. Whatever you name has to be loaded in app/index.html to render.',
