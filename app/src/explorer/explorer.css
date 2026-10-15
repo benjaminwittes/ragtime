@@ -217,20 +217,31 @@
 
 /* Brief card.
  *
- * A caution keeps its wash and loses its box. Nothing amber goes: the fill is the same, and
- * the four-sided `#f1d9b0` hairline is replaced by a leading rule in `--warn`, which the
- * sheet already owns. It was 3px, argued as a mark rather than an edge, and pinned above
- * every conversation it was the loudest thing on the Explorer; it is 2px now, the one weight
- * every other leading rule on this sheet carries — the trail's calls, the record's quoted
- * words, the question and the error — so a rule marks without shouting. What that buys is
- * one family out of three blocks: the brief, the clarifying question and the error are now
- * the same shape in three colours, and a four-sided border on this surface goes back to
- * meaning only that the reader can act on the thing. The buttons inside (`.brief-actions`)
- * are exactly that, so they keep their edges in `--line-strong` and their 3px corners. The
- * 12px corner was `--x-radius-card`, and the brief was the last rule reading it, so the
- * property is gone from the tokens above and its knob from `tune.ts` — a knob that moves
- * nothing is a slider that lies about the page. */
-.explorer .brief { border-left: 2px solid var(--warn); background: var(--warn-soft); padding: 12px 16px; margin: 12px 0; }
+ * The brief is a raised sheet, not a caution (ruled 2026-10-15). It used to wear the amber
+ * wash and the `--warn` leading rule the clarifying question and the error wear, as one
+ * family of three blocks in three colours. But the brief is not a warning: it is the thing
+ * the reader edits and then runs, and on the family's warm paper amber over peach read as
+ * muddy rather than as a place to work. So it takes the family's raised surface
+ * (`--rt-raised`, the tone cards and menus sit on), a hairline in `--line` on the three
+ * sides the reader does not enter from, and a leading rule in `--accent`, because teal is
+ * what marks the current place and this is where the work happens. The question and the
+ * error keep their own colours: those two still interrupt.
+ *
+ * The rule stays at 2px, the one weight every leading rule on this sheet carries — the
+ * trail's calls, the record's quoted words, the question and the error. The hairline is
+ * drawn as a border, as every edge on this sheet is; a `box-shadow` ring would draw
+ * outside the teal rule and soften it. Three hairlines and a rule are an exception to the
+ * convention that a four-sided border means a control, and a deliberate one: the brief is
+ * a form, and the reader does act on it. The buttons inside (`.brief-actions`) keep their
+ * own edges in `--line-strong` and their 3px corners, so the controls still read as the
+ * controls. The surface has no corners: the 12px `--x-radius-card` went with the brief's
+ * old box, and its knob left `tune.ts` with it.
+ *
+ * `--rt-raised` is read directly rather than through `--card`: the sheet's `--card` alias
+ * names itself, so it cannot be relied on here. The collapsed brief over a conversation
+ * (`.brief-compact` inside `.brief-bar`) is the same element, so it changes with this rule.
+ * In `.dark`, the family tokens move and the brief moves with them. */
+.explorer .brief { border: 1px solid var(--line); border-left: 2px solid var(--accent); background: var(--rt-raised); padding: 12px 16px; margin: 12px 0; }
 .explorer .brief-compact { padding: 10px 14px; }
 .explorer .brief-head { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
 .explorer .brief-title { font-weight: 700; }
@@ -395,8 +406,10 @@
  * terminal call — which is what retires the `#efc4c4` and `#f1d9b0` hairlines those two were
  * drawn in. A call with no result yet wears no rule and does not need one: the room for it
  * is already in the row's left padding, so the line does not step sideways when the result
- * lands. The terminal call keeps its amber wash for the reason the brief keeps its own — a
- * wash is not an enclosure. */
+ * lands. The terminal call keeps its amber wash: the run stopped
+ * there, which is a caution, and a wash is not an enclosure. (The brief used to share
+ * that wash. It left it on 2026-10-15, because a brief is the thing the reader runs and
+ * not a caution. See the brief card.) */
 .explorer .call { border-top: 1px solid var(--line); padding: 6px 0 6px 10px; margin: 0; }
 .explorer .call.ok { border-left: 2px solid var(--ok); padding-left: 8px; }
 .explorer .call.bad { border-left: 2px solid var(--bad); padding-left: 8px; }
