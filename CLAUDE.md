@@ -3,7 +3,7 @@
 This is the **public frontend repo** of the RAGtime Platform: the React app (`app/` — hub +
 per-corpus spoke surfaces, deployed at https://ragtime.lawfaremedia.org/) plus the legacy
 single-file `index.html` (preserved at `/legacy.html`). The backend Worker, DB migrations, and
-deploy pipeline live in the **private** `benjaminwittes/ragtime-worker` repo (split 2026-06-26);
+deploy pipeline live in the **private** `Lawfare-Media/ragtime-worker` repo (split 2026-06-26);
 corpus ingest lives in the private `benjaminwittes/ragtime-pipeline` repo. The full operating
 manual and durable project narrative live in `benjaminwittes/ragtime-dev`.
 
