@@ -224,7 +224,7 @@ export const explorerKnobs = defineTunables([
     group: 'Colour',
     scope: 'explorer',
     kind: 'color',
-    value: 'var(--primary, #006a72)',
+    value: 'var(--primary, var(--rt-accent))',
     prop: '--accent',
     derived: true,
     source: { file: CSS, selector: '.explorer' },

@@ -22,10 +22,10 @@
 /* Tokens. Every value the Explorer's sheet reads is one of the app's: the shadcn
  * semantics `index.css` already overrides for Lawfare (`--primary`, `--foreground`,
  * `--background`, `--border`, `--card`) and the `@theme` lawfare-* colours, with the
- * Explorer's own literal as the fallback so nothing depends on which theme variables the
- * build kept. The four states (warn / ok / bad) have no app slot yet and stay literal. */
+ * Explorer's own literal (or the family token it now names) as the fallback so nothing
+ * depends on which theme variables the build kept. The four states (warn / ok / bad) have no app slot yet and stay literal. */
 .explorer {
-  --ink: var(--foreground, #303030);
+  --ink: var(--foreground, var(--rt-ink));
   --dim: var(--color-lawfare-text-secondary, #555555);
   --faint: var(--color-lawfare-muted, #777777);
   --line: var(--border, #e3e0d8);
@@ -36,7 +36,7 @@
   --line-strong: var(--color-lawfare-line-strong, #cdc8ba);
   --bg: var(--background, #fbfaf7);
   --card: var(--card, #ffffff);
-  --accent: var(--primary, #006a72);
+  --accent: var(--primary, var(--rt-accent));
   --accent-soft: var(--color-lawfare-teal-bg, #e6f0f1);
   /* The RAGtime mark's colour: sampled by eye from the Lawfare banner. Not the brand value; swap it here when that is supplied. */
   --x-mark: #2b6872;
