@@ -139,8 +139,8 @@ export const explorerKnobs = defineTunables([
 
   /* ---- Shape -----------------------------------------------------------
    * One knob, where there were two. `explorer.radiusCard` drove `--x-radius-card`,
-   * which by the end drove one rule: the brief's 12px corner. The brief is a wash
-   * with a leading rule now, so the property had nothing left to move, and a knob
+   * which by the end drove one rule: the brief's 12px corner. The brief has no corners
+   * now (a raised sheet with a leading rule), so the property had nothing left to move, and a knob
    * that moves nothing is a slider that lies about the page. Both are gone.
    */
   {
@@ -186,7 +186,7 @@ export const explorerKnobs = defineTunables([
     value: '#9a5b12',
     prop: '--warn',
     source: { file: CSS, selector: '.explorer' },
-    note: 'The brief, the clarifying question, an allowance running out.',
+    note: 'The clarifying question, a terminal call, an allowance running out.',
   },
   {
     id: 'explorer.warnSoft',
