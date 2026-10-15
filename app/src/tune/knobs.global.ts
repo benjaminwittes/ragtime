@@ -13,7 +13,7 @@
  * block for the Lawfare palette Tailwind turns into utilities, `@theme inline`
  * for the fonts. Keep them in step with the file; a default that lies makes
  * "changed since default" lie with it. Most colours are authored as `var(--rt-*)`,
- * the family tokens vendored from ragtime-design, so their defaults say so too.
+ * the family tokens from @lawfare/ragtime-design, so their defaults say so too.
  */
 
 import { defineTunables } from './registry'

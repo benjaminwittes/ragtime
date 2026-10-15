@@ -1,10 +1,10 @@
 /* RAGtime React app — design system base.
  *
  * Structure (Tailwind 4 + shadcn/ui + the RAGtime family tokens):
- *   1. Tailwind + shadcn imports, then the family tokens vendored from
- *      ragtime-design (`./vendor/ragtime-design/`, copied unchanged; the gate's
- *      `verify:design` fails on a hand edit). They declare the `--rt-*` custom
- *      properties and the `rt-*` utilities; everything below maps onto them.
+ *   1. Tailwind + shadcn imports, then the family tokens from the
+ *      `@lawfare/ragtime-design` package (pinned by tag in app/package.json).
+ *      They declare the `--rt-*` custom properties and the `rt-*` utilities;
+ *      everything below maps onto them.
  *   2. Custom-variant for dark mode (declared but not active — Lawfare brand
  *      is light-mode-only today; dark mode preserved as future-option)
  *   3. @theme inline — maps shadcn's --primary / --secondary / etc. semantics
@@ -28,11 +28,12 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
-/* The RAGtime family tokens, from ragtime-design. family.css declares the `--rt-*`
- * properties (light on :root, dark on `.dark` / `[data-scheme="dark"]`); family.tailwind.css
- * turns them into `rt-*` utilities. Before the app's own sheets, which read them. */
-@import './vendor/ragtime-design/family.css';
-@import './vendor/ragtime-design/family.tailwind.css';
+/* The RAGtime family tokens, from the `@lawfare/ragtime-design` package. family.css declares
+ * the `--rt-*` properties (light on :root, dark on `.dark` / `[data-scheme="dark"]`);
+ * family.tailwind.css turns them into `rt-*` utilities. Before the app's own sheets, which
+ * read them. To move to a new release, change the tag in app/package.json and `npm install`. */
+@import '@lawfare/ragtime-design/family.css';
+@import '@lawfare/ragtime-design/family.tailwind.css';
 @import './explorer/explorer.css';
 @import './hub/hub.css';
 @import './components/owl.css';

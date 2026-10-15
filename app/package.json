@@ -9,14 +9,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "check": "npm run verify:design",
-    "verify:design": "node src/vendor/ragtime-design/verify.mjs",
     "preview": "vite preview",
     "e2e": "node e2e/scenarios.mjs && node e2e/conversations.mjs && node e2e/links.mjs && node e2e/cross.mjs && node e2e/band.mjs && node e2e/spokes.mjs && node e2e/books.mjs && node e2e/connected.mjs && node e2e/mark.mjs && node e2e/feedback.mjs && node e2e/tour.mjs && node e2e/demo.mjs && node e2e/stage.mjs && node e2e/signin.mjs && node e2e/consent.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
     "@lawfare/ragtime-client": "*",
+    "@lawfare/ragtime-design": "github:Lawfare-Media/ragtime-design#v0.1.0",
     "@supabase/supabase-js": "^2.106.2",
     "@tailwindcss/vite": "^4.3.0",
     "class-variance-authority": "^0.7.1",
