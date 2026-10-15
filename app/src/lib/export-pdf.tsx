@@ -31,17 +31,17 @@ function esc(s: string): string {
 
 const PRINT_CSS = `
 @page { margin: 0.75in; }
-body { font-family: Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#303030; line-height:1.55; font-size:11pt; margin:0; padding:0; }
+body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#303030; line-height:1.55; font-size:11pt; margin:0; padding:0; }
 .pdf-header { border-bottom: 2px solid #006A72; padding-bottom: 14pt; margin-bottom: 18pt; }
 .pdf-title { font-family: "EB Garamond", Garamond, Georgia, serif; font-size: 28pt; color: #006A72; font-weight: 700; line-height: 1.1; margin-bottom: 4pt; }
 .pdf-subtitle { font-family: "EB Garamond", Garamond, Georgia, serif; font-size: 13pt; font-style: italic; color: #555; margin-bottom: 12pt; }
-.pdf-meta { font-family: Lato, sans-serif; font-size: 9.5pt; color: #555; }
+.pdf-meta { font-family: Inter, sans-serif; font-size: 9.5pt; color: #555; }
 .pdf-meta .meta-row { margin-bottom: 3pt; }
 .pdf-meta .meta-key { font-weight: 700; color: #303030; }
 .md-content h1 { font-family: "EB Garamond", serif; font-size: 18pt; color: #006A72; margin: 18pt 0 8pt; font-weight: 700; }
 .md-content h2 { font-family: "EB Garamond", serif; font-size: 15pt; color: #006A72; margin: 14pt 0 6pt; font-weight: 700; }
 .md-content h3 { font-family: "EB Garamond", serif; font-size: 12.5pt; color: #303030; margin: 12pt 0 4pt; font-weight: 700; }
-.md-content h4 { font-family: Lato, sans-serif; font-size: 11pt; color: #303030; margin: 10pt 0 3pt; font-weight: 700; }
+.md-content h4 { font-family: Inter, sans-serif; font-size: 11pt; color: #303030; margin: 10pt 0 3pt; font-weight: 700; }
 .md-content p { margin: 0 0 8pt; }
 .md-content ul, .md-content ol { margin: 0 0 8pt 24pt; padding: 0; }
 .md-content li { margin-bottom: 3pt; }
@@ -54,7 +54,7 @@ body { font-family: Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-se
 .md-content th, .md-content td { border: 1px solid #ddd; padding: 3pt 6pt; text-align: left; }
 .md-content th { background: #f3f3f3; font-weight: 700; }
 .md-content hr { border: none; border-top: 1px solid #ddd; margin: 14pt 0; }
-.pdf-footer { margin-top: 28pt; padding-top: 8pt; border-top: 1px solid #ddd; font-size: 8.5pt; color: #777; text-align: center; font-family: Lato, sans-serif; }
+.pdf-footer { margin-top: 28pt; padding-top: 8pt; border-top: 1px solid #ddd; font-size: 8.5pt; color: #777; text-align: center; font-family: Inter, sans-serif; }
 .pdf-foot-brand { color: #006A72; font-weight: 700; }
 @media print {
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
