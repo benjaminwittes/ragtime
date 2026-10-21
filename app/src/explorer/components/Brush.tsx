@@ -4,6 +4,7 @@ import { MARK } from '../mark/config.ts'
 import { drawGlyph, glyphHeight, restingGlyph, stepGlyph } from '../mark/glyph.ts'
 import { markColor, prefersStill } from '../mark/page.ts'
 import { advance, linesOf, locate, pathLength, SETTLE_RUNWAY, type Box, type Line } from '../mark/reveal.ts'
+import { followOf } from './follow.ts'
 
 type Props = {
   /** Write the answer in with the mark. Fixed for the life of the component: it is not a toggle. */
@@ -143,10 +144,9 @@ function paint(el: HTMLElement, page: HTMLElement, arriving: () => boolean, setP
   g.p = 0
   const scrolls = scroller(el)
   const fs = parseFloat(getComputedStyle(page).fontSize) || 16
-  let follow = true
-  const stop = () => (follow = false)
-  window.addEventListener('wheel', stop, { passive: true })
-  window.addEventListener('touchmove', stop, { passive: true })
+  // Whether the reader is at the end, shared with the conversation: one who has scrolled up
+  // to read is left there, by the brush as by the conversation (`follow.ts`).
+  const follow = followOf(el)
 
   // The answer grows and re-wraps under the brush, and none of that is the brush's doing:
   // it is told when the lines it walks have changed, and measures them again.
@@ -188,8 +188,7 @@ function paint(el: HTMLElement, page: HTMLElement, arriving: () => boolean, setP
     cv.remove()
     wash.remove()
     el.removeAttribute('data-painting')
-    window.removeEventListener('wheel', stop)
-    window.removeEventListener('touchmove', stop)
+    follow.release()
     mo.disconnect()
     ro.disconnect()
     setPainting(false)
@@ -269,7 +268,7 @@ function paint(el: HTMLElement, page: HTMLElement, arriving: () => boolean, setP
     c.clearRect(0, 0, cw, h)
     drawGlyph(c, g, teal, t, MARK.trail, gl)
 
-    if (follow && at) {
+    if (follow.on && at) {
       // Keep the glyph in view, easing rather than jumping.
       const view = scrolls ? scrolls.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
       const excess = el.getBoundingClientRect().top + gy + h - (view.bottom - 90)

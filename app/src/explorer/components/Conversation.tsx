@@ -6,6 +6,7 @@ import { phasePill, plural, workingLabel } from '../model/format.ts'
 import { acceptMarker, type Turn, answerText } from '../model/turn.ts'
 import { Answer } from './Answer.tsx'
 import { BriefCard } from './BriefCard.tsx'
+import { followOf, type Follow } from './follow.ts'
 import { Mark } from './Mark.tsx'
 import { Markdown } from './Markdown.tsx'
 
@@ -21,10 +22,24 @@ type Props = {
 
 export function Conversation({ turns, brief, proposed, registry, now, busy, onAccept }: Props) {
   const end = useRef<HTMLDivElement>(null)
+  // The page goes to the end as the turn comes in only while the reader is there: one who
+  // has scrolled up to read an earlier answer is left reading it (`follow.ts`).
+  const follow = useRef<Follow | null>(null)
+  useEffect(() => {
+    const f = followOf(end.current!)
+    follow.current = f
+    return () => f.release()
+  }, [])
+  // Asking something, or opening another conversation, takes the reader back to the end.
+  const asked = turns.length
+  const opened = turns[0]?.startedAt
+  useEffect(() => {
+    follow.current?.pin()
+  }, [asked, opened])
   // While the brush paints an answer in it follows its own glyph down the page, so the page must not jump to the end under it.
   const [painting, setPainting] = useState(false)
   useEffect(() => {
-    if (!painting) end.current?.scrollIntoView({ block: 'end' })
+    if (!painting && follow.current?.on) end.current?.scrollIntoView({ block: 'end' })
   }, [turns, painting])
 
   // The working label of the one running turn (always the last). A keepalive carries no
