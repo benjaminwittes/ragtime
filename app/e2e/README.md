@@ -34,6 +34,7 @@ node e2e/conversations.mjs               # keeping, adopting and forgetting conv
 node e2e/links.mjs                       # where every link in an answer goes
 node e2e/cross.mjs                       # the seam: a citation followed out, and Back
 node e2e/mark.mjs                        # the mark: a live answer painted in, a restored one just shown
+node e2e/follow.mjs                      # reading back while the next answer comes in: left where you are
 node e2e/feedback.mjs                    # the feedback button on every surface; files nothing
 node e2e/tour.mjs                        # the guided tour, every step, at a desk and on a phone
 node e2e/demo.mjs                        # the presenter's kit at /demo, sealed by the driver itself; and ?docs=
