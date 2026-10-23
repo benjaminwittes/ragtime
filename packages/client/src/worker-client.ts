@@ -76,6 +76,11 @@ export type HubKeywordCorpusBlock = {
 
 export type HubKeywordResponse = {
   query: string
+  /** How the worker read `query` under the keyword grammar (words required,
+   *  "phrases", -exclusions, uppercase OR), in that grammar's own form:
+   *  `"war powers" (aumf OR authorization) -iraq`. Empty when no required
+   *  term survived. Absent from a worker that predates the grammar. */
+  interpreted?: string
   per_corpus: Partial<Record<HubCorpusSlug, HubKeywordCorpusBlock>>
 }
 
