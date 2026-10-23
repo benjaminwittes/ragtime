@@ -22,6 +22,7 @@ import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { startTour } from '@/tour/start'
 import { TOUR } from '@/tour/steps'
 import { TICKS, type SampleSet } from './samples'
+import { searchedAsLine } from './searched-as'
 import { useTick } from './tune'
 
 gsap.registerPlugin(useGSAP)
@@ -809,22 +810,33 @@ function HubKeywordResults({
   const corporaWithHits = corpora.filter(
     (c) => (response.per_corpus[c]?.count ?? 0) > 0,
   )
+  const searchedAs = searchedAsLine(query, response.interpreted)
 
   return (
     <section className="mt-6 space-y-4" aria-busy={loading}>
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 className="font-serif text-lg font-semibold">
-          {totalCount > 0
-            ? `${totalCount.toLocaleString()} responsive document${totalCount === 1 ? '' : 's'}`
-            : 'No matches'}
-        </h2>
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {corporaWithHits.length > 0
-            ? corporaWithHits
-                .map((c) => `${response.per_corpus[c]?.count.toLocaleString()} ${shortLabel(c)}`)
-                .join(' · ')
-            : `searched ${corpora.length} corpora`}
-        </p>
+      <div>
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="font-serif text-lg font-semibold">
+            {totalCount > 0
+              ? `${totalCount.toLocaleString()} responsive document${totalCount === 1 ? '' : 's'}`
+              : 'No matches'}
+          </h2>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {corporaWithHits.length > 0
+              ? corporaWithHits
+                  .map((c) => `${response.per_corpus[c]?.count.toLocaleString()} ${shortLabel(c)}`)
+                  .join(' · ')
+              : `searched ${corpora.length} corpora`}
+          </p>
+        </div>
+        {/* How the worker read the query, only when that differs from what was
+            typed (`searched-as.ts`). Under the count rather than under the box:
+            it explains these results, and the hero's row is reserved. */}
+        {searchedAs && (
+          <p data-testid="searched-as" className="mt-1 font-mono text-[11px] text-muted-foreground">
+            {searchedAs}
+          </p>
+        )}
       </div>
       {/* One column, no gap — the same argument the corpus list above makes. Two ruled
           stacks whose result counts differ give two cadences that agree nowhere, and the

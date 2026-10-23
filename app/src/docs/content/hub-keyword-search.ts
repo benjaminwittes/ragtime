@@ -20,23 +20,20 @@ import type { DocsEntry } from '../types'
  * — eight of eleven, since `spokes/lawfare/index.ts` sets the flag and is
  * not mounted.
  *
- * The operator sentence (quotes, minus, OR) is a property of the query
- * function rather than a feature anyone built. Twelve `/corpus/<slug>/filter`
- * endpoints hand the reader's raw string to `websearch_to_tsquery`, which
- * implements that grammar: usc, cfr, olc, presidential, fr, congress (laws
- * and hearings), frus, fbi, commentary, sanctions, clemency. Federal
- * litigation's `/corpus/filter` is the one that does not — it uses
- * `phraseto_tsquery` and `plainto_tsquery`. None of this needs inferring:
- * the filter endpoints return the query they ran in `executed_sql`, read
- * there on 2026-09-18.
+ * The four-rule paragraph describes Search, the hub fan, and nothing else.
+ * Since 2026-10-23 the worker parses every Search query once, under one
+ * grammar, and writes it in each corpus's own syntax: Postgres websearch for
+ * the hosted corpora, CourtListener's query language for federal litigation
+ * (ragtime-worker `worker/keyword-query.js`; the response's `interpreted`
+ * field shows the reading). So the rules hold on every corpus in the fan,
+ * litigation included. The old litigation caveat measured a Postgres
+ * `/corpus/filter` that litigation no longer uses; do not restore it.
  *
- * Do NOT restore "carry no meaning" for litigation. The marks are not inert
- * there: measured the same day on `/corpus/filter` with `allCourts`, habeas
- * 63,528 · habeas corpus 58,149 · habeas -corpus 17,267 · "habeas corpus"
- * 57,968. The minus is neither ignored (that would be 58,149) nor an
- * exclusion (that would be 63,528 - 58,149 = 5,379), and quoting moves the
- * count by 181. So the marks change the result set without meaning what they
- * mean on the other twelve; the mechanism is unestablished, so claim neither.
+ * Search inside a corpus is a different surface. Its filter endpoints still
+ * hand the reader's text to each engine as typed, so a lowercase "or" is OR
+ * on the hosted corpora there, and litigation's filter quotes a bare
+ * multi-word query for you. Do not extend the paragraph's claim to the
+ * workspaces until they share the parser.
  *
  * The sanctions carve-out in the two-pane sentence is NOT redundant with the
  * descriptor check: `sanctions/index.ts` does set `semanticSearch`, but
@@ -66,13 +63,13 @@ wording the documents use, or the question spans corpora — "where does this
 credible-fear standard come from in immigration law?" pulls USC, CFR, OLC and
 litigation — ask the Explorer instead.
 
-**Quotes, minus and OR work.** Typed with straight double quotes,
-"Freedom of Information Act" matches those words in sequence rather than
-scattered through a document. A leading minus excludes the word after it:
-\`habeas -corpus\` returns what holds the first word and not the second.
-\`OR\` between two words returns either. Federal litigation does not read
-those marks as instructions: a minus will not exclude there and quotes
-are not what make a phrase, so search that corpus in plain words.
+**Four rules, the same in every corpus.** Every word you type is required.
+Straight double quotes match words in sequence: "Freedom of Information Act"
+finds those words together, not scattered through a document. A leading
+minus excludes a word or a quoted phrase: \`habeas -corpus\` returns what
+holds the first word and not the second. \`OR\` in capitals returns either of
+the two words beside it: \`AUMF OR authorization\`. Search ignores common
+words such as *the*, *of*, *and* and *or*.
 
 **{{corpora.fan|cap}} of the {{corpora.held}} corpora.** Sanctions sits out the fan, because its
 documents include the Federal Register's sanctions notices, which that
