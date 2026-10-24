@@ -20,20 +20,23 @@ import type { DocsEntry } from '../types'
  * — eight of eleven, since `spokes/lawfare/index.ts` sets the flag and is
  * not mounted.
  *
- * The four-rule paragraph describes Search, the hub fan, and nothing else.
- * Since 2026-10-23 the worker parses every Search query once, under one
- * grammar, and writes it in each corpus's own syntax: Postgres websearch for
- * the hosted corpora, CourtListener's query language for federal litigation
- * (ragtime-worker `worker/keyword-query.js`; the response's `interpreted`
+ * The four-rule paragraph describes Search, the hub fan, and then the search
+ * box inside each corpus. Since 2026-10-23 the worker parses every Search
+ * query once, under one grammar, and writes it in each corpus's own syntax:
+ * Postgres websearch for the hosted corpora, CourtListener's query language
+ * for federal litigation (ragtime-worker `worker/keyword-query.js`; the response's `interpreted`
  * field shows the reading). So the rules hold on every corpus in the fan,
  * litigation included. The old litigation caveat measured a Postgres
  * `/corpus/filter` that litigation no longer uses; do not restore it.
  *
- * Search inside a corpus is a different surface. Its filter endpoints still
- * hand the reader's text to each engine as typed, so a lowercase "or" is OR
- * on the hosted corpora there, and litigation's filter quotes a bare
- * multi-word query for you. Do not extend the paragraph's claim to the
- * workspaces until they share the parser.
+ * Search inside a corpus shares that parser since 2026-10-24 (ragtime-worker
+ * #198, live): every hosted corpus's filter reads its search text under the
+ * same four rules. Federal litigation is the one exception, by the owner's
+ * ruling of 2026-10-24: its filter still quotes a bare multi-word query as
+ * one phrase (`clPhraseDefault` in ragtime-worker `worker/courtlistener.js`)
+ * and passes any query holding a quote, a minus or OR through as typed. The
+ * worker lists it as the one known difference in `worker/surface-parity.test.js`;
+ * when that entry goes, drop the litigation sentence here too.
  *
  * The sanctions carve-out in the two-pane sentence is NOT redundant with the
  * descriptor check: `sanctions/index.ts` does set `semanticSearch`, but
@@ -70,6 +73,12 @@ minus excludes a word or a quoted phrase: \`habeas -corpus\` returns what
 holds the first word and not the second. \`OR\` in capitals returns either of
 the two words beside it: \`AUMF OR authorization\`. Search ignores common
 words such as *the*, *of*, *and* and *or*.
+
+The search box inside each corpus follows the same four rules, with one
+exception. On the federal litigation page, several plain words are read as
+one phrase: *executive privilege* finds those two words side by side, so
+routine orders that happen to mention both stay out of the list. Add quotes,
+a minus or \`OR\` and the page reads your query as you wrote it.
 
 **{{corpora.fan|cap}} of the {{corpora.held}} corpora.** Sanctions sits out the fan, because its
 documents include the Federal Register's sanctions notices, which that
