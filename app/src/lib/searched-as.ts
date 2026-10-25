@@ -19,7 +19,10 @@ export function searchedAsLine(query: string, interpreted: string | undefined): 
   if (interpreted === '') {
     return 'Nothing to search: every word was a common word or an exclusion.'
   }
-  if (interpreted === query.trim().replace(/\s+/g, ' ').toLowerCase()) return null
+  // Case-insensitive on both sides: the worker writes a two-letter
+  // abbreviation in capitals (`US sanctions`), so a reading that only kept
+  // the reader's capitals says nothing new (ragtime-worker #206).
+  if (interpreted.toLowerCase() === query.trim().replace(/\s+/g, ' ').toLowerCase()) return null
   return `Searched as: ${interpreted}`
 }
 

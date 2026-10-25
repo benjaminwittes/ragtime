@@ -13,6 +13,12 @@ describe('searchedAsLine', () => {
       .toBe('Searched as: "war powers" (aumf OR authorization) -iraq')
   })
 
+  it('compares letter case on both sides, as a capitalised abbreviation comes back', () => {
+    expect(searchedAsLine('US sanctions', 'US sanctions')).toBeNull()
+    expect(searchedAsLine('us sanctions', 'sanctions')).toBe('Searched as: sanctions')
+    expect(searchedAsLine('U.S. policy', 'US policy')).toBe('Searched as: US policy')
+  })
+
   it('explains an empty reading', () => {
     expect(searchedAsLine('the of and', '')).toMatch(/^Nothing to search/)
   })

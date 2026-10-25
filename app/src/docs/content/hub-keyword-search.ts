@@ -72,7 +72,9 @@ finds those words together, not scattered through a document. A leading
 minus excludes a word or a quoted phrase: \`habeas -corpus\` returns what
 holds the first word and not the second. \`OR\` in capitals returns either of
 the two words beside it: \`AUMF OR authorization\`. Search ignores common
-words such as *the*, *of*, *and* and *or*.
+words such as *the*, *of*, *and* and *or*. A two-letter word in capitals,
+such as *US*, *AI* or *DC*, is a search term; the same word in lowercase
+may be ignored as a common word. *US* also finds *U.S.*
 
 The search box inside each corpus follows the same four rules, with one
 exception. On the federal litigation page, several plain words are read as
