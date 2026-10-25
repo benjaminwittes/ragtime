@@ -46,6 +46,7 @@ export function ResultWindow<T>({
   noun,
   countIsFloor,
   searchedAs,
+  note,
   children,
 }: {
   rows: readonly T[]
@@ -60,6 +61,9 @@ export function ResultWindow<T>({
   /** The "Searched as" line (`searchBoxLine`), or null when it has nothing
    *  to say. Litigation passes nothing: its box reports no reading. */
   searchedAs?: string | null
+  /** A further line under the count, in the same styling (FRUS: the search
+   *  ranked only the newest part of its matches, `rankPoolLine`). */
+  note?: string | null
   children: (visible: readonly T[]) => ReactNode
 }) {
   const [limit, setLimit] = useState(ROW_PAGE)
@@ -96,6 +100,11 @@ export function ResultWindow<T>({
         </p>
         {/* Under the count, as on Search's card: how the box's text was read. */}
         <SearchedAs line={searchedAs} />
+        {note && (
+          <p data-testid="result-note" className="mt-1 font-mono text-[11px] text-muted-foreground">
+            {note}
+          </p>
+        )}
       </div>
       {children(visible)}
       {remaining > 0 && (
