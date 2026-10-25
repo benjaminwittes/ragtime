@@ -119,6 +119,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [rankPool, setRankPool] = useState<number | null>(null)
 
   // Semantic pane state (brief #9). See OlcSpokeShell for the pattern
   // rationale; the keyword pane is the filter state above, unchanged.
@@ -220,6 +221,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       setSearchedAs(searchBoxLine(fields.search, r))
       setRows(r.display_rows)
       setCount(r.count)
+      setRankPool(r.rank_pool ?? null)
       setFilterIds(r.ids)
       setExecutedSql(r.executed_sql)
       void postUsageLog(
@@ -237,6 +239,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       setQueryError(e instanceof Error ? e.message : String(e))
       setRows([])
       setCount(0)
+      setRankPool(null)
       setFilterIds([])
       setExecutedSql(undefined)
     } finally {
@@ -535,6 +538,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
               <FrusResultsList
                 searchedAs={searchedAs}
+                rankPool={rankPool}
                 rows={rows}
                 count={count}
                 loading={queryLoading}

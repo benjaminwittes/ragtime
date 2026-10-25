@@ -4221,6 +4221,9 @@ export type FrusFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: FrusDocumentDisplayRow[]
   count: number
+  /** How many of the newest matches were ranked by relevance when the search
+   *  box had words; null for a browse. Absent on a worker that predates it. */
+  rank_pool?: number | null
   generated_sql: string
   executed_sql: string
 }

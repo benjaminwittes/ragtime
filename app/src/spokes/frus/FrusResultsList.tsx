@@ -1,6 +1,8 @@
 import type { FrusDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
+import { rankPoolLine } from '@/lib/rank-pool'
+
 import { ResultWindow } from '../components/ResultWindow'
 import { SearchedAs } from '../components/SearchedAs'
 
@@ -26,6 +28,7 @@ export function FrusResultsList({
   error,
   hasRun,
   searchedAs,
+  rankPool,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -37,6 +40,8 @@ export function FrusResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The worker's `rank_pool`: how many of the newest matches it ranked. */
+  rankPool?: number | null
   executedSql: string | undefined
   onOpenDocument: (row: FrusDocumentDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -84,7 +89,13 @@ export function FrusResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="documents">
+      <ResultWindow
+        searchedAs={searchedAs}
+        note={rankPoolLine(count, rankPool)}
+        rows={rows}
+        count={count}
+        noun="documents"
+      >
         {(visible) => (
           <FrusDocumentRowsTable
             rows={visible}
