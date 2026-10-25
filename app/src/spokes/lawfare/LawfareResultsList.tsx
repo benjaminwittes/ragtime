@@ -2,6 +2,7 @@ import type { LawfareArticleDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * Lawfare manual-filter results list.
@@ -22,6 +23,7 @@ export function LawfareResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenArticle,
   semanticMatchIds,
@@ -31,6 +33,8 @@ export function LawfareResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenArticle: (row: LawfareArticleDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -70,6 +74,7 @@ export function LawfareResultsList({
         <p className="text-center text-sm text-muted-foreground">
           No pieces matched. Try broadening the filter.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -77,7 +82,7 @@ export function LawfareResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="pieces">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="pieces">
         {(visible) => (
           <LawfareArticleRowsList
             rows={visible}

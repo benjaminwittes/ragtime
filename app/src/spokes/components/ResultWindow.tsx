@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 
+import { SearchedAs } from './SearchedAs'
+
 /**
  * How many rows enter the DOM at once, and how many each "Show more" adds.
  *
@@ -43,6 +45,7 @@ export function ResultWindow<T>({
   count,
   noun,
   countIsFloor,
+  searchedAs,
   children,
 }: {
   rows: readonly T[]
@@ -54,6 +57,9 @@ export function ResultWindow<T>({
    *  10.5M rows). Rendered as "10,000+" — a floor printed bare reads like a
    *  total. */
   countIsFloor?: boolean
+  /** The "Searched as" line (`searchBoxLine`), or null when it has nothing
+   *  to say. Litigation passes nothing: its box reports no reading. */
+  searchedAs?: string | null
   children: (visible: readonly T[]) => ReactNode
 }) {
   const [limit, setLimit] = useState(ROW_PAGE)
@@ -80,16 +86,17 @@ export function ResultWindow<T>({
     <>
       {/* Polite, because the only thing that changes it in place is the
           reader's own press of Show more. */}
-      <p
-        className="mb-3 font-mono text-xs text-muted-foreground"
-        aria-live="polite"
-      >
-        {total.toLocaleString()}
-        {countIsFloor && '+'} {noun}
-        {countIsFloor && <> · more match than the catalogue will count</>}
-        {fetched < total && <> · first {fetched.toLocaleString()} fetched</>}
-        {shown < fetched && <> · showing {shown.toLocaleString()}</>}
-      </p>
+      <div className="mb-3">
+        <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
+          {total.toLocaleString()}
+          {countIsFloor && '+'} {noun}
+          {countIsFloor && <> · more match than the catalogue will count</>}
+          {fetched < total && <> · first {fetched.toLocaleString()} fetched</>}
+          {shown < fetched && <> · showing {shown.toLocaleString()}</>}
+        </p>
+        {/* Under the count, as on Search's card: how the box's text was read. */}
+        <SearchedAs line={searchedAs} />
+      </div>
       {children(visible)}
       {remaining > 0 && (
         // A rule above, never a box around: the control is separated from the

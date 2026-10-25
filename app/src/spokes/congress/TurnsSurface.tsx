@@ -9,6 +9,8 @@ import {
   type AuthArg,
 } from '@lawfare/ragtime-client'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
+import { searchBoxLine } from '@/lib/searched-as'
+import { SearchedAs } from '../components/SearchedAs'
 import { isBioguideId, speakerTypeTone } from './congress-format'
 
 /** A hearing pre-filter handed down from the hearing detail sheet's
@@ -50,13 +52,16 @@ export function TurnsSurface({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  const [searchedAs, setSearchedAs] = useState<string | null>(null)
 
   async function run(fields: CongressTurnsFields) {
     setLoading(true)
     setError(undefined)
     setHasRun(true)
+    setSearchedAs(null)
     try {
       const r = await runCongressTurns(fields)
+      setSearchedAs(searchBoxLine(fields.search, r))
       setTurns(r.turns)
       setCount(r.count)
       setCapped(r.capped)
@@ -221,6 +226,7 @@ export function TurnsSurface({
         loading={loading}
         error={error}
         hasRun={hasRun}
+        searchedAs={searchedAs}
       />
     </div>
   )
@@ -234,6 +240,7 @@ function TurnsResults({
   loading,
   error,
   hasRun,
+  searchedAs,
 }: {
   turns: CongressTurn[] | undefined
   count: number | undefined
@@ -242,6 +249,8 @@ function TurnsResults({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line for the Topic box (lib/searched-as.ts). */
+  searchedAs: string | null
 }) {
   if (!hasRun && !loading) {
     return (
@@ -275,17 +284,21 @@ function TurnsResults({
           turns are attributed; ~94% in the modern era) — try a last name, a
           broader topic, or the ambiguous-attribution browse.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
   return (
     <div className="px-6 py-4">
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        {(count ?? turns.length).toLocaleString()} turn
-        {(count ?? turns.length) === 1 ? '' : 's'} · showing first{' '}
-        {turns.length.toLocaleString()}
-        {capped ? ' (capped)' : ''}
-      </p>
+      <div className="mb-3">
+        <p className="font-mono text-xs text-muted-foreground">
+          {(count ?? turns.length).toLocaleString()} turn
+          {(count ?? turns.length) === 1 ? '' : 's'} · showing first{' '}
+          {turns.length.toLocaleString()}
+          {capped ? ' (capped)' : ''}
+        </p>
+        <SearchedAs line={searchedAs} />
+      </div>
       <ol className="space-y-3">
         {turns.map((t) => (
           <TurnCard key={t.id} turn={t} paired={paired} />

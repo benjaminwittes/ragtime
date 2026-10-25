@@ -2,6 +2,7 @@ import type { OlcOpinionDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * OLC manual-filter results table.
@@ -25,6 +26,7 @@ export function OlcResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenOpinion,
   semanticMatchIds,
@@ -34,6 +36,8 @@ export function OlcResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenOpinion: (row: OlcOpinionDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -73,6 +77,7 @@ export function OlcResultsList({
         <p className="text-center text-sm text-muted-foreground">
           No opinions matched. Try broadening the filter.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -80,7 +85,7 @@ export function OlcResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="opinions">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="opinions">
         {(visible) => (
           <OlcOpinionRowsTable
             rows={visible}

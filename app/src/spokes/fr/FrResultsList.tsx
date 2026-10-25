@@ -3,6 +3,7 @@ import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { isTodayOrLater, prettyDocType } from './fr-format'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * Federal Register manual-filter results table.
@@ -23,6 +24,7 @@ export function FrResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -32,6 +34,8 @@ export function FrResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: FrDocumentDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -74,6 +78,7 @@ export function FrResultsList({
           persons,&rdquo; not &ldquo;sanctioned people&rdquo;), and notices
           are only partially loaded.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -81,7 +86,7 @@ export function FrResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="documents">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="documents">
         {(visible) => (
           <FrDocumentRowsTable
             rows={visible}

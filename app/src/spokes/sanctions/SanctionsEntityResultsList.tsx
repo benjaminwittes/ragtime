@@ -2,6 +2,7 @@ import type { SanctionsEntityDisplayRow } from '@lawfare/ragtime-client'
 import { aliasLine, entityTypeLabel, listTypeLabel } from './sanctions-format'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * Sanctions entity results table (the marquee pane's list).
@@ -21,6 +22,7 @@ export function SanctionsEntityResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenEntity,
 }: {
@@ -29,6 +31,8 @@ export function SanctionsEntityResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenEntity: (row: SanctionsEntityDisplayRow) => void
 }) {
@@ -71,6 +75,7 @@ export function SanctionsEntityResultsList({
           alias, and check OFAC&rsquo;s official Sanctions List Search before
           relying on an absence.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -78,7 +83,7 @@ export function SanctionsEntityResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="entries">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="entries">
         {(visible) => (
           <SanctionsEntityRowsTable rows={visible} onOpenEntity={onOpenEntity} />
         )}

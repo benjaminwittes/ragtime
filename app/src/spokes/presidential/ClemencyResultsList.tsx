@@ -1,6 +1,7 @@
 import type { ClemencyGrantDisplayRow } from '@lawfare/ragtime-client'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * Clemency grant results table. Columns: Recipient · Type · President ·
@@ -16,6 +17,7 @@ export function ClemencyResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   onOpenGrant,
 }: {
   rows: readonly ClemencyGrantDisplayRow[] | undefined
@@ -23,6 +25,8 @@ export function ClemencyResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   onOpenGrant: (row: ClemencyGrantDisplayRow) => void
 }) {
   if (!hasRun && !loading) {
@@ -42,12 +46,17 @@ export function ClemencyResultsList({
     return <div className="px-6 py-8"><p className="text-sm text-destructive">Filter failed: {error}</p></div>
   }
   if (!rows || rows.length === 0) {
-    return <div className="px-6 py-8 text-center"><p className="text-sm text-muted-foreground">No grants matched. Try broadening the filter.</p></div>
+    return (
+      <div className="px-6 py-8 text-center">
+        <p className="text-sm text-muted-foreground">No grants matched. Try broadening the filter.</p>
+        <SearchedAs line={searchedAs} centered />
+      </div>
+    )
   }
 
   return (
     <div className="px-6 py-4">
-      <ResultWindow rows={rows} count={count} noun="grants">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="grants">
         {(visible) => (
           <ClemencyRowsTable rows={visible} onOpenGrant={onOpenGrant} />
         )}

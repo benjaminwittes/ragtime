@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { searchBoxLine } from '@/lib/searched-as'
 import {
   type CfrAmaPlan,
   type CfrAmaScope,
@@ -105,6 +106,7 @@ export function CfrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  const [searchedAs, setSearchedAs] = useState<string | null>(null)
 
   // AMA state.
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
@@ -185,8 +187,10 @@ export function CfrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryLoading(true)
     setQueryError(undefined)
     setHasRun(true)
+    setSearchedAs(null)
     try {
       const r: CfrFilterResult = await runCfrFilter(fields)
+      setSearchedAs(searchBoxLine(fields.search, r))
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -377,6 +381,7 @@ export function CfrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <CfrResultsList
+            searchedAs={searchedAs}
             rows={rows}
             count={count}
             loading={queryLoading}

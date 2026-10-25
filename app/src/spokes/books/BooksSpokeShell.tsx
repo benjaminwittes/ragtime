@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { searchBoxLine } from '@/lib/searched-as'
 import ReactMarkdown from 'react-markdown'
 import {
   type BookDisplayRow,
@@ -83,6 +84,7 @@ export function BooksSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  const [searchedAs, setSearchedAs] = useState<string | null>(null)
   const [emptyHint, setEmptyHint] = useState<string | undefined>(undefined)
   // The form is keyed on this so a pivot from the record sheet (an author,
   // a subject heading) re-seeds it rather than leaving stale inputs showing.
@@ -132,8 +134,10 @@ export function BooksSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setHasRun(true)
     setEmptyHint(undefined)
     setLastFields(fields)
+    setSearchedAs(null)
     try {
       const r: BooksFilterResult = await runBooksFilter(fields)
+      setSearchedAs(searchBoxLine(fields.search, r))
       setRows(r.display_rows)
       setCount(r.count)
       setCountIsFloor(r.count_is_floor === true)
@@ -168,6 +172,7 @@ export function BooksSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setExecutedSql(undefined)
     setLastFields(undefined)
     setEmptyHint('None of the linked records are in the catalogue.')
+    setSearchedAs(null)
     try {
       const r = await fetchBooksItemsByIds(ids)
       setRows(r)
@@ -217,6 +222,7 @@ export function BooksSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       />
       {rows && rows.length > 0 && !queryLoading && <ExportBar onCsv={downloadFilterCsv} />}
       <BooksResultsList
+        searchedAs={searchedAs}
         rows={rows}
         count={count}
         countIsFloor={countIsFloor}

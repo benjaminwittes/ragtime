@@ -84,6 +84,17 @@ export type HubKeywordResponse = {
   per_corpus: Partial<Record<HubCorpusSlug, HubKeywordCorpusBlock>>
 }
 
+/**
+ * What every corpus search-box reply carries besides its rows: how the worker
+ * read the box's text (`fields.search`; `fields.q` on lawfare), the same
+ * `interpreted` field HubKeywordResponse reports. Present only when the box
+ * had text; "" when nothing was left to search. Absent from litigation's
+ * /corpus/filter and from a worker that predates the field.
+ */
+export type SearchBoxReply = {
+  interpreted?: string
+}
+
 export async function runHubKeyword(
   query: string,
   corpora?: readonly HubCorpusSlug[],
@@ -743,7 +754,7 @@ export type UscFilterFields = {
   status?: string
 }
 
-export type UscFilterResult = {
+export type UscFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: UscSectionDisplayRow[]
   count: number
@@ -1000,7 +1011,7 @@ export type CfrFilterFields = {
   reserved?: boolean
 }
 
-export type CfrFilterResult = {
+export type CfrFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: CfrSectionDisplayRow[]
   count: number
@@ -1257,7 +1268,7 @@ export type OlcFilterFields = {
   ocrQuality?: string
 }
 
-export type OlcFilterResult = {
+export type OlcFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: OlcOpinionDisplayRow[]
   count: number
@@ -1547,7 +1558,7 @@ export type PresidentialFilterFields = {
   textQuality?: string
 }
 
-export type PresidentialFilterResult = {
+export type PresidentialFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: PresidentialDocumentDisplayRow[]
   count: number
@@ -1856,7 +1867,7 @@ export type FrFilterFields = {
   effectiveTo?: string
 }
 
-export type FrFilterResult = {
+export type FrFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: FrDocumentDisplayRow[]
   count: number
@@ -2233,7 +2244,7 @@ export type CongressFilterFields = {
   to?: string
 }
 
-export type CongressFilterResult = {
+export type CongressFilterResult = SearchBoxReply & {
   collection: CongressCollection
   ids: number[]
   display_rows: CongressAnyDisplayRow[]
@@ -2399,7 +2410,7 @@ export type CongressTurn = {
   question_excerpt?: string | null
 }
 
-export type CongressTurnsResult = {
+export type CongressTurnsResult = SearchBoxReply & {
   turns: CongressTurn[]
   count: number
   capped: boolean
@@ -2615,7 +2626,7 @@ export type ClemencyFilterFields = {
   to?: string
 }
 
-export type ClemencyFilterResult = {
+export type ClemencyFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: ClemencyGrantDisplayRow[]
   count: number
@@ -2767,7 +2778,7 @@ export type LawfareFilterFields = {
   include_suppressed?: boolean
 }
 
-export type LawfareFilterResult = {
+export type LawfareFilterResult = SearchBoxReply & {
   ids: string[]
   display_rows: LawfareArticleDisplayRow[]
   count: number
@@ -3079,7 +3090,7 @@ export type CommentaryFilterFields = {
   to?: string
 }
 
-export type CommentaryFilterResult = {
+export type CommentaryFilterResult = SearchBoxReply & {
   /** The single publication queried, or null when both were unioned. */
   publication: string | null
   /** Publication-qualified strings ('lawfare:123') when both publications are
@@ -3444,7 +3455,7 @@ export type FbiFilterFields = {
   provenance?: string
 }
 
-export type FbiFilterResult = {
+export type FbiFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: FbiDocumentDisplayRow[]
   count: number
@@ -3728,7 +3739,7 @@ export type SanctionsEntityFilterFields = {
   entityType?: string
 }
 
-export type SanctionsEntityFilterResult = {
+export type SanctionsEntityFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: SanctionsEntityDisplayRow[]
   count: number
@@ -3852,7 +3863,7 @@ export type SanctionsGuidanceFilterFields = {
   to?: string
 }
 
-export type SanctionsGuidanceFilterResult = {
+export type SanctionsGuidanceFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: SanctionsGuidanceDisplayRow[]
   count: number
@@ -3957,7 +3968,7 @@ export type SanctionsFrFilterFields = {
 
 /** Slice rows ARE Federal Register display rows (the Worker reuses
  *  FR_DISPLAY_COLS) — detail views go through /corpus/fr/document. */
-export type SanctionsFrFilterResult = {
+export type SanctionsFrFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: FrDocumentDisplayRow[]
   count: number
@@ -4206,7 +4217,7 @@ export type FrusFilterFields = {
   place?: string
 }
 
-export type FrusFilterResult = {
+export type FrusFilterResult = SearchBoxReply & {
   ids: number[]
   display_rows: FrusDocumentDisplayRow[]
   count: number
@@ -5410,7 +5421,7 @@ export type BooksFilterFields = {
   isbn?: string
 }
 
-export type BooksFilterResult = {
+export type BooksFilterResult = SearchBoxReply & {
   ids: number[]
   /** The first 500 of `ids`, as display rows. */
   display_rows: BookDisplayRow[]

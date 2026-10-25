@@ -22,7 +22,7 @@ import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { startTour } from '@/tour/start'
 import { TOUR } from '@/tour/steps'
 import { TICKS, type SampleSet } from './samples'
-import { searchedAsLine } from './searched-as'
+import { searchedAsLine } from '@/lib/searched-as'
 import { useTick } from './tune'
 
 gsap.registerPlugin(useGSAP)

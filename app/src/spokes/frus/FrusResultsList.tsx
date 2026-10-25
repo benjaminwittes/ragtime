@@ -2,6 +2,7 @@ import type { FrusDocumentDisplayRow } from '@lawfare/ragtime-client'
 import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * FRUS manual-filter results table.
@@ -24,6 +25,7 @@ export function FrusResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -33,6 +35,8 @@ export function FrusResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: FrusDocumentDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -72,6 +76,7 @@ export function FrusResultsList({
         <p className="text-center text-sm text-muted-foreground">
           No documents matched. Try broadening the filter.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -79,7 +84,7 @@ export function FrusResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="documents">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="documents">
         {(visible) => (
           <FrusDocumentRowsTable
             rows={visible}
