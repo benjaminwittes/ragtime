@@ -8,7 +8,10 @@
  * (`/corpus/books/<id>` → the record sheet; `?ids=…&mode=manual_filter` → exactly
  * those records; `?q=…` → the filter, prefilled and run), a floor count reads as
  * one, sparse filters show their coverage, and the record ends in the handoff
- * ladder with Google Books kept apart from it.
+ * ladder with Google Books kept apart from it. The filter stub also carries
+ * `interpreted` (ragtime-worker#204), so the "Searched as" line every corpus
+ * page shares is checked here: absent when the reading is the typed words,
+ * under the count when it differs, and "Nothing to search" on an empty reading.
  *
  *   node e2e/books.mjs                  # a phone
  *   E2E_W=1440 node e2e/books.mjs       # and wider
@@ -67,6 +70,12 @@ const FACETS = {
   facets_computed_at: '2026-09-23 18:00:00+00',
 }
 
+/** How the stubbed worker reads a box whose reading is not just its lowercase. */
+const READINGS = {
+  'executive or power': 'executive power',
+  'the of': '',
+}
+
 async function stubWorker(ctx) {
   await ctx.route(/\/corpus\/books\/(facets|filter|record|items-by-ids)$/, async (route) => {
     const url = route.request().url()
@@ -75,6 +84,12 @@ async function stubWorker(ctx) {
       route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(json) })
     if (url.endsWith('/facets')) return reply(FACETS)
     if (url.endsWith('/filter')) {
+      // `interpreted` as ragtime-worker#204 reports it: only when the box had text.
+      const search = body.fields?.search
+      const interpreted = search === undefined ? undefined : (READINGS[search] ?? search.toLowerCase())
+      if (interpreted === '') {
+        return reply({ ids: [], display_rows: [], count: 0, count_is_floor: false, catalogue_vintage: 2016, generated_sql: '', executed_sql: '', interpreted })
+      }
       const broad = !body.fields?.author
       const rows = broad
         ? [ROW(1), ROW(2, { edition: '2nd ed.', pub_date_normalized: 2009 }), ROW(3, { title: 'Power and constraint', subtitle: null, work_cluster_key: 'power and constraint|goldsmith, jack l' })]
@@ -87,6 +102,7 @@ async function stubWorker(ctx) {
         catalogue_vintage: 2016,
         generated_sql: 'SELECT id FROM loc_bibliography …',
         executed_sql: 'SELECT id FROM loc_bibliography …',
+        ...(interpreted === undefined ? {} : { interpreted }),
       })
     }
     if (url.endsWith('/items-by-ids')) return reply({ display_rows: (body.ids || []).map((id) => ROW(id)) })
@@ -145,6 +161,25 @@ board.check('?q= prefills the search box', (await page.inputValue('input[placeho
 board.check('a broad filter reads as a floor', t.includes('10,000+ records'))
 board.check('shared cluster keys badge as editions', /2 editions here/i.test(t))
 await page.screenshot({ path: `${SHOTS}/books-results-${W}.png`, fullPage: true })
+const searchedAs = () => page.locator('[data-testid="searched-as"]').allInnerTexts()
+board.check('a reading that is the typed words shows no "Searched as" line', (await searchedAs()).length === 0)
+
+// 2b. The "Searched as" line, under the count, when the reading differs.
+await go('/corpus/books?q=executive%20or%20power')
+board.check('a dropped lowercase "or" shows "Searched as" under the count',
+  (await searchedAs()).join('|') === 'Searched as: executive power',
+  await searchedAs())
+board.check('the line sits below the count line', await page.evaluate(() => {
+  const line = document.querySelector('[data-testid="searched-as"]')
+  const count = [...document.querySelectorAll('p')].find((p) => /^10,000\+ records/.test(p.innerText))
+  return !!line && !!count && line.getBoundingClientRect().top >= count.getBoundingClientRect().bottom
+}))
+await page.screenshot({ path: `${SHOTS}/books-searched-as-${W}.png`, fullPage: true })
+
+await go('/corpus/books?q=the%20of')
+board.check('a box of only common words says nothing was left to search',
+  /^Nothing to search/.test((await searchedAs()).join('|')),
+  await searchedAs())
 
 // 3. `?ids=…&mode=manual_filter` — exactly those records.
 await go('/corpus/books?ids=11,12&mode=manual_filter')

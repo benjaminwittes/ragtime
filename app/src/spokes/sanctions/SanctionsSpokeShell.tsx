@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { searchBoxLine } from '@/lib/searched-as'
 import {
   type AmaPlan,
   type FrDocumentDisplayRow,
@@ -164,13 +165,16 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [entityLoading, setEntityLoading] = useState(false)
   const [entityError, setEntityError] = useState<string>()
   const [entityHasRun, setEntityHasRun] = useState(false)
+  const [entitySearchedAs, setEntitySearchedAs] = useState<string | null>(null)
 
   async function handleEntitySubmit(fields: SanctionsEntityFilterFields) {
     setEntityLoading(true)
     setEntityError(undefined)
     setEntityHasRun(true)
+    setEntitySearchedAs(null)
     try {
       const r = await runSanctionsEntityFilter(fields)
+      setEntitySearchedAs(searchBoxLine(fields.search, r))
       setEntityRows(r.display_rows)
       setEntityCount(r.count)
       setEntityExecutedSql(r.executed_sql)
@@ -203,13 +207,16 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [guidanceLoading, setGuidanceLoading] = useState(false)
   const [guidanceError, setGuidanceError] = useState<string>()
   const [guidanceHasRun, setGuidanceHasRun] = useState(false)
+  const [guidanceSearchedAs, setGuidanceSearchedAs] = useState<string | null>(null)
 
   async function runGuidanceKeywordPane(fields: SanctionsGuidanceFilterFields) {
     setGuidanceLoading(true)
     setGuidanceError(undefined)
     setGuidanceHasRun(true)
+    setGuidanceSearchedAs(null)
     try {
       const r = await runSanctionsGuidanceFilter(fields)
+      setGuidanceSearchedAs(searchBoxLine(fields.search, r))
       setGuidanceRows(r.display_rows)
       setGuidanceCount(r.count)
       setGuidanceIds(r.ids)
@@ -255,13 +262,16 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [frLoading, setFrLoading] = useState(false)
   const [frError, setFrError] = useState<string>()
   const [frHasRun, setFrHasRun] = useState(false)
+  const [frSearchedAs, setFrSearchedAs] = useState<string | null>(null)
 
   async function runFrKeywordPane(fields: SanctionsFrFilterFields) {
     setFrLoading(true)
     setFrError(undefined)
     setFrHasRun(true)
+    setFrSearchedAs(null)
     try {
       const r = await runSanctionsFrFilter(fields)
+      setFrSearchedAs(searchBoxLine(fields.search, r))
       setFrRows(r.display_rows)
       setFrCount(r.count)
       setFrExecutedSql(r.executed_sql)
@@ -727,6 +737,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                   loading={entityLoading}
                   error={entityError}
                   hasRun={entityHasRun}
+                  searchedAs={entitySearchedAs}
                   executedSql={entityExecutedSql}
                   onOpenEntity={handleOpenEntity}
                 />
@@ -738,6 +749,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                   loading={guidanceLoading}
                   error={guidanceError}
                   hasRun={guidanceHasRun}
+                  searchedAs={guidanceSearchedAs}
                   executedSql={guidanceExecutedSql}
                   onOpenDocument={handleOpenGuidance}
                   semanticMatchIds={semHasRun ? guidanceIdSet : undefined}
@@ -750,6 +762,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                   loading={frLoading}
                   error={frError}
                   hasRun={frHasRun}
+                  searchedAs={frSearchedAs}
                   executedSql={frExecutedSql}
                   onOpenDocument={handleOpenFr}
                 />

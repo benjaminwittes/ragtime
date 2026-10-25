@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { searchBoxLine } from '@/lib/searched-as'
 import {
   type FrAmaPlan,
   type FrAmaScope,
@@ -115,6 +116,7 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  const [searchedAs, setSearchedAs] = useState<string | null>(null)
 
   // Semantic pane state (brief #9).
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
@@ -200,8 +202,10 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryLoading(true)
     setQueryError(undefined)
     setHasRun(true)
+    setSearchedAs(null)
     try {
       const r: FrFilterResult = await runFrFilter(fields)
+      setSearchedAs(searchBoxLine(fields.search, r))
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -515,6 +519,7 @@ export function FrSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             <div className="min-w-0">
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
               <FrResultsList
+                searchedAs={searchedAs}
                 rows={rows}
                 count={count}
                 loading={queryLoading}

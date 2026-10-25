@@ -4,6 +4,7 @@ import { guidanceTypeLabel } from './sanctions-format'
 import { ProgramChips } from './SanctionsEntityResultsList'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * OFAC guidance results table.
@@ -21,6 +22,7 @@ export function SanctionsGuidanceResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -30,6 +32,8 @@ export function SanctionsGuidanceResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: SanctionsGuidanceDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -74,6 +78,7 @@ export function SanctionsGuidanceResultsList({
           (&ldquo;blocked persons,&rdquo; &ldquo;general license&rdquo;) or
           the semantic toggle.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -81,7 +86,7 @@ export function SanctionsGuidanceResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="documents">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="documents">
         {(visible) => (
           <SanctionsGuidanceRowsTable
             rows={visible}

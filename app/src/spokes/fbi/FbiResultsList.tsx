@@ -7,6 +7,7 @@ import {
 } from './fbi-format'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * FBI Records manual-filter results table.
@@ -29,6 +30,7 @@ export function FbiResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -38,6 +40,8 @@ export function FbiResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: FbiDocumentDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -81,6 +85,7 @@ export function FbiResultsList({
           &ldquo;COINTELPRO&rdquo;), a collection from the typeahead, or the
           semantic toggle to bridge the wording gap.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -88,7 +93,7 @@ export function FbiResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="documents">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="documents">
         {(visible) => (
           <FbiDocumentRowsTable
             rows={visible}

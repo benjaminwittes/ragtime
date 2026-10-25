@@ -16,6 +16,7 @@ import {
 } from './congress-format'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * Congress manual-filter results — one table shape per collection:
@@ -35,6 +36,7 @@ export function CongressResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -45,6 +47,8 @@ export function CongressResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: CongressAnyDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -86,6 +90,7 @@ export function CongressResultsList({
           collections above (coverage varies: floor debate starts 1994, bill
           text 2013, written testimony the 118th Congress).
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -94,6 +99,7 @@ export function CongressResultsList({
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
       <ResultWindow
+        searchedAs={searchedAs}
         rows={rows}
         count={count}
         noun={collectionNoun(collection, count ?? rows.length)}

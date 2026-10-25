@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { searchBoxLine } from '@/lib/searched-as'
 import {
   type OlcAmaPlan,
   type OlcAmaScope,
@@ -121,6 +122,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  const [searchedAs, setSearchedAs] = useState<string | null>(null)
   // How the filter's rows are shown: the table, which the page opens on, or the terrain.
   const [resultsView, setResultsView] = useState<ResultsView>('table')
 
@@ -226,8 +228,10 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryLoading(true)
     setQueryError(undefined)
     setHasRun(true)
+    setSearchedAs(null)
     try {
       const r: OlcFilterResult = await runOlcFilter(fields)
+      setSearchedAs(searchBoxLine(fields.search, r))
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -567,6 +571,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 <ResultsTerrain corpus="olc" rows={rows} total={count ?? rows.length} toDoc={olcDoc} onOpen={handleOpenOpinion} />
               ) : (
                 <OlcResultsList
+                  searchedAs={searchedAs}
                   rows={rows}
                   count={count}
                   loading={queryLoading}

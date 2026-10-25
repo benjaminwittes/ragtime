@@ -1,5 +1,6 @@
 import type { BookDisplayRow } from '@lawfare/ragtime-client'
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 import {
   displayAuthors,
   displayTitle,
@@ -29,6 +30,7 @@ export function BooksResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenRecord,
   emptyHint,
@@ -40,6 +42,8 @@ export function BooksResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenRecord: (row: BookDisplayRow) => void
   /** Overrides the default no-match text (the id-set handoff has its own). */
@@ -83,6 +87,7 @@ export function BooksResultsList({
         <p className="mx-auto max-w-xl text-center text-sm text-muted-foreground">
           {emptyHint ?? booksEmptyHint(snapshotYear)}
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -90,7 +95,7 @@ export function BooksResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} countIsFloor={countIsFloor} noun="records">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} countIsFloor={countIsFloor} noun="records">
         {(visible) => (
           <BookRowsTable rows={visible} editions={editionCounts(rows)} onOpenRecord={onOpenRecord} />
         )}

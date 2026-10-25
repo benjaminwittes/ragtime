@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { searchBoxLine } from '@/lib/searched-as'
 import {
   type UscAmaPlan,
   type UscAmaScope,
@@ -104,6 +105,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  const [searchedAs, setSearchedAs] = useState<string | null>(null)
 
   // AMA state.
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
@@ -183,8 +185,10 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryLoading(true)
     setQueryError(undefined)
     setHasRun(true)
+    setSearchedAs(null)
     try {
       const r: UscFilterResult = await runUscFilter(fields)
+      setSearchedAs(searchBoxLine(fields.search, r))
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -371,6 +375,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <UscResultsList
+            searchedAs={searchedAs}
             rows={rows}
             count={count}
             loading={queryLoading}

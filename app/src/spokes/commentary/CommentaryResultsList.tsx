@@ -3,6 +3,7 @@ import { AlsoMatchBadge } from '../components/SemanticResultsList'
 import { commentaryRowKey } from './commentary-format'
 
 import { ResultWindow } from '../components/ResultWindow'
+import { SearchedAs } from '../components/SearchedAs'
 
 /**
  * Commentary manual-filter results list.
@@ -24,6 +25,7 @@ export function CommentaryResultsList({
   loading,
   error,
   hasRun,
+  searchedAs,
   executedSql,
   onOpenDocument,
   semanticMatchKeys,
@@ -33,6 +35,8 @@ export function CommentaryResultsList({
   loading: boolean
   error: string | undefined
   hasRun: boolean
+  /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
+  searchedAs?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: CommentaryDisplayRow) => void
   /** Publication-qualified keys ('lawfare:123') also present in the semantic
@@ -74,6 +78,7 @@ export function CommentaryResultsList({
         <p className="text-center text-sm text-muted-foreground">
           No pieces matched. Try broadening the filter.
         </p>
+        <SearchedAs line={searchedAs} centered />
       </div>
     )
   }
@@ -81,7 +86,7 @@ export function CommentaryResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow rows={rows} count={count} noun="pieces">
+      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="pieces">
         {(visible) => (
           <CommentaryRowsList
             rows={visible}

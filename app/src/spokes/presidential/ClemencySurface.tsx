@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { searchBoxLine } from '@/lib/searched-as'
 import {
   type ClemencyFacets,
   type ClemencyFilterFields,
@@ -34,6 +35,7 @@ export function ClemencySurface() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
+  const [searchedAs, setSearchedAs] = useState<string | null>(null)
 
   const [detailOpen, setDetailOpen] = useState(false)
   const [openGrant, setOpenGrant] = useState<ClemencyGrantDisplayRow | null>(null)
@@ -55,8 +57,10 @@ export function ClemencySurface() {
     setLoading(true)
     setError(undefined)
     setHasRun(true)
+    setSearchedAs(null)
     try {
       const r = await runClemencyFilter(fields)
+      setSearchedAs(searchBoxLine(fields.search, r))
       setRows(r.display_rows)
       setCount(r.count)
       void postUsageLog(
@@ -115,6 +119,7 @@ export function ClemencySurface() {
       />
       {rows && rows.length > 0 && !loading && <ExportBar onCsv={downloadFilterCsv} />}
       <ClemencyResultsList
+        searchedAs={searchedAs}
         rows={rows}
         count={count}
         loading={loading}
