@@ -34,7 +34,6 @@ const WALK = [
   { id: 'access', target: 'button[aria-label="Configure AI access"]' },
   { id: 'docs', target: 'button[aria-label="Open documentation overlay"]' },
   { id: 'feedback', target: '[data-feedback="open"]' },
-  { id: 'claude', target: null },
 ]
 
 /** The card visible and placed for the named step. */
@@ -133,9 +132,7 @@ for (const viewport of [DESKTOP, PHONE]) {
     if (i < WALK.length - 1) await page.click(`${CARD} button:has-text("Next")`)
   }
 
-  // The last step's button is Done, its link is a real address, and ending tidies up.
-  const href = await page.locator(`${CARD} a`).getAttribute('href').catch(() => null)
-  board.check('the last step links to the docs entry by its address', typeof href === 'string' && href.endsWith('/?docs=connecting-claude'), href)
+  // The last step's button is Done, and ending tidies up.
   board.check('the address still carries the request while the tour runs', page.url().includes('tour=1'), page.url())
   await page.click(`${CARD} button:has-text("Done")`)
   board.check('Done ends the tour', (await page.locator(CARD).count()) === 0)

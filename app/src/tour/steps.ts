@@ -8,9 +8,8 @@
  * `steps.test.ts` holds it. `Tour.tsx` reads these and types no words of its own.
  *
  * The order is the order a first visit takes: what this is, the box, the choice the box
- * offers, the collections under it, then the three controls in the site bar, and last the
- * way to use it from somewhere else. Three ways to work, least to most: search with no
- * AI, the Explorer with it, and RAGtime inside the AI tool a reader already has.
+ * offers, the collections under it, then the three controls in the site bar. Two ways to
+ * work, least to most: search with no AI, and the Explorer with it.
  *
  * **The words say "collection".** The page's own headings still say corpus; a reader on
  * their first visit has no use for the word, and the tour is who they meet first.
@@ -116,12 +115,6 @@ export const STEPS: readonly TourStep[] = [
       'Your note goes to the people who build RAGtime.',
     ],
     target: '[data-feedback="open"]',
-  },
-  {
-    id: 'claude',
-    title: 'Use RAGtime inside Claude',
-    body: ['You can also connect RAGtime to Claude and ask from your own chats.'],
-    link: { label: 'How to connect', docs: 'connecting-claude' },
   },
 ]
 

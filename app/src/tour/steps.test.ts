@@ -36,12 +36,10 @@ test('every step has a name of its own, a title and something to say', () => {
   }
 })
 
-test('the tour opens with what this is and closes with where else to use it', () => {
+test('the tour opens with what this is and closes with feedback', () => {
   assert.equal(STEPS[0].id, 'welcome')
   assert.equal(STEPS[0].target, undefined)
-  const last = STEPS[STEPS.length - 1]
-  assert.equal(last.id, 'claude')
-  assert.deepEqual(last.link, { label: 'How to connect', docs: 'connecting-claude' })
+  assert.equal(STEPS[STEPS.length - 1].id, 'feedback')
 })
 
 test('the hub steps name the hub, so the tour can start from any page', () => {
