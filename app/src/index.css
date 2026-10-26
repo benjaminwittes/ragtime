@@ -131,6 +131,21 @@
   --color-lawfare-surface-alt: #eeeeee;
   --color-lawfare-border: #dddddd;
   --color-lawfare-border-light: #eeeeee;
+
+  /* A slow drift, not a bounce: the arrow at the foot of the hub's first screen
+   * says there is more below without asking to be looked at. Tailwind's own
+   * `animate-bounce` hops a quarter of its height every second, which is a
+   * notification rather than a hint. Used under `motion-safe:` only. */
+  --animate-nudge: nudge 2.4s ease-in-out infinite;
+  @keyframes nudge {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(3px);
+    }
+  }
 }
 
 /* Static, because hand-written stylesheets read these by name (`explorer.css` re-points its

@@ -600,7 +600,11 @@ export function HubKeywordSearch({
             className="text-sm text-lawfare-text-warm transition-colors duration-150 hover:text-lawfare-teal"
           >
             {sentenceCase(numberWord(spokes.length))} corpora in{' '}
-            {numberWord(spokeGroups.length)} groups ↓
+            {numberWord(spokeGroups.length)} groups{' '}
+            {/* Inline-block, because a transform does nothing to an inline box. */}
+            <span aria-hidden="true" className="inline-block motion-safe:animate-nudge">
+              ↓
+            </span>
           </button>
         </div>
       )}
