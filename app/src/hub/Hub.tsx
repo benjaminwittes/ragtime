@@ -3,7 +3,7 @@ import { formatCount } from '@/lib/format-count'
 import { getHoldingsCached, readHoldingsSnapshot } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
 import { spokeGroups, spokes } from '@/spokes/registry'
-import { LIVE_APIS, type CorpusHoldings, type CorpusSpoke } from '@lawfare/ragtime-client'
+import { type CorpusHoldings, type CorpusSpoke } from '@lawfare/ragtime-client'
 import { HubKeywordSearch } from './HubKeywordSearch'
 
 /**
@@ -83,11 +83,6 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
     headingIndex: cursor++,
     entries: group.spokes.map((spoke) => ({ spoke, index: cursor++ })),
   }))
-  // The live APIs close the list, headed apart from the corpora: not held, no page
-  // of their own, so a row and not a link. Numbered in the same pass so the exit
-  // wave still runs top to bottom.
-  const liveHeadingIndex = cursor++
-  const liveEntries = LIVE_APIS.map((source) => ({ source, index: cursor++ }))
 
   return (
     // The id is what the first screen's foot line scrolls to. `scroll-mt-6` is
@@ -158,30 +153,6 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
           </div>
         </div>
       ))}
-      <div className="mt-6">
-        <h3
-          className="mb-3 inline-block border-b-2 border-lawfare-teal pb-1 font-serif text-[17px] font-semibold text-foreground"
-          style={{ viewTransitionName: `hub-card-${liveHeadingIndex + 1}` }}
-        >
-          Live APIs, not held
-        </h3>
-        <div className="grid sm:grid-cols-2">
-          {liveEntries.map(({ source, index }) => (
-            <div
-              key={source.slug}
-              className="border-t border-lawfare-line py-3 sm:pr-8"
-              style={{ viewTransitionName: `hub-card-${index + 1}` }}
-            >
-              <h4 className="font-serif text-lg font-semibold text-foreground">
-                {source.name}
-              </h4>
-              <p className="mt-1 text-sm text-lawfare-text-warm">
-                {source.description}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
     </section>
   )
 }
