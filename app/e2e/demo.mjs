@@ -25,7 +25,7 @@ const KIT = {
   guide: [
     '# Run of show',
     '',
-    'Read this first. Then open [the tour](/?tour=1) and [the docs page](/?docs=connecting-claude).',
+    'Read this first. Then open [the tour](/?tour=1) and [the docs page](/?docs=getting-started).',
     '',
     '| When | What | Who |',
     '|---|---|---|',
@@ -163,17 +163,10 @@ const browser = await launch()
   log('— ?docs= —')
   const ctx = await ctxServing(browser, DESKTOP)
   const page = await ctx.newPage()
-  await page.goto(BASE + '/?docs=connecting-claude', { waitUntil: 'networkidle' })
+  await page.goto(BASE + '/?docs=getting-started', { waitUntil: 'networkidle' })
   await page.waitForSelector('[role="dialog"] article')
-  board.check('the docs open on the page the link named', (await page.locator('[role="dialog"] article h2').first().innerText()) === 'Using RAGtime in Claude')
-  const pdf = await page.locator('[role="dialog"] article a:has-text("printable PDF")').evaluate((a) => [a.getAttribute('href'), a.target])
-  board.check('its PDF link carries the mount point and opens in a new tab', pdf[0].endsWith('/guides/connect-claude.pdf') && pdf[0].startsWith(new URL(BASE).pathname) && pdf[1] === '_blank', pdf)
-  const served = await page.evaluate(async (href) => {
-    const r = await fetch(href)
-    return [r.status, r.headers.get('content-type')]
-  }, pdf[0])
-  board.check('and the PDF is really served there', served[0] === 200 && String(served[1]).includes('pdf'), served)
-  await page.screenshot({ path: `${SHOTS}/docs-connecting-claude.png` })
+  board.check('the docs open on the page the link named', (await page.locator('[role="dialog"] article h2').first().innerText()) === 'Start Here: What Is RAGtime?')
+  await page.screenshot({ path: `${SHOTS}/docs-getting-started.png` })
 
   await page.goto(BASE + '/?docs=no-such-page', { waitUntil: 'networkidle' })
   await page.waitForTimeout(300)

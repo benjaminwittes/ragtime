@@ -188,7 +188,14 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
             gap were 121px of the 20px the row was over at 640, and it wrapped. */}
         <span className="hidden text-xs text-lawfare-muted lg:inline">
           a project of{' '}
-          <span className="font-bold text-lawfare-text-secondary">Lawfare</span>
+          <a
+            href="https://www.lawfaremedia.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-bold text-lawfare-text-secondary underline-offset-4 hover:underline"
+          >
+            Lawfare
+          </a>
         </span>
       </div>
     </header>
