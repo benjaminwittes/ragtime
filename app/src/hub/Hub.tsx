@@ -83,6 +83,19 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
     headingIndex: cursor++,
     entries: group.spokes.map((spoke) => ({ spoke, index: cursor++ })),
   }))
+  // Two one-corpus groups in a row share a line, one to a column — "Commentary" and
+  // "The catalogue" today. Alone, each would leave its right half empty; paired, they
+  // read as the ledger above them does. The counter is untouched: DOM order is still
+  // heading, entry, heading, entry, so the exit wave still runs top to bottom.
+  const rows: (typeof groups)[] = []
+  for (const group of groups) {
+    const last = rows[rows.length - 1]
+    if (group.entries.length === 1 && last?.length === 1 && last[0].entries.length === 1) {
+      last.push(group)
+    } else {
+      rows.push([group])
+    }
+  }
 
   return (
     // The id is what the first screen's foot line scrolls to. `scroll-mt-6` is
@@ -106,8 +119,34 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
           {spokes.length} loaded
         </span>
       </div>
-      {groups.map((group, g) => (
-        <div key={group.heading} className={g === 0 ? 'mt-5' : 'mt-6'}>
+      {rows.map((row, r) =>
+        row.length === 2 ? (
+          <div key={row[0].heading} className="mt-6 grid sm:grid-cols-2">
+            {row.map((group, i) => {
+              const side = i === 0 ? 'left' : 'right'
+              return (
+                // The right group's heading steps in by the card's own `sm:pl-8`, so it
+                // stands over its entry's text and not over the column seam.
+                <div key={group.heading} className={side === 'right' ? 'mt-6 sm:mt-0' : undefined}>
+                  <h3
+                    className={`mb-3 inline-block border-b-2 border-lawfare-teal pb-1 font-serif text-[17px] font-semibold text-foreground${side === 'right' ? ' sm:ml-8' : ''}`}
+                    style={{ viewTransitionName: `hub-card-${group.headingIndex + 1}` }}
+                  >
+                    {group.heading}
+                  </h3>
+                  <SpokeCard
+                    spoke={group.entries[0].spoke}
+                    index={group.entries[0].index}
+                    side={side}
+                    onNavigate={onNavigate}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          row.map((group) => (
+        <div key={group.heading} className={r === 0 ? 'mt-5' : 'mt-6'}>
           {/* The heading sits on the paper, above the first rule of its group rather
               than inside a ruled cell, so it reads as a label for what follows and not
               as another entry. It is in the serif because it names the group — "The law",
@@ -152,7 +191,9 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
             ))}
           </div>
         </div>
-      ))}
+          ))
+        ),
+      )}
     </section>
   )
 }
