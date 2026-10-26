@@ -286,11 +286,8 @@ export function HubKeywordSearch({
           ledeClassName="mx-auto mt-4 max-w-2xl font-serif text-base italic leading-snug text-lawfare-text-secondary text-pretty sm:text-lg sm:leading-normal"
           lede={
             <>
-              I am RAGtime. I have tens of millions of records: litigation documents, court
-              opinions, pardons, administrative records, rule-makings, published analyses,
-              legislative hearings and bills, declassified records, giant catalogs of books,
-              and hundreds of years of diplomatic history. I can help you look broadly. I can
-              help you go deep. Ask me anything.
+              I am RAGtime. I have tens of millions of records. I can help you look broadly. I
+              can help you go deep. Ask me anything.
             </>
           }
         />
