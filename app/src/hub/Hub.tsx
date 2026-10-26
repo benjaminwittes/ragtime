@@ -452,12 +452,11 @@ function AboutPanel() {
     >
       <h2 className="font-serif text-base font-semibold">About RAGtime</h2>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-        A Lawfare Institute research surface. Free tier covers structured
-        filtering and free keyword search; AI features (analysis, narrative
-        synthesis, agentic ask) require either your own provider API key
-        (bring-your-own-key) or a paid prepaid balance billed by Lawfare.
-        The corpora here are democracy-adjacent public information held in
-        a queryable form; corpus loaders are reproducible and open-source.
+        RAGtime is a Lawfare Institute research surface. Free tier covers
+        structured filtering and free keyword search; AI features require
+        either your own provider API key or a paid prepaid balance billed by
+        Lawfare. The corpora here are democracy-sensitive materials held in a
+        queryable form; corpus loaders are reproducible and open-source.
       </p>
     </section>
   )
