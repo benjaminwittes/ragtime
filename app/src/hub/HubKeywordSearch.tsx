@@ -276,8 +276,10 @@ export function HubKeywordSearch({
           // The site speaking for itself, in Ben Wittes's words (2026-09-30), where one
           // line used to name the four groups below. It is a paragraph rather than a
           // line, so it takes a wider measure than that line had and a size down at
-          // phone width, where it runs to seven lines and the box still has to be on
-          // the first screen under it (measured at 390x844: the box's top is at 537).
+          // phone width, where the box still has to be on the first screen under it.
+          // At seven lines it did (measured at 390x844: the box's top was at 537).
+          // Mary Ford cut the list of record types on 2026-10-26, so it is shorter
+          // now and the box sits higher; not re-measured since.
           //
           // "Tens of millions" is the one figure on this page that is typed rather
           // than read from the worker. It is an order of magnitude and not a count —
