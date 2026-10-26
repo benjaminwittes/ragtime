@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { formatCount } from '@/lib/format-count'
 import { getHoldingsCached, readHoldingsSnapshot } from '@/lib/holdings-cache'
 import { toHref } from '@/lib/routing'
-import { spokeGroups, spokes } from '@/spokes/registry'
+import { spokeGroups } from '@/spokes/registry'
 import { type CorpusHoldings, type CorpusSpoke } from '@lawfare/ragtime-client'
 import { HubKeywordSearch } from './HubKeywordSearch'
 
@@ -115,9 +115,6 @@ function SpokeGrid({ onNavigate }: { onNavigate: (path: string) => void }) {
         style={{ viewTransitionName: 'corpora-heading' }}
       >
         <h2 className="font-serif text-xl font-semibold">Corpora</h2>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {spokes.length} loaded
-        </span>
       </div>
       {rows.map((row, r) =>
         row.length === 2 ? (
