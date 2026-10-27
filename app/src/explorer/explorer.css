@@ -470,6 +470,7 @@
   .explorer .main.with-trail .left { display: none; }
   .explorer .left .scroll { padding: 14px; }
   .explorer .composer { padding: 10px 12px; }
+  .explorer .topic-bar { padding: 6px 12px; }
   .explorer .brief-bar { padding: 8px 14px 0; }
   .explorer .bubble.user { margin-left: 6%; }
   .explorer .bubble.user.reply { margin-left: 14%; }
@@ -502,6 +503,16 @@
  * to sit between the two is gone: its controls render into the bar's slot. */
 .explorer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .explorer .app { height: auto; flex: 1; min-height: 0; }
+
+/* The conversation's own controls, above the composer: a new topic on the left, the
+ * conversations sheet on the right. Text buttons in the page's type rather than the kit's,
+ * because this sits inside `.explorer`, whose element rules would undo the kit's. */
+.explorer .topic-bar { display: flex; align-items: baseline; gap: 16px; padding: 6px 20px; border-top: 1px solid var(--line); font-size: 13px; }
+.explorer .topic-bar button { border: 0; background: none; padding: 2px 0; }
+.explorer .topic-new { color: var(--accent); }
+.explorer .topic-new:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+.explorer .topic-history { margin-left: auto; color: var(--dim); }
+.explorer .topic-history:hover { color: var(--ink); }
 
 /* The line above the composer while no credential is set; the access button that fixes
  * it is in the bar above, outside this scope, so it keeps the app's own look. */

@@ -13,22 +13,22 @@ import { ago, cents, plural } from './model/format.ts'
 import { RETENTION_NOTE, type Summary } from './model/conversations.ts'
 
 /**
- * "Start over", and what it opens.
+ * The conversations sheet: a new conversation first, then this one, then the ones set
+ * aside, so a reader can go back to an answer they paid for.
  *
- * The button is where it was and says what it said, because that is the thing in the band
- * a reader presses when they want to ask about something else. What changed is behind it:
- * pressing it no longer destroys the conversation on the screen. It shows what starting
- * over would set aside, offers the new conversation as the first thing in the panel, and
- * lists the ones already set aside so a reader can go back to an answer they paid for.
- *
- * On the app's kit rather than the Explorer's stylesheet, like every other control in the
- * band — and rendered from the header, which is outside `.explorer`, because the sheet's
- * own element rules would win over the kit's utilities inside it (see `ExplorerPage`).
+ * It has no button of its own. It used to open from a "Start over" button in the site
+ * bar, which read as a tab of the site rather than a control of the Explorer (UI/UX live
+ * doc, 2026-10-27); the page now opens it from the Explorer's own column (`TopicBar`).
+ * The sheet stays on the app's kit and is rendered outside `.explorer`, because that
+ * stylesheet's element rules would win over the kit's utilities inside it.
  *
  * The one destructive thing here is "Forget", and it is a second press on a row that has
  * already said what it holds.
  */
 export function Conversations({
+  open,
+  now,
+  onOpenChange,
   conversations,
   current,
   disabled,
@@ -36,6 +36,14 @@ export function Conversations({
   onOpen,
   onForget,
 }: {
+  open: boolean
+  /**
+   * When the sheet was opened, for the rows' "3 min ago". Stamped by whoever opens it, not
+   * read from the page's clock: that one only ticks while a turn is running, so on a tab
+   * left open since morning every row would say "3 min ago".
+   */
+  now: number
+  onOpenChange(open: boolean): void
   conversations: readonly Summary[]
   current: string
   /** A turn is running: leaving would abandon it, so the doors are shut while it does. */
@@ -44,10 +52,6 @@ export function Conversations({
   onOpen(cid: string): void
   onForget(cid: string): void
 }) {
-  const [open, setOpen] = useState(false)
-  // Read when the panel opens, not from the page's clock: that one only ticks while a turn
-  // is running, so on a tab left open since morning every row would say "3 min ago".
-  const [now, setNow] = useState(() => Date.now())
   // Which row has asked to be forgotten. One at a time, and cleared whenever the panel
   // closes, so a confirmation never outlives the sight of what it would destroy.
   const [confirming, setConfirming] = useState<string | null>(null)
@@ -55,16 +59,12 @@ export function Conversations({
   const here = conversations.find((c) => c.cid === current) ?? null
 
   function change(next: boolean) {
-    setOpen(next)
-    if (next) setNow(Date.now())
-    else setConfirming(null)
+    onOpenChange(next)
+    if (!next) setConfirming(null)
   }
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => change(true)}>
-        Start over
-      </Button>
       <Sheet open={open} onOpenChange={change}>
         <SheetContent side="right" className="flex h-full flex-col gap-0 p-0">
           <SheetHeader className="border-b border-border">

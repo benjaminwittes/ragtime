@@ -55,6 +55,8 @@ export function ExplorerPage() {
   // Closed on every viewport, which is a plain default and not a breakpoint: this is the
   // reader's own toggle, so it is component state.
   const [trailOpen, setTrailOpen] = useState(false)
+  // The conversations sheet: closed at null, else the moment it was opened.
+  const [historyAt, setHistoryAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const x = useExplorer({ workerUrl: WORKER_URL, auth: credential })
   // The hub's handoff: asked straight away when there is something to pay with,
@@ -72,9 +74,9 @@ export function ExplorerPage() {
   // Nothing is on the screen at rest, so the trail control is the one thing that can ask
   // to be looked at. `attention` holds the whole rule for when it does.
   const trail = attention({ pool: isPaid ? null : pool })
-  // Both of these are controls on a conversation, so neither exists before there is one.
-  // "Start over" used to render disabled from the first paint, which is a button teaching
-  // a reader nothing at the moment they have the least room for it.
+  // The trail toggle and "New conversation" are controls on a conversation, so neither
+  // exists before there is one: a button rendered disabled from the first paint teaches a
+  // reader nothing at the moment they have the least room for it.
   const started = x.turns.length > 0
   // Derived rather than taken from `trailOpen` directly, so no future caller can empty the
   // turns and leave the panel up: below 900px an open trail hides the conversation, and
@@ -96,7 +98,7 @@ export function ExplorerPage() {
     : x.awaitingReply
       ? 'Reply to the question'
       : x.phase === 'research'
-        ? 'Ask a follow-up — same brief; edit the brief above for a new one'
+        ? 'Ask a follow-up on this brief. A new topic is a new conversation.'
         : 'What do you want to know? Planning runs first, before anything spends.'
 
   // A refusal the page already renders somewhere it is being looked at is not worth a
@@ -107,6 +109,14 @@ export function ExplorerPage() {
   // the trail. It is still said twice: the trail control reads "Allowance used up" and
   // goes hot without being opened. What is left — no credential, a bad envelope, a
   // network that dropped — has nowhere else to appear.
+  function newConversation() {
+    // Closing the trail is not tidiness, it is the way back. A new conversation empties
+    // the turns, which unmounts the trail control — and below 900px an open trail hides
+    // the conversation, so leaving it open would strand the reader on an empty panel.
+    setTrailOpen(false)
+    x.startNew()
+  }
+
   const refusal = x.refusal && x.refusal.code !== 'cap_cents' && !QUOTA_CODES.has(x.refusal.code ?? '') ? x.refusal : null
 
   return (
@@ -147,30 +157,27 @@ export function ExplorerPage() {
             <span className="hidden sm:inline">{trail.label}</span>
           </Button>
         )}
-        {(started || x.conversations.length > 0) && (
-          <Conversations
-            conversations={x.conversations}
-            current={x.cid}
-            disabled={x.busy}
-            onNew={() => {
-              // Closing the trail is not tidiness, it is the way back. A new
-              // conversation empties the turns, which unmounts the control above — and
-              // below 900px an open trail hides the conversation, so leaving it open
-              // would strand the reader on an empty panel with nothing left to press.
-              setTrailOpen(false)
-              x.startNew()
-            }}
-            onOpen={(cid) => {
-              setTrailOpen(false)
-              x.open(cid)
-            }}
-            onForget={(cid) => {
-              setTrailOpen(false)
-              x.forget(cid)
-            }}
-          />
-        )}
       </SiteBarActions>
+
+      {/* Outside `.explorer`, for the kit's sake (see `Conversations`); the sheet portals
+          to the body either way, so where it sits in this tree moves nothing on screen. */}
+      <Conversations
+        open={historyAt !== null}
+        now={historyAt ?? 0}
+        onOpenChange={(open) => setHistoryAt(open ? Date.now() : null)}
+        conversations={x.conversations}
+        current={x.cid}
+        disabled={x.busy}
+        onNew={newConversation}
+        onOpen={(cid) => {
+          setTrailOpen(false)
+          x.open(cid)
+        }}
+        onForget={(cid) => {
+          setTrailOpen(false)
+          x.forget(cid)
+        }}
+      />
 
       <div className="explorer">
         <div className="app">
@@ -213,6 +220,22 @@ export function ExplorerPage() {
                   />
                 )}
               </div>
+              {/* A new topic, at the composer where it is wanted. Typing there continues
+                  the conversation on screen, which is not how a chat usually behaves, so
+                  the way out of it sits beside it rather than up in the site bar, where
+                  "Start over" read as a tab of the site (UI/UX live doc, 2026-10-27). */}
+              {(started || x.conversations.length > 0) && (
+                <div className="topic-bar">
+                  {started && (
+                    <button type="button" className="topic-new" disabled={x.busy} onClick={newConversation}>
+                      + New conversation
+                    </button>
+                  )}
+                  <button type="button" className="topic-history" onClick={() => setHistoryAt(Date.now())}>
+                    Conversations ({x.conversations.length})
+                  </button>
+                </div>
+              )}
               {waiting && (
                 <div className="credential" role="status">
                   {wrongProvider ? 'The Explorer runs on Claude. ' : 'Nothing spends until you are signed in or have a key set. '}
