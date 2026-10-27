@@ -405,6 +405,20 @@ export function HubKeywordSearch({
         </div>
       </div>
 
+      {/* The search is out. The lantern says so to anyone who knows the owl;
+          this says it in words, on a first search and on every one after, when
+          the old results are still standing under it (UI/UX live doc,
+          2026-10-27). The live region is always mounted, because a region that
+          appears with its text in it is not announced. */}
+      <div role="status" aria-live="polite">
+        {loading && (
+          <p className="mt-2 flex items-center justify-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-lawfare-teal" />
+            Searching {HUB_KEYWORD_CORPORA.length} corpora…
+          </p>
+        )}
+      </div>
+
       {error && !response && (
         <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
