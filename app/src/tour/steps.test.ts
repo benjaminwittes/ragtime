@@ -43,7 +43,7 @@ test('the tour opens with what this is and closes with feedback', () => {
 })
 
 test('the hub steps name the hub, so the tour can start from any page', () => {
-  for (const id of ['search', 'modes', 'collections']) {
+  for (const id of ['search', 'explorer', 'collections']) {
     assert.equal(STEPS.find((step) => step.id === id)?.route, '/', id)
   }
   // The site bar is on every route; a step about it must not move the reader.

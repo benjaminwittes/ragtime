@@ -70,13 +70,13 @@ export const STEPS: readonly TourStep[] = [
     route: '/',
   },
   {
-    id: 'modes',
-    title: 'Search, or the Explorer',
+    id: 'explorer',
+    title: 'The Explorer',
     body: [
-      'Search finds your words in the record.',
-      'The Explorer answers a question with AI. It shows every step it took and what each step cost.',
+      'The Explorer answers a question about the same record with AI.',
+      'It shows every step it took and what each step cost.',
     ],
-    target: '[role="tablist"][aria-label="What the box does"]',
+    target: '[data-tour="explorer"]',
     route: '/',
   },
   {

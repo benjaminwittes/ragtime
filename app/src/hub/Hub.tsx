@@ -23,14 +23,11 @@ import { HubKeywordSearch } from './HubKeywordSearch'
  * its spoke — then the about panel and the footer.
  *
  * The box used to be one half of a segmented Ask / Search toggle, semantic on
- * the left and keyword on the right, and the two tabs above it now are not that
- * toggle coming back. That one asked whether a *corpus* should be searched
- * semantically or lexically, which is a property of the corpus rather than a
- * setting anyone arrives here with an opinion about. These two ask which surface
- * takes the sentence — the index here, or the Explorer's tool loop with its
- * visible cost — and that changes what happens next rather than how the same
- * thing is done. `HubAmaSearch.tsx` stays in the tree unreferenced; it is not
- * what came back.
+ * the left and keyword on the right. Later it had two tabs above it, Search and
+ * the Explorer, choosing which surface took the sentence; those went on
+ * 2026-10-27 (UI/UX live doc), since both serve the same record, and the Explorer
+ * is reached from the site bar. `HubAmaSearch.tsx` stays in the tree
+ * unreferenced.
  *
  * The hub draws no bar of its own: the site's one bar is mounted above every
  * route in `App` (`components/SiteBar.tsx`), so this page is its own content and

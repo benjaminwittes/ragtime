@@ -29,7 +29,7 @@ const SCRIM = '[data-tour="scrim"]'
 const WALK = [
   { id: 'welcome', target: null },
   { id: 'search', target: '#hub-ask form' },
-  { id: 'modes', target: '[role="tablist"][aria-label="What the box does"]' },
+  { id: 'explorer', target: '[data-tour="explorer"]' },
   { id: 'collections', target: '#corpora' },
   { id: 'access', target: 'button[aria-label="Configure AI access"]' },
   { id: 'docs', target: 'button[aria-label="Open documentation overlay"]' },
@@ -153,7 +153,7 @@ for (const viewport of [DESKTOP, PHONE]) {
   await page.keyboard.press('Enter')
   await arrives(page, 'search', 'Enter moves on: the card’s button has the focus')
   await page.keyboard.press('ArrowRight')
-  await arrives(page, 'modes', 'the right arrow moves on')
+  await arrives(page, 'explorer', 'the right arrow moves on')
   await page.keyboard.press('ArrowLeft')
   await arrives(page, 'search', 'the left arrow goes back')
   await page.click(`${CARD} button:has-text("Back")`)

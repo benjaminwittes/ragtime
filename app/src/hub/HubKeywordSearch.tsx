@@ -6,7 +6,7 @@ import { Owl } from '@/components/Owl'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 import { useDocs } from '@/docs/DocsContext'
 import { cn } from '@/lib/utils'
-import { navigateTo, toHref } from '@/lib/routing'
+import { toHref } from '@/lib/routing'
 import {
   type HubCorpusSlug,
   type HubKeywordResponse,
@@ -28,23 +28,17 @@ import { useTick } from './tune'
 gsap.registerPlugin(useGSAP)
 
 /**
- * The hub's first screen: one box, two modes, and a question already in it.
+ * The hub's first screen: one box and a question already in it.
  *
  * The file is still named for the half that runs here — the free cross-corpus
  * keyword fan (brief #1 §4b): plain-language input → parallel FTS across every
- * loaded corpus but sanctions → grouped-by-corpus results, no LLM, no cost. The
- * other half of the box is a handoff: the same words, sent to `/explorer`, where
- * a conversation orients before it spends. Which one a submit does is the
- * reader's choice, made in two tabs above the field and defaulted to Search.
+ * loaded corpus but sanctions → grouped-by-corpus results, no LLM, no cost.
  *
- * That is not the old Ask / Search toggle come back. The toggle asked whether a
- * *corpus* should be searched semantically or lexically, which is a property of
- * the corpus and not a question to put to anyone before they have typed. This
- * asks which of two surfaces should take the sentence — a free index lookup
- * here, or a research conversation there — and that difference is real, visible
- * in the helper line under the box, and the reason the mode is not remembered
- * between visits: the Explorer needs a credential, and a remembered default
- * landing on a sign-in placeholder would be a page that starts by refusing.
+ * The box used to have a second half: two tabs above it, Search and Explorer,
+ * and a submit in Explorer mode handed the words to `/explorer`. Both serve the
+ * same record, in two modes of delivery, so the choice in front of the box was
+ * removed (UI/UX live doc, 2026-10-27); the Explorer is reached from the site
+ * bar.
  *
  * The page's examples are in the box rather than beside it. A row of example
  * links under the field was a second set of controls asking to be pressed; the
@@ -57,7 +51,7 @@ gsap.registerPlugin(useGSAP)
  *     the first screen is the question and the corpora are a deliberate scroll
  *     away (the foot line says so, and how far). Results collapse it: an answer
  *     that arrived below the fold is an answer nobody sees.
- *   - On submit in Search mode: per-corpus result sections, each with top-5 +
+ *   - On submit: per-corpus result sections, each with top-5 +
  *     total count + "Open workspace →".
  *   - Per-corpus error state: if one corpus's query failed, that section shows
  *     the error; the other corpora still render their results.
@@ -77,27 +71,6 @@ gsap.registerPlugin(useGSAP)
  * nobody chose it.
  */
 const HUB_KEYWORD_CORPORA: CorpusSlug[] = hubKeywordSpokes.map((s) => s.slug)
-
-/** Which surface takes the sentence. Not persisted — see the note at the top. */
-type Mode = 'search' | 'explorer'
-
-/* The two names, each with the one thing its sentence cannot say.
- *
- * The h1 carries what the box takes and what comes back; these strings carry
- * what it costs, which is the half a reader needs precisely when both modes are
- * available to them — an unlit Explorer is its own explanation, a lit one is a
- * choice with a price. Three words each, in the muted mono the Tab hint uses, so
- * a price reads as annotation on the choice rather than a second line of copy.
- *
- * They no longer stand under the words. A caption apiece at rest made the row
- * read as four things when it is two, which is the distraction he called off the
- * live page (2026-09-18, his ruling). Each string waits in the margin of its own
- * tab now and comes back while that tab is under a pointer or a focus ring — see
- * the tablist below for how, and for why nothing moves when one arrives. */
-const MODES: readonly { id: Mode; label: string; cost: string }[] = [
-  { id: 'search', label: 'Search', cost: 'free, no AI' },
-  { id: 'explorer', label: 'Explorer', cost: 'uses AI' },
-]
 
 /* The hub's motion, in seconds, because GSAP counts in seconds.
  *
@@ -124,7 +97,6 @@ export function HubKeywordSearch({
 }) {
   const auth = useAuth()
   const docs = useDocs()
-  const [mode, setMode] = useState<Mode>('search')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +113,7 @@ export function HubKeywordSearch({
   const rotating = query === ''
   const [at, setAt] = useState(0)
   const tick = TICKS[at]!
-  const sample = mode === 'search' ? tick.sample.query : tick.sample.question
+  const sample = tick.sample.query
   const hero = useRef<HTMLElement>(null)
   const skin = useRef<HTMLDivElement>(null)
   const reel = useRef<HTMLSpanElement>(null)
@@ -182,21 +154,7 @@ export function HubKeywordSearch({
     }
   }
 
-  /**
-   * Submit, whichever mode is on.
-   *
-   * The Explorer arm names `navigateTo` rather than the `onNavigate` prop the
-   * result links use, and they are the same function (App hands this page
-   * `navigateTo` itself). The difference is what is being carried: a link goes
-   * to a path, and this goes to a path *with a question on it* — a grammar
-   * `lib/routing.ts` owns at both ends, since `readCarryoverQuery` is what reads
-   * it back on the other side.
-   */
   function submit() {
-    if (mode === 'explorer') {
-      navigateTo('/explorer?q=' + encodeURIComponent(query.trim()))
-      return
-    }
     void runSearch()
   }
 
@@ -257,11 +215,9 @@ export function HubKeywordSearch({
           // sentence: no span, no live region, no second heading, no button.
           // What crosses between two corpora is the whole line's opacity, which
           // is also what lets it re-centre and re-wrap while nobody can see it.
-          // The mode's own sentence, not one sentence for both: the verb is the
-          // big half of the Search/Explorer signal, so the h1 changes when the
-          // choice does. Same object either way, so the line neither re-measures
-          // nor moves the page under the reader.
-          heading={tick.set.titles[mode]}
+          // Search's sentence. The Explorer's (`titles.explorer`) went with the
+          // tabs that chose between them (UI/UX live doc, 2026-10-27).
+          heading={tick.set.titles.search}
           // 3.25rem from `sm`, where the longest of the twenty-four sentences is
           // 889px against 976px of measure and every one of them holds a single
           // line; 2.2rem below it, which is the size at which none of them takes
@@ -294,128 +250,13 @@ export function HubKeywordSearch({
           }
         />
 
-        {/* Two words in the page's reading voice, at about half the height of
-            the sentence above them — the page's second voice, not a second
-            headline. The active one wears the same accent the group headings
-            below do: 2px of teal on the bottom edge, the width of the word,
-            which is why the rule sits on a span around the label rather than on
-            the button. The inactive one carries a transparent border of the
-            same weight so the pair sits on one baseline and nothing moves when
-            the choice changes.
-
-            The price used to be a caption under each word. At rest that put two
-            mono lines under two serif ones, and the row read as four things
-            when it is two. It comes back on the outer flank instead — Search's
-            price to the left of Search, Explorer's to the right of Explorer —
-            for as long as that tab is under a pointer or a focus ring: a note
-            in the margin of the choice, on the choice's own side, and only
-            while it is being asked for.
-
-            Nothing moves when one arrives, because a price is never in the flow
-            to begin with: each is absolutely positioned inside its own button,
-            so revealing it shifts neither tab, nor the box under them, nor the
-            page. That is the property the transparent border buys above, bought
-            the same way.
-
-            Never the teal: teal is the accent that says *chosen*, and a price is
-            not a choice. It stays the muted mono the Tab hint uses, on the lit
-            tab as much as the unlit one.
-
-            Below `sm` the reveal never fires. A touch screen has no pointer to
-            fire it with, and at 390 a note flanking the pair is a note running
-            into the words or off the edge of the paper — so nothing is lost
-            there that was not already lost. The span itself is in the document
-            at every width, transparent rather than hidden, because the button
-            names it in `aria-describedby`, and a price that is `display: none`
-            is a price nobody is told. */}
-        <div
-          role="tablist"
-          aria-label="What the box does"
-          className="mt-8 flex items-baseline justify-center gap-8 sm:gap-10"
-        >
-          {MODES.map((m, i) => (
-            <button
-              key={m.id}
-              type="button"
-              role="tab"
-              id={`hub-mode-${m.id}`}
-              aria-selected={mode === m.id}
-              aria-controls="hub-ask"
-              // The word is the name; the price is a description. Without the
-              // label the flanking span would be read into the name — a tab
-              // called "Search free, no AI" — and then read out a second time as
-              // its own description. With it, the name is the word on screen and
-              // the price arrives where a description belongs. Saying it at all
-              // is the point: one of these two modes spends money, and an
-              // affordance that exists only under a pointer exists neither for a
-              // reader who has none nor for a finger on glass.
-              aria-label={m.label}
-              aria-describedby={`hub-mode-${m.id}-cost`}
-              // Roving tabindex, the tablist pattern: one stop for the pair, and
-              // the arrows move between them, so Tab from the title lands on the
-              // choice once and then on the box.
-              tabIndex={mode === m.id ? 0 : -1}
-              onClick={() => setMode(m.id)}
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-                e.preventDefault()
-                const next = MODES.find((other) => other.id !== m.id)
-                if (!next) return
-                setMode(next.id)
-                document.getElementById(`hub-mode-${next.id}`)?.focus()
-              }}
-              className={cn(
-                'group relative flex flex-col items-center font-serif text-[22px] transition-colors duration-150 sm:text-[28px]',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lawfare-teal',
-                mode === m.id
-                  ? 'text-foreground'
-                  : 'text-lawfare-text-secondary hover:text-lawfare-teal',
-              )}
-            >
-              {/* `pb-2` where the 16px word had `pb-1`: the rule is 2px of ink
-                  read against a 28px face, and 4px of air put it in the
-                  descender of "Explorer" rather than under the word. */}
-              <span
-                className={cn(
-                  'border-b-2 pb-2 transition-colors duration-150',
-                  mode === m.id ? 'border-lawfare-teal' : 'border-transparent',
-                )}
-              >
-                {m.label}
-              </span>
-              {/* The first tab's price flanks left and the last one's flanks
-                  right, so each sits on the pair's outside and neither can
-                  collide with the other word. `inset-y-0` with `items-center`
-                  rather than a nudged offset: the note is centred on the button
-                  it belongs to, which lands an 11px line on the middle of a 28px
-                  one without a measured number to go stale. `pointer-events-none`
-                  because an invisible price is otherwise still a hit target — a
-                  strip of empty paper beside the tabs that changes the mode when
-                  clicked. */}
-              <span
-                id={`hub-mode-${m.id}-cost`}
-                className={cn(
-                  'pointer-events-none absolute inset-y-0 flex items-center whitespace-nowrap font-mono text-[11px] text-lawfare-muted',
-                  'opacity-0 transition-opacity duration-150',
-                  'sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100',
-                  i === 0 ? 'right-full mr-3' : 'left-full ml-3',
-                )}
-              >
-                {m.cost}
-              </span>
-            </button>
-          ))}
-        </div>
-
         {/* `group` here is what lets the Tab hint appear on focus without either
             end knowing about the other: the box is a shared component that ships
             no focus state, and the hint is a sibling of the form rather than
             anything inside it. */}
         <div
           id="hub-ask"
-          role="tabpanel"
-          aria-labelledby={`hub-mode-${mode}`}
-          className="group mt-5"
+          className="group mt-8"
         >
           {/* The same component the Explorer's composer is, wearing this surface's clothes.
               Five of the measurements below are `var(--ask-*)` rather than literals — the
@@ -448,13 +289,13 @@ export function HubKeywordSearch({
               placeholder=""
               disabled={loading}
               maxLength={200}
-              ariaLabel={mode === 'search' ? 'Cross-corpus search' : 'Ask the Explorer'}
+              ariaLabel="Cross-corpus search"
               fieldClassName={cn(
                 'block w-full rounded-[var(--ask-radius)] border-[length:var(--ask-border-width)] border-primary bg-card py-[var(--ask-pad-y)] pl-[var(--ask-pad-x)] pr-14 font-serif text-[length:var(--ask-font-size)] leading-7 text-foreground shadow-sm',
                 'placeholder:text-lawfare-muted focus:outline-none focus:ring-2 focus:ring-primary/30',
                 loading && 'cursor-not-allowed opacity-60',
               )}
-              submitAriaLabel={mode === 'search' ? 'Search' : 'Ask the Explorer'}
+              submitAriaLabel="Search"
               submitClassName={cn(
                 'absolute right-2 top-2 bottom-2 flex w-11 items-center justify-center rounded-md bg-primary text-lg text-primary-foreground transition',
                 canSubmit ? 'hover:opacity-90' : 'cursor-not-allowed opacity-40',
