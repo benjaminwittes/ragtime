@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/sheet'
 
 import { ago, cents, plural } from './model/format.ts'
-import type { Summary } from './model/conversations.ts'
+import { RETENTION_NOTE, type Summary } from './model/conversations.ts'
 
 /**
  * "Start over", and what it opens.
@@ -71,7 +71,7 @@ export function Conversations({
             <SheetTitle>Conversations</SheetTitle>
             <SheetDescription>
               {here
-                ? 'Starting another one keeps this one. Nothing here is lost until you forget it.'
+                ? 'Starting another one keeps this one.'
                 : 'Ask something to start one. The ones you have had are below.'}
             </SheetDescription>
           </SheetHeader>
@@ -141,8 +141,7 @@ export function Conversations({
           </div>
 
           <div className="border-t border-border p-4 text-xs text-muted-foreground">
-            These are on this device only — this browser, not your account. Clearing the
-            browser&rsquo;s storage clears them.
+            {RETENTION_NOTE}
           </div>
         </SheetContent>
       </Sheet>
