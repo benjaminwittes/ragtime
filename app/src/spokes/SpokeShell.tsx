@@ -182,6 +182,13 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setViewingIdx(stack.length) // new tip index
   }
 
+  /** Swap the tip for a new page, keeping viewing on the tip. */
+  function replaceTip(p: Omit<StackPage, 'id'>) {
+    const newPage: StackPage = { ...p, id: crypto.randomUUID() }
+    setStack((prev) => [...prev.slice(0, -1), newPage])
+    setViewingIdx(stack.length - 1)
+  }
+
   /** Enter read-only view of a past page. -1 = the implicit "all cases"
    *  root (no page rendered; just the breadcrumb). */
   function viewPast(idx: number) {
@@ -197,9 +204,9 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
    *  Empty stack → empty scope (full corpus). The Worker ANDs the ids into the
    *  CourtListener query and refuses a scope over its id cap by name
    *  (scope_too_large), which surfaces as the query error. */
-  function buildScopeFromTip(): FilterScope {
-    if (!tipPage) return {}
-    const ids = tipPage.clIds ?? tipPage.rows.map((r) => r.cl_id)
+  function buildScopeFromTip(base: StackPage | undefined = tipPage): FilterScope {
+    if (!base) return {}
+    const ids = base.clIds ?? base.rows.map((r) => r.cl_id)
     if (ids.length === 0) return {}
     return { cl_ids: ids }
   }
@@ -222,9 +229,17 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryError(undefined)
     setLoadMoreError(undefined)
     try {
-      const scope = buildScopeFromTip()
+      // The form holds every filter field, so Apply is a whole new filter,
+      // not a narrowing of the last one. When the tip is itself a filter,
+      // replace it and scope from the page beneath; stacking would AND in
+      // only the tip's loaded rows (121,055 → 9,408 → 100 → 0).
+      const replacing = tipPage?.operationType === 'manual_filter'
+      const scope = buildScopeFromTip(
+        replacing ? stack[stack.length - 2] : tipPage,
+      )
       const r = await runManualFilter(fields, scope)
-      pushPage({
+      const place = replacing ? replaceTip : pushPage
+      place({
         operationType: 'manual_filter',
         operationLabel: buildManualFilterLabel(fields),
         rows: r.display_rows,
