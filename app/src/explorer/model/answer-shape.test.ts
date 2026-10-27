@@ -1,7 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
-import { citationsIn, detectShape, firstCitation, firstNumber, isCitationToken, linkifyCitations, splitListAnswer, titlesIn } from './answer-shape.ts'
+import { citationsIn, detectShape, firstCitation, headlineCount, isCitationToken, linkifyCitations, splitListAnswer, titlesIn } from './answer-shape.ts'
 import { cents, seconds } from './format.ts'
 import { briefJson, mergePinnedCorpora, moveCorpus, normalizeBrief, pinnedSummary, sameBrief } from './brief.ts'
 
@@ -109,9 +109,19 @@ test('citations are read through the one resolver; the first number ignores ids'
   const c = citationsIn('see [A](rt://olc/867) and [B](rt://congress:hearings/CHRG-1) and [not one](https://x.y/z)')
   assert.deepEqual(c.map((x) => [x.slug, x.id, x.path]), [['olc', '867', '/corpus/olc/867'], ['congress:hearings', 'CHRG-1', '/corpus/congress:hearings/CHRG-1']])
   assert.equal(firstCitation('nothing here'), null)
-  assert.equal(firstNumber('There are 1,204 orders since [EO 14000](rt://presidential/13087).'), '1,204')
-  assert.equal(firstNumber('Fourteen orders, per [the list](rt://presidential/13087).'), null)
-  assert.equal(firstNumber('About 14 orders cite it.'), '14')
+  assert.equal(headlineCount('There are 1,204 orders since [EO 14000](rt://presidential/13087).'), '1,204')
+  assert.equal(headlineCount('Fourteen orders, per [the list](rt://presidential/13087).'), null)
+  assert.equal(headlineCount('About 14 orders cite it.'), '14')
+})
+
+// UI/UX live doc, 2026-10-27: "a multi-year answer could headline the wrong figure."
+test('a count headline is never a year, and is withheld when several figures compete', () => {
+  assert.equal(headlineCount('Since 2019, 14 orders cite it.'), '14')
+  assert.equal(headlineCount('Between 2019 and 2023 there were 1,204 filings.'), '1,204')
+  assert.equal(headlineCount('There were 12 in 2019 and 9 in 2020.'), null)
+  assert.equal(headlineCount('A total of **21**: 12 in 2019 and 9 in 2020.'), '21')
+  assert.equal(headlineCount('Filed 2020-03-01: 7 motions.'), '7')
+  assert.equal(headlineCount('In 2021 alone.'), null)
 })
 
 test('cents read with one decimal below a dollar and as dollars from one; seconds round', () => {

@@ -2,7 +2,7 @@ import type { ExplorerBrief } from '@lawfare/ragtime-client'
 
 import { AppLink } from '@/components/AppLink'
 import { SaveToCollection } from '@/my-collections/SaveToCollection'
-import { detectShape, firstCitation, firstNumber, linkifyCitations, splitListAnswer } from '../model/answer-shape.ts'
+import { detectShape, firstCitation, headlineCount, linkifyCitations, splitListAnswer } from '../model/answer-shape.ts'
 import { costLine, stopBadge } from '../model/format.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from '../model/sources.ts'
 import { answerText, type Turn } from '../model/turn.ts'
@@ -64,7 +64,7 @@ export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Pro
       <Markdown text={answer} titles={titles} signature />
     )
   } else if (shape === 'count') {
-    const n = firstNumber(text)
+    const n = headlineCount(text)
     const ws = workspaces[0]
     body = (
       <>

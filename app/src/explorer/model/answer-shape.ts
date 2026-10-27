@@ -156,10 +156,28 @@ function firstWords(text: string): string {
   return words.slice(0, 10).join(' ') + (words.length > 10 ? '…' : '')
 }
 
-/** The first number in the text (commas allowed), for the count renderer. */
-export function firstNumber(markdown: string): string | null {
-  const m = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?![\w,.]*\d)/.exec(markdown.replace(/rt:\/\/[^)\s]+/g, ''))
-  return m ? m[1]! : null
+// A whole number (commas allowed) standing alone: not part of a word, a
+// decimal, or a date written with dashes or slashes.
+const NUMBER = /(?<![\w.,/-])(\d{1,3}(?:,\d{3})+|\d+)(?![\w/-]|[.,]\d)/g
+const YEAR = /^(1[6-9]|20)\d\d$/
+
+function countCandidates(text: string): string[] {
+  return [...text.matchAll(NUMBER)].map((m) => m[1]!).filter((n) => !YEAR.test(n))
+}
+
+/**
+ * The figure a count answer is headlined by, or null when the text does not
+ * settle on one. Years are never the count. One number left is the count; with
+ * several (a per-year breakdown), only a single bolded number is, because
+ * headlining the first of several could headline the wrong figure. A
+ * citation's title (EO 14000, § 1983) is never the count.
+ */
+export function headlineCount(markdown: string): string | null {
+  const text = markdown.replace(/\[[^\]]*\]\(rt:\/\/[^)\s]*\)/g, '').replace(/rt:\/\/[^)\s]+/g, '')
+  const all = new Set(countCandidates(text))
+  if (all.size === 1) return [...all][0]!
+  const bold = new Set([...text.matchAll(/\*\*([^*]+)\*\*/g)].flatMap((m) => countCandidates(m[1]!)))
+  return bold.size === 1 ? [...bold][0]! : null
 }
 
 export type ListCard = {
