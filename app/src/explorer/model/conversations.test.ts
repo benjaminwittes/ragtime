@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest'
 import {
   EMPTY_INDEX,
   INDEX_VERSION,
+  MAX_CONVERSATIONS,
+  RETENTION_NOTE,
   TITLE_MAX,
   conversationKey,
   evict,
@@ -295,5 +297,12 @@ describe('spendOf', () => {
   it('looks back past a turn that spent nothing', () => {
     const cost = (spend: number) => ({ type: 'cost', conversation_spend: spend }) as never
     expect(spendOf([turn({ costs: [cost(3)] }), turn({ costs: [] })])).toBe(3)
+  })
+})
+
+describe('what the reader is told about keeping', () => {
+  it('names the count evict keeps, and the browser as the only place', () => {
+    expect(RETENTION_NOTE).toContain(`${MAX_CONVERSATIONS} most recent`)
+    expect(RETENTION_NOTE).toContain('this browser only')
   })
 })

@@ -51,6 +51,18 @@ export const HISTORY_BUDGET_BYTES = 3_000_000
 /** And however much room there is, a list nobody can read is not worth keeping. */
 export const MAX_CONVERSATIONS = 20
 
+/**
+ * How long a conversation lasts, said to the reader. The server keeps none: the worker's
+ * only clock is the 24-hour envelope, and when that runs out the next turn reopens it
+ * rather than losing anything. What loses a conversation is this browser — `evict` past
+ * the count or the budget, or the reader clearing site data. Built from the two limits so
+ * the sentence cannot drift from the rule (UI/UX live doc, 2026-10-27, asked "is it 2
+ * weeks?" — it is not a time at all).
+ */
+export const RETENTION_NOTE =
+  `Conversations are kept in this browser only, not in your account. It keeps your ${MAX_CONVERSATIONS} most recent, ` +
+  'fewer if they are long, and drops the oldest to make room. Clearing the browser’s storage clears them.'
+
 /** The longest a title may run before it is cut at a word. */
 export const TITLE_MAX = 90
 

@@ -5,6 +5,7 @@ import { Owl } from '@/components/Owl'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 
 import { pinnedSummary } from '../model/brief.ts'
+import { RETENTION_NOTE } from '../model/conversations.ts'
 import { EXAMPLE_QUESTIONS } from '../model/examples.ts'
 import { useExampleCount } from '../tune.ts'
 
@@ -89,6 +90,9 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
         Ask in plain words — quotes, minus and OR belong to Search. The Explorer writes its
         own searches from your question, and the trail shows each one.
       </p>
+      {/* Said before anything is asked, because nothing warns a reader later: a conversation
+          dropped to make room is simply not in the list (UI/UX live doc, 2026-10-27). */}
+      <p className="hint">{RETENTION_NOTE}</p>
       {corpora.length > 0 && (
         <div className="pins">
           {/* Thirteen chips is five rows on a desktop and more on a phone, for a control
