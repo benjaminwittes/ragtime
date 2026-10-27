@@ -111,7 +111,7 @@ let s = await ask(page, 'Who may the President remove?')
 check('an answer carrying its own mark', s.mark === 'MARK-A', s)
 
 await openPanel(page)
-await page.click('button:has-text("New conversation")')
+await page.click('[role="dialog"] button:has-text("New conversation")')
 await page.waitForTimeout(400)
 await page.evaluate(() => {
   localStorage.setItem('__rt_turn', '0')
