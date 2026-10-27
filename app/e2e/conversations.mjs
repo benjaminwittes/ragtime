@@ -34,7 +34,7 @@ const ctxWith = (seed) => ctxWithHarness(browser, { seed })
   await page.click('[role="dialog"] button:has-text("New conversation")')
   await page.waitForTimeout(800)
   const fresh = await state(page)
-  log('A3 · after New conversation', JSON.stringify({ turns: fresh.turns, startOver: fresh.startOver, chrome: fresh.chrome }))
+  log('A3 · after New conversation', JSON.stringify({ turns: fresh.turns, topicBar: fresh.topicBar, chrome: fresh.chrome }))
   await page.screenshot({ path: `${SHOTS}/conv-2-fresh-390.png` })
 
   await page.evaluate(() => localStorage.setItem('__rt_turn', '0'))

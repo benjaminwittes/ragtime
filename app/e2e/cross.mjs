@@ -83,7 +83,7 @@ async function rowsOf(page) {
 }
 
 async function openPanel(page) {
-  await page.click('button:has-text("Start over")')
+  await page.click('.explorer .topic-history')
   await page.waitForTimeout(350)
 }
 

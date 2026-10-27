@@ -252,7 +252,7 @@ function installStub() {
         // accessibility tree.
         ? { label: trailBtn.innerText.trim(), hot: /bg-destructive|text-white/.test(trailBtn.className), bg: getComputedStyle(trailBtn).backgroundColor }
         : null,
-      startOver: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Start over'),
+      topicBar: !!document.querySelector('.explorer .topic-bar'),
       researchBtn: [...document.querySelectorAll('button')].some((b) => /^Research$/.test(b.textContent.trim())),
       errors: [...document.querySelectorAll('.error')].map((e) => e.textContent.trim().slice(0, 200)),
       headerAlert: (document.querySelector('header [role="alert"]') || {}).textContent?.trim() ?? null,
@@ -328,7 +328,7 @@ async function panel(page) {
 }
 
 async function openPanel(page) {
-  await page.click('header button:has-text("Start over")')
+  await page.click('.explorer .topic-history')
   await page.waitForTimeout(500)
   return panel(page)
 }
