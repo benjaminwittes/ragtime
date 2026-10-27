@@ -67,7 +67,8 @@ in turn, and you can end it at any step.
 **The hub** is the cross-corpus entry point. **Search** fans a keyword query
 across {{corpora.fan}} of the {{corpora.held}} corpora at once, free and without AI; use it when
 you don't yet know which corpus holds your answer. (Sanctions is the one the
-fan leaves out; search it from its own workspace.) **Explorer** takes a
+fan leaves out; search it from its own workspace.) **Explorer**, the link at
+the top of every page, takes a
 question in your own words, plans the research, runs it, and hands you into
 the corpora it used. It runs on Claude specifically, so it needs a
 Lawfare-billed balance, an **Anthropic** key, or the demo password; a key for

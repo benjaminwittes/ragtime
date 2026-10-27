@@ -5,8 +5,9 @@ import type { DocsEntry } from '../types'
  * corpus's own workspace. The fan covers every spoke except sanctions
  * (`HUB_KEYWORD_SPOKES`).
  *
- * The tabs carry NO captions under them — `MODES[].cost` is drawn in the
- * tab's own margin. Do not write a caption back into the prose here.
+ * The hub box is Search only since 2026-10-27 (UI/UX live doc): the
+ * Search/Explorer tabs above it were removed, and the Explorer is the link
+ * in the site bar.
  *
  * Retitled "Search, Explained" on 2026-09-18 (Mary Ford), when the
  * keyword/semantic control came off the spokes and the entry that explained
@@ -57,7 +58,7 @@ from each, plus the total count per corpus. Free, no AI. {{corpora.fan_primary|c
 primary sources; the other is Commentary, published analysis from Lawfare and
 Executive Functions. **Explorer** sends the same words to a conversation that
 plans the research, runs it across the corpora and hands you into them; that
-reads with AI and costs money. Switching keeps what you have typed.
+reads with AI and costs money. It is the **Explorer** link at the top of every page.
 
 **What a good query looks like.** Give Search the words you expect the
 documents themselves to use — a phrase, a name, a citation: "Freedom of

@@ -143,6 +143,7 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
           <AppLink
             to="/explorer"
             aria-current={onExplorer ? 'page' : undefined}
+            data-tour="explorer"
             style={{ viewTransitionName: 'nav-explorer' }}
             className={cn(
               'font-serif text-[15px] text-primary underline-offset-4 hover:underline aria-[current=page]:underline',
