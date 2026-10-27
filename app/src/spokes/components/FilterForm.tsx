@@ -199,7 +199,7 @@ export function FilterForm({
                       ? 'District'
                       : p === 'circuit'
                         ? 'Circuit'
-                        : 'None'
+                        : 'Deselect all'
                 const a11yLabel =
                   p === 'all'
                     ? 'Select all courts'
