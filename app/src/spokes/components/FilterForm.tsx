@@ -13,6 +13,7 @@ import {
   type FacetSpec,
 } from '@lawfare/ragtime-client'
 import { courtDisplayName } from '@/spokes/litigation/court-names'
+import { selectedFirst } from '@/spokes/litigation/court-order'
 import { judgeField } from '@/spokes/litigation/judges'
 
 /**
@@ -86,6 +87,17 @@ export function FilterForm({
     [userCourtsSel, facetData],
   )
 
+  // The selection the list was last sorted by: settled by a preset or an
+  // Apply, not by each tick. `undefined` = untouched, facet order.
+  const [sortedBy, setSortedBy] = useState<Set<string> | undefined>(undefined)
+  const courtOrder = useMemo(
+    () =>
+      sortedBy
+        ? selectedFirst(facetData?.courts ?? [], sortedBy)
+        : (facetData?.courts ?? []),
+    [sortedBy, facetData],
+  )
+
   const activePreset = useMemo<CourtPreset | null>(() => {
     if (!facetData) return null
     return detectCourtPreset([...courtsSel], facetData.courts)
@@ -93,7 +105,9 @@ export function FilterForm({
 
   function applyPreset(preset: CourtPreset) {
     if (!facetData) return
-    setUserCourtsSel(new Set(resolveCourtPreset(preset, facetData.courts)))
+    const next = new Set(resolveCourtPreset(preset, facetData.courts))
+    setUserCourtsSel(next)
+    setSortedBy(next)
   }
 
   function toggleCourt(code: string) {
@@ -120,6 +134,7 @@ export function FilterForm({
     setTo('')
     // Reset back to the "default = all courts from facetData" state.
     setUserCourtsSel(undefined)
+    setSortedBy(undefined)
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -140,6 +155,7 @@ export function FilterForm({
         ? { allCourts: true }
         : { courts: [...courtsSel] }),
     }
+    setSortedBy(new Set(courtsSel))
     onSubmit(fields)
   }
 
@@ -243,7 +259,7 @@ export function FilterForm({
               className="h-48 rounded-md border border-border bg-background"
             >
               <ul className="divide-y divide-border">
-                {(facetData?.courts ?? []).map((code) => {
+                {courtOrder.map((code) => {
                   const checked = courtsSel.has(code)
                   return (
                     <li key={code}>
