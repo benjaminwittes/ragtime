@@ -207,7 +207,21 @@ export function ExplorerPage() {
               )}
               <div className="scroll">
                 {x.turns.length === 0 ? (
-                  <EmptyState registry={x.registry} pinned={x.pinned} disabled={x.busy || waiting} busy={x.busy} onAsk={x.ask} onTogglePin={x.togglePin} />
+                  <EmptyState
+                    registry={x.registry}
+                    pinned={x.pinned}
+                    disabled={x.busy || waiting}
+                    busy={x.busy}
+                    onAsk={x.ask}
+                    onTogglePin={x.togglePin}
+                    conversations={x.conversations}
+                    current={x.cid}
+                    onOpenConversation={(cid) => {
+                      setTrailOpen(false)
+                      x.open(cid)
+                    }}
+                    onShowConversations={() => setHistoryAt(Date.now())}
+                  />
                 ) : (
                   <Conversation
                     turns={x.turns}

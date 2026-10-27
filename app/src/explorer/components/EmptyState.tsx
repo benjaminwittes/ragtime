@@ -5,7 +5,8 @@ import { Owl } from '@/components/Owl'
 import { SurfaceIntro } from '@/components/SurfaceIntro'
 
 import { pinnedSummary } from '../model/brief.ts'
-import { RETENTION_NOTE } from '../model/conversations.ts'
+import { RETENTION_NOTE, type Summary } from '../model/conversations.ts'
+import { ago, plural } from '../model/format.ts'
 import { EXAMPLE_QUESTIONS } from '../model/examples.ts'
 import { useExampleCount } from '../tune.ts'
 
@@ -24,14 +25,34 @@ type Props = {
   busy: boolean
   onAsk(text: string): void
   onTogglePin(slug: string): void
+  /** The conversations kept on this browser, for "Dive back in". */
+  conversations: readonly Summary[]
+  /** The conversation on screen, which is the empty one and so not a way back. */
+  current: string
+  onOpenConversation(cid: string): void
+  onShowConversations(): void
 }
+
+/** How many past conversations the empty state lists before pointing at the sheet. */
+const RECENT = 3
 
 /**
  * The empty state (design item 10): three example questions that each
  * orient straight into a brief, and the registry's corpus chips, which
  * pre-fill the brief's corpora when orient proposes one.
  */
-export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePin }: Props) {
+export function EmptyState({
+  registry,
+  pinned,
+  disabled,
+  busy,
+  onAsk,
+  onTogglePin,
+  conversations,
+  current,
+  onOpenConversation,
+  onShowConversations,
+}: Props) {
   const corpora = registry ? registry.corpora.slice().sort(byHubOrder) : []
   // Three, unless someone is tuning. The count is a design parameter — how much
   // of the first screen is worked example and how much is the reader's own
@@ -42,6 +63,10 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
   // It starts open when something is already pinned, because a restored choice the page
   // has folded away is one the reader did not make on this screen.
   const [open, setOpen] = useState(() => pinned.length > 0)
+  // Read once, when the empty state appears: "2 h ago" need not tick under a reader.
+  const [now] = useState(() => Date.now())
+  const past = conversations.filter((c) => c.cid !== current && c.turns > 0)
+  const recent = past.slice().sort((a, b) => b.workedAt - a.workedAt).slice(0, RECENT)
   // Names, not slugs: the control is read by a person, and `presidential` is not what the
   // chip they pressed said.
   const pinnedNames = pinned.map((slug) => corpora.find((c) => c.slug === slug)?.name ?? slug)
@@ -69,6 +94,28 @@ export function EmptyState({ registry, pinned, disabled, busy, onAsk, onTogglePi
           </>
         }
       />
+      {/* The way back, ahead of the examples: a reader who has been here before is more
+          likely to want an answer they already paid for than a sample question. The
+          history used to be reachable only behind "Start over" in the site bar (UI/UX
+          live doc, 2026-10-27, "a 'Dive Back In' button"). */}
+      {recent.length > 0 && (
+        <div className="recent">
+          <span className="label">Dive back in</span>
+          {recent.map((c) => (
+            <button key={c.cid} type="button" className="recent-item" onClick={() => onOpenConversation(c.cid)} disabled={busy}>
+              <span className="recent-title">{c.title}</span>
+              <span className="recent-meta">
+                {plural(c.turns, 'turn')} · {ago(c.workedAt, now)}
+              </span>
+            </button>
+          ))}
+          {past.length > RECENT && (
+            <button type="button" className="recent-all" onClick={onShowConversations}>
+              All {past.length} conversations →
+            </button>
+          )}
+        </div>
+      )}
       <div className="examples">
         {examples.map((q) => (
           <button key={q.text} type="button" className="example" onClick={() => onAsk(q.text)} disabled={disabled}>

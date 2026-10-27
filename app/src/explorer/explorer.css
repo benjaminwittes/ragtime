@@ -149,6 +149,14 @@
 .explorer .empty h2 { font: 600 26px/1.2 var(--serif); margin: 0 0 8px; }
 .explorer .lede { color: var(--dim); margin: 0 0 18px; }
 .explorer .examples { display: grid; gap: 8px; margin-bottom: 22px; }
+/* "Dive back in": the conversations kept on this browser, newest first, above the examples. */
+.explorer .recent { display: grid; gap: 6px; margin-bottom: 22px; }
+.explorer .recent-item { text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: var(--x-radius); padding: 8px 14px; display: flex; gap: 12px; align-items: baseline; }
+.explorer .recent-item:hover:not(:disabled) { border-color: var(--accent); }
+.explorer .recent-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--serif); }
+.explorer .recent-meta { flex-shrink: 0; font-size: 12px; color: var(--dim); }
+.explorer .recent-all { justify-self: start; border: 0; background: none; padding: 2px 0; font-size: 13px; color: var(--accent); }
+.explorer .recent-all:hover { text-decoration: underline; text-underline-offset: 3px; }
 .explorer .example { text-align: left; border: 1px solid var(--line-strong); background: var(--card); border-radius: var(--x-radius); padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
 .explorer .example:hover:not(:disabled) { border-color: var(--accent); }
 .explorer .example-shape { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); min-width: 68px; }
