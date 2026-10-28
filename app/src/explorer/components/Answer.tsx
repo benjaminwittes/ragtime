@@ -5,7 +5,7 @@ import { SaveToCollection } from '@/my-collections/SaveToCollection'
 import { detectShape, firstCitation, firstNumber, linkifyCitations, splitListAnswer } from '../model/answer-shape.ts'
 import { costLine, stopBadge } from '../model/format.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from '../model/sources.ts'
-import { answerText, type Turn } from '../model/turn.ts'
+import { answerText, askedFor, type Turn } from '../model/turn.ts'
 import { Brush } from './Brush.tsx'
 import { Markdown } from './Markdown.tsx'
 import { SaveToRecordbench } from '@/components/SaveToRecordbench'
@@ -107,7 +107,7 @@ export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Pro
         <>
           {badge && <div className={'badge badge-' + badge.tone}>{badge.text}</div>}
           <div className="cost-line">{costLine(turn, now)}</div>
-          {turn.phase === 'research' && (report.sources.length > 0 || report.readUncited.length > 0 || turn.answer) && <Sources report={report} question={turn.prompt} answer={turn.answer} />}
+          {turn.phase === 'research' && (report.sources.length > 0 || report.readUncited.length > 0 || turn.answer) && <Sources report={report} question={askedFor(turn, priorTurns, brief)} answer={turn.answer} />}
         </>
       )}
     </div>

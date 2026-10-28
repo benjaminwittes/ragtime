@@ -167,6 +167,20 @@ export function applyEvent(turn: Turn, ev: ExplorerEvent, now: number): Turn {
  * event arrives, and a reader should not be made to wait to find out: either way it is what
  * the model is saying now.
  */
+/**
+ * What the person asked for, in their own words, for an answer they save. A research turn's
+ * own prompt is the brief being accepted, never the question, so it is the last thing the
+ * person asked before it; the brief's goal where nothing earlier was asked.
+ */
+export function askedFor(turn: Turn, priorTurns: readonly Turn[], brief: ExplorerBrief | null): string {
+  if (turn.promptKind === 'ask') return turn.prompt
+  for (let i = priorTurns.length - 1; i >= 0; i--) {
+    const prior = priorTurns[i]!
+    if (prior.promptKind === 'ask') return prior.prompt
+  }
+  return brief?.goal || turn.prompt
+}
+
 export function answerText(turn: Turn): string {
   return turn.answer || (turn.running ? turn.buffer.trim() : '')
 }
