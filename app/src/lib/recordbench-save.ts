@@ -10,8 +10,14 @@
  * `recordbench:save-ready` to the window that opened it; this answers once with
  * `recordbench:save`, addressed to the bench's origin and nothing else. The page reads it only
  * where the browser says it came from a site the bench names, so a page's own link cannot be
- * used to hand someone a save. Version 1 of the message carries an outcome (`document` or
- * `list`), the search's words for a list's folder, and the addresses with their titles.
+ * used to hand someone a save. Version 1 of the message carries an outcome (`document`,
+ * `list` or `report`), the search's words for a list's folder, and the addresses with their
+ * titles.
+ *
+ * A research librarian report is the one text that crosses. RAGtime keeps no answer once it
+ * is shown, so a report has no address the bench could fetch: its words go in the message
+ * beside the addresses of the documents it cites, the bench fetches those documents itself,
+ * and it keeps the words as a note filed as the librarian's, not the person's.
  */
 
 export const DEFAULT_RECORDBENCH_URL = 'https://recordbench.lawfaremedia.org'
@@ -26,12 +32,15 @@ export const HANDOFF_VERSION = 1
 /** The most the save page takes in one hand-off. */
 export const MAX_REFS = 200
 
+/** The most of a report's words the save page keeps. */
+export const REPORT_MAX = 100_000
+
 /** How long to wait for the save page to say it is ready before giving up. */
 const WAIT_MS = 60_000
 
 export type SaveItem = { corpus: string; id: string | number; title?: string | null }
 
-export type SaveOutcome = 'document' | 'list'
+export type SaveOutcome = 'document' | 'list' | 'report'
 
 export type SaveMessage = {
   type: typeof HANDOFF_SAVE
@@ -39,6 +48,8 @@ export type SaveMessage = {
   outcome: SaveOutcome
   name: string | null
   refs: { ref: string; title: string | null }[]
+  /** A report's words, for a `report` alone. */
+  report?: { text: string }
 }
 
 /** The bench's origin, from `VITE_RECORDBENCH_URL` or the hosted bench. */
@@ -52,8 +63,16 @@ export function citationOf(item: SaveItem): string {
   return `rt://${item.corpus}/${item.id}`
 }
 
-/** The message the save page reads, or null when there is nothing to save. */
-export function saveMessage(outcome: SaveOutcome, items: readonly SaveItem[], name?: string | null): SaveMessage | null {
+/**
+ * The message the save page reads, or null when there is nothing to save. A `report` needs
+ * its words and at least one cited document.
+ */
+export function saveMessage(
+  outcome: SaveOutcome,
+  items: readonly SaveItem[],
+  name?: string | null,
+  report?: string | null,
+): SaveMessage | null {
   const seen = new Set<string>()
   const refs: SaveMessage['refs'] = []
   for (const item of items) {
@@ -66,7 +85,10 @@ export function saveMessage(outcome: SaveOutcome, items: readonly SaveItem[], na
   if (refs.length === 0) return null
   if (outcome === 'document' && refs.length !== 1) return null
   const words = name?.trim()
-  return { type: HANDOFF_SAVE, v: HANDOFF_VERSION, outcome, name: words ? words : null, refs }
+  const message: SaveMessage = { type: HANDOFF_SAVE, v: HANDOFF_VERSION, outcome, name: words ? words : null, refs }
+  if (outcome !== 'report') return message
+  const text = report?.trim().slice(0, REPORT_MAX)
+  return text ? { ...message, report: { text } } : null
 }
 
 /**

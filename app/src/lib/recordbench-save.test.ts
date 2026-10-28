@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { citationOf, DEFAULT_RECORDBENCH_URL, MAX_REFS, recordbenchOrigin, saveMessage } from './recordbench-save'
+import { citationOf, DEFAULT_RECORDBENCH_URL, MAX_REFS, recordbenchOrigin, REPORT_MAX, saveMessage } from './recordbench-save'
 
 // The save page's own reading of an address (recordbench `frontend/src/lib/save.ts`). A
 // message this builds must pass it, or the page drops the row.
@@ -68,5 +68,32 @@ describe('saveMessage', () => {
         { corpus: 'olc', id: '2' },
       ]),
     ).toBeNull()
+  })
+})
+
+describe('a research librarian report', () => {
+  const cited = [{ corpus: 'olc', id: '1117', title: 'An opinion' }]
+
+  it('carries its words beside the addresses it cites, and the question', () => {
+    const message = saveMessage('report', cited, ' Who may invoke it? ', '  Two opinions say so.\n\nNeither settles it.  ')
+    expect(message).toEqual({
+      type: 'recordbench:save',
+      v: 1,
+      outcome: 'report',
+      name: 'Who may invoke it?',
+      refs: [{ ref: 'rt://olc/1117', title: 'An opinion' }],
+      report: { text: 'Two opinions say so.\n\nNeither settles it.' },
+    })
+  })
+
+  it('is nothing without words or without a cited document', () => {
+    expect(saveMessage('report', cited, 'q', '   ')).toBeNull()
+    expect(saveMessage('report', cited, 'q')).toBeNull()
+    expect(saveMessage('report', [], 'q', 'Words.')).toBeNull()
+  })
+
+  it('stops at the most the save page keeps, and only a report carries words', () => {
+    expect(saveMessage('report', cited, 'q', 'x'.repeat(REPORT_MAX + 10))?.report?.text).toHaveLength(REPORT_MAX)
+    expect(saveMessage('list', cited, 'q', 'Words.')).not.toHaveProperty('report')
   })
 })

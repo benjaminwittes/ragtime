@@ -14,6 +14,7 @@ export function SaveToRecordbench({
   outcome,
   items,
   name,
+  report,
   label,
   className,
 }: {
@@ -21,11 +22,13 @@ export function SaveToRecordbench({
   items: readonly SaveItem[]
   /** What the person searched for. It names the folder a list is saved into. */
   name?: string | null
+  /** A research librarian report's words, for a `report`. */
+  report?: string | null
   label?: string
   className?: string
 }) {
   const [blocked, setBlocked] = useState(false)
-  const message = saveMessage(outcome, items, name)
+  const message = saveMessage(outcome, items, name, report)
   if (!message) return null
   const count = message.refs.length
 
@@ -37,7 +40,9 @@ export function SaveToRecordbench({
         title={
           outcome === 'document'
             ? 'Open Recordbench to save this document into an investigation'
-            : `Open Recordbench to save these ${count} documents into an investigation, as one folder`
+            : outcome === 'report'
+              ? `Open Recordbench to save this report and the ${count} documents it cites into an investigation`
+              : `Open Recordbench to save these ${count} documents into an investigation, as one folder`
         }
         className="inline-flex items-baseline gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10"
       >
