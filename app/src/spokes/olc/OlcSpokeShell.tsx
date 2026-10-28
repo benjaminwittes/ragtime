@@ -123,6 +123,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [searchedFor, setSearchedFor] = useState<string | null>(null)
   // How the filter's rows are shown: the table, which the page opens on, or the terrain.
   const [resultsView, setResultsView] = useState<ResultsView>('table')
 
@@ -232,6 +233,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r: OlcFilterResult = await runOlcFilter(fields)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -572,6 +574,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
               ) : (
                 <OlcResultsList
                   searchedAs={searchedAs}
+                  searchedFor={searchedFor}
                   rows={rows}
                   count={count}
                   loading={queryLoading}

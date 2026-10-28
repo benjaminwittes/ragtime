@@ -155,6 +155,7 @@ export function CommentarySpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [searchedFor, setSearchedFor] = useState<string | null>(null)
 
   // Semantic pane state (brief #9). Same pattern as Lawfare; the keyword pane
   // is the filter state above, unchanged.
@@ -258,6 +259,7 @@ export function CommentarySpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r: CommentaryFilterResult = await runCommentaryFilter(fields)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -604,6 +606,7 @@ export function CommentarySpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                   {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
                   <CommentaryResultsList
                     searchedAs={searchedAs}
+                    searchedFor={searchedFor}
                     rows={rows}
                     count={count}
                     loading={queryLoading}

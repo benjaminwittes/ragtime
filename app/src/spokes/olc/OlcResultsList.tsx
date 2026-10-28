@@ -27,6 +27,7 @@ export function OlcResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   executedSql,
   onOpenOpinion,
   semanticMatchIds,
@@ -38,6 +39,8 @@ export function OlcResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   executedSql: string | undefined
   onOpenOpinion: (row: OlcOpinionDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -85,7 +88,8 @@ export function OlcResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="opinions">
+      <ResultWindow searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'olc', id: r.id, title: r.title }), name: searchedFor }} rows={rows} count={count} noun="opinions">
         {(visible) => (
           <OlcOpinionRowsTable
             rows={visible}

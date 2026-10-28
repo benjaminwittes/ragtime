@@ -37,6 +37,7 @@ export function CongressResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -49,6 +50,8 @@ export function CongressResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: CongressAnyDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -100,6 +103,7 @@ export function CongressResultsList({
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
       <ResultWindow
         searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'congress', id: `${collection}:${r.id}`, title: 'title' in r ? r.title : r.witness }), name: searchedFor }}
         rows={rows}
         count={count}
         noun={collectionNoun(collection, count ?? rows.length)}

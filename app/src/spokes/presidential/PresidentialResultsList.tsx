@@ -24,6 +24,7 @@ export function PresidentialResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -35,6 +36,8 @@ export function PresidentialResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: PresidentialDocumentDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -84,7 +87,8 @@ export function PresidentialResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="documents">
+      <ResultWindow searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'presidential', id: r.id, title: r.display_citation ?? r.title }), name: searchedFor }} rows={rows} count={count} noun="documents">
         {(visible) => (
           <PresidentialDocumentRowsTable
             rows={visible}

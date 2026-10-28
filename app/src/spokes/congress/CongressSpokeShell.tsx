@@ -149,6 +149,7 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [searchedFor, setSearchedFor] = useState<string | null>(null)
 
   // Semantic pane state (brief #9).
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
@@ -274,6 +275,7 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r: CongressFilterResult = await runCongressFilter(fields)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -631,6 +633,7 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
               <CongressResultsList
                 searchedAs={searchedAs}
+                searchedFor={searchedFor}
                 collection={collection}
                 rows={rows}
                 count={count}

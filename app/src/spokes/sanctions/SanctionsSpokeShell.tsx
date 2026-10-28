@@ -208,6 +208,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [guidanceError, setGuidanceError] = useState<string>()
   const [guidanceHasRun, setGuidanceHasRun] = useState(false)
   const [guidanceSearchedAs, setGuidanceSearchedAs] = useState<string | null>(null)
+  const [guidanceSearchedFor, setGuidanceSearchedFor] = useState<string | null>(null)
 
   async function runGuidanceKeywordPane(fields: SanctionsGuidanceFilterFields) {
     setGuidanceLoading(true)
@@ -217,6 +218,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r = await runSanctionsGuidanceFilter(fields)
       setGuidanceSearchedAs(searchBoxLine(fields.search, r))
+      setGuidanceSearchedFor(fields.search?.trim() || null)
       setGuidanceRows(r.display_rows)
       setGuidanceCount(r.count)
       setGuidanceIds(r.ids)
@@ -750,6 +752,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                   error={guidanceError}
                   hasRun={guidanceHasRun}
                   searchedAs={guidanceSearchedAs}
+                  searchedFor={guidanceSearchedFor}
                   executedSql={guidanceExecutedSql}
                   onOpenDocument={handleOpenGuidance}
                   semanticMatchIds={semHasRun ? guidanceIdSet : undefined}

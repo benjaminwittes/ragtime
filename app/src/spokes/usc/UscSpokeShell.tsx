@@ -106,6 +106,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [searchedFor, setSearchedFor] = useState<string | null>(null)
 
   // AMA state.
   const [activeMode, setActiveMode] = useState<QueryMode>('manual_filter')
@@ -189,6 +190,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r: UscFilterResult = await runUscFilter(fields)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -376,6 +378,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           )}
           <UscResultsList
             searchedAs={searchedAs}
+            searchedFor={searchedFor}
             rows={rows}
             count={count}
             loading={queryLoading}

@@ -119,6 +119,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [searchedFor, setSearchedFor] = useState<string | null>(null)
   const [rankPool, setRankPool] = useState<number | null>(null)
 
   // Semantic pane state (brief #9). See OlcSpokeShell for the pattern
@@ -219,6 +220,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r: FrusFilterResult = await runFrusFilter(fields)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
       setRankPool(r.rank_pool ?? null)
@@ -538,6 +540,7 @@ export function FrusSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
               <FrusResultsList
                 searchedAs={searchedAs}
+                searchedFor={searchedFor}
                 rankPool={rankPool}
                 rows={rows}
                 count={count}
