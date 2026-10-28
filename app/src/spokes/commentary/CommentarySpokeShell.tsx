@@ -32,6 +32,8 @@ import { BackToHubLink } from '../components/BackToHubLink'
 import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
+import { SaveToRecordbench } from '@/components/SaveToRecordbench'
+import { commentaryCited } from '../components/report-save'
 import { ModeRow } from '../components/ModeRow'
 import {
   ResultsPaneHeader,
@@ -637,7 +639,15 @@ export function CommentarySpokeShell({ spoke }: { spoke: CorpusSpoke }) {
           {activeMode === 'claude_ama' && (
             <>
               {amaSynthesis?.answer_markdown && !amaLoading && (
-                <ExportBar onPdf={downloadAmaPdf} />
+                <ExportBar onPdf={downloadAmaPdf}>
+                  <SaveToRecordbench
+                    outcome="report"
+                    items={commentaryCited(amaSynthesis.cited)}
+                    name={amaQuestion}
+                    report={amaSynthesis.answer_markdown}
+                    label="Save this report and its sources to Recordbench"
+                  />
+                </ExportBar>
               )}
               <CommentaryAmaResult
                 synthesis={amaSynthesis}

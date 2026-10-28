@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -13,10 +15,13 @@ export function ExportBar({
   onCsv,
   onPdf,
   className,
+  children,
 }: {
   onCsv?: () => void
   onPdf?: () => void
   className?: string
+  /** Set beside the buttons: the report's "Save to Recordbench". */
+  children?: ReactNode
 }) {
   if (!onCsv && !onPdf) return null
   return (
@@ -43,6 +48,7 @@ export function ExportBar({
           Download PDF ↓
         </Button>
       )}
+      {children}
     </div>
   )
 }

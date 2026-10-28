@@ -41,6 +41,8 @@ import { BackToHubLink } from '../components/BackToHubLink'
 import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
+import { SaveToRecordbench } from '@/components/SaveToRecordbench'
+import { sanctionsCited } from '../components/report-save'
 import { ModeRow } from '../components/ModeRow'
 import {
   ResultsPaneHeader,
@@ -807,7 +809,15 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             onSubmit={handleClaudeAmaSubmit}
           />
           {amaSynthesis?.answer_markdown && !amaLoading && (
-            <ExportBar onPdf={downloadAmaPdf} />
+            <ExportBar onPdf={downloadAmaPdf}>
+              <SaveToRecordbench
+                outcome="report"
+                items={sanctionsCited(amaSynthesis)}
+                name={amaQuestion}
+                report={amaSynthesis.answer_markdown}
+                label="Save this report and its sources to Recordbench"
+              />
+            </ExportBar>
           )}
           <SanctionsAmaResult
             synthesis={amaSynthesis}
