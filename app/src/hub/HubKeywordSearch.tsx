@@ -24,6 +24,7 @@ import { TOUR } from '@/tour/steps'
 import { TICKS, type SampleSet } from './samples'
 import { searchedAsLine } from '@/lib/searched-as'
 import { useTick } from './tune'
+import { SaveToRecordbench } from '@/components/SaveToRecordbench'
 
 gsap.registerPlugin(useGSAP)
 
@@ -897,6 +898,13 @@ function CorpusResultCard({
             {block.count.toLocaleString()} total
           </span>
         </h3>
+        <span className="flex shrink-0 items-baseline gap-3">
+        <SaveToRecordbench
+          outcome="list"
+          items={block.results.map((r) => ({ corpus, id: r.id, title: r.title }))}
+          name={query}
+          label="Save these to Recordbench"
+        />
         <a
           href={toHref(href)}
           onClick={(e) => {
@@ -915,6 +923,7 @@ function CorpusResultCard({
         >
           Open workspace →
         </a>
+        </span>
       </header>
       {/* A corpus that found nothing is its header line and nothing else. The mono count
           beside the name already reads "0 total", so the paragraph that used to say "No
@@ -931,7 +940,10 @@ function CorpusResultCard({
         <ol className="mt-3 space-y-2 text-sm">
           {block.results.map((r) => (
             <li key={r.id} className="leading-snug">
-              <p className="text-foreground">{r.title}</p>
+              <p className="text-foreground">
+                {r.title}
+                <SaveToRecordbench outcome="document" items={[{ corpus, id: r.id, title: r.title }]} className="ml-2" />
+              </p>
               <p className="font-mono text-[11px] text-muted-foreground">
                 {[r.context, r.date].filter(Boolean).join(' · ') || ''}
               </p>

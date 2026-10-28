@@ -8,6 +8,7 @@ import { knownTitles, sourcesOf, workspaceHandoffs } from '../model/sources.ts'
 import { answerText, type Turn } from '../model/turn.ts'
 import { Brush } from './Brush.tsx'
 import { Markdown } from './Markdown.tsx'
+import { SaveToRecordbench } from '@/components/SaveToRecordbench'
 
 type Props = {
   turn: Turn
@@ -106,7 +107,7 @@ export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Pro
         <>
           {badge && <div className={'badge badge-' + badge.tone}>{badge.text}</div>}
           <div className="cost-line">{costLine(turn, now)}</div>
-          {turn.phase === 'research' && (report.sources.length > 0 || report.readUncited.length > 0 || turn.answer) && <Sources report={report} />}
+          {turn.phase === 'research' && (report.sources.length > 0 || report.readUncited.length > 0 || turn.answer) && <Sources report={report} question={turn.prompt} />}
         </>
       )}
     </div>
@@ -122,7 +123,7 @@ export function Answer({ turn, priorTurns, brief, now, reveal, onPainting }: Pro
  * With nothing to list there is nothing to open, so it renders flat rather than offering
  * an empty disclosure.
  */
-function Sources({ report }: { report: ReturnType<typeof sourcesOf> }) {
+function Sources({ report, question }: { report: ReturnType<typeof sourcesOf>; question: string }) {
   const state = report.searchOnly
     ? 'Answered from search results; no document was read in full.'
     : report.sources.length > 0
@@ -139,6 +140,15 @@ function Sources({ report }: { report: ReturnType<typeof sourcesOf> }) {
   return (
     <details className="sources">
       <summary className="sources-summary">{head}</summary>
+      {report.sources.length > 0 && (
+        <SaveToRecordbench
+          outcome="list"
+          items={report.sources.map((s) => ({ corpus: s.slug, id: s.id, title: s.title }))}
+          name={question}
+          label="Save these sources to Recordbench"
+          className="mt-2"
+        />
+      )}
       {report.sources.length > 0 && (
         <ul className="source-list">
           {report.sources.map((s) => (
