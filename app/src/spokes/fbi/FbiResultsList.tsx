@@ -31,6 +31,7 @@ export function FbiResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   executedSql,
   onOpenDocument,
   semanticMatchIds,
@@ -42,6 +43,8 @@ export function FbiResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: FbiDocumentDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
@@ -93,7 +96,8 @@ export function FbiResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="documents">
+      <ResultWindow searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'fbi', id: r.id, title: r.title }), name: searchedFor }} rows={rows} count={count} noun="documents">
         {(visible) => (
           <FbiDocumentRowsTable
             rows={visible}

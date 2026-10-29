@@ -30,6 +30,8 @@ import { BackToHubLink } from '../components/BackToHubLink'
 import { SpokeIdentity } from '../components/SpokeIdentity'
 import { ClaudeAmaForm, type AmaLogLine } from '../components/ClaudeAmaForm'
 import { ExportBar } from '../components/ExportBar'
+import { SaveToRecordbench } from '@/components/SaveToRecordbench'
+import { bareCited } from '../components/report-save'
 import { ModeRow } from '../components/ModeRow'
 import {
   ResultsPaneHeader,
@@ -125,6 +127,7 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [searchedFor, setSearchedFor] = useState<string | null>(null)
 
   // Semantic pane state (brief #9) — live day one; the corpus arrived embedded.
   const [semRows, setSemRows] = useState<SemanticSearchRow[] | undefined>(undefined)
@@ -215,6 +218,7 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     try {
       const r: FbiFilterResult = await runFbiFilter(fields)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -532,6 +536,7 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
               <FbiResultsList
                 searchedAs={searchedAs}
+                searchedFor={searchedFor}
                 rows={rows}
                 count={count}
                 loading={queryLoading}
@@ -562,7 +567,15 @@ export function FbiSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       {activeMode === 'claude_ama' && (
         <>
           {amaSynthesis?.answer_markdown && !amaLoading && (
-            <ExportBar onPdf={downloadAmaPdf} />
+            <ExportBar onPdf={downloadAmaPdf}>
+              <SaveToRecordbench
+                outcome="report"
+                items={bareCited('fbi', amaSynthesis.document_ids)}
+                name={amaQuestion}
+                report={amaSynthesis.answer_markdown}
+                label="Save this report and its sources to Recordbench"
+              />
+            </ExportBar>
           )}
           <FbiAmaResult
             synthesis={amaSynthesis}

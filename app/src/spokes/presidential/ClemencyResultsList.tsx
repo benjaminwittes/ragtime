@@ -18,6 +18,7 @@ export function ClemencyResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   onOpenGrant,
 }: {
   rows: readonly ClemencyGrantDisplayRow[] | undefined
@@ -27,6 +28,8 @@ export function ClemencyResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   onOpenGrant: (row: ClemencyGrantDisplayRow) => void
 }) {
   if (!hasRun && !loading) {
@@ -56,7 +59,8 @@ export function ClemencyResultsList({
 
   return (
     <div className="px-6 py-4">
-      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="grants">
+      <ResultWindow searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'clemency', id: r.pardon_id, title: r.person_name }), name: searchedFor }} rows={rows} count={count} noun="grants">
         {(visible) => (
           <ClemencyRowsTable rows={visible} onOpenGrant={onOpenGrant} />
         )}

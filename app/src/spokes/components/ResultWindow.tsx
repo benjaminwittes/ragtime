@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { SaveToRecordbench } from '@/components/SaveToRecordbench'
+import type { SaveItem } from '@/lib/recordbench-save'
 
 import { SearchedAs } from './SearchedAs'
 
@@ -47,6 +49,7 @@ export function ResultWindow<T>({
   countIsFloor,
   searchedAs,
   note,
+  save,
   children,
 }: {
   rows: readonly T[]
@@ -64,6 +67,11 @@ export function ResultWindow<T>({
   /** A further line under the count, in the same styling (FRUS: the search
    *  ranked only the newest part of its matches, `rankPoolLine`). */
   note?: string | null
+  /** "Save these to Recordbench" beside the count, handing over the rows on
+   *  screen (`lib/recordbench-save.ts`). `item` names each row as the bench
+   *  reads it; `name` is the search's words, which name the folder. Left out
+   *  where the bench cannot save the corpus (litigation, the book catalogue). */
+  save?: { item: (row: T) => SaveItem; name?: string | null }
   children: (visible: readonly T[]) => ReactNode
 }) {
   const [limit, setLimit] = useState(ROW_PAGE)
@@ -91,13 +99,26 @@ export function ResultWindow<T>({
       {/* Polite, because the only thing that changes it in place is the
           reader's own press of Show more. */}
       <div className="mb-3">
-        <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
-          {total.toLocaleString()}
-          {countIsFloor && '+'} {noun}
-          {countIsFloor && <> · more match than the catalogue will count</>}
-          {fetched < total && <> · first {fetched.toLocaleString()} fetched</>}
-          {shown < fetched && <> · showing {shown.toLocaleString()}</>}
-        </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
+            {total.toLocaleString()}
+            {countIsFloor && '+'} {noun}
+            {countIsFloor && <> · more match than the catalogue will count</>}
+            {fetched < total && <> · first {fetched.toLocaleString()} fetched</>}
+            {shown < fetched && <> · showing {shown.toLocaleString()}</>}
+          </p>
+          {/* The rows on screen, not every row fetched: what the reader has seen is
+              what they meant to keep, and Show more widens both together. */}
+          {save && (
+            <SaveToRecordbench
+              outcome="list"
+              items={visible.map(save.item)}
+              name={save.name}
+              label="Save these to Recordbench"
+              className="shrink-0"
+            />
+          )}
+        </div>
         {/* Under the count, as on Search's card: how the box's text was read. */}
         <SearchedAs line={searchedAs} />
         {note && (

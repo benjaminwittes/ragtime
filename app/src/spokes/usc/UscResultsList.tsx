@@ -21,6 +21,7 @@ export function UscResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   executedSql,
   onOpenSection,
 }: {
@@ -31,6 +32,8 @@ export function UscResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   executedSql: string | undefined
   /** Click handler — opens the section detail sheet. */
   onOpenSection: (row: UscSectionDisplayRow) => void
@@ -78,7 +81,8 @@ export function UscResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="sections">
+      <ResultWindow searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'usc', id: r.id, title: [r.citation, r.heading].filter(Boolean).join(' ') }), name: searchedFor }} rows={rows} count={count} noun="sections">
         {(visible) => (
           <UscSectionRowsTable rows={visible} onOpenSection={onOpenSection} />
         )}

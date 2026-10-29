@@ -26,6 +26,7 @@ export function CommentaryResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   executedSql,
   onOpenDocument,
   semanticMatchKeys,
@@ -37,6 +38,8 @@ export function CommentaryResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   executedSql: string | undefined
   onOpenDocument: (row: CommentaryDisplayRow) => void
   /** Publication-qualified keys ('lawfare:123') also present in the semantic
@@ -86,7 +89,8 @@ export function CommentaryResultsList({
   return (
     <div className="px-6 py-4">
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
-      <ResultWindow searchedAs={searchedAs} rows={rows} count={count} noun="pieces">
+      <ResultWindow searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'commentary', id: `${r.publication}:${r.id}`, title: r.title }), name: searchedFor }} rows={rows} count={count} noun="pieces">
         {(visible) => (
           <CommentaryRowsList
             rows={visible}

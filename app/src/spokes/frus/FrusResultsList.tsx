@@ -28,6 +28,7 @@ export function FrusResultsList({
   error,
   hasRun,
   searchedAs,
+  searchedFor,
   rankPool,
   executedSql,
   onOpenDocument,
@@ -40,6 +41,8 @@ export function FrusResultsList({
   hasRun: boolean
   /** The "Searched as" line (lib/searched-as.ts), shown under the count. */
   searchedAs?: string | null
+  /** The search box's words, which name the folder a saved list goes into. */
+  searchedFor?: string | null
   /** The worker's `rank_pool`: how many of the newest matches it ranked. */
   rankPool?: number | null
   executedSql: string | undefined
@@ -91,6 +94,7 @@ export function FrusResultsList({
       {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}
       <ResultWindow
         searchedAs={searchedAs}
+        save={{ item: (r) => ({ corpus: 'frus', id: r.id, title: r.title }), name: searchedFor }}
         note={rankPoolLine(count, rankPool)}
         rows={rows}
         count={count}

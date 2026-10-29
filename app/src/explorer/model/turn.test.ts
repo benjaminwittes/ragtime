@@ -2,7 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
 import type { ExplorerBrief, ExplorerEvent, ExplorerToolResultEvent } from '@lawfare/ragtime-client'
-import { acceptMarker, answerText, applyEvent, lastCost, newTurn, roundCosts, type Turn } from './turn.ts'
+import { acceptMarker, answerText, applyEvent, askedFor, lastCost, newTurn, roundCosts, type Turn } from './turn.ts'
 import { knownTitles, sourcesOf, workspaceHandoffs } from './sources.ts'
 import { costLine, phasePill, stopBadge, workingLabel } from './format.ts'
 
@@ -295,4 +295,16 @@ test('the answer is on the page from its first word, not from the end of the tur
 test('a turn that stopped with nothing said has no answer, whatever was left in its buffer', () => {
   const stopped: Turn = { ...newTurn(0, 'research', 'q', 'accept', 1000), running: false, buffer: 'half a sent' }
   assert.equal(answerText(stopped), '')
+})
+
+test('a saved answer is named for what the person asked, not for the brief being accepted', () => {
+  const asked = newTurn(0, 'orient', 'Who may remove an agency head?', 'ask', 0)
+  const replied = newTurn(1, 'orient', 'Only OLC', 'reply', 0)
+  const research = newTurn(2, 'research', 'Proceed with the brief as shown.', 'accept', 0)
+  const brief: ExplorerBrief = { goal: 'List the opinions on removal', corpora: ['olc'], answer_shape: 'a list' }
+  assert.equal(askedFor(research, [asked, replied], brief), 'Who may remove an agency head?')
+  assert.equal(askedFor(research, [], brief), 'List the opinions on removal')
+  assert.equal(askedFor(research, [], null), 'Proceed with the brief as shown.')
+  const followUp = newTurn(3, 'research', 'And since 2019?', 'ask', 0)
+  assert.equal(askedFor(followUp, [asked, replied, research], brief), 'And since 2019?')
 })
