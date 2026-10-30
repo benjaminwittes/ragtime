@@ -148,6 +148,20 @@
 .explorer .empty .owl-figure { width: 56px; margin: 0 0 12px; }
 .explorer .empty h2 { font: 600 26px/1.2 var(--serif); margin: 0 0 8px; }
 .explorer .lede { color: var(--dim); margin: 0 0 18px; }
+/* The rotating landing (UI/UX live doc): each beat's sentence and question fade in, and
+   under reduced motion nothing rotates at all, so there is nothing to fade. */
+.explorer .beat { display: inline; animation: explorer-beat-in 0.35s ease-out; }
+@keyframes explorer-beat-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .explorer .beat { animation: none; } }
+/* Room for the longest beat is held whatever the beat on screen, so the examples and the
+   "Dive back in" list never move under a reader's pointer as the sentence changes: two
+   lines of heading, and two of question (the first beat has none, and keeps the room). */
+.explorer .empty h2 { min-height: 2.4em; }
+.explorer .beat-try { margin: -6px 0 18px; font-size: 14px; line-height: 1.45; min-height: 2.9em; }
+.explorer .beat-try .label { display: inline; margin: 0 6px 0 0; }
+.explorer .beat-ask { all: unset; cursor: pointer; color: var(--accent, inherit); text-decoration: underline; text-underline-offset: 3px; }
+.explorer .beat-ask:disabled { cursor: default; color: var(--dim); text-decoration: none; }
+.explorer .beat-ask:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .explorer .examples { display: grid; gap: 8px; margin-bottom: 22px; }
 /* "Dive back in": the conversations kept on this browser, newest first, above the examples. */
 .explorer .recent { display: grid; gap: 6px; margin-bottom: 22px; }
