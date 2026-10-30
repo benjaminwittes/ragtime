@@ -580,6 +580,7 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
       )}
       <CaseDetailSheet
         case={openCase}
+        snippet={openCase ? snippets[openCase.cl_id] : undefined}
         open={detailOpen}
         onOpenChange={setDetailOpen}
       />
