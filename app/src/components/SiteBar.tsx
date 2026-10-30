@@ -98,7 +98,7 @@ export function SiteBar({ onExplorer, onAbout = false }: { onExplorer: boolean; 
           it now carries the brand lockup *and* whatever the route puts in the slot. The
           measures that used to buy the Explorer's own band a single row (abbreviated
           labels below `sm`, a hidden "beta") are still doing that work here. */}
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 sm:gap-x-4 sm:px-6 sm:py-3">
+      <div className="group/bar mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2 sm:gap-x-4 sm:px-6 sm:py-3">
         <div className="flex items-baseline gap-2 sm:gap-3">
           {/* The lockup: the mark, then the wordmark, one link. The mark takes the
               wordmark's ink rather than the brand teal, because teal is the site's accent
@@ -155,11 +155,16 @@ export function SiteBar({ onExplorer, onAbout = false }: { onExplorer: boolean; 
           </AppLink>
           {/* The site's own description, asked for by the UI/UX live document because the
               `?` button was not where readers looked for it. Below `sm` the row has no room,
-              and the `?` button beside the access controls still opens the same entries. */}
+              and the `?` button beside the access controls still opens the same entries.
+              It also yields to a page that puts its own name or controls in the slot:
+              measured at 1280 and 1440, this link cut "Federal court litigation" to
+              "Feder…", and the row is capped at `max-w-6xl`, so no wider window gives the
+              room back. A reader who cannot see which corpus they are in has lost more
+              than one who finds this page from the hub. */}
           <AppLink
             to={ABOUT_PATH}
             aria-current={onAbout ? 'page' : undefined}
-            className="hidden font-serif text-[15px] text-primary underline-offset-4 hover:underline aria-[current=page]:underline sm:inline"
+            className="hidden font-serif text-[15px] text-primary underline-offset-4 hover:underline aria-[current=page]:underline sm:inline group-has-[[data-bar-slot]>*]/bar:hidden"
           >
             What is RAGtime?
           </AppLink>
@@ -190,6 +195,7 @@ export function SiteBar({ onExplorer, onAbout = false }: { onExplorer: boolean; 
             cluster moves to a second line instead of being written over. */}
         <div
           ref={setSlot}
+          data-bar-slot
           style={{ viewTransitionName: 'bar-slot' }}
           className="flex min-w-0 flex-1 items-center gap-2 has-[button]:min-w-fit"
         />
