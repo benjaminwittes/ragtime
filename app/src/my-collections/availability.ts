@@ -10,6 +10,16 @@
 
 import { links, type MyCollection, type MyCollectionItem, type MyCollectionsList } from '@lawfare/ragtime-client'
 
+/**
+ * Whether the site offers collections at all. Off: the Lawfare team's UI/UX
+ * live document asks for "My Collections" to come off the website, because
+ * keeping what a reader found is Recordbench's job (the *Save to Recordbench*
+ * buttons). Off, the provider never asks the worker, so the bar's link, every
+ * save control and both pages show nothing, exactly as for a worker that has
+ * the routes switched off. Turning it back on is this one line.
+ */
+export const MY_COLLECTIONS_OFFERED = false
+
 export type MyCollectionsAvailability =
   | { available: true; list: MyCollectionsList }
   | {

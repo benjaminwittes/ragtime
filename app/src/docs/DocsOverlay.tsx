@@ -27,8 +27,12 @@ import type { DocsEntry } from './types'
  * facets of the spoke it belongs to (see figures.ts). The corpus-count words
  * come from the registry and are there at once; the rest arrive after the
  * fetch and read '…' until they do.
+ *
+ * Also the body of each section on the "What is RAGtime?" page
+ * (`AboutPage.tsx`), where the entry's title is itself a section heading, so
+ * `nested` moves the entry's own `##` and `###` down a level.
  */
-function EntryBody({ entry }: { entry: DocsEntry }) {
+export function EntryBody({ entry, nested = false }: { entry: DocsEntry; nested?: boolean }) {
   const slug = entry.scope.kind === 'spoke' ? entry.scope.spokeSlug : undefined
   const [live, setLive] = useState<{ slug: string | undefined; figures: Figures; state: FigureState }>(
     { slug, figures: {}, state: 'loading' },
@@ -49,7 +53,10 @@ function EntryBody({ entry }: { entry: DocsEntry }) {
     () => resolveFigures(entry.content, { ...corpusCountFigures(), ...current.figures }, current.state),
     [entry.content, current.figures, current.state],
   )
-  return <ReactMarkdown components={{ a: DocsAnchor }}>{content}</ReactMarkdown>
+  const components = nested
+    ? { a: DocsAnchor, h2: (props: { children?: ReactNode }) => <h3>{props.children}</h3>, h3: (props: { children?: ReactNode }) => <h4>{props.children}</h4> }
+    : { a: DocsAnchor }
+  return <ReactMarkdown components={components}>{content}</ReactMarkdown>
 }
 
 /**

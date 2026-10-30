@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CorpusRegistry } from '@lawfare/ragtime-client'
 
 import { Owl } from '@/components/Owl'
@@ -8,6 +8,7 @@ import { pinnedSummary } from '../model/brief.ts'
 import { RETENTION_NOTE, type Summary } from '../model/conversations.ts'
 import { ago, plural } from '../model/format.ts'
 import { EXAMPLE_QUESTIONS } from '../model/examples.ts'
+import { LANDING_DWELL_MS, landingBeat } from '../model/landing.ts'
 import { useExampleCount } from '../tune.ts'
 
 type Props = {
@@ -70,6 +71,8 @@ export function EmptyState({
   // Names, not slugs: the control is read by a person, and `presidential` is not what the
   // chip they pressed said.
   const pinnedNames = pinned.map((slug) => corpora.find((c) => c.slug === slug)?.name ?? slug)
+  const [beatAt, setHeld] = useLandingRotation()
+  const beat = landingBeat(beatAt)
   return (
     <div className="empty">
       {/* The same component the hub opens with, and it carries no class of its own — the
@@ -85,7 +88,13 @@ export function EmptyState({
         // the page — beside an answer, the mark is already the thing that speaks.
         figure={<Owl keepsHours />}
         figureClassName="owl-figure"
-        heading="Ask the federal record a question."
+        // One corpus at a time, as the hub's title does (UI/UX live doc, "Explorer landing
+        // page should be dynamic"). Keyed so each sentence fades in rather than swapping.
+        heading={
+          <span key={beatAt} className="beat">
+            {beat.heading}
+          </span>
+        }
         ledeClassName="lede"
         lede={
           <>
@@ -94,6 +103,27 @@ export function EmptyState({
           </>
         }
       />
+      {/* The beat's own question, for the corpus the heading is speaking for. Pointing at it
+          or tabbing to it holds the rotation, so a reader reaching for it never has it moved
+          out from under them. The first beat has none: its questions are the examples. */}
+      <p className="beat-try" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
+        {beat.question && (
+          <>
+            <span className="label">For instance</span>{' '}
+            <button
+              key={beatAt}
+              type="button"
+              className="beat beat-ask"
+              onClick={() => onAsk(beat.question!)}
+              onFocus={() => setHeld(true)}
+              onBlur={() => setHeld(false)}
+              disabled={disabled}
+            >
+              {beat.question}
+            </button>
+          </>
+        )}
+      </p>
       {/* The way back, ahead of the examples: a reader who has been here before is more
           likely to want an answer they already paid for than a sample question. The
           history used to be reachable only behind "Start over" in the site bar (UI/UX
@@ -177,6 +207,25 @@ export function EmptyState({
       )}
     </div>
   )
+}
+
+/**
+ * The beat the landing is on, and whether the reader is holding it. Under
+ * `prefers-reduced-motion: reduce` it never moves, as the hub's rotation does not:
+ * such a reader gets the first beat, the old fixed heading, standing still.
+ */
+function useLandingRotation(): [number, (held: boolean) => void] {
+  const [at, setAt] = useState(0)
+  const [held, setHeld] = useState(false)
+  useEffect(() => {
+    if (held) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') setAt((n) => n + 1)
+    }, LANDING_DWELL_MS)
+    return () => window.clearInterval(id)
+  }, [held])
+  return [at, setHeld]
 }
 
 function byHubOrder(a: CorpusRegistry['corpora'][number], b: CorpusRegistry['corpora'][number]): number {

@@ -3,7 +3,7 @@ import { probeMyCollections, type MyCollection } from '@lawfare/ragtime-client'
 
 import { usePaid } from '@/auth/use-paid'
 
-import { detectMyCollections, type MyCollectionsAvailability } from './availability'
+import { detectMyCollections, MY_COLLECTIONS_OFFERED, type MyCollectionsAvailability } from './availability'
 
 /**
  * Collections for the signed-in reader, or the fact that there are none to show.
@@ -56,6 +56,7 @@ export function MyCollectionsProvider({ children }: { children: ReactNode }) {
   const [answer, setAnswer] = useState<Answer | null>(null)
 
   const ask = useCallback(async (): Promise<Answer> => {
+    if (!MY_COLLECTIONS_OFFERED) return { userId, result: { available: false, reason: 'not-switched-on' } }
     return { userId, result: await detectMyCollections(sessionToken, probeMyCollections) }
   }, [sessionToken, userId])
 
