@@ -27,6 +27,7 @@ import {
 import { beginInteraction } from '@/lib/interaction'
 import { explainRefusal } from '../model/allowance.ts'
 import { mergePinnedCorpora, normalizeBrief } from '../model/brief.ts'
+import { readPin } from '../model/handoff.ts'
 import { openTurn } from '../model/envelope.ts'
 import {
   CONVERSATION_PREFIX,
@@ -96,7 +97,7 @@ function newConversationId(): string {
  * conversation, the one key this page used before there was a list, becomes the first
  * conversation of that list rather than being orphaned by the rename.
  */
-function boot(now: number): { cid: string; index: Index; saved: Saved | null } {
+function boot(now: number, fresh = false): { cid: string; index: Index; saved: Saved | null } {
   const prefix = CONVERSATION_PREFIX + ':'
   const present = keysLocal(prefix).map((k) => k.slice(prefix.length))
   let index = reconcile(readIndex(readLocal(INDEX_KEY)), (cid) => present.includes(cid))
@@ -123,7 +124,9 @@ function boot(now: number): { cid: string; index: Index; saved: Saved | null } {
     }
   }
 
-  const current = index.current && index.items.some((i) => i.cid === index.current) ? index.current : null
+  // A hand-off that pins corpora (`model/handoff.ts`) opens a new conversation; the one
+  // that was current is already on the device and stays in the list.
+  const current = !fresh && index.current && index.items.some((i) => i.cid === index.current) ? index.current : null
   if (current) {
     const s = restore(readLocal(conversationKey(current)), now)
     if (s) return { cid: current, index, saved: s }
@@ -149,20 +152,23 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
   // Read once, at the first render, rather than in an effect: an effect would paint the
   // empty state first and then replace it, so a reader coming back would watch their own
   // conversation appear to be gone before it appeared to return.
-  const [booted] = useState(() => boot(Date.now()))
+  // Corpora a surface handed the reader over with (`?pin=`, `model/handoff.ts`). Read with
+  // the boot, for the boot's reason: they decide which conversation the page opens on.
+  const [carriedPin] = useState(() => readPin(window.location.search))
+  const [booted] = useState(() => boot(Date.now(), carriedPin !== null))
   const saved = booted.saved
   const [cid, setCid] = useState(booted.cid)
   const [conversations, setConversations] = useState<Summary[]>(booted.index.items)
   const [turns, setTurns] = useState<Turn[]>(() => saved?.turns ?? [])
   const [brief, setBrief] = useState<ExplorerBrief | null>(() => saved?.brief ?? null)
   const [proposed, setProposed] = useState<ExplorerBrief | null>(() => saved?.proposed ?? null)
-  const [pinned, setPinned] = useState<string[]>(() => saved?.pinned ?? [])
+  const [pinned, setPinned] = useState<string[]>(() => carriedPin ?? saved?.pinned ?? [])
   const [busy, setBusy] = useState(false)
   const [refusal, setRefusal] = useState<Refusal | null>(null)
   const [registry, setRegistry] = useState<CorpusRegistry | null>(null)
 
   const turnsRef = useRef<Turn[]>(saved?.turns ?? [])
-  const pinnedRef = useRef<string[]>(saved?.pinned ?? [])
+  const pinnedRef = useRef<string[]>(carriedPin ?? saved?.pinned ?? [])
   // The conversation as the worker continues it, not as the page draws it. Restored
   // together with the turns or neither is true (`model/persist.ts`).
   const conv = useRef<{ messages: ExplorerMessage[]; envelope: string | null }>({
@@ -176,6 +182,14 @@ export function useExplorer({ workerUrl, auth }: ExplorerOptions): Explorer {
   useEffect(() => {
     pinnedRef.current = pinned
   }, [pinned])
+  // Out of the address once read, as `?q=` is (`ExplorerPage`): a reload is not a second
+  // hand-off, and must not set this conversation aside for another empty one.
+  useEffect(() => {
+    if (!carriedPin) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('pin')
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+  }, [carriedPin])
 
   // The latest of everything worth keeping, readable from a listener that fires long after
   // the render it belongs to — `pagehide` has no time to wait for React. Synced in an

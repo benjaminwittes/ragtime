@@ -33,6 +33,7 @@ import { ClaudeAnalysisForm } from './components/ClaudeAnalysisForm'
 import { ClaudeReadForm } from './components/ClaudeReadForm'
 import { FilterForm } from './components/FilterForm'
 import { ModeRow } from './components/ModeRow'
+import { explorerPinnedPath } from '@/explorer/model/handoff'
 import { ResultsList } from './components/ResultsList'
 import { SpokeHeader } from './components/SpokeHeader'
 import {
@@ -487,6 +488,15 @@ export function SpokeShell({ spoke }: { spoke: CorpusSpoke }) {
         enabledModes={enabledModes}
         onSelect={selectMode}
         docSlug="litigation-modes"
+        handoff={
+          spoke.slug === 'litigation'
+            ? {
+                label: 'AMA',
+                title: 'Ask anything about federal litigation. Opens a new Explorer conversation with this corpus pinned.',
+                to: explorerPinnedPath(['litigation']),
+              }
+            : undefined
+        }
       />
       {hasStack && (
         <Breadcrumb
