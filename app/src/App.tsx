@@ -20,6 +20,7 @@ import { UscSpokeShell } from '@/spokes/usc/UscSpokeShell'
 import { getSpokeBySlug } from '@/spokes/registry'
 import { ExplorerPage } from '@/explorer/ExplorerPage'
 import { CollectionPage, CollectionsIndex } from '@/collections/CollectionsPage'
+import { AboutPage, ABOUT_PATH } from '@/docs/AboutPage'
 import { parseMyCollectionsPath } from '@/my-collections/availability'
 import { MyCollectionPage, MyCollectionsIndex } from '@/my-collections/MyCollectionsPage'
 import { DemoPage } from '@/demo/DemoPage'
@@ -39,6 +40,8 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
  *
  * Routes:
  *   `/`                          → hub (multi-spoke landing per brief #1)
+ *   `/about`                     → "What is RAGtime?": the global docs
+ *                                  entries on one page (`src/docs/AboutPage.tsx`)
  *   `/explorer`                  → the Explorer: a conversation that orients,
  *                                  proposes a brief, researches, and hands off
  *                                  into the spokes (`src/explorer/`)
@@ -82,6 +85,7 @@ import { type CorpusSlug, type CorpusSpoke, links } from '@lawfare/ragtime-clien
 type Route =
   | { kind: 'hub' }
   | { kind: 'explorer' }
+  | { kind: 'about' }
   | { kind: 'collections' }
   | { kind: 'collection'; slug: string }
   | { kind: 'my-collections'; pathname: string }
@@ -104,6 +108,7 @@ function parseRoute(pathname: string): Route {
   if (pathname === '/privacy') return { kind: 'privacy' }
   if (pathname === '/terms') return { kind: 'terms' }
   if (pathname === '/explorer') return { kind: 'explorer' }
+  if (pathname === ABOUT_PATH || pathname === ABOUT_PATH + '/') return { kind: 'about' }
   if (pathname === '/collections' || pathname === '/collections/') return { kind: 'collections' }
   const coll = pathname.match(/^\/collections\/([a-z0-9][a-z0-9-]{0,63})\/?$/)
   if (coll) return { kind: 'collection', slug: coll[1] }
@@ -170,6 +175,8 @@ function App() {
   const surface =
     route.kind === 'explorer'
       ? <ExplorerPage />
+      : route.kind === 'about'
+      ? <AboutPage />
       : route.kind === 'collections'
       ? <CollectionsIndex />
       : route.kind === 'collection'
@@ -220,7 +227,7 @@ function App() {
         {/* The stage has no bar of its own. It is a seat in an audience, not a page of
             the site: a slide fills it edge to edge, and when the presenter shows the app
             the bar a reader sees is the presenter's, arriving with the rest of the page. */}
-        {route.kind !== 'stage' && <SiteBar onExplorer={onExplorer} />}
+        {route.kind !== 'stage' && <SiteBar onExplorer={onExplorer} onAbout={route.kind === 'about'} />}
         {surface}
       </div>
       <CheckoutReturnGate />

@@ -13,6 +13,7 @@ import { Mark } from '@/components/Mark'
 import { DocsTrigger } from '@/docs/DocsTrigger'
 import { Feedback } from '@/feedback/Feedback'
 import { AccessSettings } from '@/llm/AccessSettings'
+import { ABOUT_PATH } from '@/docs/AboutPage'
 import { MY_COLLECTIONS_PATH } from '@/my-collections/availability'
 import { useMyCollections } from '@/my-collections/use-my-collections'
 import { cn } from '@/lib/utils'
@@ -47,7 +48,7 @@ import { cn } from '@/lib/utils'
  * exactly the case a per-breakpoint constant would get wrong, and the case where being
  * wrong costs the reader a scrollbar on a screen that was supposed to be one screen.
  */
-export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
+export function SiteBar({ onExplorer, onAbout = false }: { onExplorer: boolean; onAbout?: boolean }) {
   const setSlot = useContext(SlotRefContext)
   const bar = useRef<HTMLElement>(null)
   const collections = useMyCollections()
@@ -151,6 +152,16 @@ export function SiteBar({ onExplorer }: { onExplorer: boolean }) {
             )}
           >
             Explorer
+          </AppLink>
+          {/* The site's own description, asked for by the UI/UX live document because the
+              `?` button was not where readers looked for it. Below `sm` the row has no room,
+              and the `?` button beside the access controls still opens the same entries. */}
+          <AppLink
+            to={ABOUT_PATH}
+            aria-current={onAbout ? 'page' : undefined}
+            className="hidden font-serif text-[15px] text-primary underline-offset-4 hover:underline aria-[current=page]:underline sm:inline"
+          >
+            What is RAGtime?
           </AppLink>
           {/* Only for a signed-in reader whose worker has collections switched on; for
               everyone else this link does not exist. It waits for `lg`, as the note at
