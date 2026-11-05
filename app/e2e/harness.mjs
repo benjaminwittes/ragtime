@@ -375,6 +375,90 @@ export async function conversation(page, question) {
 }
 
 /**
+ * Whether a wrapping flex row is still one row, measured on the row itself.
+ *
+ * `finder` is a function that returns the row element; it is serialised and run in the
+ * page, so it may not close over anything here. Two questions are asked, and a row is one
+ * row only when both say so:
+ *
+ *   - `lines`: how many bands its children fall into. Children on one line overlap
+ *     vertically however they are centred against each other, and children on different
+ *     lines do not, so this counts lines without mistaking a centred icon for a wrap.
+ *     Children with no height (an empty slot, a note hidden at this width) hold no line
+ *     and are left out; counting them is what once reported two rows on the hub.
+ *   - `content`: the row's height less its own padding. A child that wraps *inside itself*
+ *     is still one band, but it makes the row taller, and this is what sees that. It is
+ *     the content box rather than the border box so that a change of padding, which wraps
+ *     nothing, does not read as a wrap.
+ *
+ * `ONE_ROW_CONTENT_MAX` is the tallest thing a single line holds (the lockup, 36px) with
+ * room for a few pixels of drift; a second line adds at least a control's height (26px).
+ */
+export const ONE_ROW_CONTENT_MAX = 44
+
+export async function rowShape(page, finder) {
+  const shape = await page.evaluate((src) => {
+    const row = new Function('return (' + src + ')')()()
+    if (!row) return null
+    const cs = getComputedStyle(row)
+    const box = row.getBoundingClientRect()
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth)
+    const kids = [...row.children]
+      .map((c) => c.getBoundingClientRect())
+      .filter((r) => r.height > 0)
+      .map((r) => [Math.round(r.top), Math.round(r.bottom)])
+      .sort((a, b) => a[0] - b[0])
+    let lines = 0
+    let edge = -Infinity
+    for (const [top, bottom] of kids) {
+      if (top >= edge) lines++
+      edge = Math.max(edge, bottom)
+    }
+    return { lines, height: Math.round(box.height), content: Math.round(box.height - pad), kids }
+  }, finder.toString())
+  return shape && { ...shape, oneRow: shape.lines === 1 && shape.content <= ONE_ROW_CONTENT_MAX }
+}
+
+/**
+ * A signed-in session, as a previous visit would have left it on the device.
+ *
+ * Returned as init-script *source* (see `seedOf` in `band.mjs` for why). Its token is
+ * never checked by anything real: a driver that seeds this also answers the auth project
+ * and `/api/balance` itself.
+ *
+ * The key it is stored under is supabase-js's default, `sb-<first label of the auth
+ * host>-auth-token`, so it follows the auth URL: it was `sb-aikdbjprndgksibbvcfs-…` while
+ * the app signed in at the project's own address and became `sb-auth-…` when that moved to
+ * `auth.ragtime.lawfaremedia.org`. A session seeded under the old name is simply not found,
+ * and the page renders signed out with nothing to say why. So the URL is read from the
+ * app's own source rather than repeated here. `VITE_SUPABASE_URL` in the environment is
+ * honoured as the app honours it; one set only in an `.env.local` is not seen from here.
+ */
+export function authStorageKey() {
+  const source = fs.readFileSync(path.join(HERE, '..', 'src', 'auth', 'supabase.ts'), 'utf8')
+  const named = /export const APP_PROJECT_URL = '([^']+)'/.exec(source)
+  const url = process.env.VITE_SUPABASE_URL || (named && named[1])
+  if (!url) throw new Error('e2e: could not read the auth URL from src/auth/supabase.ts')
+  return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`
+}
+
+export const SESSION_EMAIL = 'reader@lawfaremedia.org'
+
+export function sessionSeed() {
+  const b64u = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url')
+  const expires = Math.floor(Date.now() / 1000) + 3600
+  const session = {
+    access_token: `${b64u({ alg: 'ES256', typ: 'JWT' })}.${b64u({ sub: 'u-1', email: SESSION_EMAIL, exp: expires })}.sig`,
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: expires,
+    refresh_token: 'stub-refresh',
+    user: { id: 'u-1', aud: 'authenticated', role: 'authenticated', email: SESSION_EMAIL, app_metadata: {}, user_metadata: {}, created_at: '2026-10-01T00:00:00Z' },
+  }
+  return `window.localStorage.setItem(${JSON.stringify(authStorageKey())}, ${JSON.stringify(JSON.stringify(session))})`
+}
+
+/**
  * The scoreboard.
  *
  * A driver prints every expectation it checked, passing ones included, because the point

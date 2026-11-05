@@ -1,20 +1,31 @@
 /**
- * Whether the band keeps to one row, in every state its trail control can be in.
+ * Whether the bar keeps to one row on the Explorer, in every state its trail control can
+ * be in.
  *
- * At 390 the row runs out, and the control that goes hot is the one carrying a number —
- * so the states where the band has something to say were the states where it did not fit,
- * and it wrapped onto a second row at exactly the wrong moment. The labels are short below
- * `sm` for that reason; this is what holds them short.
+ * "The band" was the Explorer's own header, a second `<header>` under the site's. It is
+ * gone: the site now has one bar (`SiteBar.tsx`), and what was left of the band, the trail
+ * control, is rendered into that bar's slot. So there is no band to measure, and what this
+ * file protects is the thing the band's one row was for: the row the trail control sits in
+ * does not wrap when the control has something to say.
  *
- * The band's budget for that control was found by widening its label until the row wrapped:
- * somewhere between 74 and 85px. `--candidates` re-runs that measurement, which is how to
- * decide whether a new wording fits without shipping it to a phone first.
+ * At 390 the row runs out, and the control that goes hot is the one carrying a number,
+ * so the states where it has something to say were the states where it did not fit, and
+ * it wrapped onto a second row at exactly the wrong moment. The labels are short below
+ * `sm` for that reason; this is what holds them short. The row is tighter now than the
+ * band was, because it also carries the lockup and the site's own controls.
+ *
+ * `--candidates` measures wordings in the live control, which is how to decide whether a
+ * new one fits without shipping it to a phone first.
+ *
+ * The check holds at a phone and at a desk. Between them it does not, by design: around
+ * 640 the bar wraps on purpose once a conversation puts controls in the slot (see the
+ * slot's comment in `SiteBar.tsx`), so `E2E_W=640` fails here and is not a defect.
  *
  *   node e2e/band.mjs                    # a phone, every state
  *   E2E_W=1440 node e2e/band.mjs         # the full wording, at the width that has room
  *   node e2e/band.mjs --candidates       # measure wordings before choosing one
  */
-import { launch, ctxWith, log, SHOTS, EXPLORER, PHONE, scoreboard } from './harness.mjs'
+import { launch, ctxWith, log, SHOTS, EXPLORER, PHONE, scoreboard, rowShape } from './harness.mjs'
 
 const W = Number(process.env.E2E_W || PHONE.width)
 const CANDIDATES_MODE = process.argv.includes('--candidates')
@@ -55,18 +66,36 @@ const STATES = [
  */
 const FORCED = 'Used up'
 
-/** Band height is the signal: one row is ~53px on a phone, and a wrap costs ~36 more. */
-const ONE_ROW_MAX = 60
+/** The trail control, wherever it is drawn. Run in the page. */
+const trailControl = () => document.querySelector('button[aria-controls="trail"]')
 
-function measure() {
-  const band = document.querySelectorAll('header')[1]
-  const row = band.firstElementChild
-  const trail = [...row.querySelectorAll('button')].find((b) => b.getAttribute('aria-controls') === 'trail')
-  return {
-    reads: trail ? trail.innerText.trim() : null,
-    trailWidth: trail ? Math.round(trail.getBoundingClientRect().width) : null,
-    bandHeight: Math.round(band.getBoundingClientRect().height),
-  }
+/**
+ * The row that control sits in: the bar's one wrapping row, found from the control rather
+ * than by counting headers, which is what broke when the band's header went. Run in the
+ * page, so it repeats the selector rather than calling `trailControl`.
+ */
+const trailRow = () => {
+  const trail = document.querySelector('button[aria-controls="trail"]')
+  return trail ? trail.closest('header')?.firstElementChild ?? null : null
+}
+
+/** What the control reads and how wide it is, then whether its row is one row. */
+async function measure(page) {
+  const trail = await page.evaluate((src) => {
+    const el = new Function('return (' + src + ')')()()
+    return el ? { reads: el.innerText.trim(), trailWidth: Math.round(el.getBoundingClientRect().width), inBar: !!el.closest('header') } : null
+  }, trailControl.toString())
+  return { ...(trail ?? { reads: null, trailWidth: null, inBar: false }), row: await rowShape(page, trailRow) }
+}
+
+/** Put a wording into the live control, in both of the spans it keeps one in. */
+async function force(page, label) {
+  await page.evaluate(([src, text]) => {
+    const el = new Function('return (' + src + ')')()()
+    if (!el) return
+    for (const sp of el.querySelectorAll('span')) sp.textContent = text
+    void el.offsetHeight
+  }, [trailControl.toString(), label])
 }
 
 const browser = await launch()
@@ -79,23 +108,15 @@ if (CANDIDATES_MODE) {
   const page = await ctx.newPage()
   await page.goto(EXPLORER, { waitUntil: 'networkidle' })
   await page.waitForTimeout(600)
-  const rows = await page.evaluate(
-    ([cands, src]) => {
-      const band = document.querySelectorAll('header')[1]
-      const trail = [...band.querySelectorAll('button')].find((b) => b.getAttribute('aria-controls') === 'trail')
-      const fn = new Function('return (' + src + ')')()
-      return cands.map((c) => {
-        for (const s of trail.querySelectorAll('span')) s.textContent = c
-        void band.offsetHeight
-        return { label: c, ...fn() }
-      })
-    },
-    [CANDIDATES, measure.toString()],
-  )
+  const rows = []
+  for (const label of CANDIDATES) {
+    await force(page, label)
+    rows.push({ label, ...(await measure(page)) })
+  }
   const pad = (s, n) => String(s).padEnd(n)
   log(`candidate wordings at ${W}:`)
-  log('  ' + pad('label', 22) + pad('width', 8) + pad('band', 7) + 'one row')
-  for (const r of rows) log('  ' + pad(JSON.stringify(r.label), 22) + pad(r.trailWidth, 8) + pad(r.bandHeight, 7) + (r.bandHeight <= ONE_ROW_MAX ? 'yes' : 'NO'))
+  log('  ' + pad('label', 22) + pad('width', 8) + pad('row', 7) + pad('lines', 7) + 'one row')
+  for (const r of rows) log('  ' + pad(JSON.stringify(r.label), 22) + pad(r.trailWidth, 8) + pad(r.row?.height, 7) + pad(r.row?.lines, 7) + (r.row?.oneRow ? 'yes' : 'NO'))
   await browser.close()
   process.exit(0)
 }
@@ -108,23 +129,18 @@ for (const s of STATES) {
   await page.goto(EXPLORER, { waitUntil: 'networkidle' })
   await page.waitForTimeout(600)
 
-  const real = await page.evaluate(measure)
-  board.check(`${s.name}: one row (reads ${JSON.stringify(real.reads)}, ${real.trailWidth}px)`, real.bandHeight <= ONE_ROW_MAX, real)
+  const real = await measure(page)
+  board.check(`${s.name}: the trail control is in the bar`, real.inBar, real)
+  board.check(`${s.name}: one row (reads ${JSON.stringify(real.reads)}, ${real.trailWidth}px)`, !!real.row && real.row.oneRow, real)
 
-  const forced = await page.evaluate(
-    ([label, src]) => {
-      const band = document.querySelectorAll('header')[1]
-      const trail = [...band.querySelectorAll('button')].find((b) => b.getAttribute('aria-controls') === 'trail')
-      if (!trail) return { error: 'no trail control' }
-      for (const sp of trail.querySelectorAll('span')) sp.textContent = label
-      void band.offsetHeight
-      return new Function('return (' + src + ')')()()
-    },
-    [FORCED, measure.toString()],
-  )
-  board.check(`${s.name} + a spent allowance: one row (${forced.trailWidth}px)`, forced.bandHeight <= ONE_ROW_MAX, forced)
-
+  // Before the wording is forced, so the picture is of what a reader would see.
   await page.screenshot({ path: `${SHOTS}/band-${W}-${s.name.replace(/\W+/g, '-')}.png` })
+
+  await force(page, FORCED)
+  const forced = await measure(page)
+  board.check(`${s.name} + a spent allowance: one row (${forced.trailWidth}px)`, forced.reads === FORCED && !!forced.row && forced.row.oneRow, forced)
+
+  await page.screenshot({ path: `${SHOTS}/band-${W}-${s.name.replace(/\W+/g, '-')}-forced.png` })
   await ctx.close()
 }
 

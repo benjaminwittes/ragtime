@@ -35,7 +35,8 @@ node e2e/links.mjs                       # where every link in an answer goes
 node e2e/cross.mjs                       # the seam: a citation followed out, and Back
 node e2e/mark.mjs                        # the mark: a live answer painted in, a restored one just shown
 node e2e/follow.mjs                      # reading back while the next answer comes in: left where you are
-node e2e/feedback.mjs                    # the feedback button on every surface; files nothing
+node e2e/feedback.mjs                    # the feedback button on every surface, signed out and
+                                         #   signed in (a stub session); files nothing
 node e2e/tour.mjs                        # the guided tour, every step, at a desk and on a phone
 node e2e/demo.mjs                        # the presenter's kit at /demo, sealed by the driver itself; and ?docs=
 node e2e/signin.mjs                      # the Google button, the hourly email cap, a dead sign-in
@@ -43,7 +44,8 @@ node e2e/signin.mjs                      # the Google button, the hourly email c
 node e2e/consent.mjs                     # the connector's consent page: signing in on it, Approve
                                          #   and Deny; the auth project and the balance are stubbed
 E2E_W=1440 node e2e/cross.mjs            # the same at desktop width
-node e2e/band.mjs                        # whether the band keeps to one row
+node e2e/band.mjs                        # whether the bar keeps to one row on the Explorer,
+                                         #   whatever its trail control reads
 node e2e/band.mjs --candidates           # measure wordings before choosing one
 node e2e/spokes.mjs                      # the hub and all twelve spokes, which this
                                          #   branch changed without being about them
@@ -98,11 +100,19 @@ Three things that will bite, each of which cost a debugging session here:
   question about where the children are, and asking it that way reports a wrap on every row
   holding an icon centred against text — they sit a few pixels apart, and on the hub as much
   as 24px apart, inside one 28px row. A wrap is the thing that makes the *row* taller. This
-  cost eleven false failures before the check measured the right box.
+  cost eleven false failures before the check measured the right box. And measure it
+  without its padding, against the lines its children fall into, not against a height
+  written down when it was last right: a constant failed thirteen rows that had not wrapped
+  the day the bar's padding grew. `rowShape` in the harness does both.
+- **A seeded session is stored under a key made from the auth URL.** supabase-js names it
+  `sb-<first label of the auth host>-auth-token`, so when the auth URL moved, a session
+  seeded under the old name was not found and the page rendered signed out, with nothing
+  to say why. Use `sessionSeed()` from the harness, which reads the URL from the app.
 
 And when a check goes green, make it fail on purpose before believing it. `spokes.mjs`'s
 row check was confirmed by forcing a long label into the control and watching the row go
-from 28px to 154px — without that, a check that could never fail and a check that passes
+from 28px to 154px (today: `E2E_LABELS='A much longer wording than fits' node e2e/band.mjs
+--candidates` puts one in the same row and prints two lines) — without that, a check that could never fail and a check that passes
 look exactly alike.
 
 ## Why `playwright-core`
