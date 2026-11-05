@@ -7,45 +7,118 @@
  * it takes, and — the defect this widget shipped with in its first life — whether it sits
  * on top of the Explorer's Send.
  *
- * **Nothing here files a report.** `POST …/problem-reports` is answered by the route below
- * and never reaches the worker; what the page tried to send is kept and checked.
+ * A note is sent as the signed-in reader, so the panel has two faces and both are driven:
+ * signed out it asks for a sign-in and offers no note field and no Send; signed in it is the
+ * form. The session is a stub put on the device (`sessionSeed` in the harness), as
+ * `signin.mjs` and `consent.mjs` do it.
+ *
+ * **Nothing here files a report, and nobody is signed in.** `POST …/problem-reports` is
+ * answered by the route below and never reaches the worker; what the page tried to send is
+ * kept and checked. The auth project and `/api/balance` are answered here too, so the stub
+ * session's token is never shown to anything real.
  *
  *   node e2e/feedback.mjs
  *   E2E_BASE=http://localhost:5175/ragtime node e2e/feedback.mjs
  */
-import { launch, ctxWith, log, SHOTS, BASE, EXPLORER, PHONE, DESKTOP, scoreboard } from './harness.mjs'
+import { launch, ctxWith, log, SHOTS, BASE, EXPLORER, PHONE, DESKTOP, scoreboard, sessionSeed, SESSION_EMAIL } from './harness.mjs'
 
 const board = scoreboard('feedback')
 
-/** A context whose report route is answered here, with the status a case asks for. */
-async function ctxAnswering(browser, viewport, status = 201) {
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': '*',
+  'access-control-allow-methods': '*',
+}
+// A preflight is answered with the headers it asked for by name: the note now carries
+// `authorization`, which a wildcard does not cover.
+const preflight = (req) => ({
+  status: 204,
+  headers: { ...CORS, 'access-control-allow-headers': req.headers()['access-control-request-headers'] || '*' },
+})
+
+/**
+ * A context whose report route is answered here, with the status a case asks for.
+ *
+ * `signedIn` puts the stub session on the device; `google` is what the auth project's
+ * settings say it offers, which is what decides whether a signed-out reader is given a
+ * button or told sign-in is unavailable. `sent` holds each note's body, `bearer` whether
+ * each went with a session, and `other` anything asked of the auth project that a seeded
+ * session should not need.
+ */
+async function ctxAnswering(browser, viewport, status = 201, { signedIn = true, google = true } = {}) {
   const ctx = await ctxWith(browser, { viewport })
   const sent = []
-  await ctx.route('**/problem-reports', async (route) => {
-    if (route.request().method() === 'OPTIONS') {
-      return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' } })
+  const bearer = []
+  const other = []
+  if (signedIn) await ctx.addInitScript(sessionSeed())
+  await ctx.route('**/auth/v1/**', (route) => {
+    const req = route.request()
+    const url = new URL(req.url())
+    if (req.method() === 'OPTIONS') return route.fulfill(preflight(req))
+    if (url.pathname.endsWith('/settings')) {
+      return route.fulfill({ status: 200, headers: CORS, contentType: 'application/json', body: JSON.stringify({ external: { email: true, google } }) })
     }
-    sent.push(JSON.parse(route.request().postData() || '{}'))
+    other.push(`${req.method()} ${url.pathname}`)
+    return route.fulfill({ status: 404, headers: CORS, contentType: 'application/json', body: '{}' })
+  })
+  await ctx.route('**/api/balance', (route) =>
+    route.request().method() === 'OPTIONS'
+      ? route.fulfill(preflight(route.request()))
+      : route.fulfill({ status: 200, headers: CORS, contentType: 'application/json', body: JSON.stringify({ balance_cents: 900, per_query_cap_cents: 500, ledger: [], billing: 'self' }) }),
+  )
+  await ctx.route('**/problem-reports', async (route) => {
+    const req = route.request()
+    if (req.method() === 'OPTIONS') return route.fulfill(preflight(req))
+    sent.push(JSON.parse(req.postData() || '{}'))
+    bearer.push(/^Bearer .+/.test(req.headers()['authorization'] || ''))
     return route.fulfill({
       status,
       contentType: 'application/json',
-      headers: { 'access-control-allow-origin': '*' },
+      headers: CORS,
       body: JSON.stringify(status === 201 ? { filed: true, report_id: 'stub' } : { error: { code: 'rate_limited' } }),
     })
   })
-  return { ctx, sent }
+  return { ctx, sent, bearer, other }
 }
 
 const PANEL = '[data-feedback="panel"]'
 const IN_BAR = '[data-feedback="open"]'
 const AFLOAT = '[data-feedback="afloat"]'
 
+const GOOGLE = `${PANEL} [data-sign-in="google"]`
+
 const browser = await launch()
 
-// ── The hub, at a desk: open, refuse an empty note, send a real one ───────────────────
+// ── Signed out: the panel asks for a sign-in, and offers nothing to send with ─────────
+for (const google of [true, false]) {
+  log(`— signed out, Google ${google ? 'on' : 'off'} —`)
+  const { ctx, sent } = await ctxAnswering(browser, DESKTOP, 201, { signedIn: false, google })
+  const page = await ctx.newPage()
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' })
+  board.check('the bar carries the button all the same', (await page.locator(IN_BAR).innerText()).trim() === 'Feedback')
+  await page.click(IN_BAR)
+  board.check('the button opens the panel', await page.locator(PANEL).isVisible())
+  await page.waitForTimeout(400)
+  const said = await page.locator(PANEL).innerText()
+  board.check('it asks for a sign-in, and says why', said.includes('Sign in to send feedback') && said.includes('so we can write back'), said)
+  board.check('no note field', (await page.locator(`${PANEL} textarea`).count()) === 0)
+  board.check('no Send, and nothing to point with', (await page.locator(`${PANEL} button:has-text("Send")`).count()) === 0 && (await page.locator(`${PANEL} button:has-text("Point at something")`).count()) === 0)
+  if (google) {
+    board.check('the way in is the Google button', (await page.locator(GOOGLE).innerText()).trim() === 'Continue with Google')
+    await page.screenshot({ path: `${SHOTS}/feedback-signed-out.png` })
+  } else {
+    board.check('with no Google to offer, no button', (await page.locator(GOOGLE).count()) === 0)
+    board.check('and it says sign-in is unavailable', said.includes('Sign-in is not available right now'), said)
+  }
+  await page.keyboard.press('Escape')
+  board.check('nothing was sent', sent.length === 0, sent)
+  await ctx.close()
+}
+
+// ── The hub, at a desk, signed in: open, refuse an empty note, send a real one ────────
 {
-  log('— hub, desktop —')
-  const { ctx, sent } = await ctxAnswering(browser, DESKTOP)
+  log('— hub, desktop, signed in —')
+  const { ctx, sent, bearer, other } = await ctxAnswering(browser, DESKTOP)
   const page = await ctx.newPage()
   await page.goto(BASE + '/', { waitUntil: 'networkidle' })
 
@@ -54,7 +127,10 @@ const browser = await launch()
 
   await page.click(IN_BAR)
   board.check('the button opens the panel', await page.locator(PANEL).isVisible())
+  await page.waitForSelector(`${PANEL} textarea`)
+  board.check('signed in, the panel is the form: no sign-in prompt', !(await page.locator(PANEL).innerText()).includes('Sign in to send feedback') && (await page.locator(GOOGLE).count()) === 0)
   board.check('the note field has the focus', await page.evaluate(() => document.activeElement?.tagName === 'TEXTAREA'))
+  board.check('it says whose note this will be', (await page.locator(PANEL).innerText()).includes(`Sent as ${SESSION_EMAIL}`))
 
   await page.click(`${PANEL} button:has-text("Send")`)
   board.check('an empty note is refused in words', (await page.locator(`${PANEL} [role="alert"]`).innerText()).includes('few words'))
@@ -66,6 +142,7 @@ const browser = await launch()
   await page.waitForSelector(`${PANEL} [role="status"]`)
   board.check('the reader is thanked', (await page.locator(`${PANEL} [role="status"]`).innerText()).includes('Thank you'))
   board.check('one report went, in the route’s three words', sent.length === 1 && sent[0].summary === 'Site feedback: The collection count looks low.' && sent[0].observed === 'The collection count looks low.' && typeof sent[0].expected === 'string', sent)
+  board.check('it went as the signed-in reader, by session and not by a typed address', bearer.length === 1 && bearer[0] === true && !JSON.stringify(sent[0]).includes(SESSION_EMAIL), { bearer, sent })
   board.check('it says which page, and names this client', sent[0]?.detail?.startsWith('Page: /\nSurface: ragtime') && sent[0]?.client?.name === 'ragtime-web', sent[0])
   await page.screenshot({ path: `${SHOTS}/feedback-hub-sent.png` })
 
@@ -73,6 +150,7 @@ const browser = await launch()
   await page.click(`${PANEL} button:has-text("Send another")`)
   await page.keyboard.press('Escape')
   board.check('Escape closes the panel from inside it', (await page.locator(PANEL).count()) === 0)
+  board.check('the seeded session asked nothing unexpected of the auth project', other.length === 0, other)
   await ctx.close()
 }
 

@@ -14,7 +14,7 @@
  *   node e2e/consent.mjs
  *   E2E_BASE=http://localhost:5175/ragtime node e2e/consent.mjs
  */
-import { launch, ctxWith, log, SHOTS, BASE, PHONE, DESKTOP, scoreboard } from './harness.mjs'
+import { launch, ctxWith, log, SHOTS, BASE, PHONE, DESKTOP, scoreboard, sessionSeed } from './harness.mjs'
 
 const board = scoreboard('consent')
 
@@ -85,16 +85,7 @@ async function ctxConsent(browser, { google, balance = null, session = false, vi
 
 // A session as a previous visit would have left it. Its token is never checked: the
 // service is the route above.
-const b64u = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url')
-const session = {
-  access_token: `${b64u({ alg: 'ES256', typ: 'JWT' })}.${b64u({ sub: 'u-1', email: 'reader@lawfaremedia.org', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`,
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: Math.floor(Date.now() / 1000) + 3600,
-  refresh_token: 'stub-refresh',
-  user: { id: 'u-1', aud: 'authenticated', role: 'authenticated', email: 'reader@lawfaremedia.org', app_metadata: {}, user_metadata: {}, created_at: '2026-10-01T00:00:00Z' },
-}
-const SEED_SESSION = `window.localStorage.setItem('sb-aikdbjprndgksibbvcfs-auth-token', ${JSON.stringify(JSON.stringify(session))})`
+const SEED_SESSION = sessionSeed()
 
 const GOOGLE = '[data-sign-in="google"]'
 const SEND = 'button:has-text("Send sign-in link")'

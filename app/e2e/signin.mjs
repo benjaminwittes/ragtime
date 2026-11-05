@@ -14,7 +14,7 @@
  *   node e2e/signin.mjs
  *   E2E_BASE=http://localhost:5175/ragtime node e2e/signin.mjs
  */
-import { launch, ctxWith, log, SHOTS, BASE, PHONE, DESKTOP, scoreboard } from './harness.mjs'
+import { launch, ctxWith, log, SHOTS, BASE, PHONE, DESKTOP, scoreboard, sessionSeed } from './harness.mjs'
 
 const board = scoreboard('signin')
 
@@ -66,7 +66,7 @@ const NOTICE = `${SHEET} [data-google-required]`
 /** Open the access sheet on the sign-in form. The harness's stub password opens it on Demo. */
 async function openSignIn(page) {
   await page.click('button[aria-label="Configure AI access"]')
-  await page.click(`${SHEET} [role="tab"]:has-text("Lawfare-billed")`)
+  await page.click(`${SHEET} [role="tab"]:has-text("Account")`)
   await page.waitForSelector(`${SHEET} button:has-text("Send sign-in link")`)
 }
 
@@ -229,16 +229,7 @@ for (const google of [true, false]) {
 //
 // A session is put on the device as a previous visit would have left it, and the Worker's
 // `/api/balance` is answered here. Nothing is asked of the auth project to do it.
-const b64u = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url')
-const session = {
-  access_token: `${b64u({ alg: 'ES256', typ: 'JWT' })}.${b64u({ sub: 'u-1', email: 'reader@lawfaremedia.org', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`,
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: Math.floor(Date.now() / 1000) + 3600,
-  refresh_token: 'stub-refresh',
-  user: { id: 'u-1', aud: 'authenticated', role: 'authenticated', email: 'reader@lawfaremedia.org', app_metadata: {}, user_metadata: {}, created_at: '2026-10-01T00:00:00Z' },
-}
-const SEED_SESSION = `window.localStorage.setItem('sb-aikdbjprndgksibbvcfs-auth-token', ${JSON.stringify(JSON.stringify(session))})`
+const SEED_SESSION = sessionSeed()
 
 async function ctxSignedIn(browser, balance, status = 200) {
   const { ctx, seen } = await ctxAuth(browser, { google: true })
