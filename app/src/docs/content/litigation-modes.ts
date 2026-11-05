@@ -54,7 +54,10 @@ larger.
 **Retired modes.** "AI writes SQL" and "Ask Me Anything" ran database
 queries over a copy of the dockets that RAGtime hosted. The corpus is now
 searched live on CourtListener, which has no database for a model to query,
-so those two modes are no longer offered here.
+so those two modes are no longer offered here. The **AMA** button beside the
+modes opens the Explorer instead, in a new conversation with this corpus
+pinned: the Explorer searches CourtListener live, the same way this page
+does, and answers in prose with its sources cited.
 
 **The stack.** Each query, whether local or AI-based, creates an operation
 that changes the working dataset: filtering to a field, having the AI winnow

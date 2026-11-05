@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -17,6 +17,8 @@ import {
   entryDeepLink,
   fetchCaseEntries,
 } from '@lawfare/ragtime-client'
+import { snippetSegments, snippetTerms, termSegments } from './highlight'
+import { Highlighted } from './Highlighted'
 
 /**
  * Case-detail panel. Slide-in sheet from the right that loads and shows the
@@ -31,12 +33,19 @@ import {
  */
 export function CaseDetailSheet({
   case: theCase,
+  snippet,
   open,
   onOpenChange,
   onMoreLikeThis,
 }: {
   /** The case to show. `null` when no case is selected (sheet stays closed). */
   case: CaseDisplayRow | null
+  /**
+   * The keyword match the results list showed for this case, when it was found by
+   * one. Shown at the top, and its marked terms are marked again in the docket
+   * entries, so the highlight the reader clicked on is still there inside.
+   */
+  snippet?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Pivot to "more like this case" (briefs §3). Omitted = button hidden. */
@@ -59,6 +68,7 @@ export function CaseDetailSheet({
           <CaseDetailBody
             key={theCase.cl_id}
             theCase={theCase}
+            snippet={snippet}
             onMoreLikeThis={onMoreLikeThis}
           />
         )}
@@ -69,9 +79,11 @@ export function CaseDetailSheet({
 
 function CaseDetailBody({
   theCase,
+  snippet,
   onMoreLikeThis,
 }: {
   theCase: CaseDisplayRow
+  snippet?: string
   onMoreLikeThis?: (seed: { id: number; title: string | null }) => void
 }) {
   const auth = useAuth()
@@ -84,6 +96,7 @@ function CaseDetailBody({
   )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
+  const terms = useMemo(() => snippetTerms(snippet), [snippet])
 
   useEffect(() => {
     let cancelled = false
@@ -160,6 +173,17 @@ function CaseDetailBody({
               </Button>
             </div>
           )}
+          {snippet && (
+            <section aria-label="Where your search matched" className="mb-6">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Where your search matched
+              </h3>
+              <p className="text-sm leading-relaxed text-foreground">
+                {'… '}
+                <Highlighted segments={snippetSegments(snippet)} />
+              </p>
+            </section>
+          )}
           <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Docket entries
             {entries && (
@@ -210,7 +234,9 @@ function CaseDetailBody({
                     )}
                   </div>
                   <p className="text-sm leading-relaxed text-foreground">
-                    {cleanEntryDescription(e.description) || (
+                    {cleanEntryDescription(e.description) ? (
+                      <Highlighted segments={termSegments(cleanEntryDescription(e.description), terms)} />
+                    ) : (
                       <span className="text-muted-foreground italic">
                         (no description)
                       </span>

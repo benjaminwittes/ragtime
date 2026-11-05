@@ -5,10 +5,10 @@ import {
   type AmaOutputMode,
   type AnalysisAnnotation,
   type CaseDisplayRow,
-  SNIPPET_HL_START,
-  SNIPPET_HL_STOP,
 } from '@lawfare/ragtime-client'
 import { MARKDOWN_COMPONENTS } from './markdown-components'
+import { snippetSegments } from './highlight'
+import { Highlighted } from './Highlighted'
 
 import { ResultWindow } from './ResultWindow'
 
@@ -450,42 +450,17 @@ function shortCause(c: string | null | undefined): string {
 }
 
 /**
- * Render a match snippet, wrapping the Worker's highlight-delimited spans
- * (SNIPPET_HL_START … SNIPPET_HL_STOP) in <mark>. Splitting + rendering the
- * pieces as React string children means React escapes the (external, untrusted)
- * docket text for us — no dangerouslySetInnerHTML, no XSS. A leading ellipsis
- * hints the fragment is excerpted from a longer docket entry.
+ * Render a match snippet: CourtListener's highlighted spans in <mark>, through
+ * the same component the case sheet uses for its docket entries. A leading
+ * ellipsis hints the fragment is excerpted from a longer docket entry.
  */
 function renderSnippet(snippet: string): React.ReactNode {
-  const nodes: React.ReactNode[] = ['… ']
-  let i = 0
-  let key = 0
-  while (i < snippet.length) {
-    const start = snippet.indexOf(SNIPPET_HL_START, i)
-    if (start === -1) {
-      nodes.push(snippet.slice(i))
-      break
-    }
-    if (start > i) nodes.push(snippet.slice(i, start))
-    const stop = snippet.indexOf(SNIPPET_HL_STOP, start + 1)
-    if (stop === -1) {
-      nodes.push(snippet.slice(start + 1))
-      break
-    }
-    nodes.push(
-      // `--color-lawfare-mark` has one job on this surface and this is it: the wash under
-      // a term the reader searched for. Not a surface, not a state, not a chip — and no
-      // corner, because a highlighted run of words is not an object.
-      <mark
-        key={key++}
-        className="bg-lawfare-mark px-0.5 font-medium text-foreground"
-      >
-        {snippet.slice(start + 1, stop)}
-      </mark>,
-    )
-    i = stop + 1
-  }
-  return nodes
+  return (
+    <>
+      {'… '}
+      <Highlighted segments={snippetSegments(snippet)} />
+    </>
+  )
 }
 
 function amaTitle(source: Extract<ResultSource, { kind: 'claude_ama' }>): string {

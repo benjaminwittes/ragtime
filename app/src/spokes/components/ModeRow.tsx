@@ -1,6 +1,7 @@
 import type { QueryMode } from '@lawfare/ragtime-client'
 import { cn } from '@/lib/utils'
 import { DocsHint } from '@/docs/DocsHint'
+import { AppLink } from '@/components/AppLink'
 
 /**
  * The five query modes ported wholesale from index.html (brief #6 decision 3).
@@ -43,6 +44,7 @@ export function ModeRow({
   enabledModes,
   onSelect,
   docSlug,
+  handoff,
 }: {
   /** All modes the descriptor declares for this spoke. */
   modes: readonly QueryMode[]
@@ -55,6 +57,12 @@ export function ModeRow({
    *  set, an inline "?" marker at the end of the row deep-links to it —
    *  the contextual help affordance for the AI-function buttons. */
   docSlug?: string
+  /**
+   * A mode this corpus offers somewhere else: drawn beside the tabs like one, but a
+   * link that leaves the page, so it is not a tab and says where it goes. Litigation's
+   * AMA is the Explorer pinned to litigation (`explorer/model/handoff.ts`).
+   */
+  handoff?: { label: string; title: string; to: string }
 }) {
   const enabled = new Set(enabledModes)
   return (
@@ -93,6 +101,18 @@ export function ModeRow({
         )
       })}
       </div>
+      {handoff && (
+        <AppLink
+          to={handoff.to}
+          title={handoff.title}
+          className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+        >
+          {handoff.label}
+          <span className="ml-1.5 text-xs text-muted-foreground">
+            in the Explorer <span aria-hidden="true">→</span>
+          </span>
+        </AppLink>
+      )}
       {docSlug && (
         <DocsHint slug={docSlug} label="how these modes differ" />
       )}
