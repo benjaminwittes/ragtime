@@ -77,6 +77,11 @@ words such as *the*, *of*, *and* and *or*. A two-letter word in capitals,
 such as *US*, *AI* or *DC*, is a search term; the same word in lowercase
 may be ignored as a common word. *US* also finds *U.S.*
 
+Search also ignores a few words about the asking, such as *published*,
+*dated*, *regarding* and *document*, when you type other words with them:
+*memo regarding war powers* finds what *memo war powers* finds. Typed alone,
+inside quotes, after a minus or beside \`OR\`, such a word is a search term.
+
 The search box inside each corpus follows the same four rules, with one
 exception. On the federal litigation page, several plain words are read as
 one phrase: *executive privilege* finds those two words side by side, so
