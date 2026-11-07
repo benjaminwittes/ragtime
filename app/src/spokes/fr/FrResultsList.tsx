@@ -4,6 +4,8 @@ import { isTodayOrLater, prettyDocType } from './fr-format'
 
 import { ResultWindow } from '../components/ResultWindow'
 import { SearchedAs } from '../components/SearchedAs'
+import { FallbackResults } from '../components/FallbackResults'
+import { showsFallback, type BoxFallbackView } from '@/lib/box-fallback'
 
 /**
  * Federal Register manual-filter results table.
@@ -25,6 +27,7 @@ export function FrResultsList({
   error,
   hasRun,
   searchedAs,
+  fallback,
   searchedFor,
   executedSql,
   onOpenDocument,
@@ -42,6 +45,8 @@ export function FrResultsList({
   executedSql: string | undefined
   onOpenDocument: (row: FrDocumentDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
+  /** Hybrid search's results when keyword search found nothing. */
+  fallback?: BoxFallbackView
 }) {
   if (!hasRun && !loading) {
     return (
@@ -72,6 +77,7 @@ export function FrResultsList({
   }
 
   if (!rows || rows.length === 0) {
+    if (showsFallback(fallback)) return <FallbackResults fallback={fallback} searchedAs={searchedAs} />
     return (
       <div className="px-6 py-8 space-y-4">
         {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}

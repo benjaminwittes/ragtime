@@ -72,7 +72,7 @@ const LISTS = [
 describe('every corpus search box but litigation reports its reading', () => {
   it.each(CALLS)('%s: %s feeds %s from fields.%s', (file, call, setter, field) => {
     const re = new RegExp(
-      `await ${call}\\(fields\\)\\n\\s*${setter}\\(searchBoxLine\\(fields\\.${field}, r\\)\\)`,
+      `await ${call}\\(fields(?:, BOX_SEARCH)?\\)\\n\\s*${setter}\\(searchBoxLine\\(fields\\.${field}, r\\)\\)`,
     )
     expect(src(file)).toMatch(re)
   })

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchBoxLine } from '@/lib/searched-as'
+import { BOX_SEARCH } from '@/lib/box-fallback'
 import {
   type OlcAmaPlan,
   type OlcAmaScope,
@@ -18,6 +19,7 @@ import {
   type CorpusHoldings,
   type CorpusSpoke,
   type QueryMode,
+  type BoxFallback,
 } from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
@@ -125,6 +127,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [boxFallback, setBoxFallback] = useState<BoxFallback | undefined>(undefined)
   const [searchedFor, setSearchedFor] = useState<string | null>(null)
   // How the filter's rows are shown: the table, which the page opens on, or the terrain.
   const [resultsView, setResultsView] = useState<ResultsView>('table')
@@ -232,9 +235,11 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryError(undefined)
     setHasRun(true)
     setSearchedAs(null)
+    setBoxFallback(undefined)
     try {
-      const r: OlcFilterResult = await runOlcFilter(fields)
+      const r: OlcFilterResult = await runOlcFilter(fields, BOX_SEARCH)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setBoxFallback(r.fallback)
       setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
@@ -575,6 +580,7 @@ export function OlcSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
                 <ResultsTerrain corpus="olc" rows={rows} total={count ?? rows.length} toDoc={olcDoc} onOpen={handleOpenOpinion} />
               ) : (
                 <OlcResultsList
+                  fallback={{ reply: boxFallback, onOpen: handleOpenSemanticResult }}
                   searchedAs={searchedAs}
                   searchedFor={searchedFor}
                   rows={rows}
