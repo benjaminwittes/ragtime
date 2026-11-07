@@ -3,6 +3,8 @@ import type { UscSectionDisplayRow } from '@lawfare/ragtime-client'
 
 import { ResultWindow } from '../components/ResultWindow'
 import { SearchedAs } from '../components/SearchedAs'
+import { FallbackResults } from '../components/FallbackResults'
+import { showsFallback, type BoxFallbackView } from '@/lib/box-fallback'
 
 /**
  * USC manual-filter results table.
@@ -21,6 +23,7 @@ export function UscResultsList({
   error,
   hasRun,
   searchedAs,
+  fallback,
   searchedFor,
   executedSql,
   onOpenSection,
@@ -37,6 +40,8 @@ export function UscResultsList({
   executedSql: string | undefined
   /** Click handler — opens the section detail sheet. */
   onOpenSection: (row: UscSectionDisplayRow) => void
+  /** Hybrid search's results when keyword search found nothing. */
+  fallback?: BoxFallbackView
 }) {
   if (!hasRun && !loading) {
     return (
@@ -67,6 +72,7 @@ export function UscResultsList({
   }
 
   if (!rows || rows.length === 0) {
+    if (showsFallback(fallback)) return <FallbackResults fallback={fallback} searchedAs={searchedAs} />
     return (
       <div className="px-6 py-8 space-y-4">
         {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}

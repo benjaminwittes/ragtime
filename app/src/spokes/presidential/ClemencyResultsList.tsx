@@ -2,6 +2,8 @@ import type { ClemencyGrantDisplayRow } from '@lawfare/ragtime-client'
 
 import { ResultWindow } from '../components/ResultWindow'
 import { SearchedAs } from '../components/SearchedAs'
+import { FallbackResults } from '../components/FallbackResults'
+import { showsFallback, type BoxFallbackView } from '@/lib/box-fallback'
 
 /**
  * Clemency grant results table. Columns: Recipient · Type · President ·
@@ -18,6 +20,7 @@ export function ClemencyResultsList({
   error,
   hasRun,
   searchedAs,
+  fallback,
   searchedFor,
   onOpenGrant,
 }: {
@@ -31,6 +34,8 @@ export function ClemencyResultsList({
   /** The search box's words, which name the folder a saved list goes into. */
   searchedFor?: string | null
   onOpenGrant: (row: ClemencyGrantDisplayRow) => void
+  /** Hybrid search's results when keyword search found nothing. */
+  fallback?: BoxFallbackView
 }) {
   if (!hasRun && !loading) {
     return (
@@ -49,6 +54,7 @@ export function ClemencyResultsList({
     return <div className="px-6 py-8"><p className="text-sm text-destructive">Filter failed: {error}</p></div>
   }
   if (!rows || rows.length === 0) {
+    if (showsFallback(fallback)) return <FallbackResults fallback={fallback} searchedAs={searchedAs} />
     return (
       <div className="px-6 py-8 text-center">
         <p className="text-sm text-muted-foreground">No grants matched. Try broadening the filter.</p>

@@ -17,6 +17,8 @@ import {
 
 import { ResultWindow } from '../components/ResultWindow'
 import { SearchedAs } from '../components/SearchedAs'
+import { FallbackResults } from '../components/FallbackResults'
+import { showsFallback, type BoxFallbackView } from '@/lib/box-fallback'
 
 /**
  * Congress manual-filter results — one table shape per collection:
@@ -37,6 +39,7 @@ export function CongressResultsList({
   error,
   hasRun,
   searchedAs,
+  fallback,
   searchedFor,
   executedSql,
   onOpenDocument,
@@ -55,6 +58,8 @@ export function CongressResultsList({
   executedSql: string | undefined
   onOpenDocument: (row: CongressAnyDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
+  /** Hybrid search's results when keyword search found nothing. */
+  fallback?: BoxFallbackView
 }) {
   if (!hasRun && !loading) {
     return (
@@ -85,6 +90,7 @@ export function CongressResultsList({
   }
 
   if (!rows || rows.length === 0) {
+    if (showsFallback(fallback)) return <FallbackResults fallback={fallback} searchedAs={searchedAs} />
     return (
       <div className="px-6 py-8 space-y-4">
         {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}

@@ -93,6 +93,39 @@ export type HubKeywordResponse = {
  */
 export type SearchBoxReply = {
   interpreted?: string
+  /** Present only when the request asked for it (`SearchBoxOptions.fallback`)
+   *  and the keyword answer came back empty for a bare word search. The
+   *  keyword answer is left as it was (`ids: []`, `count: 0`); these are the
+   *  hybrid search's results for the same words, in the shape
+   *  /corpus/semantic-search returns. */
+  fallback?: BoxFallback
+}
+
+/** What a corpus page's search box may ask the filter route to fall back to
+ *  when keyword search finds nothing. Only hybrid search today. */
+export type BoxFallbackMode = 'hybrid'
+
+/** The fallback beside an empty keyword answer. `error` (with empty
+ *  `results`) means hybrid search was asked and gave no answer. */
+export type BoxFallback = {
+  mode: BoxFallbackMode
+  because: 'no_keyword_match'
+  results: SemanticSearchRow[]
+  branches?: SemanticSearchResult['branches']
+  error?: string
+}
+
+/** Options a corpus page's search box sends with its filter request. Other
+ *  callers (the record gatherer, scripts) leave them off and keep the strict
+ *  keyword answer. */
+export type SearchBoxOptions = {
+  /** Ask for hybrid search's results when no document holds every word. */
+  fallback?: BoxFallbackMode
+}
+
+/** The filter request body: `{ fields }`, plus `fallback` only when asked. */
+function searchBoxBody(fields: unknown, opts?: SearchBoxOptions): string {
+  return JSON.stringify(opts?.fallback ? { fields, fallback: opts.fallback } : { fields })
 }
 
 export async function runHubKeyword(
@@ -764,11 +797,12 @@ export type UscFilterResult = SearchBoxReply & {
 
 export async function runUscFilter(
   fields: UscFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<UscFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/usc/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -1021,11 +1055,12 @@ export type CfrFilterResult = SearchBoxReply & {
 
 export async function runCfrFilter(
   fields: CfrFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<CfrFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/cfr/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -1278,11 +1313,12 @@ export type OlcFilterResult = SearchBoxReply & {
 
 export async function runOlcFilter(
   fields: OlcFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<OlcFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/olc/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -1568,11 +1604,12 @@ export type PresidentialFilterResult = SearchBoxReply & {
 
 export async function runPresidentialFilter(
   fields: PresidentialFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<PresidentialFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/presidential/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -1877,11 +1914,12 @@ export type FrFilterResult = SearchBoxReply & {
 
 export async function runFrFilter(
   fields: FrFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<FrFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/fr/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -2255,11 +2293,12 @@ export type CongressFilterResult = SearchBoxReply & {
 
 export async function runCongressFilter(
   fields: CongressFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<CongressFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/congress/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -2636,11 +2675,12 @@ export type ClemencyFilterResult = SearchBoxReply & {
 
 export async function runClemencyFilter(
   fields: ClemencyFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<ClemencyFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/clemency/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -2788,11 +2828,12 @@ export type LawfareFilterResult = SearchBoxReply & {
 
 export async function runLawfareFilter(
   fields: LawfareFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<LawfareFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/lawfare/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -3104,11 +3145,12 @@ export type CommentaryFilterResult = SearchBoxReply & {
 
 export async function runCommentaryFilter(
   fields: CommentaryFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<CommentaryFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/commentary/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -3465,11 +3507,12 @@ export type FbiFilterResult = SearchBoxReply & {
 
 export async function runFbiFilter(
   fields: FbiFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<FbiFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/fbi/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -3873,11 +3916,12 @@ export type SanctionsGuidanceFilterResult = SearchBoxReply & {
 
 export async function runSanctionsGuidanceFilter(
   fields: SanctionsGuidanceFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<SanctionsGuidanceFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/sanctions/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)
@@ -4230,11 +4274,12 @@ export type FrusFilterResult = SearchBoxReply & {
 
 export async function runFrusFilter(
   fields: FrusFilterFields,
+  opts?: SearchBoxOptions,
 ): Promise<FrusFilterResult> {
   const r = await workerFetch(`${workerUrl()}/corpus/frus/filter`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: searchBoxBody(fields, opts),
   })
   if (!r.ok) {
     const msg = await safeErrorMessage(r)

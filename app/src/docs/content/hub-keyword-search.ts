@@ -39,6 +39,13 @@ import type { DocsEntry } from '../types'
  * worker lists it as the one known difference in `worker/surface-parity.test.js`;
  * when that entry goes, drop the litigation sentence here too.
  *
+ * The no-match paragraph describes the box fallback (ragtime-worker #266,
+ * `worker/box-fallback.js`; the page side is `lib/box-fallback.ts`): the
+ * corpus pages send `fallback: "hybrid"`, and a bare word search that finds
+ * nothing comes back with hybrid search's results beside the empty answer.
+ * Litigation and books have no meaning search, and the sanctions entity and
+ * Federal Register forms do not ask for it.
+ *
  * The sanctions carve-out in the two-pane sentence is NOT redundant with the
  * descriptor check: `sanctions/index.ts` does set `semanticSearch`, but
  * `SanctionsSpokeShell.tsx` gates the semantic pane on `pane !== 'entities'`
@@ -87,6 +94,14 @@ exception. On the federal litigation page, several plain words are read as
 one phrase: *executive privilege* finds those two words side by side, so
 routine orders that happen to mention both stay out of the list. Add quotes,
 a minus or \`OR\` and the page reads your query as you wrote it.
+
+When no document holds every word you typed, the search box inside a corpus
+does not leave you with an empty list. It shows hybrid search's closest
+matches, which also search by meaning, and says so above them. This happens
+for a plain word search only: add a filter, such as a date range, and the
+page keeps the empty list. Federal litigation, the Library of Congress
+catalogue, and the entity and Federal Register lists on the Sanctions page,
+do not do this.
 
 **{{corpora.fan|cap}} of the {{corpora.held}} corpora.** Sanctions sits out the fan, because its
 documents include the Federal Register's sanctions notices, which that

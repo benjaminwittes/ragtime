@@ -3,6 +3,8 @@ import { AlsoMatchBadge } from '../components/SemanticResultsList'
 
 import { ResultWindow } from '../components/ResultWindow'
 import { SearchedAs } from '../components/SearchedAs'
+import { FallbackResults } from '../components/FallbackResults'
+import { showsFallback, type BoxFallbackView } from '@/lib/box-fallback'
 
 /**
  * OLC manual-filter results table.
@@ -27,6 +29,7 @@ export function OlcResultsList({
   error,
   hasRun,
   searchedAs,
+  fallback,
   searchedFor,
   executedSql,
   onOpenOpinion,
@@ -44,6 +47,8 @@ export function OlcResultsList({
   executedSql: string | undefined
   onOpenOpinion: (row: OlcOpinionDisplayRow) => void
   semanticMatchIds?: ReadonlySet<string>
+  /** Hybrid search's results when keyword search found nothing. */
+  fallback?: BoxFallbackView
 }) {
   if (!hasRun && !loading) {
     return (
@@ -74,6 +79,7 @@ export function OlcResultsList({
   }
 
   if (!rows || rows.length === 0) {
+    if (showsFallback(fallback)) return <FallbackResults fallback={fallback} searchedAs={searchedAs} />
     return (
       <div className="px-6 py-8 space-y-4">
         {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}

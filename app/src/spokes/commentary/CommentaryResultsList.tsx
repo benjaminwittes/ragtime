@@ -4,6 +4,8 @@ import { commentaryRowKey } from './commentary-format'
 
 import { ResultWindow } from '../components/ResultWindow'
 import { SearchedAs } from '../components/SearchedAs'
+import { FallbackResults } from '../components/FallbackResults'
+import { showsFallback, type BoxFallbackView } from '@/lib/box-fallback'
 
 /**
  * Commentary manual-filter results list.
@@ -26,6 +28,7 @@ export function CommentaryResultsList({
   error,
   hasRun,
   searchedAs,
+  fallback,
   searchedFor,
   executedSql,
   onOpenDocument,
@@ -45,6 +48,8 @@ export function CommentaryResultsList({
   /** Publication-qualified keys ('lawfare:123') also present in the semantic
    *  pane. Undefined when no semantic search ran. */
   semanticMatchKeys?: ReadonlySet<string>
+  /** Hybrid search's results when keyword search found nothing. */
+  fallback?: BoxFallbackView
 }) {
   if (!hasRun && !loading) {
     return (
@@ -75,6 +80,7 @@ export function CommentaryResultsList({
   }
 
   if (!rows || rows.length === 0) {
+    if (showsFallback(fallback)) return <FallbackResults fallback={fallback} searchedAs={searchedAs} />
     return (
       <div className="space-y-4 px-6 py-8">
         {executedSql && <ExecutedSqlDisclosure sql={executedSql} />}

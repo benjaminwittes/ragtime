@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchBoxLine } from '@/lib/searched-as'
+import { BOX_SEARCH } from '@/lib/box-fallback'
 import {
   type LawfareAmaPlan,
   type LawfareAmaScope,
@@ -18,6 +19,7 @@ import {
   type CorpusHoldings,
   type CorpusSpoke,
   type QueryMode,
+  type BoxFallback,
 } from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
@@ -128,6 +130,7 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [boxFallback, setBoxFallback] = useState<BoxFallback | undefined>(undefined)
 
   // Semantic pane state (brief #9). See OlcSpokeShell for the pattern
   // rationale; the keyword pane is the filter state above, unchanged.
@@ -217,9 +220,11 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryError(undefined)
     setHasRun(true)
     setSearchedAs(null)
+    setBoxFallback(undefined)
     try {
-      const r: LawfareFilterResult = await runLawfareFilter(fields)
+      const r: LawfareFilterResult = await runLawfareFilter(fields, BOX_SEARCH)
       setSearchedAs(searchBoxLine(fields.q, r))
+      setBoxFallback(r.fallback)
       setRows(r.display_rows)
       setCount(r.count)
       setFilterIds(r.ids)
@@ -546,6 +551,7 @@ export function LawfareSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             <div className="min-w-0">
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
               <LawfareResultsList
+                fallback={{ reply: boxFallback, onOpen: handleOpenSemanticResult }}
                 searchedAs={searchedAs}
                 rows={rows}
                 count={count}

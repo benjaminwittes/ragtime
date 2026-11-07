@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { searchBoxLine } from '@/lib/searched-as'
+import { BOX_SEARCH } from '@/lib/box-fallback'
 import {
   type ClemencyFacets,
   type ClemencyFilterFields,
@@ -7,6 +8,8 @@ import {
   fetchClemencyFacets,
   fetchClemencyGrant,
   runClemencyFilter,
+  type BoxFallback,
+  type SemanticSearchRow,
 } from '@lawfare/ragtime-client'
 import { useAuth } from '@/lib/use-auth'
 import { useOpenDeepLinkedDocument } from '@/lib/use-deep-link'
@@ -36,6 +39,7 @@ export function ClemencySurface() {
   const [error, setError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [boxFallback, setBoxFallback] = useState<BoxFallback | undefined>(undefined)
   const [searchedFor, setSearchedFor] = useState<string | null>(null)
 
   const [detailOpen, setDetailOpen] = useState(false)
@@ -59,9 +63,11 @@ export function ClemencySurface() {
     setError(undefined)
     setHasRun(true)
     setSearchedAs(null)
+    setBoxFallback(undefined)
     try {
-      const r = await runClemencyFilter(fields)
+      const r = await runClemencyFilter(fields, BOX_SEARCH)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setBoxFallback(r.fallback)
       setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
@@ -88,6 +94,13 @@ export function ClemencySurface() {
   function handleOpenGrant(row: ClemencyGrantDisplayRow) {
     setOpenGrant(row)
     setDetailOpen(true)
+  }
+
+  /** Open one of hybrid search's results, shown when no grant held every word
+   *  of the search (lib/box-fallback.ts). The grant detail is a superset of
+   *  the display row, as for the deep link below. */
+  async function handleOpenFallbackResult(row: SemanticSearchRow) {
+    handleOpenGrant(await fetchClemencyGrant(Number(row.id)))
   }
 
   // Explorer document handoff (`/corpus/clemency/<pardon_id>`, the target of
@@ -121,6 +134,7 @@ export function ClemencySurface() {
       />
       {rows && rows.length > 0 && !loading && <ExportBar onCsv={downloadFilterCsv} />}
       <ClemencyResultsList
+        fallback={{ reply: boxFallback, onOpen: handleOpenFallbackResult }}
         searchedAs={searchedAs}
         searchedFor={searchedFor}
         rows={rows}

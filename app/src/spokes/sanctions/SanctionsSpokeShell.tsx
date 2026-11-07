@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchBoxLine } from '@/lib/searched-as'
+import { BOX_SEARCH } from '@/lib/box-fallback'
 import {
   type AmaPlan,
   type FrDocumentDisplayRow,
@@ -28,6 +29,7 @@ import {
   runSemanticSearch,
   type CorpusSpoke,
   type QueryMode,
+  type BoxFallback,
 } from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
@@ -210,6 +212,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [guidanceError, setGuidanceError] = useState<string>()
   const [guidanceHasRun, setGuidanceHasRun] = useState(false)
   const [guidanceSearchedAs, setGuidanceSearchedAs] = useState<string | null>(null)
+  const [guidanceFallback, setGuidanceFallback] = useState<BoxFallback | undefined>(undefined)
   const [guidanceSearchedFor, setGuidanceSearchedFor] = useState<string | null>(null)
 
   async function runGuidanceKeywordPane(fields: SanctionsGuidanceFilterFields) {
@@ -217,9 +220,11 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setGuidanceError(undefined)
     setGuidanceHasRun(true)
     setGuidanceSearchedAs(null)
+    setGuidanceFallback(undefined)
     try {
-      const r = await runSanctionsGuidanceFilter(fields)
+      const r = await runSanctionsGuidanceFilter(fields, BOX_SEARCH)
       setGuidanceSearchedAs(searchBoxLine(fields.search, r))
+      setGuidanceFallback(r.fallback)
       setGuidanceSearchedFor(fields.search?.trim() || null)
       setGuidanceRows(r.display_rows)
       setGuidanceCount(r.count)
@@ -748,6 +753,7 @@ export function SanctionsSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
               )}
               {pane === 'guidance' && (
                 <SanctionsGuidanceResultsList
+                  fallback={{ reply: guidanceFallback, onOpen: handleOpenSemanticResult }}
                   rows={guidanceRows}
                   count={guidanceCount}
                   loading={guidanceLoading}

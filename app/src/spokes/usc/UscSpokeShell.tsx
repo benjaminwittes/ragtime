@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchBoxLine } from '@/lib/searched-as'
+import { BOX_SEARCH } from '@/lib/box-fallback'
 import {
   type UscAmaPlan,
   type UscAmaScope,
@@ -16,6 +17,8 @@ import {
   type CorpusHoldings,
   type CorpusSpoke,
   type QueryMode,
+  type BoxFallback,
+  type SemanticSearchRow,
 } from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
@@ -108,6 +111,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [boxFallback, setBoxFallback] = useState<BoxFallback | undefined>(undefined)
   const [searchedFor, setSearchedFor] = useState<string | null>(null)
 
   // AMA state.
@@ -164,6 +168,13 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setDetailOpen(true)
   }
 
+  /** Open one of hybrid search's results, shown when no section held every
+   *  word of the search (lib/box-fallback.ts). */
+  async function handleOpenFallbackResult(row: SemanticSearchRow) {
+    const full = await fetchUscItemsByIds([Number(row.id)])
+    if (full.length > 0) handleOpenSection(full[0])
+  }
+
   // Hub → workspace carryover (`?q=`): seed the filter field + auto-run once
   // on mount so we land on the responsive set, not the full corpus. Ref-guarded
   // against StrictMode's dev double-invoke.
@@ -189,9 +200,11 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryError(undefined)
     setHasRun(true)
     setSearchedAs(null)
+    setBoxFallback(undefined)
     try {
-      const r: UscFilterResult = await runUscFilter(fields)
+      const r: UscFilterResult = await runUscFilter(fields, BOX_SEARCH)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setBoxFallback(r.fallback)
       setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
@@ -379,6 +392,7 @@ export function UscSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             <ExportBar onCsv={downloadFilterCsv} />
           )}
           <UscResultsList
+            fallback={{ reply: boxFallback, onOpen: handleOpenFallbackResult }}
             searchedAs={searchedAs}
             searchedFor={searchedFor}
             rows={rows}

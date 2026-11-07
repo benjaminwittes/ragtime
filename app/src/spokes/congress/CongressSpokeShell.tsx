@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchBoxLine } from '@/lib/searched-as'
+import { BOX_SEARCH } from '@/lib/box-fallback'
 import {
   type CongressAmaPlan,
   type CongressAmaScope,
@@ -20,6 +21,7 @@ import {
   type CorpusHoldings,
   type CorpusSpoke,
   type QueryMode,
+  type BoxFallback,
 } from '@lawfare/ragtime-client'
 import { useDocs } from '@/docs/DocsContext'
 import { readCarryoverQuery } from '@/lib/routing'
@@ -151,6 +153,7 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
   const [queryError, setQueryError] = useState<string | undefined>(undefined)
   const [hasRun, setHasRun] = useState(false)
   const [searchedAs, setSearchedAs] = useState<string | null>(null)
+  const [boxFallback, setBoxFallback] = useState<BoxFallback | undefined>(undefined)
   const [searchedFor, setSearchedFor] = useState<string | null>(null)
 
   // Semantic pane state (brief #9).
@@ -274,9 +277,11 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setQueryError(undefined)
     setHasRun(true)
     setSearchedAs(null)
+    setBoxFallback(undefined)
     try {
-      const r: CongressFilterResult = await runCongressFilter(fields)
+      const r: CongressFilterResult = await runCongressFilter(fields, BOX_SEARCH)
       setSearchedAs(searchBoxLine(fields.search, r))
+      setBoxFallback(r.fallback)
       setSearchedFor(fields.search?.trim() || null)
       setRows(r.display_rows)
       setCount(r.count)
@@ -634,6 +639,7 @@ export function CongressSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
             <div className="min-w-0">
               {panesSideBySide && <ResultsPaneHeader kind="keyword" />}
               <CongressResultsList
+                fallback={{ reply: boxFallback, onOpen: handleOpenSemanticResult }}
                 searchedAs={searchedAs}
                 searchedFor={searchedFor}
                 collection={collection}
