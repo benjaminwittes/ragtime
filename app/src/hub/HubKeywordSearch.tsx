@@ -759,6 +759,7 @@ function CorpusResultCard({
           items={block.results.map((r) => ({ corpus, id: r.id, title: r.title }))}
           name={query}
           label="Save these to Recordbench"
+          variant="link"
         />
         <a
           href={toHref(href)}
@@ -794,14 +795,23 @@ function CorpusResultCard({
       {!block.error && block.results.length > 0 && (
         <ol className="mt-3 space-y-2 text-sm">
           {block.results.map((r) => (
-            <li key={r.id} className="leading-snug">
-              <p className="text-foreground">
-                {r.title}
-                <SaveToRecordbench outcome="document" items={[{ corpus, id: r.id, title: r.title }]} className="ml-2" />
-              </p>
-              <p className="font-mono text-[11px] text-muted-foreground">
-                {[r.context, r.date].filter(Boolean).join(' · ') || ''}
-              </p>
+            <li key={r.id} className="group flex items-start justify-between gap-3 leading-snug">
+              <div className="min-w-0">
+                <p className="text-foreground">{r.title}</p>
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  {[r.context, r.date].filter(Boolean).join(' · ') || ''}
+                </p>
+              </div>
+              {/* The per-row save is a bookmark that shows on hover or focus: the
+                  header's "Save these" already says what it is, and a labelled
+                  button on every row read as the loudest thing in the list. */}
+              <SaveToRecordbench
+                outcome="document"
+                items={[{ corpus, id: r.id, title: r.title }]}
+                label={`Save “${r.title}” to Recordbench`}
+                variant="icon"
+                className="shrink-0"
+              />
             </li>
           ))}
         </ol>
