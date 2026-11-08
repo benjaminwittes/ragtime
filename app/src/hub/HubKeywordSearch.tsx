@@ -25,6 +25,14 @@ import { TICKS, type SampleSet } from './samples'
 import { searchedAsLine } from '@/lib/searched-as'
 import { useTick } from './tune'
 import { SaveToRecordbench } from '@/components/SaveToRecordbench'
+import {
+  FALLBACK_NOTICE,
+  HUB_SEARCH,
+  hubFallbackCorpora,
+  hubFallbackRows,
+  hubWantsFallback,
+  withHubFallbackFrom,
+} from '@/lib/box-fallback'
 
 gsap.registerPlugin(useGSAP)
 
@@ -107,6 +115,10 @@ export function HubKeywordSearch({
   // separately from `query` (the live input) so editing the box post-search
   // doesn't desync the carryover from the displayed results.
   const [submittedQuery, setSubmittedQuery] = useState('')
+  // The closest matches arrive after the keyword results (lib/box-fallback.ts,
+  // withHubFallbackFrom). `searchSeq` drops a late answer to an older search.
+  const [fallbackLoading, setFallbackLoading] = useState(false)
+  const searchSeq = useRef(0)
   const field = useRef<HTMLInputElement>(null)
   // Typing stops the clock, and clearing the box starts it again on the sample it
   // stopped on. Focus alone does not: a focused empty box still types, which is
@@ -127,12 +139,16 @@ export function HubKeywordSearch({
   // here is the fan-out itself and what it does with an answer.
   async function runSearch() {
     const q = query.trim()
+    const seq = ++searchSeq.current
     setLoading(true)
+    setFallbackLoading(false)
     setError(null)
     try {
       const r = await runHubKeyword(q, HUB_KEYWORD_CORPORA as HubCorpusSlug[])
+      if (seq !== searchSeq.current) return
       setResponse(r)
       setSubmittedQuery(q)
+      if (hubWantsFallback(r)) void addFallback(seq, q, r)
       void postUsageLog(
         {
           interaction_id: newInteractionId(),
@@ -152,6 +168,20 @@ export function HubKeywordSearch({
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
+    }
+  }
+
+  // The second ask: the same words with the fallback, laid onto the first
+  // answer's empty corpora. A failure leaves the keyword answer as it is.
+  async function addFallback(seq: number, q: string, first: HubKeywordResponse) {
+    setFallbackLoading(true)
+    try {
+      const second = await runHubKeyword(q, HUB_KEYWORD_CORPORA as HubCorpusSlug[], HUB_SEARCH)
+      if (seq === searchSeq.current) setResponse(withHubFallbackFrom(first, second))
+    } catch {
+      // Best-effort: the keyword answer already stands.
+    } finally {
+      if (seq === searchSeq.current) setFallbackLoading(false)
     }
   }
 
@@ -431,6 +461,7 @@ export function HubKeywordSearch({
           response={response}
           query={submittedQuery}
           loading={loading}
+          fallbackLoading={fallbackLoading}
           onNavigate={onNavigate}
         />
       )}
@@ -654,11 +685,14 @@ function HubKeywordResults({
   response,
   query,
   loading,
+  fallbackLoading = false,
   onNavigate,
 }: {
   response: HubKeywordResponse
   query: string
   loading: boolean
+  /** The closest matches for the empty corpora are on their way. */
+  fallbackLoading?: boolean
   onNavigate: (path: string) => void
 }) {
   const corpora = Object.keys(response.per_corpus) as CorpusSlug[]
@@ -670,6 +704,13 @@ function HubKeywordResults({
     (c) => (response.per_corpus[c]?.count ?? 0) > 0,
   )
   const searchedAs = searchedAsLine(query, response.interpreted)
+  // Each corpus that found nothing, and searches by meaning, comes back with
+  // hybrid search's closest matches. When no corpus held every word, the
+  // heading still says so and one notice under it says what every list is;
+  // otherwise each such section carries the notice itself, beside sections of
+  // keyword matches.
+  const fallbackCorpora = hubFallbackCorpora<CorpusSlug>(response)
+  const noticeOnTop = totalCount === 0 && fallbackCorpora.length > 0
 
   return (
     <section className="mt-6 space-y-4" aria-busy={loading}>
@@ -688,6 +729,11 @@ function HubKeywordResults({
               : `searched ${corpora.length} corpora`}
           </p>
         </div>
+        {noticeOnTop && (
+          <p data-testid="hub-fallback-notice" className="mt-1 text-sm text-muted-foreground">
+            {FALLBACK_NOTICE}
+          </p>
+        )}
         {/* How the worker read the query, only when that differs from what was
             typed (`searched-as.ts`). Under the count rather than under the box:
             it explains these results, and the hero's row is reserved. */}
@@ -712,6 +758,8 @@ function HubKeywordResults({
               block={block}
               query={query}
               onNavigate={onNavigate}
+              noticeInSection={!noticeOnTop}
+              fallbackLoading={fallbackLoading && corpus !== 'litigation'}
             />
           )
         })}
@@ -725,15 +773,27 @@ function CorpusResultCard({
   block,
   query,
   onNavigate,
+  noticeInSection = true,
+  fallbackLoading = false,
 }: {
   corpus: CorpusSlug
   block: NonNullable<HubKeywordResponse['per_corpus'][CorpusSlug]>
   query: string
   onNavigate: (path: string) => void
+  /** Say above this section's closest matches what they are. Off when the
+   *  page already says it once for every section. */
+  noticeInSection?: boolean
+  /** Say, in an empty section, that its closest matches are on their way. */
+  fallbackLoading?: boolean
 }) {
   // Carry the keyword into the spoke so it lands on the responsive set.
   const href = `/corpus/${corpus}?q=${encodeURIComponent(query)}`
   const more = Math.max(0, block.count - block.results.length)
+  // Hybrid search's closest matches, when no corpus held every word. They
+  // take the empty list's place and are labelled as what they are; the
+  // corpus's workspace, opened with the same words, shows the same fallback.
+  const fallbackRows = hubFallbackRows(block)
+  const rows = fallbackRows.length > 0 ? fallbackRows : block.results
   return (
     // This was a bordered, rounded card on `bg-card`; it is a section on the page's own
     // paper now, opened by the same hairline the corpus list above is ruled with. The hub
@@ -750,13 +810,13 @@ function CorpusResultCard({
         <h3 className="min-w-0 font-serif text-base font-semibold">
           {longLabel(corpus)}
           <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
-            {block.count.toLocaleString()} total
+            {fallbackRows.length > 0 ? 'closest matches' : `${block.count.toLocaleString()} total`}
           </span>
         </h3>
         <span className="flex shrink-0 items-baseline gap-3">
         <SaveToRecordbench
           outcome="list"
-          items={block.results.map((r) => ({ corpus, id: r.id, title: r.title }))}
+          items={rows.map((r) => ({ corpus, id: r.id, title: r.title }))}
           name={query}
           label="Save these to Recordbench"
         />
@@ -791,9 +851,22 @@ function CorpusResultCard({
           Search failed: {block.error}
         </p>
       )}
-      {!block.error && block.results.length > 0 && (
-        <ol className="mt-3 space-y-2 text-sm">
-          {block.results.map((r) => (
+      {fallbackLoading && !block.error && block.count === 0 && fallbackRows.length === 0 && (
+        <p data-testid="hub-fallback-loading" className="mt-2 text-xs text-muted-foreground">
+          No document here holds every word. Looking for hybrid search’s closest matches…
+        </p>
+      )}
+      {fallbackRows.length > 0 && noticeInSection && (
+        <p data-testid="hub-fallback-section-notice" className="mt-2 text-xs text-muted-foreground">
+          {FALLBACK_NOTICE}
+        </p>
+      )}
+      {!block.error && rows.length > 0 && (
+        <ol
+          className="mt-3 space-y-2 text-sm"
+          data-testid={fallbackRows.length > 0 ? 'hub-fallback-results' : undefined}
+        >
+          {rows.map((r) => (
             <li key={r.id} className="leading-snug">
               <p className="text-foreground">
                 {r.title}

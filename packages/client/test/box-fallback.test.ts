@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { configureWorkerClient } from '../src/config.ts'
 import {
   runCongressFilter,
+  runHubKeyword,
   runFrFilter,
   runLawfareFilter,
   runOlcFilter,
@@ -57,4 +58,15 @@ test('a caller that does not ask sends the body it always sent', async () => {
 test('the sanctions entity form has no fallback to ask for', async () => {
   const entity = await posting(() => runSanctionsEntityFilter({ search: 'x' }))
   assert.equal('fallback' in (entity.body as object), false)
+})
+
+test('Search that asks sends fallback beside its words and corpora', async () => {
+  const hub = await posting(() => runHubKeyword('war powers', ['olc'], { fallback: 'hybrid' }))
+  assert.equal(hub.url, 'http://worker.test/corpus/hub/keyword')
+  assert.deepEqual(hub.body, { query: 'war powers', corpora: ['olc'], fallback: 'hybrid' })
+})
+
+test('Search that does not ask sends the body it always sent', async () => {
+  const hub = await posting(() => runHubKeyword('war powers', ['olc']))
+  assert.deepEqual(hub.body, { query: 'war powers', corpora: ['olc'] })
 })

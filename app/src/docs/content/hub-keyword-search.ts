@@ -44,7 +44,10 @@ import type { DocsEntry } from '../types'
  * corpus pages send `fallback: "hybrid"`, and a bare word search that finds
  * nothing comes back with hybrid search's results beside the empty answer.
  * Litigation and books have no meaning search, and the sanctions entity and
- * Federal Register forms do not ask for it.
+ * Federal Register forms do not ask for it. Search sends the same option
+ * (ragtime-worker #268, `hubFallbackRequests`); each empty corpus that
+ * searches by meaning falls back, whatever the others found (ragtime-worker,
+ * Excellent Exploration Link 76).
  *
  * The sanctions carve-out in the two-pane sentence is NOT redundant with the
  * descriptor check: `sanctions/index.ts` does set `semanticSearch`, but
@@ -102,6 +105,11 @@ for a plain word search only: add a filter, such as a date range, and the
 page keeps the empty list. Federal litigation, the Library of Congress
 catalogue, and the entity and Federal Register lists on the Sanctions page,
 do not do this.
+
+Search does the same, corpus by corpus. A corpus where no document holds
+every word shows hybrid search's closest matches, labelled as such, beside
+the corpora that found keyword matches. Federal litigation shows only its
+keyword matches.
 
 **{{corpora.fan|cap}} of the {{corpora.held}} corpora.** Sanctions sits out the fan, because its
 documents include the Federal Register's sanctions notices, which that
