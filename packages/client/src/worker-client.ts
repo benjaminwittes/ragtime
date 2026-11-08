@@ -72,6 +72,12 @@ export type HubKeywordCorpusBlock = {
   results: HubKeywordResultItem[]
   /** Set when this corpus's query failed — other corpora still rendered. */
   error?: string
+  /** Present only when the request asked for it (`runHubKeyword`'s
+   *  `fallback`) and Search found nothing in any corpus it asked: hybrid
+   *  search's results for the same words, beside this corpus's empty keyword
+   *  answer, in the shape a corpus search box's fallback takes. Never on
+   *  litigation, which has no meaning search. */
+  fallback?: BoxFallback
 }
 
 export type HubKeywordResponse = {
@@ -131,6 +137,7 @@ function searchBoxBody(fields: unknown, opts?: SearchBoxOptions): string {
 export async function runHubKeyword(
   query: string,
   corpora?: readonly HubCorpusSlug[],
+  opts?: SearchBoxOptions,
 ): Promise<HubKeywordResponse> {
   const r = await workerFetch(`${workerUrl()}/corpus/hub/keyword`, {
     method: 'POST',
@@ -138,6 +145,7 @@ export async function runHubKeyword(
     body: JSON.stringify({
       query,
       ...(corpora && corpora.length > 0 ? { corpora } : {}),
+      ...(opts?.fallback ? { fallback: opts.fallback } : {}),
     }),
   })
   if (!r.ok) {
