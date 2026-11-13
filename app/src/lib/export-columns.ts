@@ -9,6 +9,7 @@
  */
 import type { CsvColumn } from './export-csv'
 import type {
+  EacDocumentDisplayRow,
   BookDisplayRow,
   CaseDisplayRow,
   CfrSectionDisplayRow,
@@ -171,6 +172,19 @@ export const FBI_COLUMNS: CsvColumn<FbiDocumentDisplayRow>[] = [
   { header: 'vault_url', value: (r) => r.source_url },
   { header: 'pdf_url', value: (r) => r.pdf_url },
   { header: 'text_length', value: (r) => r.text_length },
+  { header: 'id', value: (r) => r.id },
+]
+
+/** EAC documents. Only what the results list shows: a link-only row has no
+ * text to export, and its date/file type arrive empty from /filter today. */
+export const EAC_COLUMNS: CsvColumn<EacDocumentDisplayRow>[] = [
+  { header: 'title', value: (r) => r.title },
+  { header: 'author_group', value: (r) => r.author_group },
+  { header: 'shown_as', value: (r) => (r.display === 'full' ? 'full' : 'link_only') },
+  { header: 'posted_on_eac_gov', value: (r) => r.posted_date },
+  { header: 'file_type', value: (r) => r.file_type },
+  { header: 'folder', value: (r) => r.folder },
+  { header: 'eac_gov_url', value: (r) => r.source_url },
   { header: 'id', value: (r) => r.id },
 ]
 

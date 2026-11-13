@@ -47,6 +47,7 @@ const CALLS: [file: string, call: string, setter: string, field: string][] = [
   ['congress/TurnsSurface.tsx', 'runCongressTurns', 'setSearchedAs', 'search'],
   ['fbi/FbiSpokeShell.tsx', 'runFbiFilter', 'setSearchedAs', 'search'],
   ['books/BooksSpokeShell.tsx', 'runBooksFilter', 'setSearchedAs', 'search'],
+  ['eac/EacSpokeShell.tsx', 'runEacFilter', 'setSearchedAs', 'search'],
   ['sanctions/SanctionsSpokeShell.tsx', 'runSanctionsEntityFilter', 'setEntitySearchedAs', 'search'],
   ['sanctions/SanctionsSpokeShell.tsx', 'runSanctionsGuidanceFilter', 'setGuidanceSearchedAs', 'search'],
   ['sanctions/SanctionsSpokeShell.tsx', 'runSanctionsFrFilter', 'setFrSearchedAs', 'search'],
@@ -65,6 +66,7 @@ const LISTS = [
   'congress/CongressResultsList.tsx',
   'fbi/FbiResultsList.tsx',
   'books/BooksResultsList.tsx',
+  'eac/EacResultsList.tsx',
   'sanctions/SanctionsEntityResultsList.tsx',
   'sanctions/SanctionsGuidanceResultsList.tsx',
 ]
