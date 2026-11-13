@@ -3696,6 +3696,200 @@ export async function runFbiSummarizeDocument(
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/eac/* — U.S. Election Assistance Commission spoke
+ *
+ * The documents eac.gov listed in its media index on 2026-10-13 (eac_documents,
+ * about 9,200 rows). A TIERED corpus: every row carries `display`, 'full' or
+ * 'link_only'. Works by the EAC and other federal agencies are 'full'; work by
+ * states, test labs, manufacturers, commenters and other outside authors is
+ * 'link_only' — searchable, but the Worker returns only its title, author
+ * group, link and (where the route keeps it) date. The Worker enforces this
+ * (worker/display.js); these types only describe what comes back, so every
+ * field a link-only row loses is optional here and the UI must treat a missing
+ * field as withheld, never as an error.
+ *
+ * No AI routes: plan/execute/summarize are off for EAC in the catalogue
+ * (hub_ama, plan_execute, summarize = false), so no model reads EAC text.
+ * ------------------------------------------------------------------------- */
+
+/** 'full' | 'link_only'. Anything else is treated as link_only (the Worker's
+ *  own rule: a missing or unknown display value hides text, never shows it). */
+export type EacDisplay = 'full' | 'link_only'
+
+export type EacFacetCount = {
+  value: string
+  count: number
+}
+
+export type EacFacets = {
+  document_count: number
+  shown_in_full: number
+  link_only: number
+  /** Earliest / latest posted_date (YYYY-MM-DD). */
+  earliest: string | null
+  latest: string | null
+  /** Shown labels ('Voting system test lab' ...) — filter with `value`. */
+  author_groups: EacFacetCount[]
+  /** MIME subtypes ('pdf', 'csv', 'vnd.ms-excel' ...). */
+  file_types: EacFacetCount[]
+  /** Top 60 folders by size. */
+  folders: EacFacetCount[]
+}
+
+export async function fetchEacFacets(): Promise<EacFacets> {
+  const r = await workerFetch(`${workerUrl()}/corpus/eac/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/eac/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as EacFacets
+}
+
+/**
+ * One EAC row as /filter and /items-by-ids return it. A link-only row keeps
+ * only id, title, author_group, display, source_url and numeric/boolean
+ * columns (bytes, is_data_file); the string columns below that are marked
+ * optional are dropped for it by the Worker.
+ */
+export type EacDocumentDisplayRow = {
+  id: number
+  title: string | null
+  /** The shown author label (e.g. 'Voting system test lab'). */
+  author_group: string | null
+  display: EacDisplay | string
+  /** The document on eac.gov. */
+  source_url: string | null
+  bytes?: number | null
+  is_data_file?: boolean | null
+  /** Full rows only. */
+  file_id?: string | null
+  file_name?: string | null
+  file_type?: string | null
+  folder?: string | null
+  eac_category?: string[] | null
+  /** YYYY-MM-DD. Full rows only on /filter and /items-by-ids. */
+  posted_date?: string | null
+  extract_kind?: string | null
+  ocr_quality?: string | null
+}
+
+export type EacFilterFields = {
+  search?: string
+  /** Substring of the title. */
+  title?: string
+  /** Exact shown label from facets.author_groups. */
+  authorGroup?: string
+  /** Exact value from facets.file_types. */
+  fileType?: string
+  /** Exact value from facets.folders. */
+  folder?: string
+  /** One of the eac.gov library categories. */
+  category?: string
+  display?: EacDisplay
+  /** YYYY-MM-DD bounds on posted_date. */
+  from?: string
+  to?: string
+}
+
+export type EacFilterResult = SearchBoxReply & {
+  ids: number[]
+  display_rows: EacDocumentDisplayRow[]
+  count: number
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runEacFilter(
+  fields: EacFilterFields,
+  opts?: SearchBoxOptions,
+): Promise<EacFilterResult> {
+  const r = await workerFetch(`${workerUrl()}/corpus/eac/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: searchBoxBody(fields, opts),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/eac/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as EacFilterResult
+}
+
+/** A full document's detail (display = 'full'). */
+export type EacDocumentDetail = EacDocumentDisplayRow & {
+  display: 'full'
+  other_listings?: unknown
+  attached_meetings?: unknown
+  /** Length of the whole text; text_content is capped at 500,000 chars. */
+  text_length: number | null
+  text_source: string | null
+  page_count: number | null
+  text_content: string | null
+  text_truncated: boolean | null
+}
+
+/** What /corpus/eac/document returns for a link-only id: the link and no
+ *  text, answered by the Worker's displayRouteGuard before the handler. */
+export type EacLinkOnlyDocument = {
+  id: string | number
+  corpus: 'eac'
+  display: 'link_only'
+  author_group: string | null
+  url: string | null
+  title: string | null
+  date: string | null
+  text_withheld: true
+  summary: null
+  message: string
+}
+
+export type EacDocumentResponse =
+  | { kind: 'full'; document: EacDocumentDetail }
+  | { kind: 'link_only'; document: EacLinkOnlyDocument }
+
+export async function fetchEacDocument(id: number): Promise<EacDocumentResponse> {
+  const r = await workerFetch(`${workerUrl()}/corpus/eac/document`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/eac/document failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as
+    | { document: EacDocumentDetail }
+    | EacLinkOnlyDocument
+  if ('document' in body && body.document && body.document.display === 'full') {
+    return { kind: 'full', document: body.document }
+  }
+  // Anything that is not an explicit full document is shown as a link only.
+  if ('document' in body && body.document) {
+    const d = body.document as EacDocumentDisplayRow
+    return {
+      kind: 'link_only',
+      document: {
+        id: d.id,
+        corpus: 'eac',
+        display: 'link_only',
+        author_group: d.author_group ?? null,
+        url: d.source_url ?? null,
+        title: d.title ?? null,
+        date: d.posted_date ?? null,
+        text_withheld: true,
+        summary: null,
+        message: 'This document is shown as a link only. RAGtime does not return or summarize its text.',
+      },
+    }
+  }
+  return { kind: 'link_only', document: body as EacLinkOnlyDocument }
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/sanctions/* — Sanctions spoke (brief #15)
  *
  * The FIRST CROSS-CORPUS SPOKE. Three data legs behind one slug:
@@ -5091,6 +5285,15 @@ export function fetchFbiItemsByIds(
   )
 }
 
+export function fetchEacItemsByIds(
+  ids: readonly number[],
+): Promise<EacDocumentDisplayRow[]> {
+  return fetchItemsByIds<EacDocumentDisplayRow>(
+    `${workerUrl()}/corpus/eac/items-by-ids`,
+    ids,
+  )
+}
+
 /** Entity rows for the sanctions AMA's cited-entity list — same display shape
  *  as the entity filter, caller order preserved. */
 export function fetchSanctionsEntitiesByIds(
@@ -5169,6 +5372,9 @@ export type SemanticCorpus =
   // FBI Records: fully embedded before the spoke shipped (1.3M chunks under
   // corpus 'fbi') — the semantic pane is live from day one.
   | 'fbi'
+  // EAC: chunks under corpus 'eac'. Tiered — the Worker drops the snippet
+  // (and context) of every link-only result; `display`/`author_group` say which.
+  | 'eac'
   // Sanctions: ONE slug fanning over the ofac_guidance chunk corpus (embed
   // campaign in flight — degrades gracefully until chunks land) + the fr
   // corpus's chunks post-filtered to the sanctions slice. Ids come back
@@ -5188,6 +5394,12 @@ export type SemanticSearchRow = {
   similarity: number | null
   /** Best-matching chunk text, structural header stripped. */
   snippet: string | null
+  /** Tiered corpora (EAC) only: 'full' | 'link_only'. A link-only result
+   *  arrives without snippet/context — show its title, date, author and link. */
+  display?: string
+  author_group?: string | null
+  url?: string | null
+  source_url?: string | null
 }
 
 export type SemanticSearchResult = {
@@ -5264,6 +5476,8 @@ export type MoreLikeThisCorpus =
   | 'congress:testimony'
   // FBI Records: spoke slug and doc_chunks corpus are both 'fbi'.
   | 'fbi'
+  // EAC: spoke slug and chunk corpus are both 'eac' (catalogue mlt eac → eac).
+  | 'eac'
   // Sanctions pivots are GUIDANCE-ONLY: the compound slug maps to the
   // ofac_guidance chunk corpus (seed ids are plain guidance ids). Entities
   // have no chunks (nothing to pivot on); FR-slice docs pivot through the fr
@@ -5282,6 +5496,12 @@ export type MoreLikeThisResultItem = {
   similarity: number | null
   /** Best-matching chunk text, structural header stripped. */
   snippet: string | null
+  /** Tiered corpora (EAC) only: 'full' | 'link_only'. A link-only result
+   *  arrives without snippet/context — show its title, date, author and link. */
+  display?: string
+  author_group?: string | null
+  url?: string | null
+  source_url?: string | null
 }
 
 export type MoreLikeThisResult = {

@@ -133,6 +133,7 @@ const WIRED: [shell: string, call: string, list: string][] = [
   ['fr/FrSpokeShell.tsx', 'runFrFilter', 'fr/FrResultsList.tsx'],
   ['congress/CongressSpokeShell.tsx', 'runCongressFilter', 'congress/CongressResultsList.tsx'],
   ['fbi/FbiSpokeShell.tsx', 'runFbiFilter', 'fbi/FbiResultsList.tsx'],
+  ['eac/EacSpokeShell.tsx', 'runEacFilter', 'eac/EacResultsList.tsx'],
   ['sanctions/SanctionsSpokeShell.tsx', 'runSanctionsGuidanceFilter', 'sanctions/SanctionsGuidanceResultsList.tsx'],
 ]
 

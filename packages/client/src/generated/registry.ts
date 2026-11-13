@@ -3,7 +3,7 @@
 // app/src/spokes/registry-drift.test.ts. Coverage figures are left out on purpose;
 // they change with every ingest and the app reads them live.
 
-export const REGISTRY_VERSION = "90a4c42d" as const
+export const REGISTRY_VERSION = "56242d76" as const
 
 /** Every corpus the Worker registry holds, in registry order. */
 export const CORPORA = [
@@ -21,13 +21,14 @@ export const CORPORA = [
   { slug: "fbi", name: "FBI Records (The Vault)", shortName: "FBI", kind: "record", hub: { group: "record", order: 2, title: "FBI Records" } },
   { slug: "sanctions", name: "Sanctions (OFAC entities, guidance, Federal Register actions)", shortName: "Sanctions", kind: "designation", hub: { group: "record", order: 3, title: "Sanctions" } },
   { slug: "books", name: "Library of Congress catalogue", shortName: "LOC catalogue", kind: "catalogue", hub: { group: "catalogue", order: 1, title: "Library of Congress catalogue" } },
+  { slug: "eac", name: "U.S. Election Assistance Commission", shortName: "EAC", kind: "record", hub: { group: "record", order: 4, title: "U.S. Election Assistance Commission" } },
 ] as const
 
 /** The hub layout: headings in page order, each with its corpus slugs in card order. */
 export const HUB_GROUPS = [
   { id: "law", heading: "The law", corpora: ["usc", "cfr", "congress", "fr", "presidential"] },
   { id: "as_read", heading: "As read", corpora: ["olc", "litigation"] },
-  { id: "record", heading: "The record", corpora: ["frus", "fbi", "sanctions"] },
+  { id: "record", heading: "The record", corpora: ["frus", "fbi", "sanctions", "eac"] },
   { id: "commentary", heading: "Commentary", corpora: ["commentary"] },
   { id: "catalogue", heading: "The catalogue", corpora: ["books"] },
 ] as const

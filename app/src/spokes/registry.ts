@@ -9,6 +9,7 @@ import { booksSpoke } from './books'
 import { cfrSpoke } from './cfr'
 import { commentarySpoke } from './commentary'
 import { congressSpoke } from './congress'
+import { eacSpoke } from './eac'
 import { fbiSpoke } from './fbi'
 import { frSpoke } from './fr'
 import { frusSpoke } from './frus'
@@ -34,7 +35,8 @@ import { uscSpoke } from './usc'
  * interpret those rules — the Justice Department advising the executive on
  * what it may do, and the courts deciding it. **The record** is what
  * government actually did under all of that, once the files came out:
- * diplomacy, the Bureau's FOIA releases, the Treasury's designations.
+ * diplomacy, the Bureau's FOIA releases, the Treasury's designations, the
+ * Election Assistance Commission's publications.
  * **Commentary** stands apart because it is not a primary source at all, and
  * a reader who mistakes it for one has been misled by the page. **The
  * catalogue** stands apart for the opposite reason: it is not a source of
@@ -64,6 +66,7 @@ const spokeImplementations: Record<HubCardSlug, CorpusSpoke> = {
   frus: frusSpoke,
   fbi: fbiSpoke,
   sanctions: sanctionsSpoke,
+  eac: eacSpoke,
   commentary: commentarySpoke,
   books: booksSpoke,
 }
