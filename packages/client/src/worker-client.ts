@@ -4000,7 +4000,8 @@ export type FecFilterResult =
   | FecPage<'candidate', FecCandidateRow>
   | FecPage<'committee', FecCommitteeRow>
 
-export type FecFacetCount = { value: string | number; count: number }
+/** `value` is null for IDs with no value in that field; those are counted too. */
+export type FecFacetCount = { value: string | number | null; count: number }
 
 export type FecFacets = {
   kind: FecKind

@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { FecFacetCount, FecFacets, FecFilterFields, FecKind } from '@lawfare/ragtime-client'
 import {
+  NO_VALUE_LABEL,
+  isNoValue,
   CANDIDATE_STATUS_LABELS,
   COMMITTEE_TYPE_LABELS,
   DESIGNATION_LABELS,
@@ -274,6 +276,7 @@ const count = (n: number | string | undefined) =>
 function cycleValues(facet: FecFacetCount[] | undefined): { value: number; count?: number }[] {
   if (facet && facet.length > 0) {
     return facet
+      .filter((c) => !isNoValue(c.value))
       .map((c) => ({ value: Number(c.value), count: c.count }))
       .filter((c) => Number.isInteger(c.value))
       .sort((a, b) => b.value - a.value)
@@ -303,11 +306,14 @@ function CodeSelect({
   fallback?: string[]
   free?: boolean
 }) {
-  const list: { value: string; count?: number }[] =
-    options && options.length > 0
-      ? options.filter((o) => o.value !== null && String(o.value) !== '').map((o) => ({ value: String(o.value), count: o.count }))
-      : (fallback ?? []).map((v) => ({ value: v }))
-  if (list.length === 0 && free) {
+  const fromFacets = options && options.length > 0
+  const list: { value: string; count?: number }[] = fromFacets
+    ? options.filter((o) => !isNoValue(o.value)).map((o) => ({ value: String(o.value), count: o.count }))
+    : (fallback ?? []).map((v) => ({ value: v }))
+  // IDs with no value for this field are counted too, never dropped. The
+  // filter has no way to ask for "no value", so the option is shown, disabled.
+  const none = fromFacets ? options.filter((o) => isNoValue(o.value)) : []
+  if (list.length === 0 && none.length === 0 && free) {
     return (
       <Input
         type="text"
@@ -329,6 +335,12 @@ function CodeSelect({
       {list.map((o) => (
         <option key={o.value} value={o.value}>
           {codeLabel(o.value, labels)}
+          {count(o.count)}
+        </option>
+      ))}
+      {none.map((o, i) => (
+        <option key={`none-${i}`} value="" disabled>
+          {NO_VALUE_LABEL}
           {count(o.count)}
         </option>
       ))}

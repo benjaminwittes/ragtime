@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/use-auth'
 import { newInteractionId, postUsageLog } from '@/lib/usage-log'
 import { BackToHubLink } from '../components/BackToHubLink'
 import { SpokeIdentity } from '../components/SpokeIdentity'
-import { FEC_CYCLE_NOTE, FEC_SLUG, idCountLabel } from './fec-format'
+import { FEC_CYCLE_NOTE, FEC_SLUG, fieldsForKind, idCountLabel } from './fec-format'
 import { type FecOpenTarget } from './FecFigures'
 import { FecFilterForm } from './FecFilterForm'
 import { FecResultsList } from './FecResultsList'
@@ -85,7 +85,7 @@ export function FecSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
 
   function loadFacets(fields: Omit<FecFilterFields, 'limit' | 'offset'>) {
     const seq = ++facetsSeq.current
-    void fetchFecFacets(fields)
+    void fetchFecFacets(fieldsForKind(fields))
       .then((f) => {
         if (seq === facetsSeq.current) setFacets(f)
       })
@@ -116,7 +116,7 @@ export function FecSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     setHasRun(true)
     setLastFields(fields)
     try {
-      const r = await runFecFilter(fields)
+      const r = await runFecFilter(fieldsForKind(fields))
       setResult(r)
       void postUsageLog(
         {
@@ -137,7 +137,8 @@ export function FecSpokeShell({ spoke }: { spoke: CorpusSpoke }) {
     }
   }
 
-  function handleSubmit(fields: FecFilterFields) {
+  function handleSubmit(raw: FecFilterFields) {
+    const fields = fieldsForKind(raw)
     const { limit: _l, offset: _o, ...facetFields } = fields
     void _l
     void _o

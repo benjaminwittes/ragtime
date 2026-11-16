@@ -198,6 +198,42 @@ describe('FecCommitteeView', () => {
   })
 })
 
+describe('IDs only in the summary files (empty cycles)', () => {
+  it('names a candidate ID from its totals and says it is not in the master file', () => {
+    const html = render(
+      <FecCandidateView
+        id="H8XX00042"
+        detail={{
+          ...candidate,
+          id: 'H8XX00042',
+          cycles: [],
+          shared_principal_committee: [],
+          totals: [{ cycle: 2018, source_kind: 'weball', cand_name: 'DOE, PAT', ttl_receipts: '10.1', source: src('weball', WEBALL, 5, 2018) }],
+        }}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(html).toContain('<h2>DOE, PAT</h2>')
+    expect(html).toContain('not in the FEC candidate master (cn) file')
+    expect(html).toContain('No cycle rows.')
+    expect(html).toContain('10.10')
+  })
+
+  it('falls back to the ID when no summary row has a name', () => {
+    const html = render(
+      <FecCommitteeView
+        id="C00999999"
+        detail={{ ...committee, id: 'C00999999', cycles: [], totals: [], candidates: [], joint_fundraiser: false }}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(html).toContain('<h2>C00999999</h2>')
+    expect(html).toContain('not in the FEC committee master (cm) file')
+  })
+})
+
 describe('FecSourceLink and FecValue', () => {
   const s = src('webl', WEBL, 812)
 

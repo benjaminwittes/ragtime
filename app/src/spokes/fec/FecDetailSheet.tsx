@@ -11,6 +11,7 @@ import {
   type FecCandidateDetail,
   type FecCommitteeCycle,
   type FecCommitteeDetail,
+  type FecSummaryRow,
   fetchFecCandidate,
   fetchFecCommittee,
 } from '@lawfare/ragtime-client'
@@ -136,12 +137,12 @@ export function FecCandidateView({
   onOpen?: (target: FecOpenTarget) => void
 }) {
   const latest = detail?.cycles[0]
+  const name =
+    latest?.name ?? summaryName(detail ? [...detail.totals, ...detail.summary] : [], 'cand_name') ?? id
   return (
     <>
       <SheetHeader className="space-y-1 border-b border-lawfare-line bg-card p-5 pr-12">
-        <SheetTitle className="font-serif text-base font-semibold leading-snug">
-          {latest?.name ?? id}
-        </SheetTitle>
+        <SheetTitle className="font-serif text-base font-semibold leading-snug">{name}</SheetTitle>
         <SheetDescription className="text-xs text-muted-foreground">
           {[
             `Candidate ID ${id}`,
@@ -199,6 +200,7 @@ export function FecCandidateView({
               </section>
             )}
 
+            {detail.cycles.length === 0 && <NotInMasterNote kind="candidate" />}
             <Section title="Cycle by cycle (candidate master, cn)">
               <CandidateCyclesTable rows={detail.cycles} onOpen={onOpen} />
             </Section>
@@ -345,12 +347,11 @@ export function FecCommitteeView({
   onOpen?: (target: FecOpenTarget) => void
 }) {
   const latest = detail?.cycles[0]
+  const name = latest?.name ?? summaryName(detail?.totals ?? [], 'cmte_nm') ?? id
   return (
     <>
       <SheetHeader className="space-y-1 border-b border-lawfare-line bg-card p-5 pr-12">
-        <SheetTitle className="font-serif text-base font-semibold leading-snug">
-          {latest?.name ?? id}
-        </SheetTitle>
+        <SheetTitle className="font-serif text-base font-semibold leading-snug">{name}</SheetTitle>
         <SheetDescription className="text-xs text-muted-foreground">
           {[
             `Committee ID ${id}`,
@@ -386,6 +387,7 @@ export function FecCommitteeView({
               </section>
             )}
 
+            {detail.cycles.length === 0 && <NotInMasterNote kind="committee" />}
             <Section title="Cycle by cycle (committee master, cm)">
               <CommitteeCyclesTable rows={detail.cycles} onOpen={onOpen} />
             </Section>
@@ -501,6 +503,29 @@ function CommitteeCyclesTable({
         </tbody>
       </table>
     </div>
+  )
+}
+
+/**
+ * The name for an ID the master file does not list: the first non-empty name
+ * the summary rows carry (newest first, as sent), or null.
+ */
+function summaryName(rows: readonly FecSummaryRow[], key: string): string | null {
+  for (const r of rows) {
+    const v = r[key]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return null
+}
+
+/** Some IDs appear only in the summary files, not the master file. */
+function NotInMasterNote({ kind }: { kind: 'candidate' | 'committee' }) {
+  const file = kind === 'candidate' ? 'candidate master (cn)' : 'committee master (cm)'
+  return (
+    <p className="border-l-2 border-lawfare-line bg-muted/30 py-2 pl-3 pr-3 text-xs text-foreground">
+      This {kind} ID is not in the FEC {file} file for any cycle; it appears only in the FEC’s
+      summary files, shown below as the FEC publishes them.
+    </p>
   )
 }
 

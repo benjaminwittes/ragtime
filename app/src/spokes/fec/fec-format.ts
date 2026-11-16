@@ -120,6 +120,16 @@ export function sourceShortLabel(source: FecSource | null | undefined): string {
   return source.line != null ? `${source.kind} file · line ${source.line}` : `${source.kind} file`
 }
 
+/* ── facet values ────────────────────────────────────────────────────────── */
+
+/** How a facet bucket of IDs with no value for the field is shown. */
+export const NO_VALUE_LABEL = '(none)'
+
+/** True for a facet value that stands for "no value" (null or empty). */
+export function isNoValue(value: unknown): boolean {
+  return value === null || value === undefined || String(value).trim() === ''
+}
+
 /* ── codes ───────────────────────────────────────────────────────────────── */
 
 export const OFFICE_LABELS: Record<string, string> = {
@@ -401,3 +411,23 @@ export const CANDIDATE_TOTALS_FILES = [
     note: 'Anyone who raised or spent money in the cycle, whenever they are up for election.',
   },
 ] as const
+
+/* ── filters by kind ─────────────────────────────────────────────────────── */
+
+const SHARED_FILTERS = ['kind', 'search', 'cycle', 'cycleFrom', 'cycleTo', 'party', 'state', 'limit', 'offset']
+const KIND_FILTERS: Record<'candidate' | 'committee', readonly string[]> = {
+  candidate: [...SHARED_FILTERS, 'office', 'status', 'electionYear'],
+  committee: [...SHARED_FILTERS, 'cmteType', 'designation'],
+}
+
+/**
+ * Only the fields that belong to the fields' own kind. The Worker answers 400
+ * to a filter of the other kind (office with kind=committee), so the shell
+ * passes every request through this; the form also starts afresh on a toggle.
+ */
+export function fieldsForKind<T extends { kind: 'candidate' | 'committee' }>(fields: T): T {
+  const allowed = KIND_FILTERS[fields.kind]
+  return Object.fromEntries(
+    Object.entries(fields).filter(([k]) => allowed.includes(k)),
+  ) as T
+}

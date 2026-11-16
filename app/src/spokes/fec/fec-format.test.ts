@@ -8,6 +8,8 @@ import {
   PAC_PARTY_TOTALS_FIELDS,
   codeLabel,
   cycleLabel,
+  fieldsForKind,
+  isNoValue,
   cyclesLabel,
   fieldLabel,
   formatFecAmount,
@@ -122,5 +124,22 @@ describe('field catalogues', () => {
     const pct = CANDIDATE_TOTALS_FIELDS.find((f) => f.key === 'gen_election_precent')!
     expect(formatFecField(pct, '51.4000')).toBe('51.4000')
     expect(formatFecDate('2022-12-31T00:00:00Z')).toBe('2022-12-31')
+  })
+})
+
+describe('fieldsForKind — never send the other kind’s filters', () => {
+  it('drops candidate filters from a committee query, and the reverse', () => {
+    expect(
+      fieldsForKind({ kind: 'committee' as const, office: 'S', status: 'C', electionYear: 2022, cmteType: 'O', party: 'DEM', cycle: 2024 }),
+    ).toEqual({ kind: 'committee', cmteType: 'O', party: 'DEM', cycle: 2024 })
+    expect(
+      fieldsForKind({ kind: 'candidate' as const, designation: 'J', cmteType: 'O', office: 'H', state: 'GA', offset: 25 }),
+    ).toEqual({ kind: 'candidate', office: 'H', state: 'GA', offset: 25 })
+  })
+  it('treats null and empty facet values as "no value"', () => {
+    expect(isNoValue(null)).toBe(true)
+    expect(isNoValue('')).toBe(true)
+    expect(isNoValue('DEM')).toBe(false)
+    expect(isNoValue(0)).toBe(false)
   })
 })
