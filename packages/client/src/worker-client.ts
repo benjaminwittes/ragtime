@@ -4186,6 +4186,284 @@ export async function fetchFecItemsByIds(ids: readonly string[]): Promise<FecIte
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/state_codes/* — State Codes spoke (PROPOSED: not yet in the Worker)
+ *
+ * ONE slug ("state_codes") over the codified law of states and the District,
+ * one MEMBER per jurisdiction, the way commentary is one slug over its
+ * publications. The first and only member is `dc`: the D.C. Code, from
+ * public.dc_code_sections (one row per section; the DC Council's codified
+ * build, Title 99 left out). Later members are other states' codes.
+ *
+ * Nothing here is served yet. The Worker has a `dc_code` corpus (status
+ * "building") with keyword and semantic search only (ragtime-worker#286); the
+ * routes below are the contract the spoke is built against, following the
+ * cfr / eac / commentary conventions, so the Worker can be built to match:
+ *
+ *   POST /corpus/state_codes/facets        { member? }            → StateCodesFacets
+ *   POST /corpus/state_codes/filter        { fields, fallback? }  → StateCodesFilterResult
+ *   POST /corpus/state_codes/section       { member, id }
+ *                                       or { member, section_identifier }
+ *                                                                  → { member, section }
+ *   POST /corpus/state_codes/items-by-ids  { member, ids }        → { display_rows }
+ *   POST /corpus/semantic-search           { corpus: 'state_codes:dc', ... }
+ *
+ * Every member-scoped call names its member, and every row says which member
+ * it belongs to: two members' section ids are separate sequences and collide
+ * (the commentary lesson), so navigation is driven off { member, id }.
+ *
+ * The status rule (DC Code query design, overriding rules 1 and 3): every
+ * section carries `status`, and anything not `in_force` is flagged in the UI.
+ * Not-in-force sections are returned unless the request asks to leave them
+ * out (`inForceOnly`), and the reply always carries the status breakdown of
+ * the whole match so the page can say what an exclusion left out.
+ * ------------------------------------------------------------------------- */
+
+/** The members of the state_codes corpus. Only the District for now. */
+export type StateCodesMember = 'dc'
+
+/**
+ * A section's status, as the ingest classifies it (dc_code_sections.status).
+ * Only `in_force` is live law; every other value is flagged. A
+ * `not_yet_applicable` section has a start date in `applicable_on`.
+ */
+export type StateCodeStatus =
+  | 'in_force'
+  | 'repealed'
+  | 'expired'
+  | 'recodified'
+  | 'reserved'
+  | 'transferred'
+  | 'omitted'
+  | 'sunset'
+  | 'not_funded'
+  | 'not_applicable'
+  | 'not_yet_applicable'
+  | 'empty'
+
+/** One title of a member's code, with its name exactly as the legislature
+ *  writes it (tags such as "[Enacted title]" kept). */
+export type StateCodeTitle = {
+  /** Text, not a number: the D.C. Code has titles 27A, 28A and 29A. */
+  num: string
+  name: string
+  section_count: number
+  /** Of section_count, how many are in force. */
+  in_force_count: number
+  /** dc_code_containers.unit_status of the title: in_force, repealed,
+   *  no_live_sections, reserved, empty or removed. */
+  unit_status: string | null
+}
+
+export type StateCodeStatusCount = {
+  value: StateCodeStatus | string
+  count: number
+}
+
+/** One member's facets. */
+export type StateCodesMemberFacet = {
+  /** 'District of Columbia'. */
+  label: string
+  /** How the code is cited: 'D.C. Code'. */
+  code_name: string
+  section_count: number
+  in_force_count: number
+  /** YYYY-MM-DD. The law the loaded build reflects (the source's
+   *  codified-date): changes after it are not in the text. */
+  codified_date: string | null
+  /** YYYY-MM-DD. When the source built that codification. */
+  build_date: string | null
+  /** Sections whose current text includes emergency or temporary law. */
+  temporary_text_count: number
+  /** In the code's own order (1, 2, …, 27, 27A, 28, 28A, …). */
+  titles: StateCodeTitle[]
+  /** Every status with at least one section, largest first. */
+  statuses: StateCodeStatusCount[]
+}
+
+export type StateCodesFacets = {
+  /** Keyed by member ('dc'). No top-level totals: aggregate across members. */
+  members: Partial<Record<StateCodesMember, StateCodesMemberFacet>>
+}
+
+export async function fetchStateCodesFacets(
+  member?: StateCodesMember,
+): Promise<StateCodesFacets> {
+  const r = await workerFetch(`${workerUrl()}/corpus/state_codes/facets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(member ? { member } : {}),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/state_codes/facets failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as StateCodesFacets
+}
+
+/** One section as /filter and /items-by-ids return it. */
+export type StateCodeSectionDisplayRow = {
+  member: StateCodesMember | string
+  id: number
+  /** 'D.C. Code § 22-1307'. */
+  citation: string | null
+  /** '22-1307'. Stable across builds; what `recodified_to` points at. */
+  section_identifier: string | null
+  heading: string | null
+  title_num: string | null
+  title_name: string | null
+  /** As the legislature writes it: 'Chapter 13. Assemblies, …'. */
+  chapter: string | null
+  status: StateCodeStatus | string
+  /** section_identifier the rule moved to, for a recodified (or repealed and
+   *  replaced) section; null when none is recorded. */
+  recodified_to: string | null
+  /** The current text includes emergency or temporary law. */
+  has_temporary_text: boolean
+  /** YYYY-MM-DD: when a not_yet_applicable section takes effect. */
+  applicable_on: string | null
+  /** YYYY-MM-DD: the law this section's build reflects. */
+  codified_date: string | null
+  text_length: number | null
+}
+
+export type StateCodesFilterFields = {
+  /** Omit for every member (the page always sends one while DC is alone). */
+  member?: StateCodesMember
+  /** FTS over operative text + heading + citation (not notes or history). */
+  search?: string
+  /** A section number or citation: '22-1307', '§ 22-1307' or
+   *  'D.C. Code § 22-1307'. The Worker reads the section number out of it
+   *  and matches section_identifier exactly. */
+  citation?: string
+  /** Heading substring (ILIKE). */
+  heading?: string
+  /** Exact title_num ('22', '28A'). */
+  title?: string
+  /** Exact chapter number within the title (dc_code_sections.chapter_num:
+   *  '13', '1A'). Needs `title`. */
+  chapter?: string
+  /** Exact status. */
+  status?: StateCodeStatus
+  /** true: leave out every section whose status is not in_force. The
+   *  reply's status_counts still describe the whole match. */
+  inForceOnly?: boolean
+  /** true: only sections whose current text includes temporary law. */
+  temporaryOnly?: boolean
+}
+
+export type StateCodesFilterResult = SearchBoxReply & {
+  /** The member queried, or null when every member was. */
+  member: string | null
+  /** Member-qualified ('dc:123') when every member was queried, plain
+   *  numbers when one. Navigate off display_rows, not ids. */
+  ids: Array<number | string>
+  display_rows: StateCodeSectionDisplayRow[]
+  /** Matches returned (after inForceOnly). */
+  count: number
+  /** Every status in the match BEFORE inForceOnly is applied, so the page can
+   *  say what it left out ("31 repealed sections hidden"). */
+  status_counts: Partial<Record<StateCodeStatus, number>>
+  generated_sql: string
+  executed_sql: string
+}
+
+export async function runStateCodesFilter(
+  fields: StateCodesFilterFields,
+  opts?: SearchBoxOptions,
+): Promise<StateCodesFilterResult> {
+  const r = await workerFetch(`${workerUrl()}/corpus/state_codes/filter`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: searchBoxBody(fields, opts),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/state_codes/filter failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as StateCodesFilterResult
+}
+
+/** One entry of a section's enacting history, as the source records it
+ *  (dc_code_sections.history). `eff` is the date the change took effect in
+ *  law, the one date the query design keeps per change. */
+export type StateCodeHistoryEntry = {
+  /** The enacting document: 'D.C. Law 25-302'. */
+  doc: string | null
+  /** YYYY-MM-DD, effective in law. */
+  eff: string | null
+  /** YYYY-MM-DD, applicability date where the source gives one. */
+  app: string | null
+  /** Where in the enacting document: '§3|(a)'. */
+  path: string | null
+  target_path: string | null
+  /** The annotation's own words, or a compact citation built from the
+   *  attributes when the source gave none. */
+  text: string | null
+}
+
+/** Full detail for one section. */
+export type StateCodeSectionDetail = StateCodeSectionDisplayRow & {
+  subchapter: string | null
+  part: string | null
+  /** 'Title 22 > Chapter 13. … > § 22-1307'. */
+  structure_path: string | null
+  /** The operative text only; the apparatus is in notes and history. */
+  text_content: string | null
+  /** The enacting-law credit line(s), as text. */
+  source_credit: string | null
+  /** Editor's notes, cross references, prior codifications … as text. */
+  notes: string | null
+  history: StateCodeHistoryEntry[] | null
+  /** The source's own status words, raw: 'Repealed', 'Not Funded',
+   *  'Applicable on January 1, 2027'. */
+  source_reason: string | null
+  /** YYYY-MM-DD, when the source built the codification this row is from. */
+  build_date: string | null
+}
+
+/** Open a section by row id, or by section number (how `recodified_to`
+ *  points at the section a rule moved to). */
+export type StateCodeSectionRef =
+  | { member: StateCodesMember | string; id: number }
+  | { member: StateCodesMember | string; section_identifier: string }
+
+export async function fetchStateCodeSection(
+  ref: StateCodeSectionRef,
+): Promise<StateCodeSectionDetail> {
+  const r = await workerFetch(`${workerUrl()}/corpus/state_codes/section`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(ref),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/state_codes/section failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { member: string; section: StateCodeSectionDetail }
+  return body.section
+}
+
+/** items-by-ids for ONE member (ids are per-member sequences). Used to open
+ *  a semantic, fallback or deep-linked result as a filter row. */
+export async function fetchStateCodesItemsByIds(
+  member: StateCodesMember | string,
+  ids: readonly number[],
+): Promise<StateCodeSectionDisplayRow[]> {
+  if (ids.length === 0) return []
+  const r = await workerFetch(`${workerUrl()}/corpus/state_codes/items-by-ids`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ member, ids }),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/state_codes/items-by-ids failed (${r.status}): ${msg}`)
+  }
+  const body = (await r.json()) as { display_rows: StateCodeSectionDisplayRow[] }
+  return body.display_rows
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/sanctions/* — Sanctions spoke (brief #15)
  *
  * The FIRST CROSS-CORPUS SPOKE. Three data legs behind one slug:
@@ -5671,6 +5949,12 @@ export type SemanticCorpus =
   // EAC: chunks under corpus 'eac'. Tiered — the Worker drops the snippet
   // (and context) of every link-only result; `display`/`author_group` say which.
   | 'eac'
+  // State Codes (PROPOSED, not yet served): member-scoped like congress's
+  // collection slugs, so a member's pane never returns another member's
+  // sections. Ids come back plain (per-member). Results carry the section's
+  // status fields (citation, status, recodified_to, has_temporary_text,
+  // applicable_on, codified_date), as ragtime-worker#286 returns for dc_code.
+  | 'state_codes:dc'
   // Sanctions: ONE slug fanning over the ofac_guidance chunk corpus (embed
   // campaign in flight — degrades gracefully until chunks land) + the fr
   // corpus's chunks post-filtered to the sanctions slice. Ids come back
@@ -5696,6 +5980,17 @@ export type SemanticSearchRow = {
   author_group?: string | null
   url?: string | null
   source_url?: string | null
+  /** State codes only: the section's status fields ride along so a result
+   *  that is not in force is flagged in the pane (StateCodeSectionDisplayRow). */
+  citation?: string | null
+  section_identifier?: string | null
+  title_num?: string | null
+  title_name?: string | null
+  status?: string | null
+  recodified_to?: string | null
+  has_temporary_text?: boolean | null
+  applicable_on?: string | null
+  codified_date?: string | null
 }
 
 export type SemanticSearchResult = {

@@ -29,6 +29,7 @@ import type {
   PresidentialDocumentDisplayRow,
   SanctionsEntityDisplayRow,
   SanctionsGuidanceDisplayRow,
+  StateCodeSectionDisplayRow,
   UscSectionDisplayRow,
 } from '@lawfare/ragtime-client'
 
@@ -185,6 +186,25 @@ export const EAC_COLUMNS: CsvColumn<EacDocumentDisplayRow>[] = [
   { header: 'file_type', value: (r) => r.file_type },
   { header: 'folder', value: (r) => r.folder },
   { header: 'eac_gov_url', value: (r) => r.source_url },
+  { header: 'id', value: (r) => r.id },
+]
+
+/** State code sections. Status, the section a rule moved to and the
+ * temporary-text flag ride in every row, so an export never drops the flags
+ * the page shows. */
+export const STATE_CODES_COLUMNS: CsvColumn<StateCodeSectionDisplayRow>[] = [
+  { header: 'jurisdiction', value: (r) => r.member },
+  { header: 'citation', value: (r) => r.citation },
+  { header: 'section', value: (r) => r.section_identifier },
+  { header: 'heading', value: (r) => r.heading },
+  { header: 'status', value: (r) => r.status },
+  { header: 'recodified_to', value: (r) => r.recodified_to },
+  { header: 'has_temporary_text', value: (r) => (r.has_temporary_text ? 'yes' : 'no') },
+  { header: 'applicable_on', value: (r) => r.applicable_on },
+  { header: 'title_num', value: (r) => r.title_num },
+  { header: 'title_name', value: (r) => r.title_name },
+  { header: 'chapter', value: (r) => r.chapter },
+  { header: 'law_reflected_through', value: (r) => r.codified_date },
   { header: 'id', value: (r) => r.id },
 ]
 
