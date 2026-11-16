@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  asOfLabel,
   CANDIDATE_SUMMARY_FIELDS,
   CANDIDATE_TOTALS_FIELDS,
   CANDIDATE_TOTALS_FILES,
@@ -141,5 +142,20 @@ describe('fieldsForKind — never send the other kind’s filters', () => {
     expect(isNoValue('')).toBe(true)
     expect(isNoValue('DEM')).toBe(false)
     expect(isNoValue(0)).toBe(false)
+  })
+})
+
+describe('asOfLabel — the date the data was last fetched', () => {
+  it('reads YYYY-MM-DD as a calendar date, with no time-zone shift', () => {
+    expect(asOfLabel('2026-11-16')).toBe(
+      'Data last fetched from the FEC on November 16, 2026. The 2026 cycle is currently incomplete; the FEC rebuilds its files daily.',
+    )
+    expect(asOfLabel('2027-01-01')).toContain('January 1, 2027')
+  })
+  it('shows nothing rather than a wrong date', () => {
+    expect(asOfLabel(null)).toBeNull()
+    expect(asOfLabel(undefined)).toBeNull()
+    expect(asOfLabel('2026-13-01')).toBeNull()
+    expect(asOfLabel('Nov 16')).toBeNull()
   })
 })

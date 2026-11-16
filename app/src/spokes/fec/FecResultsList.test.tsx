@@ -67,3 +67,14 @@ describe('FecResultsList', () => {
     expect(html).toContain('O (Independent expenditure-only (super PAC))')
   })
 })
+
+describe('FecResultsList as-of line', () => {
+  it('shows the date the data was last fetched when the Worker sends it', () => {
+    const html = render({ ...result, as_of: { fetched: '2026-11-16', loaded: '2026-11-16 21:18:30+00' } })
+    expect(html).toContain('Data last fetched from the FEC on November 16, 2026.')
+    expect(html).toContain('The 2026 cycle is currently incomplete')
+  })
+  it('shows no as-of line without one', () => {
+    expect(render(result)).not.toContain('Data last fetched')
+  })
+})

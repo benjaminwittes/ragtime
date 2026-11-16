@@ -431,3 +431,19 @@ export function fieldsForKind<T extends { kind: 'candidate' | 'committee' }>(fie
     Object.entries(fields).filter(([k]) => allowed.includes(k)),
   ) as T
 }
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December']
+
+/**
+ * The "as of" line: the date the FEC data was last fetched (fec_source_files),
+ * read as a calendar date with no time-zone shift. Null or malformed → null,
+ * and the page shows no line rather than a wrong date.
+ */
+export function asOfLabel(fetched: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fetched ?? '')
+  if (!m) return null
+  const month = MONTHS[Number(m[2]) - 1]
+  if (!month) return null
+  return `Data last fetched from the FEC on ${month} ${Number(m[3])}, ${m[1]}. The 2026 cycle is currently incomplete; the FEC rebuilds its files daily.`
+}

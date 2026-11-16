@@ -3987,12 +3987,19 @@ export type FecCommitteeRow = {
   cycles: number[]
 }
 
+/** When the FEC data was last fetched: the newest staged file the tables
+ *  hold. `fetched` is YYYY-MM-DD; `loaded` is the load's timestamp. The page
+ *  shows it as the "as of" date (the 2026 cycle is incomplete). */
+export type FecAsOf = { fetched: string | null; loaded: string | null }
+
 type FecPage<K extends FecKind, R> = {
   kind: K
   /** Distinct IDs matching, not cycle rows. */
   total: number
   limit: number
   offset: number
+  /** Optional so an older Worker without it still parses. */
+  as_of?: FecAsOf
   results: R[]
 }
 
@@ -4006,6 +4013,7 @@ export type FecFacetCount = { value: string | number | null; count: number }
 export type FecFacets = {
   kind: FecKind
   total: number
+  as_of?: FecAsOf
   /** Candidate: cycle, office, state, party, status. Committee: cycle,
    *  cmteType, designation, party. Counts are distinct IDs. */
   facets: Record<string, FecFacetCount[]>

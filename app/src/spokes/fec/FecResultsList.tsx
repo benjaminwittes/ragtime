@@ -6,6 +6,7 @@ import {
   DESIGNATION_LABELS,
   EM_DASH,
   OFFICE_LABELS,
+  asOfLabel,
   PARTY_LABELS,
   codeLabel,
   cycleLabel,
@@ -72,8 +73,14 @@ export function FecResultsList({
 
   const first = result.offset + 1
   const last = result.offset + result.results.length
+  const asOf = asOfLabel(result.as_of?.fetched)
   return (
     <div className="space-y-3 px-6 py-4">
+      {asOf && (
+        <p className="text-xs text-muted-foreground" data-testid="fec-as-of">
+          {asOf}
+        </p>
+      )}
       <div className="flex flex-wrap items-baseline gap-3 text-xs text-muted-foreground">
         <span>
           {idCountLabel(result.total, result.kind)} matched · showing {first.toLocaleString('en-US')}–
