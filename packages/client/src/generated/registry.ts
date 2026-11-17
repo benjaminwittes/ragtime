@@ -3,7 +3,7 @@
 // app/src/spokes/registry-drift.test.ts. Coverage figures are left out on purpose;
 // they change with every ingest and the app reads them live.
 
-export const REGISTRY_VERSION = "62f0be5f" as const
+export const REGISTRY_VERSION = "5e155a13" as const
 
 /** Every corpus the Worker registry holds, in registry order. */
 export const CORPORA = [
