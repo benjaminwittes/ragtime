@@ -3890,6 +3890,302 @@ export async function fetchEacDocument(id: number): Promise<EacDocumentResponse>
 }
 
 /* ----------------------------------------------------------------------------
+ * /corpus/fec/* — Federal Election Commission spoke (contract v1, 2026-11-16)
+ *
+ * BUILT AHEAD OF THE WORKER. `fec` is registered as `building` and these
+ * routes are being added in a parallel ragtime-worker PR; the types below are
+ * the contract both sides build to (ragtime-pipeline#147). All routes are POST
+ * with a flat JSON body; the Worker answers 400 to unknown fields, so these
+ * calls send only the fields the caller set.
+ *
+ * The FEC bulk summary files, one row per candidate ID or committee ID per
+ * two-year cycle (fec_candidates, fec_committees, fec_linkages,
+ * fec_candidate_totals, fec_candidate_summary, fec_pac_party_totals).
+ *
+ * Data rules the types carry (ragtime-dev docs/briefs/fec-query-design.md):
+ * - Amounts arrive as STRINGS, exactly as Postgres numeric prints them
+ *   ("206593947.75"). They are typed `FecAmount` and must never go through
+ *   Number(): no float rounding, and no derived figures.
+ * - Every data row carries `source`: the FEC file it came from and the line.
+ * - Codes are as filed (party "DEM", office "S", cmte_tp "O").
+ * - Counts are of candidate IDs (or committee IDs), never of people.
+ * ------------------------------------------------------------------------- */
+
+export type FecKind = 'candidate' | 'committee'
+
+/** An amount exactly as Postgres numeric prints it, e.g. "206593947.75".
+ *  A string on purpose: never parse it to a number. */
+export type FecAmount = string | null
+
+/** Where a row came from: the FEC bulk file (kind + cycle), its URL, the line
+ *  in that file, and the file's SHA-256 (fec_source_files). */
+export type FecSource = {
+  /** cn, cm, ccl, weball, webl, webk, candidate_summary */
+  kind: string
+  cycle: number
+  url: string | null
+  line: number | null
+  sha256: string | null
+}
+
+export type FecFilterFields = {
+  kind: FecKind
+  /** Name words (websearch syntax) or an exact ID (S0GA00559, C00123456). */
+  search?: string
+  /** One cycle, named by its even year. */
+  cycle?: number
+  cycleFrom?: number
+  cycleTo?: number
+  // candidate filters
+  /** 'H' | 'S' | 'P' */
+  office?: string
+  /** Two-letter state (candidate office state, or committee cmte_st). */
+  state?: string
+  /** Party code as filed ('DEM'); candidates and committees. */
+  party?: string
+  /** cand_status as filed. */
+  status?: string
+  electionYear?: number
+  // committee filters
+  /** cmte_tp as filed. */
+  cmteType?: string
+  /** cmte_dsgn as filed. */
+  designation?: string
+  /** Default 25, max 100. */
+  limit?: number
+  offset?: number
+}
+
+/** /filter row for a candidate ID: name/office/party from its latest cycle. */
+export type FecCandidateRow = {
+  id: string
+  name: string | null
+  office: string | null
+  state: string | null
+  district: string | null
+  party: string | null
+  status: string | null
+  latest_cycle: number
+  /** Every cycle the ID appears in, ascending. */
+  cycles: number[]
+  /** Principal campaign committee ID in the latest cycle. */
+  pcc: string | null
+}
+
+/** /filter row for a committee ID: fields from its latest cycle. */
+export type FecCommitteeRow = {
+  id: string
+  name: string | null
+  type: string | null
+  designation: string | null
+  party: string | null
+  state: string | null
+  connected_org: string | null
+  /** Linked candidate ID in the latest cycle. */
+  cand_id: string | null
+  latest_cycle: number
+  cycles: number[]
+}
+
+/** When the FEC data was last fetched: the newest staged file the tables
+ *  hold. `fetched` is YYYY-MM-DD; `loaded` is the load's timestamp. The page
+ *  shows it as the "as of" date (the 2026 cycle is incomplete). */
+export type FecAsOf = { fetched: string | null; loaded: string | null }
+
+type FecPage<K extends FecKind, R> = {
+  kind: K
+  /** Distinct IDs matching, not cycle rows. */
+  total: number
+  limit: number
+  offset: number
+  /** Optional so an older Worker without it still parses. */
+  as_of?: FecAsOf
+  results: R[]
+}
+
+export type FecFilterResult =
+  | FecPage<'candidate', FecCandidateRow>
+  | FecPage<'committee', FecCommitteeRow>
+
+/** `value` is null for IDs with no value in that field; those are counted too. */
+export type FecFacetCount = { value: string | number | null; count: number }
+
+export type FecFacets = {
+  kind: FecKind
+  total: number
+  as_of?: FecAsOf
+  /** Candidate: cycle, office, state, party, status. Committee: cycle,
+   *  cmteType, designation, party. Counts are distinct IDs. */
+  facets: Record<string, FecFacetCount[]>
+}
+
+async function fecPost<T>(route: string, body: unknown): Promise<T> {
+  const r = await workerFetch(`${workerUrl()}/corpus/fec/${route}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) {
+    const msg = await safeErrorMessage(r)
+    throw new Error(`/corpus/fec/${route} failed (${r.status}): ${msg}`)
+  }
+  return (await r.json()) as T
+}
+
+/** Drop unset fields so the Worker's unknown-field check never sees them. */
+function fecFields<T extends object>(fields: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const [k, v] of Object.entries(fields) as [keyof T, T[keyof T]][]) {
+    if (v === undefined || v === null || v === '') continue
+    out[k] = v
+  }
+  return out
+}
+
+export function runFecFilter(fields: FecFilterFields): Promise<FecFilterResult> {
+  return fecPost<FecFilterResult>('filter', fecFields(fields))
+}
+
+/** Facet counts for the same filters as /filter (limit/offset are not sent). */
+export function fetchFecFacets(
+  fields: Omit<FecFilterFields, 'limit' | 'offset'>,
+): Promise<FecFacets> {
+  const { limit: _l, offset: _o, ...rest } = fields as FecFilterFields
+  void _l
+  void _o
+  return fecPost<FecFacets>('facets', fecFields(rest))
+}
+
+/** A row of fec_candidates (one cycle of one candidate ID). */
+export type FecCandidateCycle = {
+  cycle: number
+  name: string | null
+  party: string | null
+  election_year: number | null
+  office: string | null
+  state: string | null
+  district: string | null
+  /** Incumbent / challenger / open seat code. */
+  ici: string | null
+  status: string | null
+  /** Principal campaign committee ID. */
+  pcc: string | null
+  address: {
+    st1: string | null
+    st2: string | null
+    city: string | null
+    st: string | null
+    zip: string | null
+  } | null
+  source: FecSource
+}
+
+/**
+ * A row of an FEC summary table, keyed by the FEC's own field names (lower
+ * case, as the schema stores them: ttl_receipts, coh_cop …). Amounts are
+ * strings; the shape is open because the Worker sends every column.
+ */
+export type FecSummaryRow = {
+  cycle: number
+  source_kind?: string
+  source: FecSource
+  [field: string]: unknown
+}
+
+/** One fec_candidate_totals row; source_kind 'webl' or 'weball'. */
+export type FecCandidateTotalsRow = FecSummaryRow & { source_kind: 'webl' | 'weball' | string }
+
+export type FecCandidateCommitteeLink = {
+  cycle: number
+  cmte_id: string
+  cmte_name: string | null
+  cmte_tp: string | null
+  cmte_dsgn: string | null
+  linkage_id: number | string
+  source: FecSource
+}
+
+/** A row of view fec_shared_principal_committee: candidate IDs that share one
+ *  principal committee in one cycle. A flag for review, never a merge. */
+export type FecSharedPrincipalCommittee = {
+  cycle: number
+  cand_pcc: string
+  cand_ids: string[]
+  cand_names: (string | null)[]
+  n: number
+}
+
+export type FecCandidateDetail = {
+  id: string
+  /** Newest first. */
+  cycles: FecCandidateCycle[]
+  /** webl and weball rows, newest cycle first. */
+  totals: FecCandidateTotalsRow[]
+  /** fec_candidate_summary rows, newest first. */
+  summary: FecSummaryRow[]
+  committees: FecCandidateCommitteeLink[]
+  shared_principal_committee: FecSharedPrincipalCommittee[]
+}
+
+export function fetchFecCandidate(id: string): Promise<FecCandidateDetail> {
+  return fecPost<FecCandidateDetail>('candidate', { id })
+}
+
+/** A row of fec_committees (one cycle of one committee ID). */
+export type FecCommitteeCycle = {
+  cycle: number
+  name: string | null
+  treasurer: string | null
+  /** The Worker's address object (st1, st2, city, st, zip) or a string. */
+  address: Record<string, string | null> | string | null
+  designation: string | null
+  type: string | null
+  party: string | null
+  filing_freq: string | null
+  org_type: string | null
+  connected_org: string | null
+  cand_id: string | null
+  source: FecSource
+}
+
+export type FecCommitteeCandidateLink = {
+  cycle: number
+  cand_id: string
+  cand_name: string | null
+  office: string | null
+  state: string | null
+  linkage_id: number | string
+  source: FecSource
+}
+
+export type FecCommitteeDetail = {
+  id: string
+  /** Newest first. */
+  cycles: FecCommitteeCycle[]
+  /** fec_pac_party_totals (webk) rows, newest first. */
+  totals: FecSummaryRow[]
+  candidates: FecCommitteeCandidateLink[]
+  /** True when the committee is designated J (joint fundraiser) in any cycle. */
+  joint_fundraiser: boolean
+}
+
+export function fetchFecCommittee(id: string): Promise<FecCommitteeDetail> {
+  return fecPost<FecCommitteeDetail>('committee', { id })
+}
+
+export type FecItemRow =
+  | (FecCandidateRow & { kind: 'candidate' })
+  | (FecCommitteeRow & { kind: 'committee' })
+
+/** Rows for "candidate:<id>" / "committee:<id>" ids, in input order; unknown
+ *  ids are omitted. Max 100. */
+export async function fetchFecItemsByIds(ids: readonly string[]): Promise<FecItemRow[]> {
+  if (ids.length === 0) return []
+  const body = await fecPost<{ results: FecItemRow[] }>('items-by-ids', { ids })
+  return body.results
+}
+
+/* ----------------------------------------------------------------------------
  * /corpus/sanctions/* — Sanctions spoke (brief #15)
  *
  * The FIRST CROSS-CORPUS SPOKE. Three data legs behind one slug:
