@@ -3,10 +3,15 @@
  * Worker's registry (`npm run registry:sync`). Nothing here is hand-kept: the
  * slugs, the hub groups and the labels all come from `generated/registry.ts`.
  */
-import { CORPORA, HUB_GROUPS, LIVE_APIS, REGISTRY_VERSION } from './generated/registry.ts'
+import { CORPORA, HUB_GROUPS, LIVE_APIS, READER_NOTICES, REGISTRY_VERSION } from './generated/registry.ts'
 import type { CorpusSlug } from './corpus-types.ts'
 
-export { CORPORA, HUB_GROUPS, LIVE_APIS, REGISTRY_VERSION as GENERATED_REGISTRY_VERSION }
+export { CORPORA, HUB_GROUPS, LIVE_APIS, READER_NOTICES, REGISTRY_VERSION as GENERATED_REGISTRY_VERSION }
+
+/** The corpus's reader notice from the catalogue (`coverage.notice`), or null. */
+export function corpusReaderNotice(slug: CorpusSlug): string | null {
+  return READER_NOTICES[slug] ?? null
+}
 
 export type HubGroupId = (typeof HUB_GROUPS)[number]['id']
 

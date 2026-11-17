@@ -3,7 +3,7 @@
 // app/src/spokes/registry-drift.test.ts. Coverage figures are left out on purpose;
 // they change with every ingest and the app reads them live.
 
-export const REGISTRY_VERSION = "5e155a13" as const
+export const REGISTRY_VERSION = "93ef0130" as const
 
 /** Every corpus the Worker registry holds, in registry order. */
 export const CORPORA = [
@@ -23,17 +23,23 @@ export const CORPORA = [
   { slug: "books", name: "Library of Congress catalogue", shortName: "LOC catalogue", kind: "catalogue", hub: { group: "catalogue", order: 1, title: "Library of Congress catalogue" } },
   { slug: "eac", name: "U.S. Election Assistance Commission", shortName: "EAC", kind: "record", hub: { group: "elections", order: 1, title: "U.S. Election Assistance Commission" } },
   { slug: "fec", name: "Federal Election Commission", shortName: "FEC", kind: "record", hub: { group: "elections", order: 2, title: "Federal Election Commission" } },
+  { slug: "state_codes", name: "State Codes", shortName: "State Codes", kind: "statute", hub: { group: "law", order: 6, title: "State Codes" } },
 ] as const
 
 /** The hub layout: headings in page order, each with its corpus slugs in card order. */
 export const HUB_GROUPS = [
-  { id: "law", heading: "The law", corpora: ["usc", "cfr", "congress", "fr", "presidential"] },
+  { id: "law", heading: "The law", corpora: ["usc", "cfr", "congress", "fr", "presidential", "state_codes"] },
   { id: "as_read", heading: "As read", corpora: ["olc", "litigation"] },
   { id: "record", heading: "The record", corpora: ["frus", "fbi", "sanctions"] },
   { id: "elections", heading: "Elections", corpora: ["eac", "fec"] },
   { id: "commentary", heading: "Commentary", corpora: ["commentary"] },
   { id: "catalogue", heading: "The catalogue", corpora: ["books"] },
 ] as const
+
+/** Reader notices: what a complete answer may also need that RAGtime does not hold (ragtime-worker#110). */
+export const READER_NOTICES: Readonly<Record<string, string>> = {
+  "state_codes": "This covers the DC Code only. A complete answer may also depend on the DC Municipal Regulations (DCMR), which RAGtime does not carry. Check them at dcregs.dc.gov. Federal law may also apply in DC, especially on federal land such as National Park Service property and the Capitol grounds. Search RAGtime's Code of Federal Regulations and U.S. Code too.",
+}
 
 /** Sources read live from someone else's API. Not corpora: nothing here is held. */
 export const LIVE_APIS = [

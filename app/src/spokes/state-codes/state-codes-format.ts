@@ -8,17 +8,15 @@
  * misspells the field makes the page warn more, never less.
  */
 import type {
+  CorpusSlug,
   SemanticSearchRow,
   StateCodeSectionDisplayRow,
   StateCodeStatus,
   StateCodesMember,
 } from '@lawfare/ragtime-client'
 
-/**
- * The corpus slug. Not yet a `CorpusSlug`: the generated registry lists live
- * corpora only, and state_codes is not registered. See index.ts.
- */
-export const STATE_CODES_SLUG = 'state_codes'
+/** The corpus slug, live in the generated registry. */
+export const STATE_CODES_SLUG = 'state_codes' as const satisfies CorpusSlug
 
 /** The members, in the order the page lists them. Only the District for now. */
 export const STATE_CODES_MEMBERS: readonly StateCodesMember[] = ['dc']

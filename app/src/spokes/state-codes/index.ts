@@ -1,6 +1,5 @@
 import {
   type CorpusHoldings,
-  type CorpusSlug,
   type CorpusSpoke,
   fetchStateCodesFacets,
 } from '@lawfare/ragtime-client'
@@ -13,17 +12,13 @@ import { STATE_CODES_SLUG } from './state-codes-format'
  * ragtime-pipeline `ingest/dc-code`). Query design: ragtime-dev
  * docs/briefs/dc-code-query-design.md.
  *
- * PROPOSED, NOT YET SERVED. The Worker has a standalone `dc_code` corpus
- * (building; keyword + semantic only, ragtime-worker#286). This spoke is built
- * against the state_codes contract in packages/client (search
- * "/corpus/state_codes/*" in worker-client.ts): facets, filter, section,
- * items-by-ids and the member-scoped semantic slug `state_codes:dc`.
+ * Served by the Worker's state_codes routes (ragtime-worker#290): facets,
+ * filter, section, items-by-ids, and the meaning-search slugs `state_codes`
+ * and `state_codes:dc`. The contract is in packages/client (search
+ * "/corpus/state_codes/*" in worker-client.ts).
  *
- * Not yet a CorpusSlug: `CorpusSlug` is derived from the generated registry,
- * which lists live corpora only. Until state_codes is registered, live, and
- * `npm run registry:sync` has run, the slug is cast here, and the spoke is
- * not in spokes/registry.ts or App.tsx's shell switch (both are typed by the
- * generated registry and would not compile with it). Remove the cast then.
+ * The page shows the catalogue's reader notice (ragtime-worker#110): the DCMR
+ * is not in RAGtime, and federal law may also apply in DC.
  *
  * The corpus rules the page keeps (corpus description + query design):
  * - Anything not in force is flagged on every row and in the section sheet,
@@ -49,8 +44,7 @@ const KNOWN_GAPS = [
 ]
 
 export const stateCodesSpoke: CorpusSpoke = {
-  // Cast until state_codes is in the generated registry (see above).
-  slug: STATE_CODES_SLUG as CorpusSlug,
+  slug: STATE_CODES_SLUG,
   title: 'State Codes',
   description:
     'The codified law of the states and the District, section by section, with what is no longer in force marked. The District of Columbia Code first.',

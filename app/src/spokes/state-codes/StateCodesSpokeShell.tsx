@@ -10,6 +10,7 @@ import {
   type StateCodesFilterFields,
   type StateCodesFilterResult,
   type StateCodesMember,
+  corpusReaderNotice,
   fetchStateCodesFacets,
   runSemanticSearch,
   runStateCodesFilter,
@@ -367,6 +368,7 @@ function StateCodesHeader({
       <p className="max-w-3xl text-sm text-muted-foreground">
         {spoke.plainEnglishDisclosure}
       </p>
+      <ReaderNotice />
       <p className="mt-3 text-xs font-medium uppercase tracking-wide text-foreground">
         {m?.label ?? MEMBER_FALLBACK[member].label}
         <span className="ml-2 font-normal normal-case text-muted-foreground">
@@ -384,6 +386,26 @@ function StateCodesHeader({
         <p className="mt-2 text-xs text-destructive">Could not load holdings: {error}</p>
       )}
     </section>
+  )
+}
+
+/**
+ * The catalogue's reader notice (ragtime-worker#110): what a complete answer
+ * may also need that RAGtime does not hold. Shown above the holdings, on every
+ * view of the page, so no search here reads as the whole of DC law. The text
+ * is the Worker registry's (`coverage.notice`, via `npm run registry:sync`).
+ */
+export function ReaderNotice() {
+  const notice = corpusReaderNotice(STATE_CODES_SLUG)
+  if (!notice) return null
+  return (
+    <p
+      role="note"
+      data-testid="state-codes-reader-notice"
+      className="mt-3 max-w-3xl border-l-2 border-amber-400 bg-amber-500/10 py-2 pl-3 pr-3 text-sm text-amber-900 dark:text-amber-200"
+    >
+      {notice}
+    </p>
   )
 }
 
