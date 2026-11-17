@@ -1,6 +1,5 @@
 import {
   type CorpusHoldings,
-  type CorpusSlug,
   type CorpusSpoke,
   fetchFecFacets,
 } from '@lawfare/ragtime-client'
@@ -18,14 +17,7 @@ import { FEC_SLUG } from './fec-format'
  * Schema: ragtime-pipeline `ingest/fec/schema.sql`. Query design: ragtime-dev
  * docs/briefs/fec-query-design.md.
  *
- * BUILT AHEAD OF GOING LIVE. `fec` is registered as `building`, and the
- * Worker routes are being built in a parallel ragtime-worker PR.
- *
- * Not yet a CorpusSlug: `CorpusSlug` is derived from the generated registry,
- * which lists live corpora only. Until fec is live and `npm run registry:sync`
- * has run, the slug is cast here, and the spoke is not in spokes/registry.ts
- * or App.tsx's shell switch (both are typed by the generated registry and
- * would not compile with it). Remove the cast then.
+ * Live since 2026-11-17 (ragtime-pipeline#148, ragtime-worker#289).
  *
  * The rules the page keeps (see fec-format.ts): exact amounts, never computed;
  * FEC variable names beside every figure; every figure linked to its source
@@ -45,8 +37,7 @@ const KNOWN_GAPS = [
 ]
 
 export const fecSpoke: CorpusSpoke = {
-  // Cast until fec is in the generated registry (see above).
-  slug: FEC_SLUG as CorpusSlug,
+  slug: FEC_SLUG,
   title: 'Federal Election Commission',
   description:
     'FEC candidate IDs and committees, cycle by cycle: who is linked to whom, and the FEC’s own summary totals, exactly as published.',

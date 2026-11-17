@@ -136,8 +136,8 @@ describe('docs figures', () => {
 
   it('reads the corpus-count words from the registry', () => {
     expect(corpusCountFigures()).toEqual({
-      'corpora.held': 'twelve',
-      'corpora.primary': 'eleven',
+      'corpora.held': '13',
+      'corpora.primary': 'twelve',
       'corpora.fan': 'eleven',
       'corpora.fan_primary': 'ten',
       'corpora.semantic': 'nine',

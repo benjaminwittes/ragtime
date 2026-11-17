@@ -12,6 +12,7 @@ import { CommentarySpokeShell } from '@/spokes/commentary/CommentarySpokeShell'
 import { CongressSpokeShell } from '@/spokes/congress/CongressSpokeShell'
 import { FbiSpokeShell } from '@/spokes/fbi/FbiSpokeShell'
 import { EacSpokeShell } from '@/spokes/eac/EacSpokeShell'
+import { FecSpokeShell } from '@/spokes/fec/FecSpokeShell'
 import { FrSpokeShell } from '@/spokes/fr/FrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
@@ -273,6 +274,8 @@ function spokeShell(spoke: CorpusSpoke) {
       <SanctionsSpokeShell spoke={spoke} />
     ) : spoke.slug === 'eac' ? (
       <EacSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'fec' ? (
+      <FecSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )

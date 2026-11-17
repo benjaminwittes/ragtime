@@ -15,14 +15,10 @@
  * - Counts are of candidate IDs, not people.
  * - Codes stay visible: a plain label may sit beside a code, never replace it.
  */
-import type { FecSource } from '@lawfare/ragtime-client'
+import type { CorpusSlug, FecSource } from '@lawfare/ragtime-client'
 
-/**
- * The corpus slug. Not yet a `CorpusSlug`: the generated registry lists live
- * corpora only, and fec is `building`. Cast where a CorpusSlug is needed until
- * fec is live and `npm run registry:sync` has run.
- */
-export const FEC_SLUG = 'fec'
+/** The corpus slug. */
+export const FEC_SLUG = 'fec' as const satisfies CorpusSlug
 
 export const EM_DASH = '—'
 
