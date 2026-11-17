@@ -110,12 +110,9 @@ export const spokes: readonly CorpusSpoke[] = spokeGroups.flatMap(
  * The book catalogue is excluded for the Worker's reason too: it is absent
  * from HUB_CORPORA because a catalogue record among document hits reads like
  * something we hold and can quote (ragtime-worker#145).
- * The FEC is excluded because it is not on the Worker's hub roster either
- * (its registration has no `lists.hub`, ragtime-worker#289): the Worker
- * ignores it there, so fanning to it would only ever show an empty section.
  */
 export const hubKeywordSpokes: readonly CorpusSpoke[] = spokes.filter(
-  (s) => s.slug !== 'sanctions' && s.slug !== 'books' && s.slug !== 'fec',
+  (s) => s.slug !== 'sanctions' && s.slug !== 'books',
 )
 
 export function getSpokeBySlug(slug: CorpusSlug): CorpusSpoke | undefined {

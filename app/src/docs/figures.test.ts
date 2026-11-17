@@ -138,8 +138,8 @@ describe('docs figures', () => {
     expect(corpusCountFigures()).toEqual({
       'corpora.held': '13',
       'corpora.primary': 'twelve',
-      'corpora.fan': 'eleven',
-      'corpora.fan_primary': 'ten',
+      'corpora.fan': 'twelve',
+      'corpora.fan_primary': 'eleven',
       'corpora.semantic': 'nine',
     })
   })
