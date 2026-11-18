@@ -18,6 +18,7 @@ import { litigationSpoke } from './litigation'
 import { olcSpoke } from './olc'
 import { presidentialSpoke } from './presidential'
 import { sanctionsSpoke } from './sanctions'
+import { stateCodesSpoke } from './state-codes'
 import { uscSpoke } from './usc'
 
 /**
@@ -62,6 +63,7 @@ const spokeImplementations: Record<HubCardSlug, CorpusSpoke> = {
   congress: congressSpoke,
   fr: frSpoke,
   presidential: presidentialSpoke,
+  state_codes: stateCodesSpoke,
   olc: olcSpoke,
   litigation: litigationSpoke,
   frus: frusSpoke,

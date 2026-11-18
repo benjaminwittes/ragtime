@@ -87,6 +87,16 @@ function render(reg) {
   }
   lines.push('] as const')
   lines.push('')
+  // Reader notices (ragtime-worker#110): catalogue text, not a figure, so it is
+  // generated like the names. A corpus without one is absent.
+  lines.push('/** Reader notices: what a complete answer may also need that RAGtime does not hold (ragtime-worker#110). */')
+  lines.push('export const READER_NOTICES: Readonly<Record<string, string>> = {')
+  for (const c of reg.corpora) {
+    const notice = c.coverage && typeof c.coverage.notice === 'string' ? c.coverage.notice.trim() : ''
+    if (notice) lines.push(`  ${q(c.slug)}: ${q(notice)},`)
+  }
+  lines.push('}')
+  lines.push('')
   lines.push('/** Sources read live from someone else\'s API. Not corpora: nothing here is held. */')
   lines.push('export const LIVE_APIS = [')
   for (const a of reg.live_apis) {

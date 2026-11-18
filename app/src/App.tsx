@@ -13,6 +13,7 @@ import { CongressSpokeShell } from '@/spokes/congress/CongressSpokeShell'
 import { FbiSpokeShell } from '@/spokes/fbi/FbiSpokeShell'
 import { EacSpokeShell } from '@/spokes/eac/EacSpokeShell'
 import { FecSpokeShell } from '@/spokes/fec/FecSpokeShell'
+import { StateCodesSpokeShell } from '@/spokes/state-codes/StateCodesSpokeShell'
 import { FrSpokeShell } from '@/spokes/fr/FrSpokeShell'
 import { FrusSpokeShell } from '@/spokes/frus/FrusSpokeShell'
 import { OlcSpokeShell } from '@/spokes/olc/OlcSpokeShell'
@@ -276,6 +277,8 @@ function spokeShell(spoke: CorpusSpoke) {
       <EacSpokeShell spoke={spoke} />
     ) : spoke.slug === 'fec' ? (
       <FecSpokeShell spoke={spoke} />
+    ) : spoke.slug === 'state_codes' ? (
+      <StateCodesSpokeShell spoke={spoke} />
     ) : (
       <SpokeShell spoke={spoke} />
     )
