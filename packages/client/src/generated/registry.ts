@@ -3,7 +3,7 @@
 // app/src/spokes/registry-drift.test.ts. Coverage figures are left out on purpose;
 // they change with every ingest and the app reads them live.
 
-export const REGISTRY_VERSION = "93ef0130" as const
+export const REGISTRY_VERSION = "949de513" as const
 
 /** Every corpus the Worker registry holds, in registry order. */
 export const CORPORA = [
@@ -38,7 +38,7 @@ export const HUB_GROUPS = [
 
 /** Reader notices: what a complete answer may also need that RAGtime does not hold (ragtime-worker#110). */
 export const READER_NOTICES: Readonly<Record<string, string>> = {
-  "state_codes": "This covers the DC Code only. A complete answer may also depend on the DC Municipal Regulations (DCMR), which RAGtime does not carry. Check them at dcregs.dc.gov. Federal law may also apply in DC, especially on federal land such as National Park Service property and the Capitol grounds. Search RAGtime's Code of Federal Regulations and U.S. Code too.",
+  "state_codes": "This covers the DC Code only. A complete answer may also depend on the DC Municipal Regulations (DCMR), which RAGtime does not yet carry. Check them at dcregs.dc.gov. Federal law may also apply in DC, especially on federal land such as National Park Service property and the Capitol grounds. Search RAGtime's Code of Federal Regulations and U.S. Code too.",
 }
 
 /** Sources read live from someone else's API. Not corpora: nothing here is held. */

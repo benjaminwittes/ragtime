@@ -10,7 +10,7 @@ describe('the State Codes reader notice', () => {
     const notice = corpusReaderNotice('state_codes')
     expect(notice).toBe(READER_NOTICES.state_codes)
     expect(notice).toMatch(/^This covers the DC Code only\./)
-    expect(notice).toContain('DC Municipal Regulations (DCMR), which RAGtime does not carry')
+    expect(notice).toContain('DC Municipal Regulations (DCMR), which RAGtime does not yet carry')
     expect(notice).toContain('dcregs.dc.gov')
     expect(notice).toContain("Search RAGtime's Code of Federal Regulations and U.S. Code too.")
   })
